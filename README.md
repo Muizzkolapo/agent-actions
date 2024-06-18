@@ -1,1 +1,3 @@
-# agent-actions
+- we have two loaders file loader and list loaders
+- make sure we have a loader for textlike files where we chunk
+- we have a list loader for csv json ,
