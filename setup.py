@@ -50,7 +50,7 @@ setup(
     description='A description of your package',
     long_description=read('README.md'),
     long_description_content_type='text/markdown',
-    url='https://github.com/yourusername/agent-actions',
+    url='https://github.com/Muizzkolapo/agent-actions',
     classifiers=[
         'Programming Language :: Python :: 3',
         'License :: OSI Approved :: MIT License',
