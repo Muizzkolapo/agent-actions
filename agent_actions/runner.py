@@ -215,7 +215,7 @@ def main():
         print(f"Error: The default configuration file does not exist in '{current_dir}'.")
         sys.exit(1)
 
-    project_dir = os.path.abspath(os.path.join(current_dir, '..'))
+    project_dir = os.path.abspath(os.path.join(current_dir))
     if not check_agent_file_unique(full_path, project_dir):
         print(f"Error: '{full_path}' is not unique across the entire project.")
         sys.exit(1)
