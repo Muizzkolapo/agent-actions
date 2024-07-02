@@ -95,6 +95,12 @@ def run_agents(constructor_path, user_code_path, default_path):
         default_config = yaml.safe_load(file)
 
     agent_name = find_agents_name(user_config)
+
+    # Check if the configuration file's top-level key matches the expected agent name
+    config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
+    if agent_name != config_filename:
+        raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
+
     user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict)]
     default_agent_config = default_config['default_agent_config']
 
@@ -133,7 +139,6 @@ def run_agents(constructor_path, user_code_path, default_path):
         })
 
         ephemeral_directories.append(directory_info)
-
 
     end_workflow_udf = next((agent for agent in user_agents if 'end_of_workflow' in agent), None)
     if end_workflow_udf:
@@ -228,19 +233,13 @@ def main():
     try:
         run_agents(full_path, args.user_code, default_config_path)
     except ValueError as ve:
-        logging.error("Configuration error: %s", ve)
-        print(f"Configuration error: {ve}")
-        traceback.print_exc()
+        print(f"Configuration error: {ve}. Please make sure the top-level key in the YAML file matches the filename.")
         sys.exit(1)
     except FileNotFoundError as fe:
-        logging.error("File not found: %s", fe)
         print(f"File not found: {fe}")
-        traceback.print_exc()
         sys.exit(1)
     except yaml.YAMLError as ye:
-        logging.error("YAML parsing error: %s", ye)
         print(f"YAML parsing error: {ye}")
-        traceback.print_exc()
         sys.exit(1)
 
 
