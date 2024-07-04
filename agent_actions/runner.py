@@ -54,7 +54,8 @@ def topological_sort(dependencies):
         raise ValueError("There is a cycle in the dependencies")
 
     return ordered[::-1]
-def run_agent(agent_config, agent_name, previous_agent_type, idx):
+
+def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
     """
     Run an agent based on the provided configuration.
     """
@@ -63,8 +64,9 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx):
         function_name = 'generate_staging' if idx == 0 else 'generate_target'
         output_folder = process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
 
-        function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-        clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+        if use_tools:
+            function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
+            clean_agent_output(agent_name, agent_config['agent_type'], function_name)
 
         if 'udf' in agent_config:
             udf = agent_config['udf']
@@ -79,11 +81,11 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx):
     return output_folder
 
 
-def run_agents(constructor_path, user_code_path, default_path):
+def run_agents(constructor_path, user_code_path, default_path, use_tools):
     """
     Run agents based on the provided constructor path and default path.
     """
-    if user_code_path not in sys.path:
+    if user_code_path and user_code_path not in sys.path:
         sys.path.insert(0, user_code_path)
 
     with open(constructor_path, 'r', encoding='utf-8') as file:
@@ -128,7 +130,7 @@ def run_agents(constructor_path, user_code_path, default_path):
 
     for idx, agent_type in enumerate(execution_order):
         agent_config = agent_configs[agent_type]
-        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx)
+        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
         previous_agent_type = agent_type
 
         directory_info = OrderedDict({
@@ -192,7 +194,7 @@ def main():
     """
     parser = argparse.ArgumentParser(description="Run agents with a specified agent configuration.")
     parser.add_argument("-a", "--agent", required=True, help="Name of the schema (agent configuration file without path)")
-    parser.add_argument("-u", "--user_code", required=True, help="Path to the user's code folder containing UDFs")
+    parser.add_argument("-u", "--user_code", help="Path to the user's code folder containing UDFs")
     args = parser.parse_args()
 
     current_dir = os.getcwd()
@@ -231,8 +233,10 @@ def main():
         print(f"Error: The agent name '{agent_name}' is not unique across the entire project.")
         sys.exit(1)
 
+    use_tools = args.user_code is not None
+
     try:
-        run_agents(full_path, args.user_code, default_config_path)
+        run_agents(full_path, args.user_code, default_config_path, use_tools)
     except ValueError as ve:
         print(f"Configuration error: {ve}. Please make sure the top-level key in the YAML file matches the filename.")
         sys.exit(1)
