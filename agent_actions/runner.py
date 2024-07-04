@@ -54,8 +54,6 @@ def topological_sort(dependencies):
         raise ValueError("There is a cycle in the dependencies")
 
     return ordered[::-1]
-
-
 def run_agent(agent_config, agent_name, previous_agent_type, idx):
     """
     Run an agent based on the provided configuration.
@@ -146,14 +144,17 @@ def run_agents(constructor_path, user_code_path, default_path):
         print(f"Executing end-of-workflow UDF: {udf}")
         result = execute_user_defined_function(udf)
         print(f"End-of-workflow UDF result: {result}")
-
+    
+    directories_cleaned = False
     for i, directory in enumerate(ephemeral_directories):
-        if directory['ephemeral'] and i != 0 and i != len(ephemeral_directories) - 1:
+        if directory['ephemeral'] and i != len(ephemeral_directories) - 1:
             folder_path = directory['output_folder']
             if os.path.exists(folder_path):
                 shutil.rmtree(folder_path)
+                directories_cleaned = True
 
-    print("Finished cleaning up ephemeral directories.")
+    if directories_cleaned:
+        print("Finished cleaning up ephemeral directories.")
 
 
 def get_all_agent_paths(base_dir):
