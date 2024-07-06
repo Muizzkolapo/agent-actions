@@ -90,11 +90,22 @@ def extract_dependencies(config_data):
     Extract dependencies from the configuration data.
     """
     dependencies = {}
-    for agents in config_data.values():
-        for agent in agents:
-            agent_name = agent['agent_type']
-            agent_dependencies = agent.get('dependencies', [])
-            dependencies[agent_name] = agent_dependencies
+
+    for key, agents in config_data.items():
+        if key == 'udf':
+            for udf in agents:
+                dependencies[udf] = []
+                print(f"Added UDF to dependencies: {udf}")
+        elif isinstance(agents, list):
+            for agent in agents:
+                agent_name = agent.get('agent_type')
+                if agent_name:
+                    agent_dependencies = agent.get('dependencies', [])
+                    dependencies[agent_name] = agent_dependencies
+                    print(f"Added agent {agent_name} with dependencies: {agent_dependencies}")
+                else:
+                    print(f"Agent without agent_type: {agent}")
+    print(f"Final dependencies: {dependencies}")
     return dependencies
 
 
@@ -103,9 +114,13 @@ def build_dag(dependencies):
     Build a directed acyclic graph (DAG) from the dependencies.
     """
     dag = nx.DiGraph()
-    for agent, deps in dependencies.items():
+    for node, deps in dependencies.items():
+        if not dag.has_node(node):  # Ensure node is added even if it has no dependencies
+            dag.add_node(node)
+            print(f"Added node with no dependencies: {node}")
         for dep in deps:
-            dag.add_edge(dep, agent)
+            dag.add_edge(dep, node)
+            print(f"Added edge from {dep} to {node}")
     return dag
 
 
@@ -138,17 +153,26 @@ def generate_agent_lineage():
 @app.route('/get_agent_details', methods=['POST'])
 def get_agent_details():
     """
-    Get details of a specific agent based on the provided filename and agent name.
+    Get details of a specific agent or UDF based on the provided filename and node name.
     """
     filename = request.json.get('filename')
-    agent_name = request.json.get('agent_name')
+    node_name = request.json.get('node_name')
     config_data = load_single_yaml_file(filename)
+    
 
-    for agents in config_data.values():
-        for agent in agents:
-            if agent['agent_type'] == agent_name:
-                return jsonify(agent)
-    return jsonify({'error': 'Agent not found'}), 404
+    # Check UDFs
+    if 'udf' in config_data and node_name in config_data['udf']:
+        print()
+        return jsonify({'type': 'udf', 'name': node_name})
+
+    # Check agents
+    for key, agents in config_data.items():
+        if isinstance(agents, list):
+            for agent in agents:
+                if agent.get('agent_type') == node_name:
+                    return jsonify(agent)
+    print(config_data)
+    return jsonify({'error': 'Agent or UDF not found'}), 404
 
 
 @app.route('/')
