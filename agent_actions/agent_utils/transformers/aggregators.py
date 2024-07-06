@@ -13,24 +13,23 @@ except ImportError:
     find_agent_folder = None
 
 
-def load_schema(agent_name, schema_name):
+def load_schema(schema_name):
     """
     Retrieve and generate a JSON schema based on the schema name provided.
     """
     try:
         current_dir = os.getcwd()
-        agent_folder = find_agent_folder(current_dir, agent_name, "schema")
+        schema_dir = os.path.join(current_dir, "schema")
 
-        if agent_folder is None:
-            raise FileNotFoundError(f"Schema folder not found for agent: {agent_name}")
+        if schema_dir is None:
+            raise FileNotFoundError(f"Schema directory not found.")
 
-        agent_schema_dir = os.path.join(agent_folder, schema_name)
-        file_path = agent_schema_dir + '.yml'
+        schema_file_path = find_file_in_directory(schema_dir, f"{schema_name}.yml")
 
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Schema file not found: {file_path}")
+        if not schema_file_path:
+            raise FileNotFoundError(f"Schema file not found: {schema_name}.yml")
 
-        with open(file_path, 'r', encoding='utf-8') as file:
+        with open(schema_file_path, 'r', encoding='utf-8') as file:
             documents = yaml.safe_load(file)
 
         return documents
@@ -45,6 +44,18 @@ def load_schema(agent_name, schema_name):
         print(f"An unexpected error occurred in load_schema: {e}")
         traceback.print_exc()
 
+def find_file_in_directory(directory, target_filename):
+    """
+    Recursively searches for a file in a directory.
+
+    :param directory: The base directory to start the search from.
+    :param target_filename: The name of the file to find.
+    :return: The full path to the file or None if not found.
+    """
+    for root, _, files in os.walk(directory):
+        if target_filename in files:
+            return os.path.join(root, target_filename)
+    return None
 
 def update_schema_objects(schema_name, agent_name, data_old, data_new, keys_to_update):
     """
