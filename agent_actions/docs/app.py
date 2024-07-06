@@ -90,11 +90,20 @@ def extract_dependencies(config_data):
     Extract dependencies from the configuration data.
     """
     dependencies = {}
+
+    # Include UDFs in the dependencies
+    if 'udf' in config_data:
+        for udf in config_data['udf']:
+            dependencies[udf] = []
+
     for agents in config_data.values():
-        for agent in agents:
-            agent_name = agent['agent_type']
-            agent_dependencies = agent.get('dependencies', [])
-            dependencies[agent_name] = agent_dependencies
+        if isinstance(agents, list):
+            for agent in agents:
+                agent_name = agent.get('agent_type', 'udf')
+                if agent_name:
+                    agent_dependencies = agent.get('dependencies', [])
+                    dependencies[agent_name] = agent_dependencies
+
     return dependencies
 
 
@@ -103,9 +112,11 @@ def build_dag(dependencies):
     Build a directed acyclic graph (DAG) from the dependencies.
     """
     dag = nx.DiGraph()
-    for agent, deps in dependencies.items():
+    for node, deps in dependencies.items():
+        if not dag.has_node(node):  # Ensure node is added even if it has no dependencies
+            dag.add_node(node)
         for dep in deps:
-            dag.add_edge(dep, agent)
+            dag.add_edge(dep, node)
     return dag
 
 
@@ -142,12 +153,16 @@ def get_agent_details():
     """
     filename = request.json.get('filename')
     agent_name = request.json.get('agent_name')
+    print(agent_name + "============")
     config_data = load_single_yaml_file(filename)
 
+
+
     for agents in config_data.values():
-        for agent in agents:
-            if agent['agent_type'] == agent_name:
-                return jsonify(agent)
+        if isinstance(agents, list):
+            for agent in agents:
+                if agent.get('agent_type', 'udf') == agent_name:
+                    return jsonify(agent)
     return jsonify({'error': 'Agent not found'}), 404
 
 
