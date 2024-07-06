@@ -16,11 +16,11 @@ def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
 
-def create_dynamic_agent(agent_config,agent_name,input_documentation):
+def create_dynamic_agent(agent_config, agent_name, input_documentation):
     """
     Create a dynamic agent based on the provided configuration.
 
-    :param prompt_config: Configuration for the prompt.
+    :param agent_config: Configuration for the prompt.
     :param model_name: Name of the language model.
     :param api_key: API key for the language model.
     :param schema_name: Name of the schema.
@@ -34,6 +34,6 @@ def create_dynamic_agent(agent_config,agent_name,input_documentation):
     schema_name = agent_config['schema_name']
     llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
     prompt = ChatPromptTemplate.from_messages(prompt_config)
-    schema = load_schema(agent_name, schema_name)
+    schema = load_schema(schema_name)
     agent = create_structured_output_runnable(schema, llm, prompt)
     return agent.invoke({"input": input_documentation, "chat_history": []})
