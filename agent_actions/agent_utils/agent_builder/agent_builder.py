@@ -16,7 +16,7 @@ def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
 
-def create_dynamic_agent(agent_config, agent_name, input_documentation):
+def create_dynamic_agent(agent_config, input_documentation):
     """
     Create a dynamic agent based on the provided configuration.
 
@@ -24,7 +24,6 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation):
     :param model_name: Name of the language model.
     :param api_key: API key for the language model.
     :param schema_name: Name of the schema.
-    :param agent_name: Name of the agent.
     :param input_documentation: Input documentation for the agent.
     :return: Result of the agent's invocation.
     """
