@@ -72,7 +72,7 @@ def update_schema_objects(schema_name, agent_name, data_old, data_new, keys_to_u
     :param keys_to_update: List of keys for which values should be updated from the new objects.
     :return: A dictionary containing the list of updated objects.
     """
-    schema = load_schema(schema_name)
+    schema = load_schema(agent_name, schema_name)
 
     if schema is None:
         print(f"Failed to load schema for agent '{agent_name}' and schema '{schema_name}'.")
