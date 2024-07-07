@@ -21,9 +21,12 @@ def execute_user_defined_function(udf):
     Execute a user-defined function specified in the UDF string.
     """
     try:
-        module_name, function_name = udf.rsplit('.', 1)
+        module_name, function_name = udf.split('.')
         func = load_user_defined_function(module_name, function_name)
         return func()
-    except ValueError as ve:
-        logging.error("Error parsing UDF %s: %s", udf, ve)
-        raise
+    except ModuleNotFoundError as e:
+        logging.error(f"Error loading function {function_name} from module {module_name}: {e}")
+        return None
+    except Exception as e:
+        logging.error(f"An error occurred while executing the UDF {udf}: {e}")
+        return None

@@ -126,6 +126,9 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     if top_level_udf:
         print(f"Executing top-level UDF: {top_level_udf}")
         result = execute_user_defined_function(top_level_udf)
+        if result is None:
+            print(f"Failed to execute top-level UDF: {top_level_udf}. Exiting.")
+            sys.exit(1)
         print(f"Top-level UDF result: {result}")
 
     previous_agent_type = None
@@ -148,6 +151,9 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     if end_workflow_udf:
         print(f"Executing end-of-workflow UDF: {end_workflow_udf}")
         result = execute_user_defined_function(end_workflow_udf)
+        if result is None:
+            print(f"Failed to execute end-of-workflow UDF: {end_workflow_udf}. Exiting.")
+            sys.exit(1)
         print(f"End-of-workflow UDF result: {result}")
     
     directories_cleaned = False
@@ -270,6 +276,11 @@ def main():
         print(f"Error: {message}")
         sys.exit(1)
 
+    # Check for user_code path if UDFs are defined
+    if udf_entries and not args.user_code:
+        print(f"Error: UDFs are defined in the configuration but no user code path is provided with the '-u' option.")
+        sys.exit(1)
+
     use_tools = args.user_code is not None
 
     try:
@@ -283,6 +294,9 @@ def main():
     except yaml.YAMLError as ye:
         print(f"YAML parsing error: {ye}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
