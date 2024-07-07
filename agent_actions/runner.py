@@ -16,11 +16,13 @@ try:
     from agent_actions.agent_utils.processor.process_target import process_and_generate_for_agent
     from agent_actions.agent_utils.processor.process_target import find_config_file
     from agent_actions.agent_utils.transformers.tooling import execute_user_defined_function
+    from agent_actions.agent_utils.transformers.validator import validate_agent_config
 except ImportError:
     clean_agent_output = None
     process_and_generate_for_agent = None
     find_config_file = None
     execute_user_defined_function = None
+    validate_agent_config = None
 
 
 def find_agents_name(config):
@@ -233,6 +235,33 @@ def main():
         print(f"Error: The agent name '{agent_name}' is not unique across the entire project.")
         sys.exit(1)
 
+    # Load the agent configuration file
+    with open(full_path, 'r') as config_file:
+        config_data = yaml.safe_load(config_file)
+    
+    # Extract the agent configurations
+    if agent_name not in config_data:
+        print(f"Error: The top-level key '{agent_name}' is not found in the configuration file.")
+        sys.exit(1)
+
+    agent_config = config_data[agent_name]
+
+    # Print a summary of the loaded agent configuration
+    print(f"Loaded configuration for '{agent_name}' with {len(agent_config)} agents.")
+    for idx, agent in enumerate(agent_config):
+        print(f"  Agent {idx + 1}: {agent['agent_type']}")
+
+    # Validate that agent_config is a list
+    if not isinstance(agent_config, list):
+        print(f"Error: The configuration for '{filename}' is not a list.")
+        sys.exit(1)
+
+    # Validate the agent configuration
+    is_valid, message = validate_agent_config(agent_config)
+    if not is_valid:
+        print(f"Error: {message}")
+        sys.exit(1)
+
     use_tools = args.user_code is not None
 
     try:
@@ -246,7 +275,6 @@ def main():
     except yaml.YAMLError as ye:
         print(f"YAML parsing error: {ye}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()

@@ -16,7 +16,7 @@ def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
 
-def create_dynamic_agent(agent_config, input_documentation):
+def create_dynamic_agent(agent_config, agent_name, input_documentation):
     """
     Create a dynamic agent based on the provided configuration.
 
