@@ -2,21 +2,22 @@
 
 def validate_agent_config(agent_config):
     """
-    Validate the agent configuration to ensure that only the first agent can have no dependencies
-    and all subsequent agents have at least one dependency.
-
-    :param agent_config: The list of agent configurations.
-    :return: Tuple (is_valid, message). is_valid is True if the configuration is valid, False otherwise.
-             message contains the error message if the configuration is invalid.
+    Validate the agent configuration to ensure all required fields are present and correctly formatted.
     """
+    required_keys = {'agent_type', 'model_name', 'api_key', 'schema_name', 'prompt'}
+
     for idx, agent in enumerate(agent_config):
-        if idx == 0:
-            # The first agent can have no dependencies
-            if agent['dependencies']:
-                return False, f"The first agent '{agent['agent_type']}' should have no dependencies."
-        else:
-            # All other agents must have at least one dependency
-            if not agent['dependencies']:
-                return False, f"The agent '{agent['agent_type']}' must have at least one dependency."
+        # Skip validation for top-level UDFs
+        if 'udf' in agent:
+            continue
+        
+        missing_keys = required_keys - agent.keys()
+        if missing_keys:
+            return False, f"Agent {idx + 1} is missing required keys: {', '.join(missing_keys)}"
+
+        # Ensure dependencies is a list if it exists, otherwise set it to an empty list
+        if 'dependencies' in agent and not isinstance(agent['dependencies'], list):
+            return False, f"Agent {idx + 1}: 'dependencies' should be a list."
+        agent.setdefault('dependencies', [])
 
     return True, "Agent configuration is valid."

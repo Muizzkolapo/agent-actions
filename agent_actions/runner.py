@@ -73,7 +73,8 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
         if 'udf' in agent_config:
             udf = agent_config['udf']
             print(f"Calling UDF: {udf}")
-            execute_user_defined_function(udf)
+            result = execute_user_defined_function(udf)
+            print(f"UDF result: {result}")
 
     except Exception as e:
         logging.error("Error running agent %s: %s", agent_config['agent_type'], e)
@@ -103,7 +104,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     if agent_name != config_filename:
         raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
 
-    user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict)]
+    user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
     default_agent_config = default_config['default_agent_config']
 
     agent_configs = {}
@@ -120,11 +121,11 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
     execution_order = topological_sort(dependency_graph)
 
-    top_level_udf = next((item for item in user_config[agent_name] if 'udf' in item), None)
+    # Correctly locate and execute the top-level UDF
+    top_level_udf = next((item['udf'] for item in user_config[agent_name] if 'udf' in item), None)
     if top_level_udf:
-        udf = top_level_udf['udf']
-        print(f"Executing top-level UDF: {udf}")
-        result = execute_user_defined_function(udf)
+        print(f"Executing top-level UDF: {top_level_udf}")
+        result = execute_user_defined_function(top_level_udf)
         print(f"Top-level UDF result: {result}")
 
     previous_agent_type = None
@@ -132,6 +133,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
 
     for idx, agent_type in enumerate(execution_order):
         agent_config = agent_configs[agent_type]
+        print(f"  Agent {idx + 1}: {agent_config['agent_type']}")
         output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
         previous_agent_type = agent_type
 
@@ -142,11 +144,10 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
 
         ephemeral_directories.append(directory_info)
 
-    end_workflow_udf = next((agent for agent in user_agents if 'end_of_workflow' in agent), None)
+    end_workflow_udf = next((agent['end_of_workflow'] for agent in user_agents if 'end_of_workflow' in agent), None)
     if end_workflow_udf:
-        udf = end_workflow_udf['end_of_workflow']
-        print(f"Executing end-of-workflow UDF: {udf}")
-        result = execute_user_defined_function(udf)
+        print(f"Executing end-of-workflow UDF: {end_workflow_udf}")
+        result = execute_user_defined_function(end_workflow_udf)
         print(f"End-of-workflow UDF result: {result}")
     
     directories_cleaned = False
@@ -159,6 +160,8 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
 
     if directories_cleaned:
         print("Finished cleaning up ephemeral directories.")
+
+
 
 
 def get_all_agent_paths(base_dir):
@@ -246,10 +249,15 @@ def main():
 
     agent_config = config_data[agent_name]
 
+    # Separate UDF entries from agent configurations
+    udf_entries = [entry for entry in agent_config if 'udf' in entry]
+    agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
+
     # Print a summary of the loaded agent configuration
-    print(f"Loaded configuration for '{agent_name}' with {len(agent_config)} agents.")
-    for idx, agent in enumerate(agent_config):
-        print(f"  Agent {idx + 1}: {agent['agent_type']}")
+    print(f"Loaded configuration for '{agent_name}' with {len(agent_entries)} agents.")
+    for idx, agent in enumerate(agent_entries):
+        if 'agent_type' in agent:
+            print(f"  Agent {idx + 1}: {agent['agent_type']}")
 
     # Validate that agent_config is a list
     if not isinstance(agent_config, list):
@@ -257,7 +265,7 @@ def main():
         sys.exit(1)
 
     # Validate the agent configuration
-    is_valid, message = validate_agent_config(agent_config)
+    is_valid, message = validate_agent_config(agent_entries)
     if not is_valid:
         print(f"Error: {message}")
         sys.exit(1)
