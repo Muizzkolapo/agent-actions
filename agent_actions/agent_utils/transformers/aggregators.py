@@ -141,3 +141,21 @@ def flatten_nested_dictionaries(data):
             if isinstance(value, list) and all(isinstance(elem, dict) for elem in value):
                 flattened.extend(value)
     return flattened
+
+def try_cleaning_functions(data):
+    """
+    Tries to clean the data using two different functions, and returns the cleaned data.
+    If both functions return None, returns the raw data.
+
+    :param data: The raw data to clean
+    :return: Cleaned data or raw data if both cleaning functions return None
+    """
+    result = extract_all_lists(data)
+    if result is not None:
+        return result
+
+    result = flatten_nested_dictionaries(data)
+    if result is not None:
+        return result
+
+    return data

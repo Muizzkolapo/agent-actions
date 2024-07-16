@@ -5,12 +5,13 @@ import os
 
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
-    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects
+    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects,try_cleaning_functions
+    from agent_actions.agent_utils.processor.clean_target import clean_agent_output
 except ImportError:
     # Handle import error gracefully
     agent_builder = None
     update_schema_objects = None
-
+    try_cleaning_functions = None
 
 
 
@@ -27,7 +28,8 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     """
     data = load_json(file_path)
     new_data = process_data(data, agent_config, agent_name)
-    save_output(new_data, file_path, base_directory, output_directory)
+    final_data = try_cleaning_functions(new_data)
+    save_output(final_data, file_path, base_directory, output_directory)
 
 def load_json(file_path):
     """
