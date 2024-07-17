@@ -57,7 +57,8 @@ def find_file_in_directory(directory, target_filename):
             return os.path.join(root, target_filename)
     return None
 
-def update_schema_objects(schema_name, agent_name, data_old, data_new, keys_to_update):
+
+def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update):
     """
     Updates specific fields in objects within a list based on a JSON schema and specified keys
     from new data.
@@ -65,25 +66,24 @@ def update_schema_objects(schema_name, agent_name, data_old, data_new, keys_to_u
     This function takes objects from the old data, updates certain fields with values from the
     corresponding objects in the new data, and retains all other fields as they are.
 
-    :param schema_name: Name of the JSON schema describing the structure and keys of the objects.
+    :param schema: JSON schema describing the structure and keys of the objects.
     :param agent_name: Name of the agent.
-    :param data_old: Dictionary containing a key with a list of original objects.
-    :param data_new: Dictionary containing a key with a list of new objects with updates.
+    :param data_old: List containing original objects.
+    :param data_new: List containing new objects with updates.
     :param keys_to_update: List of keys for which values should be updated from the new objects.
-    :return: A dictionary containing the list of updated objects.
+    :return: List of updated objects.
     """
-    schema = load_schema(schema_name)
+    schema = load_schema(schema)
 
     if schema is None:
-        print(f"Failed to load schema for agent '{agent_name}' and schema '{schema_name}'.")
+        print(f"Failed to load schema for agent '{agent_name}' and schema '{schema}'.")
         return None
-
     try:
         # Dynamically identify the key for the list of objects, as defined by the schema
         main_key = next(k for k, v in schema['properties'].items() if v.get('type') == 'array')
 
-        old_objects = data_old[main_key]
-        new_objects = data_new[main_key]
+        old_objects = data_old
+        new_objects = data_new
 
         # Initialize an empty list to store the updated objects
         updated_objects = []
@@ -102,14 +102,15 @@ def update_schema_objects(schema_name, agent_name, data_old, data_new, keys_to_u
             # Append the updated object to the list
             updated_objects.append(updated_object)
 
-        # Return the new data structure with updated objects
-        return {main_key: updated_objects}
+        # Return the new list of updated objects
+        return updated_objects
     except KeyError as e:
         print(f"KeyError: {e}. Please check that the schema and data structures are correct.")
     except Exception as e:
         print(f"An unexpected error occurred in update_schema_objects: {e}")
         traceback.print_exc()
         return None
+
 
 
 def extract_all_lists(data):
