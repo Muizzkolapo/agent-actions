@@ -13,16 +13,24 @@ except ImportError:
     try_cleaning_functions = None
 
 import copy
-
 def replace_placeholders(prompt, content_dict):
-    new_prompt = copy.deepcopy(prompt)
-    for i, sublist in enumerate(new_prompt):
-        for j, string in enumerate(sublist):
+    new_prompt = [] 
+    for sublist in prompt:  
+        new_sublist = [] 
+        for string in sublist:  
             for key, value in content_dict.items():
                 placeholder = f"get[{key}]"
-                if placeholder in string:
-                    new_prompt[i][j] = string.replace(placeholder, value)
+                if isinstance(value, list):  # Check if value is a list
+                    value = ", ".join(value)  # Convert the list to a comma-separated string
+                string = string.replace(placeholder, value)  # Always perform the replacement
+            new_sublist.append(string)  
+        new_prompt.append(new_sublist)  
     return new_prompt
+
+
+
+
+
 
 def generate_target(agent_config, agent_name, file_path, base_directory, output_directory):
     """
@@ -61,21 +69,23 @@ def process_data(data, agent_config, agent_name):
     new_data = []
     select_list = {agent_config['agent_type']: agent_config['select_list']}
     keys_list = list(select_list.keys())
+
+
     for contents in data:
-        formatted_prompt = replace_placeholders(agent_config['prompt'], contents)
-        generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formatted_prompt)
+        formated_prompt=replace_placeholders(agent_config['prompt'],contents)
+        generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):
             keys_to_update = select_list[agent_config['agent_type']]
             merged_questions = update_schema_objects(agent_config["schema_name"],
                                                      agent_name,
                                                      [contents],
-                                                     flatten_nested_list(generated_data),
+                                                     flatten_nested_list(generated_data)[0],
                                                      keys_to_update)
             
             new_data.append(merged_questions[0])
         else:
             new_data.append(generated_data)
-         
+
     return new_data
 
 def should_update_schema(agent_config, keys_list, select_list):
