@@ -14,18 +14,24 @@ except ImportError:
 
 import copy
 def replace_placeholders(prompt, content_dict):
-    new_prompt = [] 
-    for sublist in prompt:  
-        new_sublist = [] 
-        for string in sublist:  
+    def convert_to_string(value):
+        if isinstance(value, list):
+            return ", ".join([str(v) if isinstance(v, dict) else v for v in value])
+        return value
+
+    new_prompt = []
+    for sublist in prompt:
+        new_sublist = []
+        for string in sublist:
             for key, value in content_dict.items():
                 placeholder = f"get[{key}]"
-                if isinstance(value, list):  # Check if value is a list
-                    value = ", ".join(value)  # Convert the list to a comma-separated string
-                string = string.replace(placeholder, value)  # Always perform the replacement
-            new_sublist.append(string)  
-        new_prompt.append(new_sublist)  
+                value = convert_to_string(value)
+                string = string.replace(placeholder, value)
+            new_sublist.append(string)
+        new_prompt.append(new_sublist)
+    
     return new_prompt
+
 
 
 
