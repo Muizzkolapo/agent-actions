@@ -16,8 +16,12 @@ import copy
 def replace_placeholders(prompt, content_dict):
     def convert_to_string(value):
         if isinstance(value, list):
-            return ", ".join([str(v) if isinstance(v, dict) else v for v in value])
-        return value
+            return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
+        return str(value)
+
+    # Check if content_dict is a dictionary and has keys
+    if not isinstance(content_dict, dict) or not content_dict:
+        return prompt
 
     new_prompt = []
     for sublist in prompt:
@@ -90,7 +94,7 @@ def process_data(data, agent_config, agent_name):
             
             new_data.append(merged_questions[0])
         else:
-            new_data.append(generated_data)
+            new_data.append(flatten_nested_list(generated_data)[0])
 
     return new_data
 
