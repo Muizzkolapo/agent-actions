@@ -16,7 +16,7 @@ def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
 
-def create_dynamic_agent(agent_config, agent_name, input_documentation):
+def create_dynamic_agent(agent_config, agent_name, input_documentation,formatted_prompt = None):
     """
     Create a dynamic agent based on the provided configuration.
 
@@ -27,7 +27,10 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation):
     :param input_documentation: Input documentation for the agent.
     :return: Result of the agent's invocation.
     """
-    prompt_config = list_to_tuples(agent_config['prompt'])
+    if formatted_prompt != None:
+        prompt_config = list_to_tuples(formatted_prompt)
+    else:
+        prompt_config = list_to_tuples(agent_config['prompt'])
     model_name = agent_config['model_name']
     api_key = os.getenv(agent_config['api_key'])
     schema_name = agent_config['schema_name']
