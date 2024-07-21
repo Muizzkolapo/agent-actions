@@ -133,9 +133,9 @@ def save_output(new_data, file_path, base_directory, output_directory):
 
 def flatten_data(data, parent_key='', sep='_'):
     """
-    Flattens a nested dictionary or list into a flat dictionary.
+    Flattens a nested dictionary into a flat dictionary, keeping the innermost lists intact.
 
-    :param data: The dictionary or list to flatten.
+    :param data: The dictionary to flatten.
     :param parent_key: The base key string for nested items (used in recursion).
     :param sep: The separator between parent and child keys.
     :return: A flattened dictionary.
@@ -145,11 +145,10 @@ def flatten_data(data, parent_key='', sep='_'):
     if isinstance(data, dict):
         for key, value in data.items():
             new_key = f"{parent_key}{sep}{key}" if parent_key else key
-            items.extend(flatten_data(value, new_key, sep=sep).items())
-    elif isinstance(data, list):
-        for i, value in enumerate(data):
-            new_key = f"{parent_key}{sep}{i}" if parent_key else str(i)
-            items.extend(flatten_data(value, new_key, sep=sep).items())
+            if isinstance(value, list) and all(isinstance(i, (dict, list)) for i in value):
+                items.append((new_key, [flatten_data(v, '', sep) if isinstance(v, dict) else v for v in value]))
+            else:
+                items.extend(flatten_data(value, new_key, sep=sep).items())
     else:
         items.append((parent_key, data))
 
@@ -181,28 +180,3 @@ def flatten_nested_list(data):
 
     return flattened_data
 
-def flatten_nested_list(data):
-    """
-    Identifies the key containing a list of objects in the given data and flattens the list.
-
-    :param data: Dictionary containing a list of objects under an unknown key.
-    :return: List of flattened dictionaries.
-    """
-    flattened_data = []
-
-    # Identify the key containing the list of objects
-    list_key = None
-    for key, value in data.items():
-        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            list_key = key
-            break
-
-    if list_key is None:
-        print("No key containing a list of objects was found in the input data.")
-        return flattened_data
-
-    for item in data[list_key]:
-        flattened_item = flatten_data(item)
-        flattened_data.append(flattened_item)
-
-    return flattened_data

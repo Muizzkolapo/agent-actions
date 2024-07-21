@@ -6,11 +6,6 @@ import os
 import traceback
 import yaml
 
-try:
-    from agent_actions.agent_utils.processor.process_target import find_agent_folder
-except ImportError:
-    # Handle import error gracefully
-    find_agent_folder = None
 
 
 def load_schema(schema_name):
