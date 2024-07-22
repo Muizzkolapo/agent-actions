@@ -89,7 +89,7 @@ def process_data(data, agent_config, agent_name):
             merged_questions = update_schema_objects(agent_config["schema_name"],
                                                      agent_name,
                                                      [contents],
-                                                     flatten_nested_list(generated_data)[0],
+                                                     flatten_nested_list(generated_data),
                                                      keys_to_update)
             
             new_data.append(merged_questions[0])
@@ -145,10 +145,12 @@ def flatten_data(data, parent_key='', sep='_'):
     if isinstance(data, dict):
         for key, value in data.items():
             new_key = f"{parent_key}{sep}{key}" if parent_key else key
-            if isinstance(value, list) and all(isinstance(i, (dict, list)) for i in value):
+            if isinstance(value, dict):
+                items.extend(flatten_data(value, new_key, sep=sep).items())
+            elif isinstance(value, list):
                 items.append((new_key, [flatten_data(v, '', sep) if isinstance(v, dict) else v for v in value]))
             else:
-                items.extend(flatten_data(value, new_key, sep=sep).items())
+                items.append((new_key, value))
     else:
         items.append((parent_key, data))
 
@@ -163,20 +165,29 @@ def flatten_nested_list(data):
     """
     flattened_data = []
 
-    # Identify the key containing the list of objects
-    list_key = None
-    for key, value in data.items():
-        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            list_key = key
-            break
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                flattened_data.extend(flatten_nested_list(item))
+            elif isinstance(item, list):
+                for sub_item in item:
+                    flattened_data.extend(flatten_nested_list(sub_item))
+    elif isinstance(data, dict):
+        # Identify the key containing the list of objects
+        list_key = None
+        for key, value in data.items():
+            if isinstance(value, list) and all(isinstance(item, dict) for item in value):
+                list_key = key
+                break
 
-    if list_key is None:
-        print("No key containing a list of objects was found in the input data.")
-        return flattened_data
+        if list_key is None:
+            print("No key containing a list of objects was found in the input data.")
+            return flattened_data
 
-    for item in data[list_key]:
-        flattened_item = flatten_data(item)
-        flattened_data.append(flattened_item)
+        for item in data[list_key]:
+            flattened_item = flatten_data(item)
+            flattened_data.append(flattened_item)
 
     return flattened_data
+
 
