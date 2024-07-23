@@ -46,6 +46,8 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         return agent.invoke({"input": input_documentation, "chat_history": []})
     
     elif model_vendor.lower() == 'gemini':
+        api_key = agent_config['api_key']
+        genai.configure(api_key=os.environ[api_key])
         llm = genai.GenerativeModel(model_name, generation_config={"response_mime_type": "application/json"})
         prompt = f"""
             prompt_config: {prompt_config}
