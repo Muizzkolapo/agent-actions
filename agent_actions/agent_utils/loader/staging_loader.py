@@ -11,11 +11,9 @@ from langchain.text_splitter import CharacterTextSplitter
 
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
-    from agent_actions.agent_utils.transformers.aggregators import try_cleaning_functions
 except ImportError:
     # Handle import error gracefully
     agent_builder = None
-    try_cleaning_functions = None
 
 
 
@@ -242,9 +240,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                                     relative_path.replace(os.path.splitext(file_path)[1], '.json'))
 
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
-    final_data = flatten_nested_list(data_chunk)
 
-    write_file(final_data, output_file_path)
+    write_file(data_chunk, output_file_path)
 
 
 def split_text_content(content, chunk_config=None):
@@ -345,67 +342,5 @@ def process_xml_content(content, agent_config, agent_name):
             data_chunk.append(agent_builder.create_dynamic_agent(
                 agent_config, agent_name, process_xml_element(element)))
     return data_chunk
-
-
-
-
-def flatten_data(data, parent_key='', sep='_'):
-    """
-    Flattens a nested dictionary into a flat dictionary, keeping the innermost lists intact.
-
-    :param data: The dictionary to flatten.
-    :param parent_key: The base key string for nested items (used in recursion).
-    :param sep: The separator between parent and child keys.
-    :return: A flattened dictionary.
-    """
-    items = []
-
-    if isinstance(data, dict):
-        for key, value in data.items():
-            new_key = f"{parent_key}{sep}{key}" if parent_key else key
-            if isinstance(value, dict):
-                items.extend(flatten_data(value, new_key, sep=sep).items())
-            elif isinstance(value, list):
-                items.append((new_key, [flatten_data(v, '', sep) if isinstance(v, dict) else v for v in value]))
-            else:
-                items.append((new_key, value))
-    else:
-        items.append((parent_key, data))
-
-    return dict(items)
-
-def flatten_nested_list(data):
-    """
-    Identifies the key containing a list of objects in the given data and flattens the list.
-
-    :param data: Dictionary containing a list of objects under an unknown key.
-    :return: List of flattened dictionaries.
-    """
-    flattened_data = []
-
-    if isinstance(data, list):
-        for item in data:
-            if isinstance(item, dict):
-                flattened_data.extend(flatten_nested_list(item))
-            elif isinstance(item, list):
-                for sub_item in item:
-                    flattened_data.extend(flatten_nested_list(sub_item))
-    elif isinstance(data, dict):
-        # Identify the key containing the list of objects
-        list_key = None
-        for key, value in data.items():
-            if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-                list_key = key
-                break
-
-        if list_key is None:
-            print("No key containing a list of objects was found in the input data.")
-            return flattened_data
-
-        for item in data[list_key]:
-            flattened_item = flatten_data(item)
-            flattened_data.append(flattened_item)
-
-    return flattened_data
 
 

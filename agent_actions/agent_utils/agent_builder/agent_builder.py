@@ -9,10 +9,11 @@ from langchain_core.prompts import ChatPromptTemplate
 import google.generativeai as genai
 
 try:
-    from agent_actions.agent_utils.transformers.aggregators import load_schema
+    from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_summaries
 except ImportError:
     # Handle import error gracefully
     load_schema = None
+    extract_summaries = None
 
 def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
@@ -43,7 +44,8 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
         prompt = ChatPromptTemplate.from_messages(prompt_config)
         agent = create_structured_output_runnable(schema, llm, prompt)
-        return agent.invoke({"input": input_documentation, "chat_history": []})
+        transformed_response = extract_summaries(agent.invoke({"input": input_documentation, "chat_history": []}))
+        return transformed_response
     
     elif model_vendor.lower() == 'gemini':
         api_key = agent_config['api_key']
@@ -56,7 +58,8 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
             Return a list[schema]
         """
         response = llm.generate_content(prompt)
-        return json.loads(response.text)
+        transformed_response = extract_summaries(json.loads(response.text))
+        return transformed_response
     
     else:
         raise ValueError(f"Unsupported model name: {model_name}")

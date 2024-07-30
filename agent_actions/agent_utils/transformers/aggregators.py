@@ -106,52 +106,17 @@ def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update
         traceback.print_exc()
         return None
 
-
-
-def extract_all_lists(data):
+def extract_summaries(input_data):
     """
-    Extract all lists from a list of dictionaries.
+    Extracts the list of summaries from the input dictionary.
+
+    :param input_data: Dictionary containing a list of summaries under any key.
+    :return: List of summaries.
     """
-    all_lists = []
-    for item in data:
-        # Iterate over all key-value pairs in the item
-        for value in item.values():
-            # Check if the value is a list
+    try:
+        for key, value in input_data.items():
             if isinstance(value, list):
-                all_lists.extend(value)
-    return all_lists
-
-
-def flatten_nested_dictionaries(data):
-    """
-    Flattens a list of dictionaries containing nested dictionaries under any key into a single
-    list of dictionaries.
-
-    :param data: List of dictionaries where each dictionary may contain any key with a list of
-                 nested dictionaries.
-    :return: List of flattened dictionaries.
-    """
-    flattened = []
-    for item in data:
-        for value in item.values():
-            if isinstance(value, list) and all(isinstance(elem, dict) for elem in value):
-                flattened.extend(value)
-    return flattened
-
-def try_cleaning_functions(data):
-    """
-    Tries to clean the data using two different functions, and returns the cleaned data.
-    If both functions return None, returns the raw data.
-
-    :param data: The raw data to clean
-    :return: Cleaned data or raw data if both cleaning functions return None
-    """
-    result = extract_all_lists(data)
-    if result is not None:
-        return result
-
-    result = flatten_nested_dictionaries(data)
-    if result is not None:
-        return result
-
-    return data
+                return value
+    except Exception as e:
+        print(f"An error occurred while extracting summaries: {e}")
+    return []
