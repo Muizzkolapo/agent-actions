@@ -9,11 +9,12 @@ from langchain_core.prompts import ChatPromptTemplate
 import google.generativeai as genai
 
 try:
-    from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_summaries
+    from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_summaries,process_as_string
 except ImportError:
     # Handle import error gracefully
     load_schema = None
     extract_summaries = None
+    process_as_string = None
 
 def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
@@ -51,9 +52,10 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         api_key = agent_config['api_key']
         genai.configure(api_key=os.environ[api_key])
         llm = genai.GenerativeModel(model_name, generation_config={"response_mime_type": "application/json"})
+        input_documentation_str= process_as_string(input_documentation)
         prompt = f"""
             prompt_config: {prompt_config}
-            Using this input Input: {input_documentation}
+            Using this input Input: {input_documentation_str}
             schema: {schema}
             Return a list[schema]
         """

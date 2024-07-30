@@ -5,7 +5,7 @@ import copy
 import os
 import traceback
 import yaml
-
+import re
 
 
 def load_schema(schema_name):
@@ -120,3 +120,29 @@ def extract_summaries(input_data):
     except Exception as e:
         print(f"An error occurred while extracting summaries: {e}")
     return []
+
+
+
+
+def process_as_string(input_text):
+    """
+    This function ensures the input text is treated as a plain string,
+    even if it contains dictionary-like patterns.
+
+    Args:
+    input_text (str): The input text that may contain dictionary-like patterns.
+
+    Returns:
+    str: The processed string treated as plain text.
+    """
+    # Ensure the input is a string
+    if not isinstance(input_text, str):
+        raise ValueError("Input must be a string")
+
+    # Pattern to identify dictionary-like structures
+    pattern = re.compile(r'({.*?})')
+
+    # Escape curly braces to avoid interpretation as dictionary-like structures
+    escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
+    
+    return escaped_text
