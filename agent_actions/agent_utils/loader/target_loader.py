@@ -6,11 +6,11 @@ import traceback
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
     from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.transformers.aggregators import try_cleaning_functions,update_schema_objects
+    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects
 except ImportError:
     # Handle import error gracefully
     agent_builder = None
-    try_cleaning_functions = None
+    update_schema_objects = None
 
 import copy
 def replace_placeholders(prompt, content_dict):
@@ -85,16 +85,17 @@ def process_data(data, agent_config, agent_name):
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):
+            generated_data_extracted = generated_data[0] 
             keys_to_update = select_list[agent_config['agent_type']]
             merged_questions = update_schema_objects(agent_config["schema_name"],
                                                      agent_name,
                                                      [contents],
-                                                     flatten_nested_list(generated_data)[0],
+                                                     generated_data_extracted,
                                                      keys_to_update)
             
             new_data.append(merged_questions[0])
         else:
-            new_data.append(flatten_nested_list(generated_data)[0])
+            new_data.append(generated_data)
 
     return new_data
 
@@ -128,55 +129,4 @@ def save_output(new_data, file_path, base_directory, output_directory):
 
 
 
-
-
-
-def flatten_data(data, parent_key='', sep='_'):
-    """
-    Flattens a nested dictionary into a flat dictionary, keeping the innermost lists intact.
-
-    :param data: The dictionary to flatten.
-    :param parent_key: The base key string for nested items (used in recursion).
-    :param sep: The separator between parent and child keys.
-    :return: A flattened dictionary.
-    """
-    items = []
-
-    if isinstance(data, dict):
-        for key, value in data.items():
-            new_key = f"{parent_key}{sep}{key}" if parent_key else key
-            if isinstance(value, list) and all(isinstance(i, (dict, list)) for i in value):
-                items.append((new_key, [flatten_data(v, '', sep) if isinstance(v, dict) else v for v in value]))
-            else:
-                items.extend(flatten_data(value, new_key, sep=sep).items())
-    else:
-        items.append((parent_key, data))
-
-    return dict(items)
-
-def flatten_nested_list(data):
-    """
-    Identifies the key containing a list of objects in the given data and flattens the list.
-
-    :param data: Dictionary containing a list of objects under an unknown key.
-    :return: List of flattened dictionaries.
-    """
-    flattened_data = []
-
-    # Identify the key containing the list of objects
-    list_key = None
-    for key, value in data.items():
-        if isinstance(value, list) and all(isinstance(item, dict) for item in value):
-            list_key = key
-            break
-
-    if list_key is None:
-        print("No key containing a list of objects was found in the input data.")
-        return flattened_data
-
-    for item in data[list_key]:
-        flattened_item = flatten_data(item)
-        flattened_data.append(flattened_item)
-
-    return flattened_data
 

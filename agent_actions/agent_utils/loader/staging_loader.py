@@ -11,11 +11,9 @@ from langchain.text_splitter import CharacterTextSplitter
 
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
-    from agent_actions.agent_utils.transformers.aggregators import try_cleaning_functions
 except ImportError:
     # Handle import error gracefully
     agent_builder = None
-    try_cleaning_functions = None
 
 
 
@@ -242,8 +240,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                                     relative_path.replace(os.path.splitext(file_path)[1], '.json'))
 
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
-    final_data = try_cleaning_functions(data_chunk)
-    write_file(final_data, output_file_path)
+
+    write_file(data_chunk, output_file_path)
 
 
 def split_text_content(content, chunk_config=None):
@@ -344,3 +342,5 @@ def process_xml_content(content, agent_config, agent_name):
             data_chunk.append(agent_builder.create_dynamic_agent(
                 agent_config, agent_name, process_xml_element(element)))
     return data_chunk
+
+
