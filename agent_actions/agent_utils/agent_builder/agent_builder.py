@@ -9,11 +9,11 @@ from langchain_core.prompts import ChatPromptTemplate
 import google.generativeai as genai
 
 try:
-    from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_summaries,process_as_string
+    from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_objects,process_as_string
 except ImportError:
     # Handle import error gracefully
     load_schema = None
-    extract_summaries = None
+    extract_objects = None
     process_as_string = None
 
 def list_to_tuples(input_list):
@@ -46,7 +46,7 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         prompt = ChatPromptTemplate.from_messages(prompt_config)
         agent = create_structured_output_runnable(schema, llm, prompt)
         response = agent.invoke({"input": input_documentation, "chat_history": []})
-        transformed_response = extract_summaries(response)
+        transformed_response = extract_objects(response)
         return transformed_response
     
     elif model_vendor.lower() == 'gemini':
@@ -60,8 +60,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
             schema: {schema}
             Return a list[schema]
         """
-        response = llm.generate_content(prompt)
-        transformed_response = extract_summaries(json.loads(response.text))
+        response_temp = llm.generate_content(prompt)
+        response = json.loads(response_temp.text)
+        transformed_response = extract_objects(response)
         return transformed_response
     
     else:

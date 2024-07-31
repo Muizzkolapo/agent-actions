@@ -101,7 +101,7 @@ def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update
         traceback.print_exc()
         return None
 
-def extract_summaries(input_data):
+def extract_objects(input_data):
     """
     Extracts the list of summaries from the input dictionary.
 
@@ -109,9 +109,14 @@ def extract_summaries(input_data):
     :return: List of summaries.
     """
     try:
-        for key, value in input_data.items():
-            if isinstance(value, list):
-                return value
+        if isinstance(input_data, list):
+            for key, value in input_data[0].items():
+                if isinstance(value, list):
+                    return value
+        else:
+            for key, value in input_data.items():
+                if isinstance(value, list):
+                    return value
     except Exception as e:
         print(f"An error occurred while extracting summaries: {e}")
     return []
