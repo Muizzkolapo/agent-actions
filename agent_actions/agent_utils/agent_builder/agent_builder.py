@@ -60,8 +60,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
             schema: {schema}
             Return a list[schema]
         """
-        response = llm.generate_content(prompt)
-        transformed_response = extract_objects(json.loads(response.text))
+        response_temp = llm.generate_content(prompt)
+        response = json.loads(response_temp.text)
+        transformed_response = extract_objects(response)
         return transformed_response
     
     else:
