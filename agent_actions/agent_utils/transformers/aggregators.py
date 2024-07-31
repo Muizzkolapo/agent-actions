@@ -55,8 +55,7 @@ def find_file_in_directory(directory, target_filename):
 
 def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update):
     """
-    Updates specific fields in objects within a list based on a JSON schema and specified keys
-    from new data.
+    Creates new objects by combining specific fields from new data with other fields from old data.
 
     This function takes objects from the old data, updates certain fields with values from the
     corresponding objects in the new data, and retains all other fields as they are.
@@ -66,7 +65,7 @@ def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update
     :param data_old: List containing original objects.
     :param data_new: List containing new objects with updates.
     :param keys_to_update: List of keys for which values should be updated from the new objects.
-    :return: List of updated objects.
+    :return: List of new combined objects.
     """
     schema = load_schema(schema)
 
@@ -74,31 +73,27 @@ def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update
         print(f"Failed to load schema for agent '{agent_name}' and schema '{schema}'.")
         return None
     try:
-        # Dynamically identify the key for the list of objects, as defined by the schema
-        main_key = next(k for k, v in schema['properties'].items() if v.get('type') == 'array')
-
         old_objects = data_old
         new_objects = data_new
 
-        # Initialize an empty list to store the updated objects
-        updated_objects = []
+        # Initialize an empty list to store the new combined objects
+        combined_objects = []
 
-        # Iterate through each pair of old and new object assuming both lists are of the same length
+        # Iterate through each pair of old and new objects assuming both lists are of the same length
         for old_obj, new_obj in zip(old_objects, new_objects):
-            # Use deep copy to avoid modifying the original dictionary
-            updated_object = copy.deepcopy(old_obj)
+            # Create a new combined object by copying the old object
+            combined_object = copy.deepcopy(old_obj)
 
             # Update specified keys from the new object if they are defined in the schema
-            object_properties = schema['properties'][main_key]['items']['properties']
             for key in keys_to_update:
-                if key in new_obj and key in object_properties:
-                    updated_object[key] = new_obj[key]
+                if key in new_obj:
+                    print(f"Updating key '{key}' from new object")
+                    combined_object[key] = new_obj[key]
 
-            # Append the updated object to the list
-            updated_objects.append(updated_object)
+            combined_objects.append(combined_object)
 
-        # Return the new list of updated objects
-        return updated_objects
+        # Return the new list of combined objects
+        return combined_objects
     except KeyError as e:
         print(f"KeyError: {e}. Please check that the schema and data structures are correct.")
     except Exception as e:

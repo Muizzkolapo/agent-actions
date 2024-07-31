@@ -85,11 +85,12 @@ def process_data(data, agent_config, agent_name):
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):
+            generated_data_extracted = generated_data[0] 
             keys_to_update = select_list[agent_config['agent_type']]
             merged_questions = update_schema_objects(agent_config["schema_name"],
                                                      agent_name,
                                                      [contents],
-                                                     generated_data,
+                                                     generated_data_extracted,
                                                      keys_to_update)
             
             new_data.append(merged_questions[0])

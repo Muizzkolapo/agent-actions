@@ -45,7 +45,8 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
         prompt = ChatPromptTemplate.from_messages(prompt_config)
         agent = create_structured_output_runnable(schema, llm, prompt)
-        transformed_response = extract_summaries(agent.invoke({"input": input_documentation, "chat_history": []}))
+        response = agent.invoke({"input": input_documentation, "chat_history": []})
+        transformed_response = extract_summaries(response)
         return transformed_response
     
     elif model_vendor.lower() == 'gemini':
