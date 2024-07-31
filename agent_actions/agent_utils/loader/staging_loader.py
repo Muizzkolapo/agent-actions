@@ -277,7 +277,7 @@ def process_chunks(chunks, agent_config, agent_name):
     """
     data_chunk = []
     for input_documentation in chunks:
-        data_chunk.append(agent_builder.create_dynamic_agent(
+        data_chunk.extend(agent_builder.create_dynamic_agent(
             agent_config, agent_name, input_documentation))
     return data_chunk
 
@@ -306,7 +306,7 @@ def process_json_content(content, agent_config, agent_name):
                 generated_content = agent_builder.create_dynamic_agent(agent_config,
                                                                        agent_name,
                                                                        content)
-                data_chunk.append(generated_content)
+                data_chunk.extend(generated_content)
     return data_chunk
 
 def process_tabular_content(content, agent_config, agent_name):
@@ -339,7 +339,7 @@ def process_xml_content(content, agent_config, agent_name):
     _, root = content
     for element in root.findall('.//*'):
         if list(element):
-            data_chunk.append(agent_builder.create_dynamic_agent(
+            data_chunk.extend(agent_builder.create_dynamic_agent(
                 agent_config, agent_name, process_xml_element(element)))
     return data_chunk
 

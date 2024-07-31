@@ -2,6 +2,7 @@
 
 import json
 import os
+import copy
 import traceback
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
@@ -12,7 +13,7 @@ except ImportError:
     agent_builder = None
     update_schema_objects = None
 
-import copy
+
 def replace_placeholders(prompt, content_dict):
     def convert_to_string(value):
         if isinstance(value, list):
@@ -95,7 +96,7 @@ def process_data(data, agent_config, agent_name):
             
             new_data.append(merged_questions[0])
         else:
-            new_data.append(generated_data)
+            new_data.extend(generated_data)
 
     return new_data
 
