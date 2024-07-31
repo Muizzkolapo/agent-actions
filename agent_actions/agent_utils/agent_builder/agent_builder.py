@@ -52,7 +52,7 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
     elif model_vendor.lower() == 'gemini':
         api_key = agent_config['api_key']
         genai.configure(api_key=os.environ[api_key])
-        llm = genai.GenerativeModel(model_name, generation_config={"response_mime_type": "application/json"})
+        llm = genai.GenerativeModel(model_name,system_instruction="Return only JSON", generation_config={"response_mime_type": "application/json"})
         input_documentation_str= process_as_string(input_documentation)
         prompt = f"""
             prompt_config: {prompt_config}
@@ -62,8 +62,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
         """
         response_temp = llm.generate_content(prompt)
         response = json.loads(response_temp.text)
-        transformed_response = extract_objects(response)
-        return transformed_response
+        #transformed_response = extract_objects(response)
+        #return transformed_response
+        return response
     
     else:
         raise ValueError(f"Unsupported model name: {model_name}")
