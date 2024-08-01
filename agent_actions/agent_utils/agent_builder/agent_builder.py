@@ -1,6 +1,6 @@
-from agent_actions.agent_utils.agent_builder.openai_vendor import OpenAIHandler
-from agent_actions.agent_utils.agent_builder.gemini_vendor import GeminiHandler
-from agent_actions.agent_utils.agent_builder.mistral_vendor import MistralHandler
+from agent_actions.agent_utils.agent_builder.vendors.openai_vendor import OpenAIHandler
+from agent_actions.agent_utils.agent_builder.vendors.gemini_vendor import GeminiHandler
+from agent_actions.agent_utils.agent_builder.vendors.mistral_vendor import MistralHandler
 try:
     from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_objects,process_as_string
 except ImportError:
