@@ -1,13 +1,6 @@
-# pylint: disable=no-name-in-module
-"""Module for creating dynamic agents."""
-
-import os
-import json
-from langchain.chains import create_structured_output_runnable
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
-import google.generativeai as genai
-
+from agent_actions.agent_utils.agent_builder.openai_vendor import OpenAIHandler
+from agent_actions.agent_utils.agent_builder.gemini_vendor import GeminiHandler
+from agent_actions.agent_utils.agent_builder.mistral_vendor import MistralHandler
 try:
     from agent_actions.agent_utils.transformers.aggregators import load_schema,extract_objects,process_as_string
 except ImportError:
@@ -15,7 +8,6 @@ except ImportError:
     load_schema = None
     extract_objects = None
     process_as_string = None
-
 def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
@@ -35,36 +27,17 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation, formatte
     else:
         prompt_config = list_to_tuples(agent_config['prompt'])
     
-    model_name = agent_config['model_name']
     model_vendor = agent_config['model_vendor']
-    api_key = os.getenv(agent_config['api_key'])
     schema_name = agent_config['schema_name']
     schema = load_schema(schema_name)
 
     if model_vendor.lower() == 'openai':
-        llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
-        prompt = ChatPromptTemplate.from_messages(prompt_config)
-        agent = create_structured_output_runnable(schema, llm, prompt)
-        response = agent.invoke({"input": input_documentation, "chat_history": []})
-        transformed_response = extract_objects(response)
-        return transformed_response
-    
+        response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'gemini':
-        api_key = agent_config['api_key']
-        genai.configure(api_key=os.environ[api_key])
-        llm = genai.GenerativeModel(model_name,system_instruction="Return only JSON", generation_config={"response_mime_type": "application/json"})
-        input_documentation_str= process_as_string(input_documentation)
-        prompt = f"""
-            prompt_config: {prompt_config}
-            Using this input Input: {input_documentation_str}
-            schema: {schema}
-            Return a list[schema]
-        """
-        response_temp = llm.generate_content(prompt)
-        response = json.loads(response_temp.text)
-        #transformed_response = extract_objects(response)
-        #return transformed_response
-        return response
-    
+        response = GeminiHandler.invoke(agent_config, prompt_config, input_documentation, schema)
+    elif model_vendor.lower() == 'mistral':
+        response = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     else:
-        raise ValueError(f"Unsupported model name: {model_name}")
+        raise ValueError(f"Unsupported model vendor: {model_vendor}")
+    
+    return response
