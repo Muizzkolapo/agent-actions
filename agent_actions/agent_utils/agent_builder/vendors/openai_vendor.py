@@ -12,7 +12,6 @@ class OpenAIHandler:
         api_key = os.getenv(agent_config['api_key'])
 
         llm = ChatOpenAI(model=model_name, temperature=0, api_key=api_key)
-        print(prompt_config)
         prompt = ChatPromptTemplate.from_messages(prompt_config)
         agent = create_structured_output_runnable(schema, llm, prompt)
         response = agent.invoke({"input": input_documentation, "chat_history": []})

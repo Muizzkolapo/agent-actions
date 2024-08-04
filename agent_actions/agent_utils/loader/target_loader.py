@@ -97,7 +97,7 @@ def process_data(data, agent_config, agent_name):
                                                      generated_data_extracted,
                                                      keys_to_update)
             
-            new_data.append(merged_questions[0])
+            new_data.append(merged_questions)
         else:
             new_data.extend(generated_data)
 
