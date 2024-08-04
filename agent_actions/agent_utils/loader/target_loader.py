@@ -4,6 +4,7 @@ import json
 import os
 import copy
 import traceback
+from agent_actions.agent_utils.transformers.aggregators  import process_as_string
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
     from agent_actions.agent_utils.processor.clean_target import clean_agent_output
@@ -68,6 +69,9 @@ def load_json(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
+
+
 def process_data(data, agent_config, agent_name):
     """
     Processes the input data based on the agent configuration and generates new data.
@@ -83,6 +87,7 @@ def process_data(data, agent_config, agent_name):
 
 
     for contents in data:
+        contents = f"{contents}"
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):

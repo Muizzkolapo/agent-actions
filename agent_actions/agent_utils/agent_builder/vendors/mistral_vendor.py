@@ -15,12 +15,12 @@ class MistralHandler:
 
         input_documentation_str = process_as_string(input_documentation)
         prompt = f"""
-            prompt_config: {prompt_config}
-            Using this input Input: {input_documentation_str}
-            schema: {schema}
-            Return JSON BASED ON SCHEMA
-        """
+            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
+            <|begin_of_text|>: {input_documentation_str} :<|end_of_text|>
+            <|begin_of_output_schema|> : {schema} : <|end_of_output_schema|>
 
+            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
+            """
         messages = [
             ChatMessage(role="user", content=prompt)
         ]
