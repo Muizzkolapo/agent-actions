@@ -8,6 +8,7 @@ from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
+from agent_actions.agent_utils.transformers.aggregators  import process_as_string
 
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
@@ -222,6 +223,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         raise ImportError("Unable to import 'agent_actions.agent_utils.agent_builder'")
 
     content = read_file(file_path)
+
     data_chunk = []
     file_type = os.path.splitext(file_path)[1].lower()
 
@@ -240,6 +242,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                                     relative_path.replace(os.path.splitext(file_path)[1], '.json'))
 
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+
 
     write_file(data_chunk, output_file_path)
 

@@ -93,15 +93,14 @@ def process_data(data, agent_config, agent_name):
         if should_update_schema(agent_config, keys_list, select_list):
             generated_data_extracted = generated_data[0] 
             keys_to_update = select_list[agent_config['agent_type']]
-            merged_questions = update_schema_objects(agent_config["schema_name"],
-                                                     agent_name,
-                                                     [contents],
+            merged_questions = update_schema_objects(contents,
                                                      generated_data_extracted,
                                                      keys_to_update)
             
             new_data.append(merged_questions[0])
         else:
             new_data.extend(generated_data)
+
 
     return new_data
 
