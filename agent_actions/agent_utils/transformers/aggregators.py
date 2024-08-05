@@ -71,9 +71,8 @@ def update_schema_objects(data_old, data_new, keys_to_update):
             if key in data_new:
                 print(f"Updating key '{key}' from new data")
                 combined_object[key] = data_new[key]
-
-        # Return the new combined object
         return combined_object
+
     except KeyError as e:
         print(f"KeyError: {e}. Please check the data structures.")
     except Exception as e:
