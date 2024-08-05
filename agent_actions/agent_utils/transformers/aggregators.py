@@ -144,3 +144,36 @@ def flatten_to_list_of_dicts(nested_lists):
         flattened_list.extend(sublist)
     
     return flattened_list
+
+
+def replace_placeholders(prompt, content_dict):
+    def convert_to_string(value):
+        if isinstance(value, list):
+            return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
+        return str(value)
+
+    # Check if content_dict is a dictionary and has keys
+    if not isinstance(content_dict, dict) or not content_dict:
+        return prompt
+
+    new_prompt = []
+    for element in prompt:
+        if isinstance(element, list):
+            # Process as a sublist
+            new_sublist = []
+            for string in element:
+                for key, value in content_dict.items():
+                    placeholder = f"get[{key}]"
+                    value = convert_to_string(value)
+                    string = string.replace(placeholder, value)
+                new_sublist.append(string)
+            new_prompt.append(new_sublist)
+        else:
+            # Process as a single string
+            for key, value in content_dict.items():
+                placeholder = f"get[{key}]"
+                value = convert_to_string(value)
+                element = element.replace(placeholder, value)
+            new_prompt.append(element)
+    
+    return new_prompt

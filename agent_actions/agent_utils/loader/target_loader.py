@@ -9,35 +9,12 @@ from agent_actions.agent_utils.transformers.aggregators  import process_as_strin
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
     from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects
+    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects,replace_placeholders
 except ImportError:
     # Handle import error gracefully
     agent_builder = None
     update_schema_objects = None
-
-
-def replace_placeholders(prompt, content_dict):
-    def convert_to_string(value):
-        if isinstance(value, list):
-            return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
-        return str(value)
-
-    # Check if content_dict is a dictionary and has keys
-    if not isinstance(content_dict, dict) or not content_dict:
-        return prompt
-
-    new_prompt = []
-    for sublist in prompt:
-        new_sublist = []
-        for string in sublist:
-            for key, value in content_dict.items():
-                placeholder = f"get[{key}]"
-                value = convert_to_string(value)
-                string = string.replace(placeholder, value)
-            new_sublist.append(string)
-        new_prompt.append(new_sublist)
-    
-    return new_prompt
+    replace_placeholders = None
 
 
 
