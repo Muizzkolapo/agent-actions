@@ -2,6 +2,14 @@ import os
 import json
 import google.generativeai as genai
 from agent_actions.agent_utils.transformers.aggregators  import process_as_string
+
+
+
+def ensure_list(obj):
+    if not isinstance(obj, list):
+        return [obj]
+    return obj
+
 class GeminiHandler:
     @staticmethod
     def invoke(agent_config, prompt_config, input_documentation, schema):
@@ -26,4 +34,5 @@ class GeminiHandler:
         """
         response_temp = llm.generate_content(prompt)
         response = json.loads(response_temp.text)
-        return response
+        response_list = ensure_list(response)
+        return response_list

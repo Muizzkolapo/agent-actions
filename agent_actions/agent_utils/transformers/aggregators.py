@@ -168,6 +168,17 @@ def replace_placeholders(prompt, content_dict):
                     string = string.replace(placeholder, value)
                 new_sublist.append(string)
             new_prompt.append(new_sublist)
+        elif isinstance(element, dict):
+            # Process dictionary entries
+            new_dict = {}
+            for key, value in element.items():
+                for k, v in content_dict.items():
+                    placeholder = f"get[{k}]"
+                    v = convert_to_string(v)
+                    new_key = key.replace(placeholder, v)
+                    new_value = value.replace(placeholder, v) if isinstance(value, str) else value
+                    new_dict[new_key] = new_value
+            new_prompt.append(new_dict)
         else:
             # Process as a single string
             for key, value in content_dict.items():
