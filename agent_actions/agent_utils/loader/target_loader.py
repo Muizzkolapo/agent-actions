@@ -1,9 +1,11 @@
 """Module for target loader."""
+import itertools
 
 import json
 import os
 import copy
 import traceback
+from agent_actions.agent_utils.transformers.aggregators  import process_as_string
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
     from agent_actions.agent_utils.processor.clean_target import clean_agent_output
@@ -68,6 +70,9 @@ def load_json(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         return json.load(f)
 
+
+
+
 def process_data(data, agent_config, agent_name):
     """
     Processes the input data based on the agent configuration and generates new data.
@@ -80,23 +85,22 @@ def process_data(data, agent_config, agent_name):
     new_data = []
     select_list = {agent_config['agent_type']: agent_config['select_list']}
     keys_list = list(select_list.keys())
-
-
     for contents in data:
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):
-            generated_data_extracted = generated_data[0] 
-            keys_to_update = select_list[agent_config['agent_type']]
-            merged_questions = update_schema_objects(agent_config["schema_name"],
-                                                     agent_name,
-                                                     [contents],
-                                                     generated_data_extracted,
-                                                     keys_to_update)
-            
-            new_data.append(merged_questions[0])
+            updated_generated_data = []
+            for data in generated_data:
+                keys_to_update = select_list[agent_config['agent_type']]
+                merged_questions = update_schema_objects(contents,
+                                                        data,
+                                                        keys_to_update)
+                
+                updated_generated_data.append(merged_questions)
+            new_data.extend(updated_generated_data)
         else:
             new_data.extend(generated_data)
+
 
     return new_data
 

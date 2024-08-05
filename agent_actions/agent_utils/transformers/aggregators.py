@@ -53,52 +53,30 @@ def find_file_in_directory(directory, target_filename):
     return None
 
 
-def update_schema_objects(schema, agent_name, data_old, data_new, keys_to_update):
+def update_schema_objects(data_old, data_new, keys_to_update):
     """
-    Creates new objects by combining specific fields from new data with other fields from old data.
+    Updates specified keys in old data with values from new data.
 
-    This function takes objects from the old data, updates certain fields with values from the
-    corresponding objects in the new data, and retains all other fields as they are.
-
-    :param schema: JSON schema describing the structure and keys of the objects.
-    :param agent_name: Name of the agent.
-    :param data_old: List containing original objects.
-    :param data_new: List containing new objects with updates.
-    :param keys_to_update: List of keys for which values should be updated from the new objects.
-    :return: List of new combined objects.
+    :param data_old: Dictionary containing original data.
+    :param data_new: Dictionary containing new data with updates.
+    :param keys_to_update: List of keys for which values should be updated from the new data.
+    :return: Dictionary with updated values.
     """
-    schema = load_schema(schema)
-
-    if schema is None:
-        print(f"Failed to load schema for agent '{agent_name}' and schema '{schema}'.")
-        return None
     try:
-        old_objects = data_old
-        new_objects = data_new
+        # Create a new combined object by copying the old object
+        combined_object = copy.deepcopy(data_old)
 
-        # Initialize an empty list to store the new combined objects
-        combined_objects = []
+        # Update specified keys from the new object
+        for key in keys_to_update:
+            if key in data_new:
+                print(f"Updating key '{key}' from new data")
+                combined_object[key] = data_new[key]
+        return combined_object
 
-        # Iterate through each pair of old and new objects assuming both lists are of the same length
-        for old_obj, new_obj in zip(old_objects, new_objects):
-            # Create a new combined object by copying the old object
-            combined_object = copy.deepcopy(old_obj)
-
-            # Update specified keys from the new object if they are defined in the schema
-            for key in keys_to_update:
-                if key in new_obj:
-                    print(f"Updating key '{key}' from new object")
-                    combined_object[key] = new_obj[key]
-
-            combined_objects.append(combined_object)
-
-        # Return the new list of combined objects
-        return combined_objects
     except KeyError as e:
-        print(f"KeyError: {e}. Please check that the schema and data structures are correct.")
+        print(f"KeyError: {e}. Please check the data structures.")
     except Exception as e:
-        print(f"An unexpected error occurred in update_schema_objects: {e}")
-        traceback.print_exc()
+        print(f"An unexpected error occurred in update_objects: {e}")
         return None
 
 def extract_objects(input_data):
@@ -146,3 +124,23 @@ def process_as_string(input_text):
     escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
     
     return escaped_text
+
+def flatten_to_list_of_dicts(nested_lists):
+    """
+    Flattens a nested list of lists containing dictionaries into a single list of dictionaries.
+    
+    Args:
+        nested_lists (list): A nested list where each inner list contains dictionaries.
+        
+    Returns:
+        list: A flat list containing all dictionaries from the nested structure.
+    """
+    # Initialize an empty list to store the dictionaries
+    flattened_list = []
+    
+    # Iterate over each sublist in the nested lists
+    for sublist in nested_lists:
+        # Extend the flattened list with dictionaries from the current sublist
+        flattened_list.extend(sublist)
+    
+    return flattened_list
