@@ -2,7 +2,6 @@ import os
 import json
 import google.generativeai as genai
 from agent_actions.agent_utils.transformers.aggregators  import process_as_string
-from agent_actions.agent_utils.transformers.aggregators import flatten_to_list_of_dicts
 class GeminiHandler:
     @staticmethod
     def invoke(agent_config, prompt_config, input_documentation, schema):
@@ -23,6 +22,7 @@ class GeminiHandler:
             <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>
 
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
+            RULES: ALWAYS READ INPUT AS STRING
         """
         response_temp = llm.generate_content(prompt)
         response = json.loads(response_temp.text)

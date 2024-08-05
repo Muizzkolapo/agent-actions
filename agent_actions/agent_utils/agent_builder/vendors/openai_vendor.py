@@ -2,7 +2,7 @@ import os
 from langchain.chains import create_structured_output_runnable
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from agent_actions.agent_utils.transformers.aggregators import extract_objects,flatten_to_list_of_dicts
+from agent_actions.agent_utils.transformers.aggregators import extract_objects
 
 
 class OpenAIHandler:
@@ -16,6 +16,5 @@ class OpenAIHandler:
         agent = create_structured_output_runnable(schema, llm, prompt)
         response = agent.invoke({"input": input_documentation, "chat_history": []})
         #--this would help extract list fromt the key as openai is in key:[] format
-        transformed_response_temp = extract_objects(response)
-
-        return transformed_response_temp
+        transformed_response = extract_objects(response)
+        return transformed_response

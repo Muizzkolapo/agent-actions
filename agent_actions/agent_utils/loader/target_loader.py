@@ -1,4 +1,5 @@
 """Module for target loader."""
+import itertools
 
 import json
 import os
@@ -84,8 +85,6 @@ def process_data(data, agent_config, agent_name):
     new_data = []
     select_list = {agent_config['agent_type']: agent_config['select_list']}
     keys_list = list(select_list.keys())
-
-
     for contents in data:
         contents = f"{contents}"
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)

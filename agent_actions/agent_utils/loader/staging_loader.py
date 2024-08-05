@@ -9,6 +9,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
 from agent_actions.agent_utils.transformers.aggregators  import process_as_string
+import itertools
+
 
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
@@ -244,6 +246,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
 
+
     write_file(data_chunk, output_file_path)
 
 
@@ -280,9 +283,12 @@ def process_chunks(chunks, agent_config, agent_name):
     """
     data_chunk = []
     for input_documentation in chunks:
-        data_chunk.extend(agent_builder.create_dynamic_agent(
-            agent_config, agent_name, input_documentation))
+        dynamic_agent = agent_builder.create_dynamic_agent(
+            agent_config, agent_name, input_documentation)
+        data_chunk.extend(dynamic_agent)
     return data_chunk
+
+
 
 def process_json_content(content, agent_config, agent_name):
     """
@@ -297,20 +303,29 @@ def process_json_content(content, agent_config, agent_name):
         list: A list of dynamic agents created from the JSON content.
     """
     data_chunk = []
+    
+    # Check if content is a list
     if isinstance(content, list):
-        data_chunk = [agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
-                      for obj in content]
+        for obj in content:
+            # Create a dynamic agent for each object in the list
+            dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
+            data_chunk.extend(dynamic_agent)
+    
+    # Check if content is a dictionary
     elif isinstance(content, dict):
         for value in content.values():
             if isinstance(value, list):
-                data_chunk.extend(agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
-                                  for obj in value)
+                for obj in value:
+                    # Create a dynamic agent for each object in the list
+                    dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
+                    data_chunk.extend(dynamic_agent)
             else:
-                generated_content = agent_builder.create_dynamic_agent(agent_config,
-                                                                       agent_name,
-                                                                       content)
+                # Create a dynamic agent for the entire dictionary content
+                generated_content = agent_builder.create_dynamic_agent(agent_config, agent_name, content)
                 data_chunk.extend(generated_content)
+    
     return data_chunk
+
 
 def process_tabular_content(content, agent_config, agent_name):
     """
@@ -324,7 +339,16 @@ def process_tabular_content(content, agent_config, agent_name):
     Returns:
         list: A list of dynamic agents created from the tabular content.
     """
-    return [agent_builder.create_dynamic_agent(agent_config, agent_name, row) for row in content]
+    data_chunk = []
+    
+    # Iterate over each row in the content
+    for row in content:
+        # Create a dynamic agent for each row
+        dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, row)
+        data_chunk.extend(dynamic_agent)
+    
+    return data_chunk
+
 
 def process_xml_content(content, agent_config, agent_name):
     """
@@ -342,8 +366,8 @@ def process_xml_content(content, agent_config, agent_name):
     _, root = content
     for element in root.findall('.//*'):
         if list(element):
-            data_chunk.extend(agent_builder.create_dynamic_agent(
-                agent_config, agent_name, process_xml_element(element)))
+            chunk_output = agent_builder.create_dynamic_agent(agent_config, agent_name, process_xml_element(element))
+            data_chunk.extend(chunk_output)
     return data_chunk
 
 
