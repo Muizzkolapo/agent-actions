@@ -87,8 +87,6 @@ def process_data(data, agent_config, agent_name):
     keys_list = list(select_list.keys())
     for contents in data:
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
-        print("======formated promt=====")
-        print(formated_prompt)
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
         if should_update_schema(agent_config, keys_list, select_list):
             updated_generated_data = []
