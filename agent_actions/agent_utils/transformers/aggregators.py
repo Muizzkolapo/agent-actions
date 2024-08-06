@@ -188,3 +188,18 @@ def replace_placeholders(prompt, content_dict):
             new_prompt.append(element)
     
     return new_prompt
+
+
+def transform_structure(data):
+    transformed_data = []
+    # Iterate over each dictionary in the list
+    for item in data:
+        # Extract the GUID and the content list
+        for guid, contents in item.items():
+            # Iterate over each content dictionary in the contents list
+            for content in contents:
+                transformed_data.append({
+                    "guid": guid,
+                    "content": content
+                })
+    return transformed_data

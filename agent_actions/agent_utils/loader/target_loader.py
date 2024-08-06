@@ -9,12 +9,13 @@ from agent_actions.agent_utils.transformers.aggregators  import process_as_strin
 try:
     from agent_actions.agent_utils.agent_builder import agent_builder
     from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects,replace_placeholders
+    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects,replace_placeholders,transform_structure
+
 except ImportError:
     # Handle import error gracefully
-    agent_builder = None
     update_schema_objects = None
     replace_placeholders = None
+    transform_structure = None
 
 
 
@@ -62,9 +63,14 @@ def process_data(data, agent_config, agent_name):
     new_data = []
     select_list = {agent_config['agent_type']: agent_config['select_list']}
     keys_list = list(select_list.keys())
-    for contents in data:
+    for items in data:
+        contents = items['content']
+        guid = items['guid']
         formated_prompt=replace_placeholders(agent_config['prompt'],contents)
+
+        # Generate dynamic with agent builder but we dont need the returned source in this case
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
+
         if should_update_schema(agent_config, keys_list, select_list):
             updated_generated_data = []
             for data in generated_data:
@@ -74,9 +80,14 @@ def process_data(data, agent_config, agent_name):
                                                         keys_to_update)
                 
                 updated_generated_data.append(merged_questions)
-            new_data.extend(updated_generated_data)
+                
+            updated_generated_data_response_temp = [{guid: updated_generated_data}]
+            updated_transformed_response = transform_structure(updated_generated_data_response_temp) 
+            new_data.extend(updated_transformed_response)
         else:
-            new_data.extend(generated_data)
+            transformed_response_temp = [{guid: generated_data}]
+            transformed_response = transform_structure(transformed_response_temp) 
+            new_data.extend(transformed_response)
 
 
     return new_data
