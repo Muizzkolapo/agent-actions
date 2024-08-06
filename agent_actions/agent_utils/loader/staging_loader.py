@@ -47,8 +47,6 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, forma
     transformed_response_temp = [{guid: response}]
     transformed_response = transform_structure(transformed_response_temp) 
     src_text = [{guid: input_documentation}]
-
-    print(transformed_response)
     
     return transformed_response,src_text
 
