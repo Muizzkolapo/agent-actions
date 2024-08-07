@@ -203,3 +203,35 @@ def transform_structure(data):
                     "content": content
                 })
     return transformed_data
+
+
+
+def replace_guid_placeholder(data, guid):
+    """
+    Replace the placeholder 'get_from_src[guid]' with the specified GUID
+    in various data structures, including lists of strings, nested lists, and dictionaries.
+
+    Parameters:
+    data (list): The data to process, which can include lists of strings, nested lists, or dictionaries.
+    guid (str): The GUID to replace the placeholder with.
+
+    Returns:
+    list: The updated data with the placeholder replaced.
+    """
+
+    def replace_in_string(text):
+        return text.replace('get_from_src[guid]', guid)
+
+    def process_item(item):
+        if isinstance(item, str):
+            return replace_in_string(item)
+        elif isinstance(item, list):
+            return [process_item(sub_item) for sub_item in item]
+        elif isinstance(item, dict):
+            return {key: process_item(value) for key, value in item.items() if isinstance(value, str)}
+        else:
+            return item
+
+    # Process each element in the input data
+    return [process_item(item) for item in data]
+
