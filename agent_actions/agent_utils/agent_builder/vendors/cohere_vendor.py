@@ -7,7 +7,7 @@ from agent_actions.agent_utils.transformers.aggregators  import process_as_strin
 class CohereHandler:
     @staticmethod
     def invoke(agent_config, prompt_config, input_documentation, schema):
-        api_key = os.getenv(agent_config['api_key'])
+        api_key = os.environ.get(agent_config['api_key'])
         model_name = agent_config['model_name']
         input_documentation_str = process_as_string(input_documentation)
         co = cohere.Client(api_key=api_key)

@@ -41,21 +41,12 @@ def generate_id():
 
 
 def staging_dynamic_creator(agent_config, agent_name, input_documentation, formatted_prompt=None):
-    if 'guid' in input_documentation and input_documentation['guid'] and input_documentation['content']:
-        input_data = input_documentation['content']
-        guid = input_documentation['guid']
-        response = agent_builder.create_dynamic_agent(
-                    agent_config, agent_name, input_data)   
-        transformed_response_temp = [{guid: response}]
-        transformed_response = transform_structure(transformed_response_temp) 
-        src_text = input_documentation
-    else:
-        response = agent_builder.create_dynamic_agent(
-                    agent_config, agent_name, input_documentation)
-        guid = generate_id()
-        transformed_response_temp = [{guid: response}]
-        transformed_response = transform_structure(transformed_response_temp) 
-        src_text = [{guid: input_documentation}]
+    response = agent_builder.create_dynamic_agent(
+                agent_config, agent_name, input_documentation)
+    guid = generate_id()
+    transformed_response_temp = [{guid: response}]
+    transformed_response = transform_structure(transformed_response_temp) 
+    src_text = [{guid: input_documentation}]
     
     return transformed_response,src_text
 
