@@ -26,19 +26,38 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     :return: Result of the agent's invocation.
     """
     input_documentation = json.dumps(input_documentation_str) 
-    if formatted_prompt is not None:
-        prompt_config = list_to_tuples(formatted_prompt)
-    else:
-        prompt_config = list_to_tuples(agent_config['prompt'])
+
     
     model_vendor = agent_config['model_vendor']
     schema_name = agent_config['schema_name']
     schema = load_schema(schema_name)
 
     if model_vendor.lower() == 'openai':
+        if formatted_prompt is not None:
+            prompt_config = list_to_tuples(formatted_prompt)
+        else:
+            prompt_config = list_to_tuples(agent_config['prompt'])
         response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'gemini':
+        if formatted_prompt is not None:
+            prompt_config = formatted_prompt
+        else:
+            prompt_config = agent_config['prompt']
         response = GeminiHandler.invoke(agent_config, prompt_config, input_documentation, schema)
+    elif model_vendor.lower() == 'mistral':
+        if formatted_prompt is not None:
+            prompt_config = formatted_prompt
+        else:
+            prompt_config = agent_config['prompt']
+        response_mistral = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
+        response = [response_mistral]
+    elif model_vendor.lower() == 'cohere':
+        if formatted_prompt is not None:
+            prompt_config = formatted_prompt
+        else:
+            prompt_config = agent_config['prompt']
+        response_cohere = CohereHandler.invoke(agent_config, prompt_config, input_documentation, schema)
+        response = [response_cohere]
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
     

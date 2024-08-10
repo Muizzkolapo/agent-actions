@@ -8,8 +8,16 @@ from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
 from langchain.text_splitter import CharacterTextSplitter
-from agent_actions.agent_utils.transformers.aggregators  import process_as_string
 import itertools
+import uuid
+
+try:
+    from agent_actions.agent_utils.agent_builder import agent_builder
+    from agent_actions.agent_utils.processor.clean_target import clean_agent_output
+    from agent_actions.agent_utils.transformers.aggregators import transform_structure
+except ImportError:
+    transform_structure = None
+
 
 
 try:
@@ -18,6 +26,29 @@ except ImportError:
     # Handle import error gracefully
     agent_builder = None
 
+
+
+
+def generate_id():
+    """Generate a unique identifier."""
+    return str(uuid.uuid4())
+
+
+
+
+
+
+
+
+def staging_dynamic_creator(agent_config, agent_name, input_documentation, formatted_prompt=None):
+    response = agent_builder.create_dynamic_agent(
+                agent_config, agent_name, input_documentation)
+    guid = generate_id()
+    transformed_response_temp = [{guid: response}]
+    transformed_response = transform_structure(transformed_response_temp) 
+    src_text = [{guid: input_documentation}]
+    
+    return transformed_response,src_text
 
 
 def read_json(file):
@@ -231,23 +262,34 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
         chunks = split_text_content(content, agent_config["chunk_config"])
-        data_chunk = process_chunks(chunks, agent_config, agent_name)
+        data_chunk,src_text = process_chunks(chunks, agent_config, agent_name)
     elif file_type == '.json':
-        data_chunk = process_json_content(content, agent_config, agent_name)
+        data_chunk,src_text = process_json_content(content, agent_config, agent_name)
     elif file_type in ('.csv', '.xlsx'):
-        data_chunk = process_tabular_content(content, agent_config, agent_name)
+        data_chunk,src_text = process_tabular_content(content, agent_config, agent_name)
     elif file_type == '.xml':
-        data_chunk = process_xml_content(content, agent_config, agent_name)
+        data_chunk,src_text = process_xml_content(content, agent_config, agent_name)
 
+
+    
+    #--sorting out output target
     relative_path = os.path.relpath(file_path, base_directory)
     output_file_path = os.path.join(output_directory,
                                     relative_path.replace(os.path.splitext(file_path)[1], '.json'))
-
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+
+    #--sorting out output source_text folder
+    base_path = os.path.join(base_directory, "..")
+    source_path = os.path.join(base_path, "source")
+    output_src_path = os.path.join(source_path,
+                                    relative_path.replace(os.path.splitext(file_path)[1], '.json'))
+    
+    os.makedirs(os.path.dirname(output_src_path), exist_ok=True)
 
 
 
     write_file(data_chunk, output_file_path)
+    write_file(src_text, output_src_path)
 
 
 def split_text_content(content, chunk_config=None):
@@ -283,10 +325,10 @@ def process_chunks(chunks, agent_config, agent_name):
     """
     data_chunk = []
     for input_documentation in chunks:
-        dynamic_agent = agent_builder.create_dynamic_agent(
+        dynamic_agent,src_text = staging_dynamic_creator(
             agent_config, agent_name, input_documentation)
         data_chunk.extend(dynamic_agent)
-    return data_chunk
+    return data_chunk,src_text
 
 
 
@@ -308,7 +350,7 @@ def process_json_content(content, agent_config, agent_name):
     if isinstance(content, list):
         for obj in content:
             # Create a dynamic agent for each object in the list
-            dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
+            dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, obj)
             data_chunk.extend(dynamic_agent)
     
     # Check if content is a dictionary
@@ -317,14 +359,14 @@ def process_json_content(content, agent_config, agent_name):
             if isinstance(value, list):
                 for obj in value:
                     # Create a dynamic agent for each object in the list
-                    dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, obj)
+                    dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, obj)
                     data_chunk.extend(dynamic_agent)
             else:
                 # Create a dynamic agent for the entire dictionary content
-                generated_content = agent_builder.create_dynamic_agent(agent_config, agent_name, content)
+                generated_content = staging_dynamic_creator(agent_config, agent_name, content)
                 data_chunk.extend(generated_content)
     
-    return data_chunk
+    return data_chunk,src_text
 
 
 def process_tabular_content(content, agent_config, agent_name):
@@ -344,10 +386,10 @@ def process_tabular_content(content, agent_config, agent_name):
     # Iterate over each row in the content
     for row in content:
         # Create a dynamic agent for each row
-        dynamic_agent = agent_builder.create_dynamic_agent(agent_config, agent_name, row)
+        dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, row)
         data_chunk.extend(dynamic_agent)
     
-    return data_chunk
+    return data_chunk,src_text
 
 
 def process_xml_content(content, agent_config, agent_name):
@@ -366,8 +408,8 @@ def process_xml_content(content, agent_config, agent_name):
     _, root = content
     for element in root.findall('.//*'):
         if list(element):
-            chunk_output = agent_builder.create_dynamic_agent(agent_config, agent_name, process_xml_element(element))
+            chunk_output,src_text = staging_dynamic_creator(agent_config, agent_name, process_xml_element(element))
             data_chunk.extend(chunk_output)
-    return data_chunk
+    return data_chunk,src_text
 
 
