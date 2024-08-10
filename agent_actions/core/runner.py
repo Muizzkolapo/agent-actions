@@ -12,11 +12,12 @@ import shutil
 import yaml
 
 try:
-    from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.processor.process_target import process_and_generate_for_agent
-    from agent_actions.agent_utils.processor.process_target import find_config_file
-    from agent_actions.agent_utils.transformers.tooling import execute_user_defined_function
-    from agent_actions.agent_utils.transformers.validator import validate_agent_config
+    from agent_actions.core.handlers import clean_agent_output
+    from agent_actions.core.handlers import process_and_generate_for_agent
+    from agent_actions.core.handlers  import find_config_file
+    from agent_actions.core.handlers  import validate_agent_config
+    from agent_actions.core.tooling import execute_user_defined_function
+    
 except ImportError:
     clean_agent_output = None
     process_and_generate_for_agent = None

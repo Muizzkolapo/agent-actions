@@ -1,8 +1,7 @@
 import cohere
 import os
 import json 
-from agent_actions.agent_utils.transformers.aggregators  import process_as_string
-
+from agent_actions.core.utils import process_as_string
 
 class CohereHandler:
     @staticmethod
