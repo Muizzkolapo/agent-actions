@@ -7,31 +7,19 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
-from langchain.text_splitter import CharacterTextSplitter
+
 import itertools
-import uuid
-
-try:
-    from agent_actions.agent_utils.agent_builder import agent_builder
-    from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.transformers.aggregators import transform_structure
-except ImportError:
-    transform_structure = None
 
 
-
-try:
-    from agent_actions.agent_utils.agent_builder import agent_builder
-except ImportError:
-    # Handle import error gracefully
-    agent_builder = None
+from agent_actions.models import agent_builder
+from agent_actions.core.utils import transform_structure
+from agent_actions.core.utils import generate_id
+from agent_actions.core.handlers import split_text_content
 
 
 
 
-def generate_id():
-    """Generate a unique identifier."""
-    return str(uuid.uuid4())
+
 
 
 
@@ -292,24 +280,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     write_file(src_text, output_src_path)
 
 
-def split_text_content(content, chunk_config=None):
-    """
-    Split the given text content into chunks based on the provided chunk configuration.
 
-    Args:
-        content (str): The text content.
-        chunk_config (dict): The configuration for chunk size and overlap. Defaults to None.
-
-    Returns:
-        list: A list of text chunks.
-    """
-    if chunk_config is None:
-        chunk_config = {}
-    chunk_size = chunk_config.get('chunk_size', 300)
-    chunk_overlap = chunk_config.get('chunk_overlap', 10)
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return text_splitter.split_text(content)
 
 def process_chunks(chunks, agent_config, agent_name):
     """

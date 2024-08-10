@@ -5,20 +5,13 @@ import json
 import os
 import copy
 import traceback
-from agent_actions.agent_utils.transformers.aggregators  import process_as_string
-try:
-    from agent_actions.agent_utils.agent_builder import agent_builder
-    from agent_actions.agent_utils.processor.clean_target import clean_agent_output
-    from agent_actions.agent_utils.transformers.aggregators import update_schema_objects,replace_placeholders,transform_structure,replace_guid_placeholder
-
-except ImportError:
-    # Handle import error gracefully
-    update_schema_objects = None
-    replace_placeholders = None
-    transform_structure = None
-    replace_guid_placeholder = None
-
-
+from agent_actions.models import agent_builder
+from agent_actions.core.utils import update_schema_objects
+from agent_actions.core.utils import replace_placeholders
+from agent_actions.core.utils import transform_structure
+from agent_actions.core.utils import replace_guid_placeholder
+from agent_actions.core.handlers import should_update_schema
+from agent_actions.core.handlers import get_content_by_guid
 
 
 
@@ -50,24 +43,7 @@ def load_json(file_path):
         return json.load(f)
 
 
-def get_content_by_guid(data, guid):
-    """
-    Retrieve the content associated with a specific GUID from a list of dictionaries.
 
-    Parameters:
-    data (list of dict): The list containing dictionaries with GUIDs as keys.
-    guid (str): The GUID to search for.
-
-    Returns:
-    str: The content associated with the GUID, or a message if not found.
-    """
-    # Iterate through the list of dictionaries
-    for item in data:
-        # Check if the guid is a key in the dictionary
-        if guid in item:
-            return item[guid]
-    # Return None or an appropriate message if not found
-    return "GUID not found."
 
 
 
@@ -132,16 +108,7 @@ def process_data(data, agent_config, agent_name,file_path):
 
 
 
-def should_update_schema(agent_config, keys_list, select_list):
-    """
-    Determines whether the schema should be updated based on the agent configuration.
 
-    :param agent_config: Configuration dictionary for the agent
-    :param keys_list: List of keys in the select list
-    :param select_list: Dictionary containing the select list
-    :return: Boolean indicating whether the schema should be updated
-    """
-    return agent_config['agent_type'] == keys_list[0] and select_list[agent_config['agent_type']]
 
 def save_output(new_data, file_path, base_directory, output_directory):
     """

@@ -2,8 +2,7 @@ import os
 from langchain.chains import create_structured_output_runnable
 from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from agent_actions.agent_utils.transformers.aggregators import extract_objects
-
+from agent_actions.core.utils import extract_objects
 
 class OpenAIHandler:
     @staticmethod

@@ -1,7 +1,8 @@
 import os
 import json
 import google.generativeai as genai
-from agent_actions.agent_utils.transformers.aggregators  import process_as_string
+from agent_actions.core.utils import process_as_string
+
 
 
 

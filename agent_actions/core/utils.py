@@ -6,7 +6,7 @@ import os
 import traceback
 import yaml
 import re
-
+import uuid
 
 def load_schema(schema_name):
     """
@@ -235,3 +235,6 @@ def replace_guid_placeholder(data, guid):
     # Process each element in the input data
     return [process_item(item) for item in data]
 
+def generate_id():
+    """Generate a unique identifier."""
+    return str(uuid.uuid4())
