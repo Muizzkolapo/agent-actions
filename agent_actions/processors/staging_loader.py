@@ -245,7 +245,6 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     content = read_file(file_path)
 
-    data_chunk = []
     file_type = os.path.splitext(file_path)[1].lower()
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
@@ -295,10 +294,12 @@ def process_chunks(chunks, agent_config, agent_name):
         list: A list of dynamic agents created from the chunks.
     """
     data_chunk = []
+    src_text = []
     for input_documentation in chunks:
-        dynamic_agent,src_text = staging_dynamic_creator(
+        dynamic_agent,src_collection = staging_dynamic_creator(
             agent_config, agent_name, input_documentation)
         data_chunk.extend(dynamic_agent)
+        src_text.extend(src_collection)
     return data_chunk,src_text
 
 
@@ -316,13 +317,15 @@ def process_json_content(content, agent_config, agent_name):
         list: A list of dynamic agents created from the JSON content.
     """
     data_chunk = []
+    src_text = []
     
     # Check if content is a list
     if isinstance(content, list):
         for obj in content:
             # Create a dynamic agent for each object in the list
-            dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, obj)
+            dynamic_agent,src_collection = staging_dynamic_creator(agent_config, agent_name, obj)
             data_chunk.extend(dynamic_agent)
+            src_text.extend(src_collection)
     
     # Check if content is a dictionary
     elif isinstance(content, dict):
@@ -330,12 +333,14 @@ def process_json_content(content, agent_config, agent_name):
             if isinstance(value, list):
                 for obj in value:
                     # Create a dynamic agent for each object in the list
-                    dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, obj)
+                    dynamic_agent,src_collection = staging_dynamic_creator(agent_config, agent_name, obj)
                     data_chunk.extend(dynamic_agent)
+                    src_text.extend(src_collection)
             else:
                 # Create a dynamic agent for the entire dictionary content
-                generated_content = staging_dynamic_creator(agent_config, agent_name, content)
+                generated_content,src_collection  = staging_dynamic_creator(agent_config, agent_name, content)
                 data_chunk.extend(generated_content)
+                src_text.extend(src_collection)
     
     return data_chunk,src_text
 
@@ -353,12 +358,14 @@ def process_tabular_content(content, agent_config, agent_name):
         list: A list of dynamic agents created from the tabular content.
     """
     data_chunk = []
+    src_text = []
     
     # Iterate over each row in the content
     for row in content:
         # Create a dynamic agent for each row
-        dynamic_agent,src_text = staging_dynamic_creator(agent_config, agent_name, row)
+        dynamic_agent,src_collection = staging_dynamic_creator(agent_config, agent_name, row)
         data_chunk.extend(dynamic_agent)
+        src_text.extend(src_collection)
     
     return data_chunk,src_text
 
@@ -376,11 +383,13 @@ def process_xml_content(content, agent_config, agent_name):
         list: A list of dynamic agents created from the XML content.
     """
     data_chunk = []
+    src_text = []
     _, root = content
     for element in root.findall('.//*'):
         if list(element):
-            chunk_output,src_text = staging_dynamic_creator(agent_config, agent_name, process_xml_element(element))
+            chunk_output,src_collection = staging_dynamic_creator(agent_config, agent_name, process_xml_element(element))
             data_chunk.extend(chunk_output)
+            src_text.extend(src_collection)
     return data_chunk,src_text
 
 
