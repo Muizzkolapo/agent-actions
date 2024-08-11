@@ -1,5 +1,0 @@
-[
-    {
-        "8a6c3d86-bb74-4648-bdf7-59f12f3f7e4c": "---\ntitle: Advanced configuration usage\nsidebar_label: Advanced usage\n---\n## Alternative config block syntax\n\nSome configurations may contain characters (e.g. dashes) that cannot be parsed as a jinja argument. For example, the following would return an error:\n\n```sql\n{{ config(\n    post-hook=\"grant select on {{ this }} to role reporter\",\n    materialized='table'\n) }}\n\nselect ...\n```\n\nWhile dbt provides an alias for any core configurations (e.g. you should use `pre_hook` instead of `pre-hook` in a config block), your dbt project may contain custom configurations without aliases.\n\nIf you want to specify these configurations inside of a model, use the alternative config block syntax:\n\n\n<File name='models/events/base/base_events.sql'>\n\n```sql\n{{\n  config({\n    \"post-hook\": \"grant select on {{ this }} to role reporter\",\n    \"materialized\": \"table\"\n  })\n}}\n\n\nselect ...\n```\n\n</File>\n\n<!---\n## Hierarchies / overriding configs / precedence\nFor Drew to do\n--->"
-    }
-]

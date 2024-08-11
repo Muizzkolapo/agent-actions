@@ -1,8 +1,0 @@
-[
-    {
-        "5fce7f62-bd45-4609-ae41-ab81bb5a8a6c": "---\nresource_types: [snapshots]\ndescription: \"Read this guide to understand the check_cols configuration in dbt.\"\ndatatype: \"[column_name] | all\"\n---\n<File name='snapshots/<filename>.sql'>\n\n```jinja2\n{{ config(\n  strategy=\"check\",\n  check_cols=[\"column_name\"]\n) }}\n\n```\n\n</File>\n\n\n<File name='dbt_project.yml'>\n\n```yml\nsnapshots:\n  [<resource-path>](/reference/resource-configs/resource-path):\n    +strategy: check\n    +check_cols: [column_name] | all\n\n```\n\n</File>\n\n## Description\nA list of columns within the results of your snapshot query to check for changes.\n\nAlternatively, use all columns using the `all` value (however this may be less performant).\n\nThis parameter is **required if using the `check` [strategy](/reference/resource-configs/strategy)**.\n\n## Default\nNo default is provided.\n\n## Examples\n\n### Check a list of columns for changes\n\n```sql\n{% snapshot orders_snapshot_check %}"
-    },
-    {
-        "d3a4ebc7-eb2d-4ad8-8867-0241aa8cbb58": "{{\n        config(\n          strategy='check',\n          unique_key='id',\n          check_cols=['status', 'is_cancelled'],\n        )\n    }}\n\n    select * from {{ source('jaffle_shop', 'orders') }}\n\n{% endsnapshot %}\n```\n\n### Check all columns for changes\n\n```sql\n{% snapshot orders_snapshot_check %}\n\n    {{\n        config(\n          strategy='check',\n          unique_key='id',\n          check_cols='all',\n        )\n    }}\n\n    select * from {{ source('jaffle_shop', 'orders') }}\n\n{% endsnapshot %}\n```"
-    }
-]
