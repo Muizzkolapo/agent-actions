@@ -1,7 +1,6 @@
 import json 
 from agent_actions.vendors.openai_vendor import OpenAIHandler
 from agent_actions.vendors.gemini_vendor import GeminiHandler
-from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.core.utils import load_schema
 
@@ -34,9 +33,6 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
         response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'gemini':
         response = GeminiHandler.invoke(agent_config, prompt_config, input_documentation, schema)
-    elif model_vendor.lower() == 'mistral':
-        response_mistral = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
-        response = [response_mistral]
     elif model_vendor.lower() == 'cohere':
         response_cohere = CohereHandler.invoke(agent_config, prompt_config, input_documentation, schema)
         response = [response_cohere]
