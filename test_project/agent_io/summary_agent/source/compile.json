@@ -1,5 +1,0 @@
-[
-    {
-        "1b581bf3-e46e-4b7c-b329-e3b88c6edaac": "dbt will raise an error if a model's definition requires running one. This is a `dbt compile` flag, which means you need to add `dbt compile` as a prefix. For example:`dbt compile --no-introspect"
-    }
-]

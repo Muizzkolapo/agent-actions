@@ -1,9 +1,0 @@
-[
-    {
-        "guid": "1b581bf3-e46e-4b7c-b329-e3b88c6edaac",
-        "content": {
-            "summary": "When using dbt, if a model's definition necessitates execution, an error will occur unless the `dbt compile` command is prefixed appropriately.",
-            "explainer": "In dbt (data build tool), models are essentially SQL files that define how data should be transformed. If a model's definition requires it to be executed (for instance, if it includes operations that need to run against the database), dbt will not allow this to happen without the correct command. The `dbt compile` command is a specific instruction that prepares the model for execution without actually running it. By adding the `--no-introspect` flag, you are telling dbt to compile the model without trying to analyze its dependencies or the context in which it runs. This is particularly useful in scenarios where you want to ensure that the model compiles correctly without executing any queries, which can help in debugging or validating the model's structure before actual execution. It is important to note that if you attempt to run a model that requires execution without using the appropriate command, an error will occur."
-        }
-    }
-]
