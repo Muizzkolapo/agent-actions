@@ -1,0 +1,78 @@
+[
+    {
+        "guid": "2d60ee24-8887-4c60-90c3-a149514b3fa1",
+        "content": {
+            "scenario": "A data analyst is preparing to install dbt Core on a CentOS operating system for a new data project. They have downloaded the necessary files but are unsure if their system meets the prerequisites for a successful installation. They recall that the documentation mentioned specific dependencies that need to be installed before proceeding with the installation.",
+            "question": "What should the data analyst do to ensure their CentOS system is ready for the installation of dbt Core?",
+            "options": [
+                "The data analyst should verify that Python and all other required dependencies are installed and configured on their CentOS system before attempting to install dbt Core.",
+                "The data analyst should proceed with installing dbt Core without checking for dependencies, as the installation process will likely handle any missing dependencies automatically.",
+                "The data analyst should only install Python, as other dependencies are not essential for dbt Core to function properly.",
+                "The data analyst should seek assistance from the dbt community forum, as they may provide insights into the specific dependencies required for the CentOS operating system."
+            ],
+            "answer": "A",
+            "explanation": "The CentOS operating system requires specific dependencies, including Python, for dbt Core to function properly. Before installing dbt Core, the data analyst should ensure that all necessary dependencies are installed and configured. This will prevent potential installation failures or runtime issues that may arise from missing dependencies."
+        }
+    },
+    {
+        "guid": "e774c0c5-8381-44b3-be41-1692532bdc72",
+        "content": {
+            "scenario": "A data analyst is preparing to install dbt Core on their Ubuntu machine. They have just opened their terminal and are ready to execute the necessary commands. They recall that they need to install Python and other dependencies to ensure a successful installation. They are unsure about the specific commands to use for this process.",
+            "question": "What command should the data analyst use to install the required dependencies for dbt Core on their Ubuntu machine?",
+            "options": [
+                "To install Python 3 and its package manager, the data analyst should execute the command 'sudo apt-get install python3 python3-pip' on their Ubuntu machine. This command ensures that both Python 3 and its associated package manager are correctly installed.",
+                "The command 'sudo yum install python3 python3-pip' is typically used for Red Hat-based distributions and may not function as intended on Ubuntu. It is not the appropriate command for installing Python 3 and its package manager on an Ubuntu system.",
+                "The data analyst should use the command 'sudo apt install python3 python3-pip' to install Python 3 and its package manager on their Ubuntu machine. This command leverages Ubuntu's package management system, ensuring a smooth and reliable installation.",
+                "For installing Python 3 and its package manager on an Ubuntu operating system, the command 'sudo dnf install python3 python3-pip' is unsuitable as 'dnf' is primarily used for Fedora and other Red Hat-based distributions."
+            ],
+            "answer": "C",
+            "explanation": "The correct command to install Python and its package manager on Ubuntu is 'sudo apt install python3 python3-pip'. This command utilizes the Advanced Package Tool (APT), which is the standard package management system for Ubuntu. The other options either use incorrect package managers for Ubuntu (like yum or dnf, which are for Red Hat-based systems) or are missing the necessary components for a complete installation."
+        }
+    },
+    {
+        "guid": "e774c0c5-8381-44b3-be41-1692532bdc72",
+        "content": {
+            "scenario": "A software engineer is working on a MacOS machine with an Apple M1 chip. They need to install dbt Core but are aware that certain dependencies may not be compatible with their architecture. They decide to check their current Python version before proceeding with the installation.",
+            "question": "What command should the software engineer use to check their Python version on MacOS, ensuring they are using Python 3, which is required for dbt Core?",
+            "options": [
+                "The command 'python --version' can be utilized to ascertain the version of Python installed, although it may default to Python 2 if that version is present on the system, which could lead to compatibility issues with newer software.",
+                "To accurately determine the version of Python 3 installed on the system, the software engineer should execute the command 'python3 --version', as this explicitly targets the Python 3 interpreter, which is essential for dbt Core.",
+                "Using the command 'python -V' will provide the version of Python currently set as the default on the system, but it may not reflect the version of Python 3 if Python 2 is also installed, thus potentially causing confusion regarding compatibility.",
+                "The command 'python3 -V' serves a similar purpose to 'python3 --version', providing the version of Python 3 installed, and is a succinct way to verify the correct interpreter is being referenced for dbt Core installation.",
+                "The command 'which python3' can be utilized to locate the path of the Python 3 executable, which can help verify its presence and version."
+            ],
+            "answer": "B",
+            "explanation": "To check the Python version on MacOS, the software engineer should use 'python3 --version'. This command specifically checks for Python 3, which is required for dbt Core. While 'python --version' may work if Python 2 is the default, it is best practice to specify 'python3' to ensure compatibility with the required version. The other options are valid but less commonly used in practice."
+        }
+    },
+    {
+        "guid": "e774c0c5-8381-44b3-be41-1692532bdc72",
+        "content": {
+            "scenario": "A developer is setting up their environment to run dbt Core on a machine that runs on Apple M1 architecture. They have read that they need to install dbt via Rosetta to handle certain dependencies. They are now looking for guidance on how to proceed with the installation.",
+            "question": "What should the developer do to install dbt Core on their Apple M1 machine",
+            "options": [
+                "The developer should proceed to install dbt directly without any additional steps, assuming that the default installation will suffice for their needs without considering the architecture-specific requirements.",
+                "The developer should utilize Rosetta to facilitate the installation of dbt, as this compatibility layer is essential for enabling applications designed for Intel architecture to function correctly on Apple Silicon, thereby addressing the necessary dependencies.",
+                "The developer should opt to install dbt within a virtual environment, which may provide isolation from system-wide packages, although this approach does not specifically address the architectural compatibility issues posed by the M1 chip.",
+                "The developer should consider using Docker to install dbt, as this containerization technology can encapsulate the application and its dependencies, yet it may not directly resolve the underlying architecture compatibility concerns that Rosetta addresses."
+            ],
+            "answer": "B",
+            "explanation": "The developer should use Rosetta to install dbt Core on their Apple M1 machine. Rosetta allows applications built for Intel processors to run on Apple Silicon, which is necessary for certain dependencies that dbt relies on. The other options do not address the specific requirement for Rosetta, which is crucial for compatibility on M1 architecture."
+        }
+    },
+    {
+        "guid": "927b0e4c-659c-44ce-adef-dfd1bfbad580",
+        "content": {
+            "scenario": "A data analyst is setting up their development environment to work with dbt Core on a Windows machine. They have already installed Python version 3.8 and Git for Windows. However, they are unsure about the next steps to ensure all necessary dependencies are installed correctly.",
+            "question": "What should the data analyst do next to complete the setup for dbt Core on their Windows machine",
+            "options": [
+                "Execute the command 'sudo apt-get install git libpq-dev python-dev python3-pip' to install essential packages, although this command is primarily intended for Linux environments and may not be applicable in this context.",
+                "Utilize the command 'sudo apt-get remove python-cffi' to eliminate any existing Python cffi package, which is an unnecessary step unless there is a specific conflict with the installation of dbt Core.",
+                "Proceed to install the necessary Python packages by executing 'pip install cryptography~=3.4', as this command is crucial for ensuring that the cryptography library, a vital dependency for dbt Core, is correctly installed on the system.",
+                "Refer to the Python compatibility FAQ for additional guidance, which can provide valuable insights into version compatibility and potential issues, although it does not directly resolve the immediate requirement for package installation."
+            ],
+            "answer": "C",
+            "explanation": "To complete the setup for dbt Core on a Windows machine, the data analyst should focus on installing the required Python packages. The command 'pip install cryptography~=3.4' is essential as it ensures that the cryptography library is installed, which is a dependency for dbt Core. The other options are not applicable to Windows; 'sudo apt-get' commands are specific to Linux distributions like Ubuntu or Debian, and removing the cffi package is unnecessary if it is not installed. Consulting the Python compatibility FAQ is a good practice but does not directly address the immediate need to install the required packages."
+        }
+    }
+]

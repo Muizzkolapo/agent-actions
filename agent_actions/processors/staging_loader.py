@@ -25,18 +25,107 @@ from agent_actions.core.handlers import split_text_content
 
 
 
+def get_file_info(file_path):
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        return f"File '{file_path}' does not exist."
+
+    # Extract the directory and file name from the file path
+    dir_path, file_name = os.path.split(file_path)
+
+    # Extract the path up to the 'summary_agent' directory
+    summary_agent_dir = os.path.dirname(dir_path)
+
+    # Define the source path as '/source' at the same level as 'staging'
+    source_path = os.path.join(summary_agent_dir, 'source')
+
+    # Join the file name with the source path
+    source_file_path = os.path.join(source_path, file_name)
+
+    # Check if the source path exists
+    if os.path.exists(source_path):
+        return source_file_path
+    else:
+        return "Source path does not exist."
 
 
 
-def staging_dynamic_creator(agent_config, agent_name, input_documentation, formatted_prompt=None):
-    response = agent_builder.create_dynamic_agent(
-                agent_config, agent_name, input_documentation)
-    guid = generate_id()
-    transformed_response_temp = [{guid: response}]
-    transformed_response = transform_structure(transformed_response_temp) 
-    src_text = [{guid: input_documentation}]
+def staging_dynamic_creator(agent_config, agent_name, input_documentation, source_path=None, formatted_prompt=None):
+    """
+    Create a dynamic agent for processing input documentation.
+
+    Parameters:
+        agent_config (dict): Configuration for the agent.
+        agent_name (str): Name of the agent.
+        input_documentation (str): Documentation or input data to be processed.
+        source_path (str, optional): Path to the source data file.
+        formatted_prompt (str, optional): Optional formatted prompt.
+
+    Returns:
+        tuple: Transformed response and source text.
+    """
+
+    source_file_path_result = get_file_info(source_path)
+
+
+    # If source_path is provided, attempt to load the source data
+    if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
+       with open(source_path, 'r') as file:
+        source_data = json.load(file)
+
+
     
-    return transformed_response,src_text
+
+
+
+
+
+        for item in source_data:
+            
+            guid_key = list(item.keys())[0]
+        # Check if the loaded data has the required structure
+            if guid_key == input_documentation["guid"]:
+                
+                input_documentation_new = input_documentation["content"]
+
+                response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation_new)
+                transformed_response_temp = [{guid_key: response}]
+                transformed_response = transform_structure(transformed_response_temp)
+        
+                src_text = [item]
+                return transformed_response,src_text
+
+      
+        
+            elif guid_key != input_documentation["guid"] or guid_key not in input_documentation:
+
+                input_documentation_new = input_documentation["content"]
+                # This block handles the scenario where source_path is None or keys are missing
+                response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation_new)
+                guid = input_documentation["guid"]
+                transformed_response_temp = [{guid: response}]
+                transformed_response = transform_structure(transformed_response_temp)
+                print(input_documentation)
+
+                src_text = [{input_documentation["guid"]: input_documentation["content"]}]
+                
+                return transformed_response, src_text
+                
+
+    else:
+        # This block handles the scenario where source_path is None or keys are missing
+        response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation)
+        guid = generate_id()
+        transformed_response_temp = [{guid: response}]
+        transformed_response = transform_structure(transformed_response_temp)
+        src_text = [{guid: input_documentation}]
+
+        return transformed_response, src_text
+
+
+
+    
+
 
 
 def read_json(file):
@@ -251,7 +340,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         chunks = split_text_content(content, agent_config["chunk_config"])
         data_chunk,src_text = process_chunks(chunks, agent_config, agent_name)
     elif file_type == '.json':
-        data_chunk,src_text = process_json_content(content, agent_config, agent_name)
+        data_chunk,src_text = process_json_content(content, agent_config, agent_name,file_path)
     elif file_type in ('.csv', '.xlsx'):
         data_chunk,src_text = process_tabular_content(content, agent_config, agent_name)
     elif file_type == '.xml':
@@ -276,7 +365,57 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
 
     write_file(data_chunk, output_file_path)
-    write_file(src_text, output_src_path)
+    write_file2(src_text, output_src_path)
+
+
+def write_file2(content, file_path):
+    """
+    Writes content to a file, appending it if it doesn't already exist.
+
+    Parameters:
+        content: The content to be written to the file.
+        file_path (str): The path to the file.
+    """
+    # If the file exists, load its current contents
+    if os.path.exists(file_path):
+        # Read the existing content
+        with open(file_path, 'r') as file:
+            try:
+                existing_content = json.load(file)
+            except json.JSONDecodeError:
+                existing_content = []
+
+        # Ensure existing content is a list
+        if not isinstance(existing_content, list):
+            existing_content = [existing_content]
+
+        # Flatten the existing content to a set of unique IDs for quick lookup
+        existing_ids = set()
+        for item in existing_content:
+            if isinstance(item, dict):
+                existing_ids.update(item.keys())
+
+        # Check if each content item already exists
+        new_content = []
+        for item in content:
+            if isinstance(item, list):  # Handle list of items in content
+                for sub_item in item:
+                    if isinstance(sub_item, dict) and not set(sub_item.keys()).intersection(existing_ids):
+                        new_content.append(sub_item)
+            elif isinstance(item, dict) and not set(item.keys()).intersection(existing_ids):
+                new_content.append(item)
+
+        # Append new content if there are any new entries
+        if new_content:
+            existing_content.extend(new_content)
+
+    else:
+        # If file does not exist, start a new list with content
+        existing_content = content if isinstance(content, list) else [content]
+
+    # Write back to the file if there were any changes
+    with open(file_path, 'w') as file:
+        json.dump(existing_content, file, indent=4)
 
 
 
@@ -304,7 +443,7 @@ def process_chunks(chunks, agent_config, agent_name):
 
 
 
-def process_json_content(content, agent_config, agent_name):
+def process_json_content(content, agent_config, agent_name,file_path):
     """
     Process JSON content and create dynamic agents for each value in the content.
 
@@ -318,12 +457,13 @@ def process_json_content(content, agent_config, agent_name):
     """
     data_chunk = []
     src_text = []
+    src_legacy_path = get_file_info(file_path)
     
     # Check if content is a list
     if isinstance(content, list):
         for obj in content:
             # Create a dynamic agent for each object in the list
-            dynamic_agent,src_collection = staging_dynamic_creator(agent_config, agent_name, obj)
+            dynamic_agent,src_collection = staging_dynamic_creator(agent_config, agent_name, obj,src_legacy_path)
             data_chunk.extend(dynamic_agent)
             src_text.extend(src_collection)
     

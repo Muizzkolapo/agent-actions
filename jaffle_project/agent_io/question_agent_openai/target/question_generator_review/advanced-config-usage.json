@@ -1,0 +1,17 @@
+[
+    {
+        "guid": "8a6c3d86-bb74-4648-bdf7-59f12f3f7e4c",
+        "content": {
+            "scenario": "A data analyst is working on a dbt project that requires the use of custom configurations for a model. They encounter an error when trying to use a configuration with a dash in its name, such as 'post-hook'. The analyst needs to apply the correct syntax to avoid this error while ensuring that the model is configured properly for their reporting needs.",
+            "question": "What is the correct way for the analyst to specify the 'post-hook' configuration in their dbt model to avoid parsing errors?",
+            "options": [
+                "The analyst should use the standard configuration syntax, but replace the hyphen with an underscore. For example, 'post_hook'. This approach ensures that the configuration name is recognized by dbt without requiring special handling.",
+                "The analyst should use the conventional configuration syntax, including the hyphen, and rely on dbt's built-in parsing capabilities to interpret the configuration name correctly. Dbt is designed to handle configurations with special characters, including hyphens.",
+                "The analyst should use the alternative configuration block syntax, enclosed in double quotes. This approach allows for special characters in configuration names, avoiding parsing errors.",
+                "The analyst should use the alternative configuration block syntax, but exclude the configuration name from double quotes. This approach allows for special characters in configuration names, relying on dbt's implicit parsing logic."
+            ],
+            "answer": "C",
+            "explanation": "The correct approach is to use the alternative configuration block syntax with quotes around the configuration name. This method allows the analyst to specify configurations that contain characters that cannot be parsed as jinja arguments, such as dashes. The standard config syntax would lead to parsing errors, while omitting quotes would not properly define the configuration. Therefore, using quotes in the alternative syntax is essential for successful configuration."
+        }
+    }
+]

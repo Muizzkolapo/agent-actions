@@ -1,0 +1,32 @@
+[
+    {
+        "guid": "45cf1360-0e64-4d0b-925c-857d47a389d4",
+        "content": {
+            "scenario": "A data analyst is tasked with generating documentation for a data warehouse project using dbt. They need to ensure that the documentation accurately reflects the current state of the database objects, including tables and views. The analyst runs the `dbt docs generate` command, which produces a Catalog JSON file containing metadata about the project. However, they notice that some expected information about certain tables is missing from the generated documentation.",
+            "question": "What should the analyst check to troubleshoot the missing information in the Catalog JSON file",
+            "options": [
+                "The analyst should meticulously verify that the dbt models corresponding to the missing tables are not only correctly defined but also appropriately configured within the project to ensure their inclusion in the generated documentation.",
+                "It is imperative for the analyst to ensure that the `dbt docs generate` command was executed without any errors, as any issues during execution could potentially lead to incomplete documentation being produced.",
+                "The analyst must check whether the missing tables are explicitly included in the `nodes` section of the Catalog JSON file, as this section is crucial for determining which models are documented and how they are represented.",
+                "The analyst should confirm that the database connection settings are properly configured in the dbt profile, as an incorrect configuration could hinder the documentation process, although it may not directly address the missing information."
+            ],
+            "answer": "A",
+            "explanation": "To troubleshoot the missing information in the Catalog JSON file, the analyst should first verify that the dbt models for the missing tables are correctly defined in the project. If the models are not defined or are incorrectly configured, they will not be included in the generated documentation. While ensuring that the `dbt docs generate` command was executed without errors is important, it does not address the root cause of missing models. Checking the `nodes` section is also relevant, but it is contingent on the models being defined correctly. Lastly, confirming the database connection is essential for overall functionality, but it does not directly resolve the issue of missing table information."
+        }
+    },
+    {
+        "guid": "4e7c039a-f954-490b-8013-1263ab824e59",
+        "content": {
+            "scenario": "A data analyst is tasked with optimizing the performance of a reporting system that relies on various database resources. The analyst discovers that the current setup includes multiple tables and views, each defined in a manifest file. The manifest specifies unique identifiers for each resource, along with metadata such as type, database, schema, and owner. The analyst needs to decide how to best structure the resources to improve query performance and maintainability.",
+            "question": "What should the analyst prioritize when restructuring the resources to enhance performance and maintainability",
+            "options": [
+                "The analyst should ensure that all resources possess a unique identifier that adheres to the specified format of <resource_type>.<package>.<resource_name>, as this is essential for accurate mapping and clarity in resource identification within the manifest.",
+                "The analyst ought to consider grouping all columns of each resource into a single array, irrespective of their respective data types, which may simplify access but could lead to significant confusion regarding the roles of different data types.",
+                "The analyst might contemplate minimizing the use of comments in the metadata to reduce perceived clutter, although this could inadvertently obscure critical contextual information necessary for understanding the resources.",
+                "The analyst should create multiple schemas for each resource type, thereby separating them based on their specific usage patterns, which could potentially enhance organization but may also introduce unnecessary complexity into the overall architecture."
+            ],
+            "answer": "A",
+            "explanation": "The analyst should prioritize ensuring that all resources have a unique_id that follows the specified format. This is crucial for mapping resources correctly in the manifest and for maintaining clarity in resource identification. A well-structured unique_id helps in avoiding conflicts and enhances the maintainability of the system. Grouping all columns into a single array disregards the importance of data types and their specific roles, which can lead to confusion and inefficiencies. Minimizing comments in the metadata can obscure important context and understanding of the resources, while creating multiple schemas may complicate the architecture without necessarily improving performance."
+        }
+    }
+]

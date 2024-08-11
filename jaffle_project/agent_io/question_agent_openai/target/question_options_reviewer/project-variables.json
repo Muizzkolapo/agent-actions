@@ -1,0 +1,78 @@
+[
+    {
+        "guid": "a80a0f1f-8c90-47a7-a1f8-0226444863ce",
+        "content": {
+            "scenario": "A data analyst is working on a project using dbt (data build tool) to transform data for a reporting dashboard. The analyst needs to ensure that the model can adapt to different environments, such as development and production, without changing the codebase. They decide to use variables to manage configurations like timezone and table names. The analyst is considering how to define these variables effectively.",
+            "question": "What is the most efficient way for the analyst to define variables that can be easily modified for different environments without altering the model code directly?",
+            "options": [
+                "The most effective approach for the analyst would be to define the variables in the dbt_project.yml file, thereby facilitating centralized management of configurations that can be easily adjusted for various environments without necessitating any modifications to the model code itself.",
+                "Utilizing hardcoded values directly within the model might seem straightforward, but this practice ultimately leads to increased complexity and potential errors when future changes are required, making it a less desirable option.",
+                "Defining the variables solely on the command line for each execution may provide some flexibility; however, this method is inefficient as it requires repetitive input for every run, which can be cumbersome and error-prone in the long run.",
+                "Creating distinct models for each environment to manage configurations introduces unnecessary complexity and maintenance challenges, as it requires the analyst to duplicate efforts and manage multiple codebases, which is not ideal.",
+                "Employing a third-party tool to manage environment variables could potentially streamline the process, but it may also introduce additional dependencies and complications that could outweigh the benefits of such an approach."
+            ],
+            "answer": "A",
+            "explanation": "Defining the variables in the dbt_project.yml file allows for centralized management of configurations, making it easy to modify them for different environments without changing the model code. This approach promotes maintainability and reduces the risk of errors that could arise from hardcoding values or managing multiple models. Using hardcoded values complicates future changes, while defining variables only on the command line requires repeated input for each run, which is less efficient. Creating separate models for each environment increases complexity and maintenance overhead, and relying on a third-party tool may introduce unnecessary dependencies."
+        }
+    },
+    {
+        "guid": "e447936b-573f-4532-bb9c-148a29d3d470",
+        "content": {
+            "scenario": "A data analyst is working on a dbt project and needs to define variables that can be accessed across different models and packages. They are aware that Jinja is not supported within the `vars` config and that all values will be interpreted literally. The analyst wants to set a global variable for the start date of their data analysis and a specific variable for a package that handles user platforms. They are unsure how to structure the `vars` section in their `dbt_project.yml` file to achieve this.",
+            "question": "What is the correct way to define the `vars` section in the `dbt_project.yml` file to ensure that the `start_date` variable is globally accessible and the `platforms` variable is scoped to the specific project?",
+            "options": [
+                "vars:\n  start_date: '2016-06-01'\n  my_dbt_project:\n    platforms: ['web', 'mobile']",
+                "vars:\n  my_dbt_project:\n    start_date: '2016-06-01'\n    platforms: ['web', 'mobile']",
+                "vars:\n  start_date: '2016-06-01'\n  platforms: ['web', 'mobile']",
+                "vars:\n  start_date: '2016-06-01'\n  my_dbt_project:\n    platforms: 'web, mobile'"
+            ],
+            "answer": "A",
+            "explanation": "The correct way to define the `vars` section is to declare the `start_date` variable at the top level, making it globally accessible, and then nest the `platforms` variable under the `my_dbt_project` key to restrict its scope to that specific project. This structure ensures that the `start_date` can be used in all resources while the `platforms` variable is only accessible within the `my_dbt_project`. The other options either incorrectly scope the `start_date` variable or misrepresent the structure required for the `platforms` variable."
+        }
+    },
+    {
+        "guid": "86c3b702-fac4-4de5-90f9-94b6d0faaecb",
+        "content": {
+            "scenario": "A data analyst is preparing to run a dbt model that requires specific date parameters for the analysis. The analyst knows that these date parameters will change frequently based on the reporting period. They need to ensure that the model runs with the correct date values without modifying the `dbt_project.yml` file every time. They decide to use the command line to set these variables dynamically.",
+            "question": "What is the most effective way for the analyst to define the date variables for their dbt run without altering the project configuration file",
+            "options": [
+                "Utilize the `--vars` command line option to dynamically pass the date variables as a structured YAML dictionary, thereby ensuring that the model can adapt to varying reporting periods without necessitating changes to the project configuration file.",
+                "Modify the `dbt_project.yml` file to incorporate the date variables directly, which would require manual adjustments each time the reporting period changes, potentially leading to errors and inconsistencies in the model execution.",
+                "Establish a separate configuration file dedicated to the date variables and reference this file during the dbt run, which could introduce additional complexity and overhead in managing multiple configuration files.",
+                "Leverage environment variables to set the date values prior to executing the dbt command, which may offer a level of flexibility but could also complicate the execution process if not managed properly."
+            ],
+            "answer": "A",
+            "explanation": "The most effective way for the analyst to define the date variables for their dbt run is to use the `--vars` command line option to pass the date variables as a YAML dictionary. This method allows for flexibility and convenience, especially since the date parameters change frequently. By using the command line, the analyst can easily override the variables for each run without needing to modify the `dbt_project.yml` file, which is ideal for variables that are subject to change. The other options, such as editing the `dbt_project.yml` file or using a separate configuration file, would not provide the same level of convenience for frequently changing variables. Environment variables could be used, but they may not be as straightforward as using the `--vars` option for this specific scenario."
+        }
+    },
+    {
+        "guid": "cea72c44-97f8-4af3-ad62-f515387b82a8",
+        "content": {
+            "scenario": "A data analyst is working on a project using dbt (data build tool) and needs to run a model that requires specific variable values. They have defined some variables in the `dbt_project.yml` file but also want to override these values for a particular run. The analyst decides to use the command line to execute the dbt run with the `--vars` argument to specify the new values. They are aware that the command line variables will take precedence over the ones defined in the `dbt_project.yml` file.",
+            "question": "What will happen if the analyst runs the dbt command with the `--vars` argument to override the variables defined in the `dbt_project.yml` file?",
+            "options": [
+                "The command will fail to execute due to the inherent limitation that prohibits the overriding of variables defined within the `dbt_project.yml` file, thereby resulting in an error message indicating the conflict.",
+                "The command will execute successfully, utilizing the variable definitions provided through the `--vars` argument, which will take precedence over any previously defined variables in the `dbt_project.yml` file, thus ensuring the new values are applied during the run.",
+                "The command will proceed by utilizing the variable definitions specified in the `dbt_project.yml` file, effectively disregarding the `--vars` argument, which would lead to the original variable values being used instead of the intended overrides.",
+                "The command will generate a compilation error as a result of conflicting variable definitions, indicating that the variables specified in the `--vars` argument cannot coexist with those defined in the `dbt_project.yml` file."
+            ],
+            "answer": "B",
+            "explanation": "When the analyst uses the `--vars` command line argument, it overrides any variables defined in the `dbt_project.yml` file. This is due to the order of precedence for variable declaration, where command line variables have the highest priority. Therefore, the command will succeed, and the new variable values specified in the `--vars` argument will be utilized for the run. The other options are incorrect because the command will not fail, the variables from `dbt_project.yml` will not be used in this case, and there will be no compilation error as long as the variables are defined correctly."
+        }
+    },
+    {
+        "guid": "6d9d17fa-f88a-413d-9850-ebfc95be7a88",
+        "content": {
+            "scenario": "A data engineer is working on a project that involves multiple packages and macros. The engineer has defined a variable in the root project that is intended to be used within a macro defined in an external package. However, the engineer is unsure how the variable's scope will affect its resolution when the macro is called.",
+            "question": "How will the variable defined in the root project be resolved when used in the macro from the external package",
+            "options": [
+                "The resolution of the variable will occur in accordance with the scope defined by the external package, potentially leading to conflicts if similarly named variables exist within that package's context.",
+                "The resolution of the variable will be determined by the scope of the root project, ensuring that the macro can access the variable as it is defined within the root project's environment.",
+                "The variable will be entirely inaccessible within the macro, resulting in a failure to reference it during execution, which could lead to unexpected behavior or errors.",
+                "The invocation of the macro will trigger an error due to the variable's scope not being recognized, thus preventing the macro from executing successfully."
+            ],
+            "answer": "B",
+            "explanation": "The variable defined in the root project will be resolved based on the root project's scope when used in the macro from the external package. This means that even though the macro is defined in an external package, it will still reference the variable as it exists in the context of the root project. The other options are incorrect because the variable is indeed accessible, it will not cause an error, and it is not resolved based on the external package's scope."
+        }
+    }
+]

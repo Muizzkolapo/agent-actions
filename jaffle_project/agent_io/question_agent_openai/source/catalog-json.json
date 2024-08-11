@@ -1,0 +1,8 @@
+[
+    {
+        "45cf1360-0e64-4d0b-925c-857d47a389d4": "---\ntitle: \"Catalog JSON file\"\nsidebar_label: \"Catalog\"\n---\n\n**Current schema**: [`v1`](https://schemas.getdbt.com/dbt/catalog/v1.json)\n    \n**Produced by:** [`docs generate`](/reference/commands/cmd-docs)\n\nThis file contains information from your <Term id=\"data-warehouse\" /> about the tables and <Term id=\"view\">views</Term> produced and defined by the resources in your project. Today, dbt uses this file to populate metadata, such as column types and <Term id=\"table\" /> statistics, in the [docs site](/docs/collaborate/build-and-view-your-docs).\n\n### Top-level keys\n\n- [`metadata`](/reference/artifacts/dbt-artifacts#common-metadata)\n- `nodes`: Dictionary containing information about database objects corresponding to dbt models, seeds, and snapshots.\n- `sources`: Dictionary containing information about database objects corresponding to dbt sources.\n- `errors`: Errors received while running metadata queries during `dbt docs generate`.\n\n### Resource details"
+    },
+    {
+        "4e7c039a-f954-490b-8013-1263ab824e59": "Within `sources` and `nodes`, each dictionary key is a resource `unique_id`. Each nested resource contains:\n- `unique_id`: `<resource_type>.<package>.<resource_name>`, same as dictionary key, maps to `nodes` and `sources` in the [manifest](/reference/artifacts/manifest-json)\n- `metadata`\n    - `type`: table, view, etc.\n    - `database`\n    - `schema`\n    - `name`\n    - `comment`\n    - `owner`\n- `columns` (array)\n    - `name`\n    - `type`: data type\n    - `comment`\n    - `index`: ordinal\n- `stats`: differs by database and relation type"
+    }
+]

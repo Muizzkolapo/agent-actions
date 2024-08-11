@@ -1,0 +1,14 @@
+[
+    {
+        "6a7b4fde-3a26-4edc-9b53-e389a5594dff": "```text\n$ dbt debug --config-dir\nTo view your profiles.yml file, run:\n\nopen /Users/alice/.dbt\n```"
+    },
+    {
+        "f9991333-b3c5-4e51-b234-6dc2b772f6ef": "What should the analyst focus on when integrating the staging models into the reporting process?"
+    },
+    {
+        "6a7b4fde-3a26-4edc-9b53-e389a5594dffalan": {
+            "summary": "To debug a dbt (data build tool) project, you can use the command `dbt debug --config-dir` to check the configuration directory, and then access the `profiles.yml` file by navigating to the specified directory.",
+            "explainer": "The command `dbt debug --config-dir` is a useful tool for developers working with dbt, as it helps to verify the setup and configuration of the dbt environment. When you run this command, it checks the configuration directory where dbt looks for its settings and profiles. The output will typically indicate whether the configuration is set up correctly or if there are any issues that need to be addressed. \n\nAfter running the debug command, you may want to view the `profiles.yml` file, which contains important configuration details such as database connection settings. To access this file, you can use the command `open /Users/alice/.dbt`, which will open the directory where the `profiles.yml` file is located. This file is crucial for dbt to connect to the data warehouse and perform transformations, so ensuring it is correctly configured is essential for the successful execution of dbt commands."
+        }
+    }
+]

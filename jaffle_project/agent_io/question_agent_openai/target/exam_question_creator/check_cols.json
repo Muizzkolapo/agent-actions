@@ -1,0 +1,47 @@
+[
+    {
+        "guid": "5fce7f62-bd45-4609-ae41-ab81bb5a8a6c",
+        "content": {
+            "scenario": "A data analyst is tasked with creating a snapshot of the orders table in a data warehouse using dbt. The analyst needs to ensure that any changes in specific columns are tracked over time. They are considering using the 'check' strategy for their snapshot configuration. The analyst must decide which columns to include in the check_cols parameter to optimize performance while ensuring data integrity.",
+            "question": "What should the analyst consider when configuring the check_cols parameter for the snapshot to balance performance and data integrity?",
+            "options": [
+                "Include only the most critical columns that are likely to change",
+                "Use the 'all' option to ensure every column is monitored for changes",
+                "Select a mix of critical and non-critical columns to cover all bases",
+                "Exclude columns that are not expected to change at all"
+            ],
+            "answer": "A",
+            "explanation": "When configuring the check_cols parameter for a snapshot in dbt, it is essential to include only the most critical columns that are likely to change. This approach optimizes performance by reducing the amount of data processed during the snapshot operation. Using the 'all' option, while comprehensive, may lead to performance issues due to the increased load on the system, as it checks every column for changes. Selecting a mix of critical and non-critical columns can also lead to unnecessary overhead, while excluding columns that are not expected to change does not align with the requirement of tracking changes effectively. Therefore, focusing on the most critical columns strikes the best balance between performance and data integrity."
+        }
+    },
+    {
+        "guid": "d3a4ebc7-eb2d-4ad8-8867-0241aa8cbb58",
+        "content": {
+            "scenario": "A data analyst is tasked with monitoring changes in the 'orders' table from the 'jaffle_shop' database. They need to ensure that any updates to the order status or cancellation status are captured effectively. The analyst considers using a snapshot strategy that checks specific columns for changes.",
+            "question": "What is the most appropriate snapshot configuration for monitoring changes in the 'status' and 'is_cancelled' columns of the 'orders' table?",
+            "options": [
+                "Using a snapshot with a strategy of 'check' and specifying 'status' and 'is_cancelled' as check columns",
+                "Using a snapshot with a strategy of 'check' and specifying 'all' columns for monitoring",
+                "Using a snapshot with a strategy of 'check' but not specifying any check columns",
+                "Using a snapshot with a strategy of 'check' and specifying 'id' as the only check column"
+            ],
+            "answer": "A",
+            "explanation": "The correct approach is to use a snapshot with a strategy of 'check' and specify 'status' and 'is_cancelled' as check columns. This configuration allows the analyst to focus on the specific columns that are critical for monitoring changes in order status and cancellation. The option of checking 'all' columns would be unnecessary and could lead to performance issues, as it would track changes in every column rather than just the relevant ones. Not specifying any check columns would result in no effective monitoring of the desired changes, and using 'id' alone would not capture the necessary status changes."
+        }
+    },
+    {
+        "guid": "d3a4ebc7-eb2d-4ad8-8867-0241aa8cbb58",
+        "content": {
+            "scenario": "In a different scenario, the same data analyst is now required to implement a snapshot that captures all changes in the 'orders' table, regardless of which columns are modified. They need to ensure that they have a complete view of the data changes over time.",
+            "question": "What snapshot configuration should the analyst use to capture all changes in the 'orders' table?",
+            "options": [
+                "Using a snapshot with a strategy of 'check' and specifying 'status' and 'is_cancelled' as check columns",
+                "Using a snapshot with a strategy of 'check' and specifying 'all' columns for monitoring",
+                "Using a snapshot with a strategy of 'check' but not specifying any check columns",
+                "Using a snapshot with a strategy of 'check' and specifying 'id' as the only check column"
+            ],
+            "answer": "B",
+            "explanation": "To capture all changes in the 'orders' table, the analyst should use a snapshot with a strategy of 'check' and specify 'all' columns for monitoring. This configuration ensures that any modification in any column will be tracked, providing a comprehensive view of the data changes. The other options either limit the monitoring to specific columns or do not effectively capture all changes, which would not meet the requirement for a complete overview of the data."
+        }
+    }
+]

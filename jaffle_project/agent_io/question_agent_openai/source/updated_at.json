@@ -1,0 +1,11 @@
+[
+    {
+        "fbb02365-cc83-4c0a-9270-fc5b83441bab": "---\nresource_types: [snapshots]\ndescription: \"Updated_at - Read this in-depth guide to learn about configurations in dbt.\"\ndatatype: column_name\n---\n<File name='snapshots/<filename>.sql'>\n\n```jinja2\n{{ config(\n  strategy=\"timestamp\",\n  updated_at=\"column_name\"\n) }}\n\n```\n\n</File>\n\n<File name='dbt_project.yml'>\n\n```yml\nsnapshots:\n  [<resource-path>](/reference/resource-configs/resource-path):\n    +strategy: timestamp\n    +updated_at: column_name\n\n```\n\n</File>\n\n## Description\nA column within the results of your snapshot query that represents when the record row was last updated.\n\nThis parameter is **required if using the `timestamp` [strategy](/reference/resource-configs/strategy)**.\n\n\n## Default\nNo default is provided.\n\n## Examples\n### Use a column name `updated_at`\n\n<File name='snapshots/orders.sql'>\n\n```sql\n{% snapshot orders_snapshot %}\n\n{{\n    config(\n      target_schema='snapshots',\n      unique_key='id',"
+    },
+    {
+        "f853d14e-0e0b-4af2-bb60-e47375bcd9e0": "strategy='timestamp',\n      updated_at='updated_at'\n    )\n}}\n\nselect * from {{ source('jaffle_shop', 'orders') }}\n\n{% endsnapshot %}\n\n```\n\n</File>\n\n### Coalesce two columns to create a reliable `updated_at` column\nConsider a data source that only has an `updated_at` column filled in when a record is updated (so a `null` value indicates that the record hasn't been updated after it was created).\n\nSince the `updated_at` configuration only takes a column name, rather than an expression, you should update your snapshot query to include the coalesced column.\n\n<File name='snapshots/orders.sql'>\n\n```sql\n{% snapshot orders_snapshot %}\n\n{{\n    config(\n      target_schema='snapshots',\n      unique_key='id',\n\n      strategy='timestamp',\n      updated_at='updated_at_for_snapshot'\n    )\n}}\n\nselect\n    *,\n    coalesce(updated_at, created_at) as updated_at_for_snapshot\n\nfrom {{ source('jaffle_shop', 'orders') }}"
+    },
+    {
+        "21a88e34-1605-4ee3-a18d-716dbcbc703a": "{% endsnapshot %}\n\n```\n\n</File>"
+    }
+]

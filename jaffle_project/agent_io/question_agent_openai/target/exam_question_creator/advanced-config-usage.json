@@ -1,0 +1,17 @@
+[
+    {
+        "guid": "8a6c3d86-bb74-4648-bdf7-59f12f3f7e4c",
+        "content": {
+            "scenario": "A data analyst is working on a dbt project that requires the use of custom configurations for a model. They encounter an error when trying to use a configuration with a dash in its name, such as 'post-hook'. The analyst needs to apply the correct syntax to avoid this error while ensuring that the model is configured properly for their reporting needs.",
+            "question": "What is the correct way for the analyst to specify the 'post-hook' configuration in their dbt model to avoid parsing errors",
+            "options": [
+                "Use the standard config syntax with dashes in the configuration name",
+                "Use the alternative config block syntax with quotes around the configuration name",
+                "Use the standard config syntax without any quotes",
+                "Use the alternative config block syntax without any quotes"
+            ],
+            "answer": "B",
+            "explanation": "The correct approach is to use the alternative config block syntax with quotes around the configuration name. This method allows the analyst to specify configurations that contain characters that cannot be parsed as jinja arguments, such as dashes. The standard config syntax would lead to parsing errors, while omitting quotes would not properly define the configuration. Therefore, using quotes in the alternative syntax is essential for successful configuration."
+        }
+    }
+]

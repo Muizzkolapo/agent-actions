@@ -1,0 +1,23 @@
+[
+    {
+        "80527f53-64f5-4c76-b543-841ee294651b": "---\nresource_types: all\ndatatype: test\n---\n\n<Tabs\n  defaultValue=\"models\"\n  values={[\n    { label: 'Models', value: 'models', },\n    { label: 'Sources', value: 'sources', },\n    { label: 'Seeds', value: 'seeds', },\n    { label: 'Snapshots', value: 'snapshots', },\n    { label: 'Analyses', value: 'analyses', },\n  ]\n}>\n\n<TabItem value=\"models\">\n\n<File name='models/<filename>.yml'>\n\n```yml\nversion: 2"
+    },
+    {
+        "cf03402e-3d23-4bb5-9271-446656d3d55d": "models:\n  - name: <model_name>\n    columns:\n      - name: <column_name>\n        data_type: <string>\n        [description](/reference/resource-properties/description): <markdown_string>\n        [quote](/reference/resource-properties/quote): true | false\n        [tests](/reference/resource-properties/data-tests): ...\n        [tags](/reference/resource-configs/tags): ...\n        [meta](/reference/resource-configs/meta): ...\n      - name: <another_column>\n        ...\n```\n\n</File>\n\n</TabItem>\n\n<TabItem value=\"sources\">\n\n<File name='models/<filename>.yml'>\n\n```yml\nversion: 2"
+    },
+    {
+        "2ea06944-89e9-4efc-a2f3-1b9849016bfd": "sources:\n  - name: <source_name>\n    tables:\n    - name: <table_name>\n      columns:\n        - name: <column_name>\n          [description](/reference/resource-properties/description): <markdown_string>\n          data_type: <string>\n          [quote](/reference/resource-properties/quote): true | false\n          [tests](/reference/resource-properties/data-tests): ...\n          [tags](/reference/resource-configs/tags): ...\n          [meta](/reference/resource-configs/meta): ...\n        - name: <another_column>\n          ...\n\n```\n\n</File>\n\n</TabItem>\n\n<TabItem value=\"seeds\">\n\n<File name='seeds/<filename>.yml'>\n\n```yml\nversion: 2"
+    },
+    {
+        "f33d85b9-17e5-49aa-a9c9-82e4a319b328": "seeds:\n  - name: <seed_name>\n    columns:\n      - name: <column_name>\n        [description](/reference/resource-properties/description): <markdown_string>\n        data_type: <string>\n        [quote](/reference/resource-properties/quote): true | false\n        [tests](/reference/resource-properties/data-tests): ...\n        [tags](/reference/resource-configs/tags): ...\n        [meta](/reference/resource-configs/meta): ...\n      - name: <another_column>\n            ...\n```\n\n</File>\n\n</TabItem>\n\n<TabItem value=\"snapshots\">\n\n<File name='snapshots/<filename>.yml'>\n\n```yml\nversion: 2"
+    },
+    {
+        "b8a2d939-d72c-403d-bcd1-d38c18172b70": "snapshots:\n  - name: <snapshot_name>\n    columns:\n      - name: <column_name>\n        [description](/reference/resource-properties/description): <markdown_string>\n        data_type: <string>\n        [quote](/reference/resource-properties/quote): true | false\n        [tests](/reference/resource-properties/data-tests): ...\n        [tags](/reference/resource-configs/tags): ...\n        [meta](/reference/resource-configs/meta): ...\n      - name: <another_column>\n\n```\n\n</File>\n\n</TabItem>\n\n\n<TabItem value=\"analyses\">\n\n<File name='analyses/<filename>.yml'>\n\n```yml\nversion: 2"
+    },
+    {
+        "e4f50952-7c9a-4825-94ec-16f0cecdd54e": "analyses:\n  - name: <analysis_name>\n    columns:\n      - name: <column_name>\n        [description](/reference/resource-properties/description): <markdown_string>\n        data_type: <string>\n      - name: <another_column>\n\n```\n\n</File>\n\n</TabItem>\n\n</Tabs>\n\nColumns are not resources in and of themselves. Instead, they are child properties of another resource type. They can define sub-properties that are similar to properties defined at the resource level:\n- `tags`\n- `meta`\n- `tests`\n- `description`\n\nBecause columns are not resources, their `tags` and `meta` properties are not true configurations. They do not inherit the `tags` or `meta` values of their parent resources. However, you can select a generic test, defined on a column, using tags applied to its column or top-level resource; see [test selection examples](/reference/node-selection/test-selection-examples#run-tests-on-tagged-columns)."
+    },
+    {
+        "f2ab5a46-e3ae-4604-b0a7-1aba2baa3967": "Columns may optionally define a `data_type`, which is necessary for:\n- Enforcing a model [contract](/reference/resource-configs/contract)\n- Use in other packages or plugins, such as the [`external`](/reference/resource-properties/external) property of sources and [`dbt-external-tables`](https://hub.getdbt.com/dbt-labs/dbt_external_tables/latest/)"
+    }
+]

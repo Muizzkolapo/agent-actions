@@ -1,0 +1,108 @@
+[
+    {
+        "guid": "80527f53-64f5-4c76-b543-841ee294651b",
+        "content": {
+            "scenario": "A data science team is tasked with developing a predictive model for customer behavior using a new dataset. They have access to various resources, including models, sources, seeds, snapshots, and analyses. The team needs to decide which resource type to prioritize for their initial exploration and model development.",
+            "question": "Which resource type should the team prioritize to effectively start their predictive modeling process",
+            "options": [
+                "Models",
+                "Sources",
+                "Seeds",
+                "Snapshots",
+                "Analyses"
+            ],
+            "answer": "B",
+            "explanation": "Prioritizing sources is crucial for the team as it allows them to understand the origin and context of the data they will be using. Sources provide insights into the data's reliability, relevance, and potential biases, which are essential for building a robust predictive model. While models can offer templates for development, they are only as good as the data they are built upon. Seeds can help in initializing models, but without a solid understanding of the sources, the team risks developing a model based on flawed or incomplete data. Snapshots and analyses are useful for reviewing past performance but do not directly contribute to the initial data exploration phase."
+        }
+    },
+    {
+        "guid": "cf03402e-3d23-4bb5-9271-446656d3d55d",
+        "content": {
+            "scenario": "A data engineering team is tasked with designing a new data model for a customer relationship management (CRM) system. They need to define the structure of the data, including the types of data that will be stored and how it will be accessed. The team is considering various attributes for the model, such as customer names, contact information, and purchase history. They must decide on the data types for each attribute and whether to include descriptions and tags for better documentation and understanding of the data.",
+            "question": "What should the team prioritize when defining the data types and attributes for the new CRM data model",
+            "options": [
+                "Ensuring all attributes have detailed descriptions and tags for clarity",
+                "Choosing data types based solely on the size of the data",
+                "Focusing on the performance of the database without considering data integrity",
+                "Selecting data types that allow for future scalability and flexibility"
+            ],
+            "answer": "D",
+            "explanation": "The team should prioritize selecting data types that allow for future scalability and flexibility. This approach ensures that the data model can adapt to changing business needs and accommodate new data types or structures as the CRM system evolves. While detailed descriptions and tags are important for documentation, they do not directly impact the model's performance or scalability. Choosing data types based solely on size may lead to inefficiencies, and focusing only on performance without considering data integrity can result in data quality issues."
+        }
+    },
+    {
+        "guid": "2ea06944-89e9-4efc-a2f3-1b9849016bfd",
+        "content": {
+            "scenario": "A data analyst is tasked with designing a new database schema for a project that requires efficient data retrieval and storage. The analyst reviews the existing documentation, which includes details about various data sources and their respective tables and columns. One of the sources contains a table with multiple columns, each having specific data types and attributes such as descriptions, quotes, and tags. The analyst must decide how to structure the new schema to optimize performance and maintainability.",
+            "question": "What should the analyst prioritize when designing the new database schema based on the provided documentation",
+            "options": [
+                "Ensuring all columns have a description for clarity",
+                "Using only the data types specified in the documentation",
+                "Incorporating tags for better data organization",
+                "Designing the schema to allow for future scalability"
+            ],
+            "answer": "D",
+            "explanation": "When designing a new database schema, it is crucial to prioritize future scalability. This ensures that the schema can accommodate growth in data volume and complexity without requiring a complete redesign. While having descriptions, using specified data types, and incorporating tags are important for clarity and organization, they do not address the long-term adaptability of the schema. A scalable design allows for easier integration of new data sources and modifications as project requirements evolve."
+        }
+    },
+    {
+        "guid": "f33d85b9-17e5-49aa-a9c9-82e4a319b328",
+        "content": {
+            "scenario": "A data engineering team is tasked with designing a new data pipeline that will ingest and process large volumes of data from various sources. They need to define the structure of the data they will be working with, including the seeds that will be used to create the initial tables in their database. The team is considering how to best document the properties of each column in their seed files to ensure clarity and maintainability for future developers.",
+            "question": "What is the most effective way for the team to document the properties of each column in their seed files to facilitate understanding and future modifications",
+            "options": [
+                "Include a detailed description for each column using markdown syntax",
+                "Use generic names for columns to keep the seed files concise",
+                "Limit the documentation to only the data types of each column",
+                "Avoid using tags and meta properties to simplify the structure"
+            ],
+            "answer": "A",
+            "explanation": "Including a detailed description for each column using markdown syntax is the most effective way to document the properties of each column. This approach enhances clarity and provides context for future developers who may work with the data. It allows for a better understanding of the purpose and usage of each column, which is crucial for maintainability. Using generic names for columns can lead to confusion, as it does not provide any context. Limiting documentation to only data types ignores the importance of understanding the data's purpose. Avoiding tags and meta properties can lead to a lack of organization and context, making it harder to manage the data effectively."
+        }
+    },
+    {
+        "guid": "b8a2d939-d72c-403d-bcd1-d38c18172b70",
+        "content": {
+            "scenario": "A data analyst is tasked with creating a snapshot of a database to capture the current state of various data columns for future reference. The analyst needs to define the structure of the snapshot, including the names of the columns, their descriptions, data types, and any relevant metadata. The analyst is considering how to best document the snapshot to ensure clarity and usability for future analyses.",
+            "question": "What is the most effective way for the analyst to structure the snapshot documentation to ensure it is comprehensive and user-friendly",
+            "options": [
+                "Include detailed descriptions for each column along with their data types and any applicable metadata",
+                "Only list the column names without descriptions or data types to keep it simple",
+                "Use a separate document for metadata to avoid clutter in the snapshot",
+                "Limit the documentation to only the essential columns and omit any optional information"
+            ],
+            "answer": "A",
+            "explanation": "The most effective way for the analyst to structure the snapshot documentation is to include detailed descriptions for each column along with their data types and any applicable metadata. This approach ensures that anyone reviewing the snapshot in the future will have a clear understanding of what each column represents, the type of data it contains, and any additional context that may be necessary for interpretation. Omitting descriptions or data types would lead to ambiguity, while using a separate document for metadata could create confusion and hinder usability. Limiting the documentation to only essential columns would also reduce the comprehensiveness of the snapshot, making it less useful for future analyses."
+        }
+    },
+    {
+        "guid": "e4f50952-7c9a-4825-94ec-16f0cecdd54e",
+        "content": {
+            "scenario": "A data analyst is tasked with creating a report that includes various analyses of a dataset. The dataset contains multiple resources, each with several columns. The analyst needs to ensure that the columns are properly defined and that their properties are correctly set up to facilitate accurate reporting. They are particularly concerned about how tags and meta properties are applied to these columns, as they want to ensure that the tests run on the correct data.",
+            "question": "What should the analyst consider regarding the tags and meta properties of the columns in relation to their parent resources",
+            "options": [
+                "Columns inherit tags and meta properties from their parent resources, ensuring consistency across the dataset",
+                "Columns do not inherit tags and meta properties from their parent resources, requiring separate definitions for each column",
+                "Tags and meta properties are only applicable at the resource level and cannot be used for columns",
+                "Columns can have tags and meta properties that are automatically applied to their parent resources"
+            ],
+            "answer": "B",
+            "explanation": "The correct consideration for the analyst is that columns do not inherit tags and meta properties from their parent resources. This means that each column must have its tags and meta properties defined separately to ensure that any tests run on the columns are accurate and relevant. The other options are incorrect because they imply that columns automatically inherit properties from their parent resources, which is not the case. Understanding this distinction is crucial for the analyst to set up their analyses correctly."
+        }
+    },
+    {
+        "guid": "f2ab5a46-e3ae-4604-b0a7-1aba2baa3967",
+        "content": {
+            "scenario": "A data engineering team is working on a project that involves integrating various data sources into a centralized data warehouse. They are defining the schema for the data tables and need to ensure that the data types for each column are correctly specified. The team is aware that defining a `data_type` is optional but are considering its implications for their project.",
+            "question": "What is the primary reason the team should define a `data_type` for their columns in the schema?",
+            "options": [
+                "To enforce a model contract that ensures data integrity and consistency",
+                "To make the schema more visually appealing and easier to read",
+                "To reduce the overall size of the database by limiting data types",
+                "To allow for more flexible data entry without strict validation"
+            ],
+            "answer": "A",
+            "explanation": "Defining a `data_type` for columns is crucial for enforcing a model contract, which ensures that the data adheres to specific rules and standards. This helps maintain data integrity and consistency across the data warehouse. While the other options may seem beneficial, they do not address the fundamental purpose of defining data types, which is to establish clear expectations for the data being stored and processed."
+        }
+    }
+]

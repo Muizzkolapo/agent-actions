@@ -1,0 +1,137 @@
+[
+    {
+        "guid": "414f5796-5cac-482a-be24-9f01c0429ff1",
+        "content": {
+            "scenario": "A data analyst is setting up a new dbt project named 'jaffle_shop' and needs to ensure that the project can connect to the appropriate data warehouse. They have created a `dbt_project.yml` file that specifies the project name and profile. However, they are unsure about how dbt locates the necessary connection details for the data warehouse.",
+            "question": "What steps should the analyst take to ensure that dbt can successfully connect to the data warehouse using the specified profile?",
+            "options": [
+                "Ensure that the `profiles.yml` file is located in the current working directory or in the `~/.dbt/` directory",
+                "Check that the `dbt_project.yml` file contains the correct profile name and matches the profile in `profiles.yml`",
+                "Verify that sensitive credentials are stored directly in the `profiles.yml` file without using environment variables",
+                "Confirm that the `dbt_project.yml` file is checked into version control to maintain a backup of the project configuration"
+            ],
+            "answer": "A",
+            "explanation": "To ensure that dbt can successfully connect to the data warehouse, the analyst must ensure that the `profiles.yml` file is located in the current working directory or in the `~/.dbt/` directory. This is crucial because dbt looks for the `profiles.yml` file in these locations to find the connection details associated with the specified profile. Additionally, it is important to check that the profile name in the `dbt_project.yml` file matches the profile defined in `profiles.yml`. Storing sensitive credentials directly in `profiles.yml` is not recommended; instead, using environment variables is a safer practice. Finally, while checking the `dbt_project.yml` file into version control can be useful, it is not necessary for dbt to function correctly, especially if sensitive information is included."
+        }
+    },
+    {
+        "guid": "7e1d73e5-2676-472d-833a-4357cd32244d",
+        "content": {
+            "scenario": "A data analyst is setting up their dbt (data build tool) environment to connect to a PostgreSQL database for a project called 'jaffle_shop'. They need to ensure that their connection settings are correctly configured in the profiles.yml file to facilitate smooth data transformations and analysis. The analyst has created a profiles.yml file with a profile named 'jaffle_shop', specifying a target environment as 'dev'.",
+            "question": "What is the significance of the 'target' in the profiles.yml file for the jaffle_shop project",
+            "options": [
+                "It defines the default database to be used for all operations",
+                "It specifies the environment settings for connecting to the database",
+                "It indicates the number of threads to be used during data processing",
+                "It determines the user permissions for accessing the database"
+            ],
+            "answer": "B",
+            "explanation": "The 'target' in the profiles.yml file specifies the environment settings for connecting to the database. In this case, it indicates that the 'dev' environment is being used, which includes the connection details such as host, user, and database name. This is crucial for ensuring that the dbt tool connects to the correct database environment. The other options, while related to database operations, do not accurately describe the role of the 'target' in this context."
+        }
+    },
+    {
+        "guid": "9f27a316-e3f3-48f7-9e94-a3edd9c3e07b",
+        "content": {
+            "scenario": "A data engineer is tasked with setting up a connection to a new data warehouse for a project. They have access to the documentation that outlines the necessary credentials and sample profiles for various supported warehouses. The engineer needs to ensure that the connection is established correctly to avoid any data retrieval issues later on.",
+            "question": "What is the first step the data engineer should take to set up their profile for the new data warehouse?",
+            "options": [
+                "Review the sample profiles for the specific warehouse in the documentation",
+                "Directly input the credentials into the profiles.yml file without checking the documentation",
+                "Use a generic profile that is not tailored to the specific warehouse",
+                "Skip the profile setup and attempt to connect directly to the warehouse"
+            ],
+            "answer": "A",
+            "explanation": "The first step the data engineer should take is to review the sample profiles for the specific warehouse in the documentation. This ensures that they have the correct format and required credentials for the connection. Directly inputting credentials without checking the documentation may lead to errors, especially if the required format or specific fields are not adhered to. Using a generic profile could result in compatibility issues, and skipping the profile setup entirely would prevent any connection from being established."
+        }
+    },
+    {
+        "guid": "f6deb17a-f1e5-4502-b7ee-e5dfdcbd5e72",
+        "content": {
+            "scenario": "A data analyst at a mid-sized retail company is setting up their dbt (data build tool) project for the first time. They need to configure their profile to ensure that their project connects to the correct data warehouse and operates efficiently. The analyst is unsure about how to name the profile and what settings to include for the target configuration.",
+            "question": "What should the analyst consider when naming the profile and setting the target for their dbt project",
+            "options": [
+                "The profile name should reflect the organization and match the name in the dbt_project.yml file, while the target should be set to 'dev' for development purposes",
+                "The profile name can be anything, and the target can be set to any random name as it does not affect the project",
+                "The profile name should be unique and unrelated to the organization, and the target should be set to 'prod' to ensure production readiness",
+                "The profile name should be the same as the user's name, and the target should be set to 'test' for testing purposes"
+            ],
+            "answer": "A",
+            "explanation": "The correct approach for naming the profile is to use a sensible name that reflects the organization, ensuring consistency with the name specified in the dbt_project.yml file. This practice aids in clarity and organization within the project. Additionally, setting the target to 'dev' is a common practice as it designates the default environment for development work, allowing for testing and validation before moving to production. The other options either suggest incorrect naming conventions or inappropriate target settings that could lead to confusion or operational issues."
+        }
+    },
+    {
+        "guid": "3bf53e53-c086-43eb-aa85-92c54a3be0f5",
+        "content": {
+            "scenario": "An analyst is working on a data transformation project using dbt and has set up their local environment with a profile that includes both a `dev` and a `prod` target. The analyst typically runs their transformations in the `dev` environment but is considering scheduling production runs to ensure data is updated regularly. They are aware that using separate credentials for production runs is recommended for security and debugging purposes.",
+            "question": "What should the analyst do to ensure that their production runs are executed securely and effectively while minimizing risks associated with using the same credentials as their development environment?",
+            "options": [
+                "Use the same credentials for both dev and prod to simplify access",
+                "Create a separate user with appropriate privileges for the prod target",
+                "Run all dbt commands from their local machine to maintain control",
+                "Schedule production runs to execute without monitoring"
+            ],
+            "answer": "B",
+            "explanation": "Creating a separate user with appropriate privileges for the production target is essential for maintaining security and accountability. This approach allows for better debugging of any issues that arise during production runs, as it isolates the production environment from development activities. Using the same credentials for both environments increases the risk of accidental changes to production data and complicates ownership and auditing. Running all commands from the local machine does not address the need for a secure production environment, and scheduling runs without monitoring could lead to undetected errors."
+        }
+    },
+    {
+        "guid": "39595d26-db9a-4441-9540-24da07881068",
+        "content": {
+            "scenario": "A data analyst is working on a project that requires the use of dbt (data build tool) to transform and model data within a data warehouse. The analyst has been granted access to a specific schema but does not have the privileges to create new schemas. They need to ensure that their dbt runs are successful while adhering to the permissions set by the database administrator.",
+            "question": "What should the data analyst do to successfully run dbt without the ability to create new schemas",
+            "options": [
+                "Target an existing schema where they have permission to create relations",
+                "Request additional privileges from the database administrator",
+                "Create a new schema using a different user account",
+                "Use a temporary schema for the dbt runs"
+            ],
+            "answer": "A",
+            "explanation": "The data analyst should target an existing schema where they have permission to create relations. This approach allows them to run dbt successfully without needing to create new schemas, which they do not have the privileges for. Requesting additional privileges may not be feasible or timely, and creating a new schema using a different user account could violate security protocols. Using a temporary schema is not advisable as it may lead to confusion and lack of organization in the data warehouse."
+        }
+    },
+    {
+        "guid": "954ecf20-066d-4cb5-94eb-1d7cb5bd738d",
+        "content": {
+            "scenario": "A data analyst is tasked with setting up a new dbt project for their organization. They are aware that dbt can automatically create the target schema if it does not exist, but they are considering whether to use a single schema for all models or to split them into custom schemas for better organization. Additionally, they want to optimize the run time of their dbt project by adjusting the number of threads used during execution.",
+            "question": "What should the analyst consider when deciding whether to use a single schema or custom schemas for their dbt models, and how can adjusting the number of threads impact the project's performance?",
+            "options": [
+                "Using a single schema simplifies management but may lead to clutter; increasing threads can reduce run time significantly.",
+                "Custom schemas provide better organization but complicate management; reducing threads can improve performance.",
+                "Using a single schema is always recommended for simplicity; threads do not impact performance.",
+                "Custom schemas are unnecessary and should be avoided; the default thread setting is optimal for all projects."
+            ],
+            "answer": "A",
+            "explanation": "The choice between using a single schema or custom schemas depends on the complexity and organization needs of the project. A single schema can simplify management but may lead to a cluttered environment as the number of models grows. On the other hand, custom schemas can help in organizing models logically, making it easier to manage and understand the project structure. Regarding threads, increasing the number of threads allows dbt to process multiple paths through the directed acyclic graph (DAG) simultaneously, which can significantly reduce the overall run time of the project. Therefore, the analyst should weigh the benefits of organization against management complexity and consider optimizing thread usage to enhance performance."
+        }
+    },
+    {
+        "guid": "48cab275-0820-4e8f-9ff7-1f8bfdebe4f3",
+        "content": {
+            "scenario": "Alice is working on a data transformation project using dbt and needs to manage her database credentials securely. She has decided to store her `profiles.yml` file in the root directory of her dbt project instead of the default `~/.dbt/` directory. To ensure dbt recognizes this new location, she needs to execute a dbt command that specifies the path to her `profiles.yml` file.",
+            "question": "What command should Alice use to run her dbt project while directing it to the new location of her `profiles.yml` file",
+            "options": [
+                "dbt run --profiles-dir /Users/alice/dbt_project",
+                "dbt run --config-dir /Users/alice/dbt_project",
+                "dbt run --profiles-dir ~/.dbt",
+                "dbt run --config-dir ~/.dbt"
+            ],
+            "answer": "A",
+            "explanation": "To run dbt while specifying a custom location for the `profiles.yml` file, Alice should use the `--profiles-dir` option followed by the path to her project directory. The correct command is `dbt run --profiles-dir /Users/alice/dbt_project`. The other options are incorrect because they either point to the default directory or use the wrong option (`--config-dir`), which does not direct dbt to the `profiles.yml` file."
+        }
+    },
+    {
+        "guid": "dbd42874-19ea-4524-9ad6-8af0a142171b",
+        "content": {
+            "scenario": "A data engineer is preparing to deploy a dbt project in a production environment. They need to ensure that sensitive credentials are not hard-coded in the `profiles.yml` file for security reasons. Instead, they want to utilize environment variables to manage these credentials effectively. Additionally, they want to change the default location where dbt looks for the `profiles.yml` file to a custom directory for better organization.",
+            "question": "What steps should the data engineer take to configure the environment for their dbt project while ensuring security and organization?",
+            "options": [
+                "Set the `DBT_PROFILES_DIR` environment variable to the custom directory and load credentials from environment variables",
+                "Hard-code the credentials in the `profiles.yml` file and leave the `DBT_PROFILES_DIR` as default",
+                "Use the `DBT_PROFILES_DIR` environment variable to point to the default directory and load credentials directly in `profiles.yml`",
+                "Only set the `DBT_PROFILES_DIR` environment variable without managing credentials through environment variables"
+            ],
+            "answer": "A",
+            "explanation": "The correct approach for the data engineer is to set the `DBT_PROFILES_DIR` environment variable to the custom directory and load credentials from environment variables. This method enhances security by avoiding hard-coded credentials in the `profiles.yml` file, which is crucial in production environments. Hard-coding credentials poses a significant security risk, as it can lead to unauthorized access if the file is exposed. Leaving the `DBT_PROFILES_DIR` as default or only setting it without managing credentials through environment variables does not address the security concerns effectively. Therefore, the best practice is to utilize environment variables for both the directory configuration and credential management."
+        }
+    }
+]

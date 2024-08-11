@@ -1,0 +1,240 @@
+[
+    {
+        "term": "dbt Project Structure",
+        "definition": "In a dbt project, the organizational structure is crucial for efficient data transformation. The core of a dbt project usually includes a 'models' folder where transformation logic is defined. Additionally, the project structure involves YAML configuration files for defining models, a 'seeds' folder for storing lookup tables, and other customizable components. It is essential to maintain consistency in the project structure to ensure clarity and ease of maintenance. Documenting the structure helps in understanding and collaborating on the project effectively."
+    },
+    {
+        "term": "YAML Configuration in dbt",
+        "definition": "YAML (YAML Ain't Markup Language) is a human-readable data serialization standard used in dbt for configuration. dbt leverages YAML files for configuration, allowing users to define settings and parameters in a structured format. Key files in dbt's YAML configuration include 'dbt_project.yml' and 'packages.yml'. While these core files have predefined names and locations, other YAML files, such as those for model configuration, offer flexibility in naming, location, and organization, enabling users to customize their configurations based on specific project requirements."
+    },
+    {
+        "term": "Config per Folder Structure",
+        "definition": "Config per Folder Structure is a recommended approach in software development that involves creating a YAML file named '_[directory]__models.yml' within each directory inside your 'models' folder. This file houses configuration details such as database connections, schema definitions, and other settings for all models within that directory, providing a centralized and organized way to manage configurations for different parts of the application."
+    },
+    {
+        "term": "Seeds Folder in dbt",
+        "definition": "In dbt, the 'seeds' folder is a designated directory where you can store static data that serves as lookup tables or reference data for your project. These tables typically contain data that doesn't change frequently and are used for reference or joining with other tables during the transformation process. The 'seeds' folder helps maintain data integrity and consistency by providing a centralized location for managing these static datasets within a dbt project.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Seeds Folder in dbt",
+        "definition": "The 'seeds' folder is intended for storing and managing lookup tables within a dbt project.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Staging Folder YAML Files",
+        "definition": "In dbt, when using staging folders, it is important to create a YAML file named '_[directory]__sources.yml' for each directory. The leading underscore in the file name is a convention that helps with file organization within the project structure. By including the directory name in the file name, such as '_sales__sources.yml', it becomes easier to locate and manage specific YAML files related to different directories. This naming convention enhances the clarity and efficiency of working with staging folders in dbt.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Schema file naming convention",
+        "definition": "Schema files, previously referred to as `schema.yml`, should be named based on the YAML dictionary they contain. This naming convention helps maintain organization and clarity in the project structure, making it easier for developers to identify and locate specific schema files corresponding to their respective data structures."
+    },
+    {
+        "term": "Documentation organization",
+        "definition": "To maintain a structured approach to documentation, it is essential to organize doc blocks systematically. This can be achieved by creating a `_[directory]__docs.md` file for each project directory. These files should contain all doc blocks related to the models within that specific folder, ensuring clarity and ease of access for developers and stakeholders."
+    },
+    {
+        "term": "Configuration",
+        "definition": "Configuration refers to the process of maintaining configuration settings at the project level. These settings include parameters, options, and preferences that define how a system or software operates. Proper configuration ensures consistency, reliability, and efficiency in the project's functionality and performance.",
+        "flash_card_review": []
+    },
+    {
+        "term": "YAML Configuration Organization",
+        "definition": "When working with YAML for model and source configurations, there are two main approaches to organize the configuration files:\n\n1. **Single File:** This approach involves putting all configurations in one file, which simplifies file management by consolidating all settings in a single location. However, it can hinder navigation within the file, especially as the file grows larger and more complex.\n\n2. **Config Per Model:** In this method, separate YAML files are created for each model, enhancing organization and searchability. Each model's configuration is isolated in its own file, making it easier to locate and modify specific settings. However, this approach may require managing a larger number of files, which could lead to potential file management challenges."
+    },
+    {
+        "term": "Recommended YAML Organization",
+        "definition": "Recommended YAML organization refers to the advisable approach of striking a balance between having a single file for all configurations and separating configurations per model or logically grouping them. This balance enhances maintainability and navigation, making it easier to manage and locate specific configurations within YAML files."
+    },
+    {
+        "term": "Monolithic Configuration Files",
+        "definition": "Monolithic configuration files refer to the practice of storing all configurations, including settings and models, in a single file. This approach can hinder development processes as it makes it challenging for developers to efficiently search for specific settings, track changes over time, and identify models that lack configurations. The complexity of managing a monolithic configuration file can lead to errors, inefficiencies, and difficulties in maintaining and updating the configurations, ultimately impacting the overall development workflow."
+    },
+    {
+        "term": "Multi-File Configuration Approach",
+        "definition": "The multi-file configuration approach refers to the practice of organizing configurations across multiple files in software development. This approach enhances searchability, as developers can easily locate specific settings by examining individual files. Additionally, it clarifies the location of configurations, making it easier to manage and update settings. Moreover, this method helps identify models lacking configurations by examining the file structure, ensuring that all necessary settings are properly defined and implemented.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Trade-off in Configuration Management",
+        "definition": "In software development, the concept of trade-off in configuration management refers to the balance between organizational efficiency and development speed. While using a multi-file configuration system improves organization by categorizing settings and configurations, it can slow down development processes due to the increased overhead of managing numerous files and navigating between them. This trade-off highlights the importance of carefully considering the structure of configuration management systems to optimize both organization and efficiency.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Configuration Strategies in dbt",
+        "definition": "**Configuration Strategies in dbt:** \n\n- **Directory-level Configuration:** This strategy involves defining configurations within specific directories in a dbt project. It is considered the most balanced and recommended approach for most dbt projects. By setting configurations at the directory level, it allows for a structured and organized way to manage settings across multiple models and resources within that directory.\n\n- **Model-level Configuration:** In contrast to directory-level configuration, model-level configuration involves configuring settings directly within model files, often using YAML at the top of the file. This approach is less common but can be suitable in situations where there are very specific needs for individual models. Projects may opt for model-level configuration to tailor settings at a granular level for certain models.\n\n- **Cascade Configs:** dbt provides the capability to set default configurations at the directory level using the `dbt_project.yml` file. These configurations cascade down to models within those directories, enabling a hierarchical way to manage settings efficiently. By leveraging cascade configs, project teams can establish consistent configurations across related models and streamline the management of settings in a dbt project.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Cascading Scope Priority",
+        "definition": "In dbt, Cascading Scope Priority refers to the system used to determine configuration settings at various levels such as project, subfolder, and model. This system follows a hierarchy where more specific locations, like model-specific settings, override broader ones, such as project-wide settings. This ensures that settings at a lower level take precedence over those at a higher level, allowing for granular control and customization within the dbt environment.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Materialization",
+        "definition": "In dbt, materialization refers to the process of determining how the results of a model are physically stored in the data warehouse. This decision impacts the performance and efficiency of queries. Common options for materialization include creating tables, views, and incremental models. Materialization choices are crucial for optimizing data processing and query performance in dbt projects."
+    },
+    {
+        "term": "Mart",
+        "definition": "In the context of data warehousing, a Mart refers to a specialized type of data model that is tailored to a specific business area or subject, such as sales or inventory. Marts are optimized for efficient reporting and analysis, allowing organizations to extract valuable insights and make informed decisions based on the data stored within them."
+    },
+    {
+        "term": "Schema",
+        "definition": "In the context of databases, a schema is a logical grouping of database objects (such as tables, views, and relationships) that defines the structure and organization of the database. It helps to organize and manage access permissions, data integrity constraints, and data manipulation operations within the database management system (DBMS). Schemas provide a way to separate different aspects of the database, such as data storage and user access, making it easier to maintain and secure the database effectively."
+    },
+    {
+        "term": "Incremental Materialization",
+        "definition": "Incremental Materialization is a dbt materialization strategy that only processes and updates changed data since the last run, improving efficiency. This approach helps in reducing processing time and resource usage by focusing on the delta changes in the data, rather than reprocessing the entire dataset every time the dbt model runs. By incrementally updating only the modified data, Incremental Materialization optimizes the data transformation process and enhances overall performance.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Project Structure Benefits",
+        "definition": "A consistent project structure, which includes organizing files, folders, and modules in a predefined manner, allows for default configurations, reducing the need for repetitive setup and promoting DRY (Don't Repeat Yourself) principles. This structure enhances code readability, maintainability, and collaboration among team members, leading to increased efficiency and productivity in software development.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Cascading Defaults",
+        "definition": "Cascading Defaults is a concept in data modeling and configuration management where organizing folders and defining configurations at higher levels allows settings like schema and materialization to cascade down, simplifying configuration for individual models. This approach ensures that changes made at a higher level automatically apply to all lower-level components, reducing the need for manual adjustments and ensuring consistency across the entire system."
+    },
+    {
+        "term": "Configuration Exceptions",
+        "definition": "Configuration Exceptions refer to specific settings that deviate from the general rules established through cascading defaults. In this context, configuration is required only for cases where deviations occur, simplifying and speeding up the overall setup process.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Tagging and Default Behavior",
+        "definition": "In software development, tagging and default behavior are essential components of maintaining a structured project environment. Consistent project structure not only enhances organization but also benefits tagging strategies, allowing for standardized approaches across the project. Tagging involves labeling specific components or versions for easy identification and tracking, while default behavior sets predefined actions or settings to streamline processes and ensure consistency in project management."
+    },
+    {
+        "term": "Over-reliance on dbt tags",
+        "definition": "New dbt users often depend heavily on tags for organization instead of using a well-structured folder system. This can lead to every model requiring tags, creating unnecessary complexity and hindering maintainability. It's important to understand that while dbt tags can be useful for categorizing and filtering models, they should complement a clear folder structure rather than replace it. By establishing a balance between tags and folders, users can maintain a more organized and sustainable dbt project."
+    },
+    {
+        "term": "Folder-Based Selection in dbt",
+        "definition": "Folder-Based Selection in dbt is an approach that prioritizes project folders as the primary means of organizing and selecting models in dbt (data build tool). This approach simplifies model selection by leveraging the existing file structure, making it easier to include or exclude groups of models based on their directory location. For instance, when running the command 'dbt build --select marts.marketing', all models within the 'marketing' subfolder of the 'marts' folder would be built. This method enhances organization and efficiency in managing dbt projects by aligning model selection with folder structure, streamlining the process of building specific groups of models within a project."
+    },
+    {
+        "term": "Tag-Based Selection in dbt (exceptions)",
+        "definition": "In dbt (data build tool), while folders are preferred for general organization, tags serve a specific purpose in handling exceptions or creating specific model groupings that may not strictly follow the folder structure. This approach is crucial to prevent unnecessary tagging of numerous models and potential errors that may arise if developers forget to apply tags consistently. Tags are particularly useful for grouping models related to a specific business process or marking models with unique dependencies, ensuring a more efficient and organized data modeling process in dbt."
+    },
+    {
+        "term": "Seeds in Data Modeling",
+        "definition": "Seeds are used in data modeling to populate lookup tables with static data that is beneficial for modeling purposes but is not sourced directly from operational systems. These static values serve as foundational reference points for the model, aiding in data analysis and interpretation. For instance, seeds can include mapping zip codes to states for geographical analysis or correlating UTM parameters to specific marketing campaigns for tracking and attribution. By incorporating seeds, data modelers can enhance the accuracy and completeness of their models, enabling more effective data analysis and decision-making.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Seeds vs. Source Data",
+        "definition": "Seeds, in the context of data warehousing, should not be used to directly load data from a source system into your warehouse. They are specifically intended for auxiliary lookup data, such as reference tables or static data that supports the main dataset. Using seeds for source data loading can lead to data inconsistency and errors in the warehouse integration process."
+    },
+    {
+        "term": "Data Loading in dbt",
+        "definition": "Data Loading in dbt refers to the process of bringing data into dbt (data build tool) for transformation and modeling. It's important to note that dbt is not designed for loading data into a warehouse. Instead, dbt operates on data already present in the warehouse, focusing on transforming and modeling that data. This means that dbt is not a data extraction or loading tool. To effectively use dbt, it is recommended to utilize appropriate EL (Extract, Load) tools to load data into the warehouse before leveraging dbt for further processing and analysis."
+    },
+    {
+        "term": "dbt analyses folder",
+        "definition": "The `analyses` folder in a dbt project is intended for storing queries that you want to version control and potentially use with Jinja templating. These queries are not meant to be built into models within your data warehouse. It's a place to keep auditing queries, exploratory analyses, or other SQL you want to track but not deploy as transformations.",
+        "flash_card_review": []
+    },
+    {
+        "term": "dbt analyses folder",
+        "definition": "The `analyses` folder in a dbt project is intended for storing queries that you want to version control and potentially use with Jinja templating. These queries are not meant to be built into models within your data warehouse. It's a place to keep auditing queries, exploratory analyses, or other SQL you want to track but not deploy as transformations.",
+        "flash_card_review": []
+    },
+    {
+        "term": "dbt Audit Helper Package",
+        "definition": "The dbt Audit Helper Package is a specialized tool used in dbt (data build tool) projects to identify and resolve discrepancies in output, particularly useful when migrating logic and transformations from other systems into dbt. This package assists data engineers and analysts in ensuring data accuracy and consistency throughout the data transformation process."
+    },
+    {
+        "term": "dbt Tests",
+        "definition": "dbt Tests are a crucial component of the dbt (data build tool) framework, used for validating data and model behavior in dbt projects. These tests ensure the accuracy and reliability of the data transformations and models implemented in the dbt workflow. While they can be designed to test specific tables or models, the evolution of dbt has emphasized the use of more holistic and comprehensive tests, making singular table tests less common but promoting a more robust testing strategy across the entire data pipeline."
+    },
+    {
+        "term": "Singular Tests in dbt",
+        "definition": "Singular tests in dbt refer to individual tests created to validate specific data models within a dbt project. While useful for workshopping test logic and ensuring the accuracy of individual models, singular tests are often replaced by custom generic tests or pre-built tests from packages like `dbt-utils` and `dbt-expectations`. However, they remain valuable for flexibly testing scenarios requiring a mix of specific models, providing a granular approach to data validation in dbt projects."
+    },
+    {
+        "term": "Singular Test (Data Modeling)",
+        "definition": "A Singular Test in data modeling is a specific type of test that focuses on verifying the logic and outputs of how multiple models interact or connect within a data model. This type of test is similar to integration tests in software engineering, where the goal is to ensure the seamless integration and functioning of different components within the system."
+    },
+    {
+        "term": "macros",
+        "definition": "Macros are reusable code blocks in dbt (data build tool) that help avoid repetition by allowing users to define custom SQL transformations. They are similar to functions in programming languages and promote the DRY (Don't Repeat Yourself) principles by enabling users to write code once and reuse it multiple times across their dbt projects. Macros are well-documented in dbt Docs, providing detailed explanations and examples for users to leverage. This guide won't cover them in-depth but understanding macros is essential for efficient data modeling and transformation workflows in dbt."
+    },
+    {
+        "term": "Macros in dbt",
+        "definition": "Macros in dbt are reusable chunks of code defined in a `_macros.yml` file. They help in organizing and reusing code snippets within your dbt project. Macros allow you to create custom SQL transformations that can be applied across multiple models, enhancing the modularity and efficiency of your data transformation processes."
+    },
+    {
+        "term": "Splitting dbt Projects",
+        "definition": "Splitting dbt Projects refers to the practice of dividing a dbt (data build tool) codebase into multiple smaller projects. This approach is often used to manage complex data transformations and workflows efficiently. While possible, it's generally discouraged for beginners and smaller teams unless absolutely necessary. It requires a good understanding of dbt's project structure and can introduce complexity that may not be beneficial for less experienced users. It's recommended to start with a single project and only consider splitting projects when the codebase grows significantly in size or complexity."
+    },
+    {
+        "term": "When to Split dbt Projects",
+        "definition": "Consider splitting dbt projects only when facing unavoidable constraints, such as resource limitations or performance issues, or when it simplifies an overly complex workaround that hinders efficiency. Prioritize keeping your project unified for clarity and maintainability, as a fragmented project structure can lead to confusion and difficulties in tracking dependencies and changes over time."
+    },
+    {
+        "term": "Private Packages in dbt",
+        "definition": "Private Packages in dbt refer to a mechanism that allows users to segment their projects, providing a way to organize and manage different aspects of their dbt workflows. However, it is important to note that while Private Packages offer project segmentation, they can introduce complexity that may outweigh their benefits for most organizations. This complexity may arise from the need for careful management and maintenance of multiple packages, potentially impacting the overall efficiency and simplicity of the dbt environment."
+    },
+    {
+        "term": "Cohesive Lineage in dbt",
+        "definition": "Cohesive Lineage in dbt refers to a future goal in dbt development to enable seamless integration of multiple dbt projects, simplifying the management of complex data pipelines. This concept aims to create a unified view of data lineage across different dbt projects, allowing for better traceability and understanding of how data flows through the pipelines, ultimately enhancing data governance and decision-making processes."
+    },
+    {
+        "term": "Splitting dbt Projects",
+        "definition": "Splitting dbt projects refers to the practice of dividing dbt (data build tool) projects based on conceptual separations like business groups or departments. While it might be tempting to split projects in this way, it's generally not recommended due to potential complexities in managing dependencies and configurations. However, with the evolution of monolithic projects into multiple connected projects within a monorepo, this approach might become more viable in the future. It's important to carefully consider the implications of splitting projects and assess the benefits and drawbacks before implementing this strategy.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Siloed Modeling in Business Analysis",
+        "definition": "Siloed Modeling in Business Analysis refers to the practice of separating business analysis projects based on departments (like marketing and finance) or use cases (like standard BI vs. ML). This siloed approach adds complexity and undermines the benefits of organization-wide collaboration on consistent definitions and business logic. By breaking down projects into isolated silos, teams may miss out on valuable insights that could be gained from cross-functional collaboration and a holistic view of the organization's operations and goals.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Single Source of Truth",
+        "definition": "A Single Source of Truth is a centralized and agreed-upon repository for data, ensuring consistency and reliability across an organization. This concept is crucial in data management as it eliminates data silos and discrepancies by providing a unified source for all data-related activities, such as analysis, reporting, and decision-making. By having a Single Source of Truth, organizations can make informed decisions based on accurate and up-to-date information, leading to improved efficiency and effectiveness in operations."
+    },
+    {
+        "term": "Data Governance",
+        "definition": "Data Governance is the practice of managing data availability, usability, integrity, and security in an organization to ensure reliable and trustworthy data is used for decision-making. It involves establishing policies, procedures, and controls to govern how data is collected, stored, accessed, and maintained throughout its lifecycle, aligning with regulatory requirements and organizational goals."
+    },
+    {
+        "term": "Reasons to Split a Data Science Project",
+        "definition": "While generally discouraged, splitting a data science project might be necessary for structural and organizational reasons, such as data governance and security. Splitting a project can also help in managing large datasets more efficiently, enabling parallel processing and reducing the risk of data breaches or unauthorized access. Additionally, dividing a project into smaller components can enhance collaboration among team members with specialized skills and facilitate better project tracking and monitoring."
+    },
+    {
+        "term": "Data Governance and Security for Sensitive Data",
+        "definition": "Data governance and security for sensitive data refer to the practices and policies implemented to ensure the proper handling and protection of confidential information, such as Personally Identifiable Information (PII) in healthcare. In organizations, separate projects might be needed to comply with strict data access policies, establish data ownership, define data usage guidelines, and maintain data security measures like encryption, access controls, and monitoring to prevent unauthorized access or breaches."
+    },
+    {
+        "term": "Managing Projects with Separate Data Access Levels",
+        "definition": "Managing projects with separate data access levels involves splitting projects to control access based on the sensitivity of the data. For example, a project dealing with raw, sensitive data, such as personal information, financial records, or proprietary data, is kept isolated from a project that uses aggregated or anonymized data. This separation allows for different access levels to be assigned to individuals or teams, ensuring that only authorized personnel can view or manipulate sensitive information while maintaining data security and compliance with privacy regulations."
+    },
+    {
+        "term": "Private Packages for Sharing Project Outputs",
+        "definition": "Private packages for sharing project outputs refer to the practice of packaging outputs, like staging models, from one project to be imported into other projects. This process ensures controlled access and efficient dependency management, allowing teams to easily share and utilize valuable project assets across different projects."
+    },
+    {
+        "term": "Project Size in dbt",
+        "definition": "Project Size in dbt refers to the scenario when a dbt project grows too large, typically with thousands of models, which can hinder the development experience. This growth necessitates splitting the project into smaller, more manageable parts to maintain efficiency and clarity. While specific organizational conventions, such as naming conventions and folder structures, are valuable, ensuring consistency throughout the project is paramount for seamless collaboration and scalability."
+    },
+    {
+        "term": "Organizational Uniqueness",
+        "definition": "Organizational uniqueness refers to the distinct and individualized characteristics of each organization, including its culture, structure, goals, and stakeholders. Every organization has its own specific needs and context, meaning a one-size-fits-all approach to project management may not be suitable. Understanding and adapting to these unique aspects is essential for successful project execution.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Deviations from Conventions",
+        "definition": "Deviations from conventions refer to instances where recommended structures or approaches are modified or strayed from. When adapting these deviations, it's crucial to carefully consider and document the reasons for these changes. This documentation helps maintain transparency and understanding within the team, ensuring that everyone is aware of the rationale behind the deviations. By explaining the \"how\" and \"why\" behind the changes, teams can effectively navigate deviations while upholding clarity and alignment with the overall objectives and standards of the project.",
+        "flash_card_review": []
+    },
+    {
+        "term": "Forking the dbt Project Guide",
+        "definition": "Forking the dbt Project Guide refers to the process where users are encouraged to create a copy of the dbt project guide repository on GitHub and incorporate it into their own project's documentation (such as README, wiki, or docs) for easy access, customization, and reference. This allows users to leverage the existing documentation structure and content provided by dbt while tailoring it to their specific project needs and requirements."
+    },
+    {
+        "term": "Living Document",
+        "definition": "A 'Living Document' refers to the dbt project guide, which serves as an evolving and dynamic resource. This guide is continuously updated and expanded in alignment with the development of dbt and dbt Labs. It remains open to community discussion, comments, and contributions for ongoing improvements and enhancements, reflecting a collaborative and iterative approach to knowledge sharing and development within the dbt ecosystem."
+    }
+]
