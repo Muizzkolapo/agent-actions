@@ -64,24 +64,11 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
     Returns:
         tuple: Transformed response and source text.
     """
-
-    source_file_path_result = get_file_info(source_path)
-
-
     # If source_path is provided, attempt to load the source data
     if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
        with open(source_path, 'r') as file:
         source_data = json.load(file)
-
-
-    
-
-
-
-
-
         for item in source_data:
-            
             guid_key = list(item.keys())[0]
         # Check if the loaded data has the required structure
             if guid_key == input_documentation["guid"]:
@@ -111,7 +98,6 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
                 
                 return transformed_response, src_text
                 
-
     else:
         # This block handles the scenario where source_path is None or keys are missing
         response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation)
