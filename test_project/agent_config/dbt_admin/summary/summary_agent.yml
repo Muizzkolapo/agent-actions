@@ -1,0 +1,43 @@
+summary_agent:
+  - agent_type: explainer_agent
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: summary_schema_explainer
+    select_list: [] 
+    prompt:
+      - ["system", "Your task is to capture the key ideas in the provided input text."]
+      - ["system", "For each key ideas captured, explain the key idea in deep detail, ensuring your explanations are thorough, clear, and structured. Break down complex concepts into simple terms, provide examples, and make sure each explanation is accessible to someone unfamiliar with the topic."]
+      - ["human", "Avoid referring to the document, guide, text as users wont have access, your job is to write in your own word"]
+      - ["system", "Avoid Objective or Neutral Tone"]
+      - ["system", "YOU MUST INCLUDE THE EXCERPT USED FOR GENERATING YOUR OUTPUT FOR TRACEABILITY"]
+      - ["system", "Input documentation found here: {input}"]
+      - ["human", "thinking step by step implement the instructions"]
+
+  - agent_type: explainer_agent_reviewer
+    dependencies: ['explainer_agent']
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: explainer_reviewer
+    select_list: []
+    prompt:
+      - ["system", "thinking step by step given that this was the original source_text:get_from_src[guid]."]
+      - ["system", "this is a an explanation generated from the source_text generated_explanation=get[explainer]."]      
+      - ["human", "review the generated text and validate that the explaianation is correct."]
+      - ["system", "generate a report of accuracy and recommendations for improvement if needed: {input}"]
+      - ["human", "thinking step by step implement the instructions"]
+
+  - agent_type: explainer_agent_rewrite
+    dependencies: ['explainer_agent_reviewer']
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: summary_schema_explainer
+    select_list: []
+    prompt:
+      - ["system", "thinking step by step given that this was review by another agent review_text=get[report]."]
+      - ["system", "rewrite our explnation better based on recommendations provided if available."]      
+      - ["system", "Here is the input to be used: {input}"]
+      - ["human", "thinking step by step implement the instructions"]

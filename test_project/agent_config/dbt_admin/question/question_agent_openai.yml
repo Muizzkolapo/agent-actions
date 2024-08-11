@@ -1,0 +1,74 @@
+question_agent_openai:
+  - agent_type: exam_question_creator
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: question_schema
+    select_list: []
+    prompt:
+    prompt:
+      - ["system", "Style and Tone: Adopt a tone that balances formality with approachability, suitable for educational contexts."]
+      - ["system", "Develop questions that simulate real-world challenges, based on the provided documentation. These questions should be \
+                  rich in context, drawing from practical scenarios to illustrate the trade-offs and benefits of different infrastructure \
+                  choices. Aim to craft questions that elucidate the strategic decision-making processes and their outcomes."]
+      - ["system", "SAMPLE EXAM QUESTION TEMPLATE:
+                    Scenario: Describe a realistic situation that requires a decision, setting the stage for the question.
+                    Question: Pose a question that stems from the scenario, challenging the student to apply their knowledge.
+                    Options: Provide a list of potential answers, including both the correct answer and plausible distractors.
+                    Answer: Identify the correct answer.
+                    Explanation: Offer a comprehensive explanation of why the selected answer is correct and discuss why other options are not, using insights from the documentation provided."]
+      - ["system", "Ensure that the explanations are independent of the specific option letters and focus on the reasoning behind the correct answer. Do not mention the option letter in the explanation"]
+      - ["human", "Using the  <documentation>, create a scenario-based question that utilizes the details in the document provided. This should help students apply theoretical knowledge to practical situations, enhancing their learning experience.:{input}"]
+      - ["human", "Follow a step-by-step process to implement the instructions."]
+
+  - agent_type: question_options_reviewer
+    api_key: OPENAI_API_KEY
+    dependencies: ["exam_question_creator"]
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: question_schema
+    select_list: ['options']
+    prompt:
+      - ["system", "Focus on Options Only: Review and refine only the answer options within the exam questions. DO NOT TOUCH OTHER PARTS OF THE QUESTION."]
+      - ["system", "Refine Answer Options: Review the answer options provided in the exam questions, ensuring that each option is presented as a complete, grammatically correct sentence. Increase the complexity and length of each option to make the exam more challenging. The options should be detailed and wordy, using technical language and specific terminology where appropriate to test deeper understanding and ensure they align with the difficulty level desired for the exam."]
+      - ["human", "Final Quality Assurance: Assess the revised options to ensure they meet the desired complexity and educational standards. Check for clarity, grammatical accuracy, and appropriateness of the language used. Make any necessary adjustments to ensure the options not only challenge the students but also enhance their learning experience by clearly communicating intricate concepts.:{input}"]    
+
+  - agent_type: question_generator_review
+    dependencies: ['question_options_reviewer']
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-flash"
+    model_vendor: "Gemini"
+    schema_name: gemini_question
+    select_list: []
+    prompt:
+      - This is the source text used to generate the practice dbt exam question source_text=get_from_src[guid]
+      - We noticed that the options where the right answer is the one with the longest text is on average common.
+      - rewrite the options based on the source text and the question provided such that its the perfect exam question.
+      - You dont have to fix any other part of the question, just make sure your options align with the question
+
+  - agent_type: question_reviewer_final
+    dependencies: ['question_generator_review']
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: question_schema
+    select_list: []
+    prompt:
+      - ["system", "Question Focus: Review and refine the question to ensure it is concise, integrating the scenario and question seamlessly without giving away the correct answer."]
+      - ["system", "Question Development: Ensure the question presents a neutral context that allows for multiple plausible answers, focusing on critical thinking rather than leading to a specific answer."]
+      - ["system", "Ensure diverse phrasing is maintained to avoid repetitive patterns in questions."]
+      - ["human", "Review the question to make sure it provides a balanced setup for the options, focusing on general context rather than specific details that suggest the answer.:{input}"]
+
+
+  - agent_type: final_question
+    dependencies: ['question_reviewer_final']
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-flash"
+    model_vendor: "Gemini"
+    schema_name: gemini_question
+    select_list: []
+    prompt:
+      - Remove any references to specific option letters (e.g., "Option A") in the explanation and option list.
+      - Ensure the explanation focuses solely on the content and logic behind the correct answer without mentioning its position in the list of options.
+      - refer to the actual option text and not just the option letter

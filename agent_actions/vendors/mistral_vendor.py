@@ -1,7 +1,6 @@
 import os
 import json
-from mistralai.client import MistralClient
-from mistralai.models.chat_completion import ChatMessage
+from mistralai import Mistral
 from agent_actions.core.utils import process_as_string
 
 class MistralHandler:
@@ -11,7 +10,7 @@ class MistralHandler:
         api_key = os.environ["MISTRAL_API_KEY"]
         model_name = agent_config['model_name']
 
-        client = MistralClient(api_key=api_key)
+        client = Mistral(api_key=api_key)
 
         input_documentation_str = process_as_string(input_documentation)
         prompt = f"""
@@ -22,10 +21,12 @@ class MistralHandler:
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             """
         messages = [
-            ChatMessage(role="user", content=prompt)
+            {
+                "role": "user",
+                "content": prompt,
+            }
         ]
-
-        chat_response = client.chat(
+        chat_response = client.chat.complete(
             model=model_name,
             response_format={"type": "json_object"},
             messages=messages,
