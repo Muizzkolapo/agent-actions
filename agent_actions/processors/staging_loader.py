@@ -365,10 +365,10 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
 
     write_file(data_chunk, output_file_path)
-    write_file2(src_text, output_src_path)
+    write_source_file(src_text, output_src_path)
 
 
-def write_file2(content, file_path):
+def write_source_file(content, file_path):
     """
     Writes content to a file, appending it if it doesn't already exist.
 
