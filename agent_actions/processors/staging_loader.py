@@ -71,31 +71,25 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
         for item in source_data:
             guid_key = list(item.keys())[0]
         # Check if the loaded data has the required structure
-            if guid_key == input_documentation["guid"]:
-                
+            if guid_key == input_documentation["guid"]:                
                 input_documentation_new = input_documentation["content"]
-
                 response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation_new)
                 transformed_response_temp = [{guid_key: response}]
                 transformed_response = transform_structure(transformed_response_temp)
-        
                 src_text = [item]
                 return transformed_response,src_text
 
       
         
             elif guid_key != input_documentation["guid"] or guid_key not in input_documentation:
-
                 input_documentation_new = input_documentation["content"]
+                print('+++using this switch2')
                 # This block handles the scenario where source_path is None or keys are missing
                 response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation_new)
                 guid = input_documentation["guid"]
                 transformed_response_temp = [{guid: response}]
                 transformed_response = transform_structure(transformed_response_temp)
-                print(input_documentation)
-
-                src_text = [{input_documentation["guid"]: input_documentation["content"]}]
-                
+                src_text = [{guid: input_documentation_new}]
                 return transformed_response, src_text
                 
     else:
