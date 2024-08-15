@@ -1,0 +1,35 @@
+flashcard_agent:
+  - agent_type: flashcard_refiner
+    dependencies: []
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-pro"
+    model_vendor: "Gemini"
+    schema_name: flashcard_schema_explainer 
+    select_list: []
+    prompt:
+      - ["system", "You are a specialized system designed to refine flashcards. Take the initial flashcards created and refine them for clarity, conciseness, and thorough coverage of key concepts."]
+      - ["human", "DO NOT INCLUDE ANY OUTPUT THAT DOES NOT ALIGN WITH SCHEMA"]
+
+  - agent_type: flashcard_enhancer
+    dependencies: [flashcard_refiner]
+    api_key: OPENAI_API_KEY
+    model_name: "gpt-3.5-turbo"
+    model_vendor: "OpenAI"
+    schema_name: flashcard_reviewer 
+    select_list: []
+    prompt:
+      - ["system", "You are a specialized system designed to enhance flashcards. Take the refined flashcards and enhance them by adding any additional context to make them more effective for learning into the definition."]
+      - ["human", "Refined Flashcards: {input}"]
+      - ["human", "Let's think step by step and add relevant additional context within the definition."]
+
+  - agent_type: flashcard_quality_checker
+    dependencies: [flashcard_enhancer]
+    api_key: OPENAI_API_KEY
+    model_name: "gpt-3.5-turbo"
+    model_vendor: "OpenAI"
+    schema_name: flashcard_reviewer 
+    select_list: []
+    prompt:
+      - ["system", "You are a specialized system designed to perform a final quality check on flashcards. Take the enhanced flashcards and make any final adjustments needed to ensure they are perfect."]
+      - ["human", "Enhanced Flashcards: {input}"]
+      - ["human", "Let's think step by step and review the flashcards for completeness, accuracy, and effectiveness. Ensure that each flashcard is clear, concise, and includes necessary details."]

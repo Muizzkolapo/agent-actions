@@ -1,0 +1,20 @@
+title: "summary_schema_feedback"
+description: "A schema for validating summaries with associated explanations in a structured format."
+type: "object"
+required:
+  - "rewrite"
+properties:
+  summaries:
+    title: "All text"
+    description: "An array of rewrite, each containing a written text"
+    type: "array"
+    minItems: 1
+    items:
+      type: "object"
+      required:
+        - "rewrite"
+      properties:
+        summary:
+          type: "string"
+          description: "The written text capturing the main idea or concept."
+       
