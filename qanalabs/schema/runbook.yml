@@ -1,0 +1,73 @@
+title: "summary_schema_feedback"
+description: "A schema for validating summaries with associated explanations in a structured format."
+type: "object"
+required:
+  - "summaries"
+properties:
+  summaries:
+    title: "All Summaries"
+    description: "An array of summaries, each containing a written summary, its explanation, and feedback."
+    type: "array"
+    minItems: 1
+    items:
+      type: "object"
+      required:
+        - "summary"
+        - "explainer"
+        - "feedback"
+      properties:
+        summary:
+          type: "string"
+          description: "The written summary capturing the main idea or concept."
+        explainer:
+          type: "string"
+          title: "Detailed Explanation"
+          description: "A detailed explanation of the summary, providing further context and understanding."
+          pattern: "^(?=.*\\b(explain|describe|elaborate|discuss|how|why|what)\\b)(?=.*\\b(because|since|as|thus|therefore)\\b)(?=.*[,;]).{300,}$"
+        Purpose:
+          type: "string"
+          title: "Purpose"
+          description: "A brief description of the purpose of the run book, explaining why it is required (e.g., compliance, incident resolution, daily monitoring)."
+        Introduction:
+          type: "string"
+          title: "Introduction"
+          description: "A general introduction with a statement of rationale."
+        Scope:
+          type: "string"
+          title: "Scope"
+          description: "A statement outlining the areas and context covered by the run book, including any areas to which it does not apply."
+
+        Definitions:
+          type: "string"
+          title: "Definitions"
+          description: "A list of definitions for terms used in the run book. Acronyms and abbreviations should be explained at the point of use."
+
+        Responsibilities:
+          type: "string"
+          title: "Responsibilities"
+          description: "A summary of the roles and the key tasks each role holder is responsible for in the procedures detailed in the run book."
+
+        Frequency:
+          type: "string"
+          title: "Frequency"
+          description: "A description of how often the process needs to be run."
+
+        ToolsAccess:
+          type: "string"
+          title: "Tools and Access Required"
+          description: "A list of tools and access required to fully perform the activity."
+
+        SpecificProcedure:
+          type: "string"
+          title: "Specific Procedure"
+          description: "The main text of the run book, detailing the procedure for the task to be performed. It should enable a trained person to perform the procedure without supervision and to train others."
+
+        InternalExternalReferences:
+          type: "string"
+          title: "Internal/External References"
+          description: "A list of all controlled internal references (e.g., other run books) and external references referred to within the run book."
+
+        EscalationPoint:
+          type: "string"
+          title: "Escalation Point"
+          description: "The procedure to escalate if the process did not run successfully, including contact details of the team responsible for escalation."

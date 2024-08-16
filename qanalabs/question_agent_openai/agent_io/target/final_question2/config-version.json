@@ -1,0 +1,17 @@
+[
+    {
+        "guid": "1ea7c1f8-f7ad-4c84-b0d7-46fd6ab7b574",
+        "content": {
+            "scenario": "A data analyst is working on a project using dbt and is reviewing the configuration settings in the `dbt_project.yml` file. They notice that the `config-version:` tag is present and set to 2. They are unsure if this is necessary since they are using dbt version 1.5. They want to ensure their project is configured correctly without unnecessary settings.",
+            "question": "Is the `config-version:` tag required in the `dbt_project.yml` file when using dbt version 1.5?",
+            "options": [
+                "The `config-version:` tag is required for all versions of dbt, regardless of the specific version being used. This tag ensures that the project configuration is correctly interpreted by dbt, regardless of the version being used. Omitting this tag could lead to unexpected behavior or compatibility issues.",
+                "Starting with dbt version 1.5, the `config-version:` tag became optional. While it can be included to explicitly specify that the project uses the v2 structure, dbt defaults to assuming version 2 syntax if the tag is absent. Therefore, including the `config-version:` tag is not necessary for correct configuration in version 1.5.",
+                "The `config-version:` tag is only required if using dbt version 1. This tag specifies the project configuration version and is essential for dbt to interpret the configuration correctly. In later versions of dbt, like 1.5, the default configuration version is assumed, making the `config-version:` tag unnecessary.",
+                "The `config-version:` tag should be set to 1.5 when using dbt version 1.5. This ensures that the project configuration aligns with the specific version being used, preventing potential conflicts or compatibility issues with older versions of dbt."
+            ],
+            "answer": "B",
+            "explanation": "The correct answer is **B**.  The `config-version:` tag is optional starting with dbt version 1.5. If the tag is present, dbt understands it as using the v2 structure, however if the tag is omitted, dbt will assume v2 by default. In other words, dbt version 1.5 and higher will assume v2 syntax if no `config-version:` tag is present. The other options are incorrect because they claim the tag is either always required, required only for v1, or should be set to 1.5.  In reality, dbt 1.5 and higher support v2 syntax by default and therefore, if using 1.5 or higher, the tag is not needed."
+        }
+    }
+]

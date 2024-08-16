@@ -1,0 +1,49 @@
+question_agent_openai:
+  - agent_type: exam_question_creator
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: question_schema
+    select_list: []
+    prompt:
+    prompt:
+      - ["system", "Style and Tone: Adopt a tone that balances formality with approachability, suitable for educational contexts."]
+      - ["system", "Develop questions that simulate real-world challenges, based on the provided documentation. These questions should be \
+                  rich in context, drawing from practical scenarios suited to the context of the provided document."]
+      - ["system", "All key ideas in the provided text must be tested for."]
+      - ["system", "SAMPLE EXAM QUESTION TEMPLATE:
+                    Scenario: Describe a realistic situation that requires a decision, setting the stage for the question.
+                    Question: Pose a question that stems from the scenario, challenging the student to apply their knowledge.
+                    Options: Provide a list of potential answers, including both the correct answer and plausible distractors.
+                    Answer: Identify the correct answer.
+                    Explanation: Offer a comprehensive explanation of why the selected answer is correct and discuss why other options are not, using insights from the documentation provided."]
+      - ["system", "Ensure that the explanations are independent of the specific option letters and focus on the reasoning behind the correct answer. Do not mention the option letter in the explanation"]
+      - ["human", "Using the {input}, create a scenario-based question that utilizes the details in the document provided."]
+      - ["human", "Follow a step-by-step process to implement the instructions."]
+
+  - agent_type: final_question
+    dependencies: ['exam_question_creator']
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-flash"
+    model_vendor: "Gemini"
+    schema_name: gemini_question
+    select_list: []
+    prompt:
+      - Remove any references to specific option letters (e.g., "Option A") in the explanation and option list.
+      - Ensure the explanation focuses solely on the content and logic behind the correct answer without mentioning its position in the list of options.
+      - refer to the actual option text and not just the option letter
+      - Answer field should only have a letter designating the right answer
+
+  - agent_type: final_question2
+    dependencies: ['final_question']
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-flash"
+    model_vendor: "Gemini"
+    schema_name: gemini_question
+    select_list: []
+    prompt:
+      - Considering this was the source text used for this quiz get_from_src[guid]
+      - Write a better explanation for the answer, explaining why it is right and explaining why other options are wrong
+      - We need to avoid mentionin option letter in explanation has we would randomize option possition once geneation is done
+      - Give a proper explanatoon taking question context and the source text into consideration

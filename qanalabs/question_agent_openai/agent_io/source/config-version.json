@@ -1,0 +1,8 @@
+[
+    {
+        "edbe6656-bcb3-4991-88cc-aa915d4c22e4": "---\ndatatype: integer\ndescription: \"Read this guide to understand the config-version configuration in dbt.\"\n---\n\n<VersionBlock firstVersion=\"1.5\">\n\nStarting in dbt v1.5, the `config-version:` tag is optional.\n\n</VersionBlock>\n\n<File name='dbt_project.yml'>\n\n```yml\nconfig-version: 2\n```\n\n</File>\n\n## Definition\nSpecify your `dbt_project.yml` as using the v2 structure.\n\n<VersionBlock firstVersion=\"1.5\"> This configuration is optional. </VersionBlock>\n\n## Default\nWithout this configuration, dbt will assume your `dbt_project.yml` uses the version 2 syntax. Version 1 was deprecated in dbt v0.19.0.\n\n\n## Link\nhttps://docs.getdbt.com/docs/introduction"
+    },
+    {
+        "1ea7c1f8-f7ad-4c84-b0d7-46fd6ab7b574": "---\ndatatype: integer\ndescription: \"Read this guide to understand the config-version configuration in dbt.\"\n---\n\n<VersionBlock firstVersion=\"1.5\">\n\nStarting in dbt v1.5, the `config-version:` tag is optional.\n\n</VersionBlock>\n\n<File name='dbt_project.yml'>\n\n```yml\nconfig-version: 2\n```\n\n</File>\n\n## Definition\nSpecify your `dbt_project.yml` as using the v2 structure.\n\n<VersionBlock firstVersion=\"1.5\"> This configuration is optional. </VersionBlock>\n\n## Default\nWithout this configuration, dbt will assume your `dbt_project.yml` uses the version 2 syntax. Version 1 was deprecated in dbt v0.19.0.\n\n\n## Link\nhttps://docs.getdbt.com/docs/introduction"
+    }
+]

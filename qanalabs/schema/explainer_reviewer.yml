@@ -1,0 +1,29 @@
+title: "summary_schema_explainer"
+description: "A schema for validating summaries with associated explanations in a structured format."
+type: "object"
+required:
+  - "summaries"
+properties:
+  summaries:
+    title: "All Summaries"
+    description: "An array of summaries, each containing a written summary and its explanation."
+    type: "array"
+    minItems: 1
+    items:
+      type: "object"
+      required:
+        - "summary"
+        - "explainer"
+        - "report"
+      properties:
+        summary:
+          type: "string"
+          description: "The written summary capturing the main idea or concept."
+        explainer:
+          type: "string"
+          title: "Detailed Explanation"
+          description: "A detailed explanation of the summary, providing further context and understanding."
+          pattern: "^(?=.*\\b(explain|describe|elaborate|discuss|how|why|what)\\b)(?=.*\\b(because|since|as|thus|therefore)\\b)(?=.*[,;]).{300,}$"
+        report:
+          type: "string"
+          description: "report of how accurate explaination is"

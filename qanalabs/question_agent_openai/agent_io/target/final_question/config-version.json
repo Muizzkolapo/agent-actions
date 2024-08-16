@@ -1,0 +1,17 @@
+[
+    {
+        "guid": "1ea7c1f8-f7ad-4c84-b0d7-46fd6ab7b574",
+        "content": {
+            "scenario": "A data analyst is working on a project using dbt and is reviewing the configuration settings in the `dbt_project.yml` file. They notice that the `config-version:` tag is present and set to 2. They are unsure if this is necessary since they are using dbt version 1.5. They want to ensure their project is configured correctly without unnecessary settings.",
+            "question": "Is the `config-version:` tag required in the `dbt_project.yml` file when using dbt version 1.5?",
+            "options": [
+                "It is required for all versions",
+                "It is optional starting from version 1.5",
+                "It is required only if using version 1",
+                "It must be set to 1.5"
+            ],
+            "answer": "B",
+            "explanation": "Starting with dbt version 1.5, the `config-version:` tag is optional. If included, it can specify the project as using the v2 structure, but dbt will default to assuming version 2 syntax if the tag is absent. Therefore, while the tag can be present, it is not necessary for proper configuration in version 1.5. The other options incorrectly state the requirements or conditions for the `config-version:` tag."
+        }
+    }
+]

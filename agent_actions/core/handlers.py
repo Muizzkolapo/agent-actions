@@ -68,6 +68,7 @@ def get_folder(agent_name):
 def find_agent_folder(working_directory, folder_name,base_dir):
     # Define the base path to search within
     base_path = os.path.join(working_directory, base_dir)
+    print(base_dir)
     
     # Walk through the directory tree
     for root, dirs, files in os.walk(base_path):
@@ -96,9 +97,10 @@ def process_and_generate_for_agent(agent_config,
     :param function_name: Name of the function to apply to the data.
     """
     try:
-        folder_name, file_name = get_folder(agent_name)
+        #folder_name, file_name = get_folder(agent_name)
         current_dir = os.getcwd()
-        agent_folder = find_agent_folder(current_dir, agent_name, "agent_io")
+        agent_folder = os.path.join(current_dir, agent_name)
+        print(agent_folder)
         
         if agent_folder is None:
             raise FileNotFoundError(f"Agent folder not found for agent: {agent_name}")
@@ -107,15 +109,18 @@ def process_and_generate_for_agent(agent_config,
 
         input_directory = os.path.join(
             agent_folder,
+            'agent_io',
             'target',
             previous_agent_type
         ) if previous_agent_type else os.path.join(
             agent_folder,
+            'agent_io',
             'staging'
         )
 
         output_directory = os.path.join(
             agent_folder,
+            'agent_io',
             'target',
             agent_config["agent_type"]
         )
