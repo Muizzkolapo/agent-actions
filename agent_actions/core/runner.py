@@ -25,9 +25,6 @@ except ImportError:
     execute_user_defined_function = None
     validate_agent_config = None
 
-# Import the StateManager class from the newly created module
-from agent_actions.core.state_manager import StateManager
-
 
 def find_agents_name(config):
     """
@@ -61,83 +58,31 @@ def topological_sort(dependencies):
 
     return ordered[::-1]
 
-import signal
-import sys
-import logging
-
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
     """
     Run an agent based on the provided configuration.
     """
-    # Initialize StateManager with the current working directory
-    state_manager = StateManager(state_file=f'{agent_name}_state.json')
-    
-    # Load the state if it exists
-    state = state_manager.load_state()
-    
-    if state is None:
-        # If there's no saved state, start from the beginning
-        state = {
-            'agent_config': agent_config,
-            'agent_name': agent_name,
-            'previous_agent_type': previous_agent_type,
-            'idx': idx,
-            'use_tools': use_tools,
-            'step': 'start'
-        }
-
-    def handle_interrupt(signum, frame):
-        print("Interrupt received, saving state...")
-        state_manager.save_state(state)
-        print(f"State saved to {state_manager.state_file}. Exiting...")
-        sys.exit(0)
-
-    # Set up signal handler for graceful shutdown on keyboard interrupt
-    signal.signal(signal.SIGINT, handle_interrupt)
-    signal.signal(signal.SIGTERM, handle_interrupt)
-    
     try:
-        if state['step'] == 'start':
-            # Initial setup step
-            loader = 'staging_loader' if state['idx'] == 0 else 'target_loader'
-            function_name = 'generate_staging' if state['idx'] == 0 else 'generate_target'
-            state['output_folder'] = process_and_generate_for_agent(state['agent_config'], state['agent_name'], state['previous_agent_type'], loader, function_name)
-            state['step'] = 'output_processed'
-            state_manager.save_state(state)
-        
-        if state['step'] == 'output_processed':
-            # Continue processing or any other tasks after generating output
-            if state['use_tools']:
-                execute_user_defined_function(state['output_folder'])
-            state['step'] = 'completed'
-            state_manager.save_state(state)
-        
-        if state['step'] == 'completed':
-            # Final step, clean up or finalize
-            print(f"Agent {state['agent_name']} completed successfully.")
-            state_manager.clear_state()
+        loader = 'staging_loader' if idx == 0 else 'target_loader'
+        function_name = 'generate_staging' if idx == 0 else 'generate_target'
+        output_folder = process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
 
-    except KeyboardInterrupt:
-        print("Process interrupted by user. Saving state...")
-        state_manager.save_state(state)
-        print(f"State saved to {state_manager.state_file}. Exiting...")
-        sys.exit(0)
-    
+        if use_tools:
+            function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
+            clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+
+        if 'udf' in agent_config:
+            udf = agent_config['udf']
+            print(f"Calling UDF: {udf}")
+            result = execute_user_defined_function(udf)
+            print(f"UDF result: {result}")
+
     except Exception as e:
-        print(f"An error occurred: {e}. Saving state...")
         logging.error("Error running agent %s: %s", agent_config['agent_type'], e)
-        state_manager.save_state(state)
+        print(f"Error running agent {agent_config['agent_type']}: {e}")
         raise
 
-    finally:
-        # Optional: final save state in case of unexpected exit
-        state_manager.save_state(state)
-        print(f"Final state saved to {state_manager.state_file}.")
-
-    return state['output_folder']
-
-
-
+    return output_folder
 
 
 def run_agents(constructor_path, user_code_path, default_path, use_tools):
@@ -218,6 +163,8 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
         print("Finished cleaning up ephemeral directories.")
 
 
+
+
 def get_all_agent_paths(base_dir):
     """
     Get a list of all agent configuration file paths within the base directory.
@@ -256,10 +203,15 @@ def main():
     parser.add_argument("-u", "--user_code", help="Path to the user's code folder containing UDFs")
     args = parser.parse_args()
 
+
+
+    filename = args.agent
     current_dir = os.getcwd()
-    agent_config_dir = os.path.join(current_dir, 'agent_config')
+    agent_config_dir =os.path.join(current_dir,filename,'agent_config')
+    print(os.path.join(current_dir,filename,'agent_config'))
     schema_dir = os.path.join(current_dir, 'schema')
-    io_dir = os.path.join(current_dir, 'agent_io')
+    io_dir = os.path.join(current_dir,filename,'agent_io')
+    print(os.path.join(current_dir,filename,'agent_io'))
     filename = args.agent
 
     default_config_path = os.path.join(current_dir, 'agent_actions.yml')
@@ -288,6 +240,7 @@ def main():
         sys.exit(1)
 
     agent_name = os.path.splitext(filename)[0]
+    print(agent_name)
     if not check_agent_name_unique(agent_name, project_dir):
         print(f"Error: The agent name '{agent_name}' is not unique across the entire project.")
         sys.exit(1)
@@ -295,6 +248,7 @@ def main():
     # Load the agent configuration file
     with open(full_path, 'r') as config_file:
         config_data = yaml.safe_load(config_file)
+        print(config_data)
     
     # Extract the agent configurations
     if agent_name not in config_data:
