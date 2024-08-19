@@ -1,0 +1,46 @@
+{
+  "title": "flashcard_reviewer",
+  "description": "A schema for validating flashcards with associated definitions in a structured format.",
+  "type": "object",
+  "required": [
+    "flashcards"
+  ],
+  "properties": {
+    "flashcards": {
+      "title": "All Flashcards",
+      "description": "An array of flashcards, each containing a term, its definition, and a list of suggested improvements.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "term",
+          "definition",
+          "flash_card_review"
+        ],
+        "properties": {
+          "term": {
+            "type": "string",
+            "description": "The term or concept to be defined.",
+            "maxLength": 100
+          },
+          "definition": {
+            "type": "string",
+            "title": "Definition",
+            "description": "A detailed definition of the term, providing further context and understanding.",
+            "pattern": "^(?=.*\\b(define|describe|explain|elaborate|discuss|how|why|what)\\b)(?=.*\\b(because|since|as|thus|therefore)\\b)(?=.*[,;]).{300,}$"
+          },
+          "flash_card_review": {
+            "type": "array",
+            "title": "Flash Card Review",
+            "description": "A list of suggested improvements for the flashcard.",
+            "items": {
+              "type": "string",
+              "description": "A suggested improvement for the flashcard."
+            }
+          }
+        }
+      }
+    }
+  }
+}

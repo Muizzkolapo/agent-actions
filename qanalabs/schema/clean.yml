@@ -1,0 +1,20 @@
+title: "clean"
+description: "A schema for validating summaries with associated explanations in a structured format."
+type: "object"
+required:
+  - "summaries"
+properties:
+  summaries:
+    title: "clean"
+    description: "clean."
+    type: "array"
+    minItems: 1
+    items:
+      type: "object"
+      required:
+        - "clean"
+        - "explainer"
+      properties:
+        summary:
+          type: "string"
+          description: "cleaned text"

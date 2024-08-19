@@ -1,0 +1,4 @@
+[console_scripts]
+agent-dags = agent_actions.docs.app:main
+agent-init = agent_actions.core.init:main
+agent-run = agent_actions.core.runner:main
