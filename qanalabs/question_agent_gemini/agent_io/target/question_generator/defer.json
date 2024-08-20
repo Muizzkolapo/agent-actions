@@ -1,19 +1,19 @@
 [
     {
-        "guid": "78513c67-c8d9-422d-af06-f478339a70c1",
+        "guid": "b8183ccc-49a2-48fb-8f4b-6ceaea63c87a",
         "content": [
             {
-                "scenario": "The 'Defer' feature in dbt is designed to enhance efficiency during the development and testing phases of data modeling.",
-                "question": "How does the 'Defer' feature in dbt enhance efficiency during the development and testing phases of data modeling?",
+                "scenario": "Defer feature in dbt is designed to enhance efficiency during the development and testing phases of data modeling.",
+                "question": "What is the main purpose of the Defer feature in dbt?",
                 "options": [
-                    "What are the benefits of using the 'Defer' feature in dbt?",
-                    "Explain why the 'Defer' feature is useful in data modeling?",
-                    "How does the 'Defer' feature improve the testing process in dbt?",
-                    "Describe the advantages of using 'Defer' in dbt for large projects.",
-                    "What is the purpose of the 'Defer' feature in dbt for data modeling?"
+                    "The Defer feature in dbt is used to enhance the performance of large models by reducing the number of joins.",
+                    "The Defer feature in dbt is used to test specific models or tests in a sandbox environment without needing to build their upstream dependencies first.",
+                    "The Defer feature in dbt is used to reduce the complexity of data modeling by automatically generating SQL queries.",
+                    "The Defer feature in dbt is used to improve the security of data models by limiting access to sensitive data.",
+                    "The Defer feature in dbt is used to optimize the storage of data models by compressing data."
                 ],
-                "answer": "D",
-                "explanation": "The 'Defer' feature in dbt allows you to run a subset of models or tests in a sandbox environment without needing to build their upstream dependencies first, which enhances efficiency during development and testing phases of data modeling."
+                "answer": "B",
+                "explanation": "The Defer feature in dbt is designed to enhance efficiency during the development and testing phases of data modeling by allowing users to run a subset of models or tests in a sandbox environment without needing to build their upstream dependencies first."
             }
         ]
     }

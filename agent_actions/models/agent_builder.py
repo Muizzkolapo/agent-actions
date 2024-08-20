@@ -4,7 +4,7 @@ from agent_actions.vendors.gemini_vendor import GeminiHandler
 from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.core.utils import load_schema
-from agent_actions.vendors.groq_vendor import GroqLlama3Handler
+from agent_actions.vendors.groq_llama import GroqLlama3Handler
 
 
 

@@ -15,9 +15,9 @@ class GroqLlama3Handler:
         input_documentation_str = process_as_string(input_documentation)
         
         prompt = f"""
-            {prompt_config}.\n
-            WRITE OUTPUTS IN JSON SCHEMA: {json.dumps(schema)}.\n
-            INPUT DATA: {input_documentation_str}
+            <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n
+            <|begin_of_text|>:: {input_documentation_str} :<|end_of_text|>\n
+            <|begin_of_output_schema|> :WRITE OUTPUTS IN JSON SCHEMA: {json.dumps(schema)}. : <|end_of_output_schema|>
         """
 
         try:
