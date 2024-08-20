@@ -238,3 +238,8 @@ def replace_guid_placeholder(data, guid):
 def generate_id():
     """Generate a unique identifier."""
     return str(uuid.uuid4())
+
+def ensure_list(obj):
+    if not isinstance(obj, list):
+        return [obj]
+    return obj

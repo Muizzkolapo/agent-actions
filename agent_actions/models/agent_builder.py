@@ -42,10 +42,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     elif model_vendor.lower() == 'mistral':
         response_cohere = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
         response = [response_cohere]
-    elif model_vendor.lower() == 'groq_llama3':  # New logic for Groq Llama 3
+    elif model_vendor.lower() == 'groq_llama3': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, input_documentation, schema)
         response = [response_groq_llama]
-        print(response)
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
     

@@ -1,0 +1,20 @@
+[
+    {
+        "guid": "78513c67-c8d9-422d-af06-f478339a70c1",
+        "content": [
+            {
+                "scenario": "The 'Defer' feature in dbt is designed to enhance efficiency during the development and testing phases of data modeling.",
+                "question": "How does the 'Defer' feature in dbt enhance efficiency during the development and testing phases of data modeling?",
+                "options": [
+                    "What are the benefits of using the 'Defer' feature in dbt?",
+                    "Explain why the 'Defer' feature is useful in data modeling?",
+                    "How does the 'Defer' feature improve the testing process in dbt?",
+                    "Describe the advantages of using 'Defer' in dbt for large projects.",
+                    "What is the purpose of the 'Defer' feature in dbt for data modeling?"
+                ],
+                "answer": "D",
+                "explanation": "The 'Defer' feature in dbt allows you to run a subset of models or tests in a sandbox environment without needing to build their upstream dependencies first, which enhances efficiency during development and testing phases of data modeling."
+            }
+        ]
+    }
+]

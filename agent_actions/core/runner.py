@@ -208,10 +208,8 @@ def main():
     filename = args.agent
     current_dir = os.getcwd()
     agent_config_dir =os.path.join(current_dir,filename,'agent_config')
-    print(os.path.join(current_dir,filename,'agent_config'))
     schema_dir = os.path.join(current_dir, 'schema')
     io_dir = os.path.join(current_dir,filename,'agent_io')
-    print(os.path.join(current_dir,filename,'agent_io'))
     filename = args.agent
 
     default_config_path = os.path.join(current_dir, 'agent_actions.yml')
@@ -248,7 +246,7 @@ def main():
     # Load the agent configuration file
     with open(full_path, 'r') as config_file:
         config_data = yaml.safe_load(config_file)
-        print(config_data)
+
     
     # Extract the agent configurations
     if agent_name not in config_data:
