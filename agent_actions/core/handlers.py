@@ -67,9 +67,7 @@ def get_folder(agent_name):
 
 def find_agent_folder(working_directory, folder_name,base_dir):
     # Define the base path to search within
-    base_path = os.path.join(working_directory, base_dir)
-    print(base_dir)
-    
+    base_path = os.path.join(working_directory, base_dir)    
     # Walk through the directory tree
     for root, dirs, files in os.walk(base_path):
         if folder_name in dirs:
@@ -100,12 +98,9 @@ def process_and_generate_for_agent(agent_config,
         #folder_name, file_name = get_folder(agent_name)
         current_dir = os.getcwd()
         agent_folder = os.path.join(current_dir, agent_name)
-        print(agent_folder)
         
         if agent_folder is None:
             raise FileNotFoundError(f"Agent folder not found for agent: {agent_name}")
-
-        print(agent_folder)
 
         input_directory = os.path.join(
             agent_folder,
