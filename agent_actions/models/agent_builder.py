@@ -4,6 +4,8 @@ from agent_actions.vendors.gemini_vendor import GeminiHandler
 from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.core.utils import load_schema
+from agent_actions.vendors.groq_llama import GroqLlama3Handler
+
 
 
 def list_to_tuples(input_list):
@@ -40,6 +42,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     elif model_vendor.lower() == 'mistral':
         response_cohere = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
         response = [response_cohere]
+    elif model_vendor.lower() == 'groq_llama3': 
+        response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, input_documentation, schema)
+        response = [response_groq_llama]
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
     

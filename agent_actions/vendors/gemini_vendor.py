@@ -1,15 +1,12 @@
 import os
 import json
 import google.generativeai as genai
-from agent_actions.core.utils import process_as_string
+from agent_actions.core.utils import process_as_string,ensure_list
 
 
 
 
-def ensure_list(obj):
-    if not isinstance(obj, list):
-        return [obj]
-    return obj
+
 
 class GeminiHandler:
     @staticmethod
