@@ -1,5 +1,0 @@
-[
-    {
-        "b8183ccc-49a2-48fb-8f4b-6ceaea63c87a": "he 'Defer' feature in dbt is designed to enhance efficiency during the development and testing phases of data modeling. When working on large projects, it can be cumbersome to build all upstream models before testing a specific model. With 'Defer', you can run a subset of models or tests in a sandbox environment without needing to build their upstream dependencies first. This is particularly useful when you want to quickly validate changes or test specific functionalities without waiting for the entire build process. For instance, if you are working on a model that relies on another model, but you only want to test the changes in the dependent model, 'Defer' allows you to do that without the overhead of building the entire dependency chain."
-    }
-]
