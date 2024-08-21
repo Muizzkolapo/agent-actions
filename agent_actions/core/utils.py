@@ -243,3 +243,23 @@ def ensure_list(obj):
     if not isinstance(obj, list):
         return [obj]
     return obj
+
+
+def find_specific_folder(current_dir, filename, folder_name):
+    """
+    Search for a specific folder within a directory specified by the filename.
+
+    Parameters:
+    current_dir (str): The base directory to start searching from.
+    filename (str): The folder under which the specific folder is expected.
+    folder_name (str): The name of the specific folder to search for.
+
+    Returns:
+    str or None: The full path to the folder if found, otherwise None.
+    """
+    for root, dirs, files in os.walk(current_dir):
+        if filename in dirs:
+            target_folder_path = os.path.join(root, filename, folder_name)
+            if os.path.isdir(target_folder_path):
+                return target_folder_path
+    return None
