@@ -83,7 +83,6 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
         
             elif guid_key != input_documentation["guid"] or guid_key not in input_documentation:
                 input_documentation_new = input_documentation["content"]
-                print('+++using this switch2')
                 # This block handles the scenario where source_path is None or keys are missing
                 response = agent_builder.create_dynamic_agent(agent_config, agent_name, input_documentation_new)
                 guid = input_documentation["guid"]
