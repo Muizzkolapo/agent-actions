@@ -202,6 +202,7 @@ def main():
     parser.add_argument("-a", "--agent", required=True, help="Name of the schema (agent configuration file without path)")
     parser.add_argument("-u", "--user_code", help="Path to the user's code folder containing UDFs")
     args = parser.parse_args()
+    print("hi")
 
 
 
