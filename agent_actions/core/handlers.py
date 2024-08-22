@@ -96,9 +96,7 @@ def process_and_generate_for_agent(agent_config,
     :param function_name: Name of the function to apply to the data.
     """
     try:
-        #folder_name, file_name = get_folder(agent_name)
         current_dir = os.getcwd()
-        #agent_folder = os.path.join(current_dir, agent_name)
         agent_folder = find_specific_folder(current_dir,agent_name,'agent_io')
         
         if agent_folder is None:
