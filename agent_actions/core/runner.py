@@ -17,6 +17,7 @@ try:
     from agent_actions.core.handlers  import find_config_file
     from agent_actions.core.handlers  import validate_agent_config
     from agent_actions.core.tooling import execute_user_defined_function
+    from agent_actions.core.utils import find_specific_folder
     
 except ImportError:
     clean_agent_output = None
@@ -208,10 +209,10 @@ def main():
 
     filename = args.agent
     current_dir = os.getcwd()
-    agent_config_dir =os.path.join(current_dir,filename,'agent_config')
+    agent_config_dir = find_specific_folder(current_dir, filename,'agent_config')
+    io_dir = find_specific_folder(current_dir,filename,'agent_io')
     schema_dir = os.path.join(current_dir, 'schema')
-    io_dir = os.path.join(current_dir,filename,'agent_io')
-    filename = args.agent
+    
 
     default_config_path = os.path.join(current_dir, 'agent_actions.yml')
 

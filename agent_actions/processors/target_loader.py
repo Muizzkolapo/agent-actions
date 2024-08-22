@@ -77,7 +77,7 @@ def process_data(data, agent_config, agent_name,file_path):
         # for the provided guid get the source data that generated it at first layer
         source_content = get_content_by_guid(source_data, guid)
         raw_prompt = agent_config['prompt']
-        source_loaded_prompt = replace_guid_placeholder(raw_prompt, source_content)
+        source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
         formated_prompt=replace_placeholders(source_loaded_prompt,contents)
 
 

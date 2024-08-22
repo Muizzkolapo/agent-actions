@@ -46,7 +46,7 @@ def get_file_info(file_path):
     if os.path.exists(source_path):
         return source_file_path
     else:
-        return "Source path does not exist."
+        return None
 
 
 
