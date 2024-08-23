@@ -194,16 +194,16 @@ def split_text_content(content, chunk_config=None):
 
 
 
-def should_update_schema(agent_config, keys_list, select_list):
+def should_update_schema(agent_config, keys_list, side_collection):
     """
     Determines whether the schema should be updated based on the agent configuration.
 
     :param agent_config: Configuration dictionary for the agent
     :param keys_list: List of keys in the select list
-    :param select_list: Dictionary containing the select list
+    :param side_collection: Dictionary containing the select list
     :return: Boolean indicating whether the schema should be updated
     """
-    return agent_config['agent_type'] == keys_list[0] and select_list[agent_config['agent_type']]
+    return agent_config['agent_type'] == keys_list[0] and side_collection[agent_config['agent_type']]
 
 def get_content_by_guid(data, guid):
     """

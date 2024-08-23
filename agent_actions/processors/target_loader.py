@@ -68,8 +68,8 @@ def process_data(data, agent_config, agent_name,file_path):
 
 
     processed_data = []
-    select_list = {agent_config['agent_type']: agent_config['select_list']}
-    selection_keys = list(select_list.keys())
+    side_collection = {agent_config['agent_type']: agent_config['side_collection']}
+    selection_keys = list(side_collection.keys())
     for items in data:
         contents = items['content']
         guid = items['guid']
@@ -84,10 +84,10 @@ def process_data(data, agent_config, agent_name,file_path):
         # Generate dynamic with agent builder but we dont need the returned source in this case
         generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
 
-        if should_update_schema(agent_config, selection_keys, select_list):
+        if should_update_schema(agent_config, selection_keys, side_collection):
             updated_generated_data = []
             for data in generated_data:
-                keys_to_update = select_list[agent_config['agent_type']]
+                keys_to_update = side_collection[agent_config['agent_type']]
                 merged_questions = update_schema_objects(contents,
                                                         data,
                                                         keys_to_update)
