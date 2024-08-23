@@ -163,9 +163,9 @@ def replace_placeholders(prompt, content_dict):
             new_sublist = []
             for string in element:
                 for key, value in content_dict.items():
-                    placeholder = f"get[{key}]"
+                    placeholder = f"select_collection[{key}]"
                     value = convert_to_string(value)
-                    string = string.replace(placeholder, value)
+                    string = string.replace(placeholder, value) 
                 new_sublist.append(string)
             new_prompt.append(new_sublist)
         elif isinstance(element, dict):
@@ -182,7 +182,7 @@ def replace_placeholders(prompt, content_dict):
         else:
             # Process as a single string
             for key, value in content_dict.items():
-                placeholder = f"get[{key}]"
+                placeholder = f"select_collection[{key}]"
                 value = convert_to_string(value)
                 element = element.replace(placeholder, value)
             new_prompt.append(element)
@@ -208,7 +208,7 @@ def transform_structure(data):
 
 def replace_guid_placeholder(data, guid):
     """
-    Replace the placeholder 'get_from_src[guid]' with the specified GUID
+    Replace the placeholder 'Agent_{{source_context}}' with the specified GUID
     in various data structures, including lists of strings, nested lists, and dictionaries.
 
     Parameters:
@@ -220,7 +220,7 @@ def replace_guid_placeholder(data, guid):
     """
 
     def replace_in_string(text):
-        return text.replace('get_from_src[guid]', guid)
+        return text.replace('Agent_{{source_context}}', guid)
 
     def process_item(item):
         if isinstance(item, str):

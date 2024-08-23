@@ -203,11 +203,11 @@ def main():
     parser.add_argument("-a", "--agent", required=True, help="Name of the schema (agent configuration file without path)")
     parser.add_argument("-u", "--user_code", help="Path to the user's code folder containing UDFs")
     args = parser.parse_args()
-    print("hi")
 
 
 
     filename = args.agent
+    #check we are in agent-action directory and use for schema
     current_dir = os.getcwd()
     agent_config_dir = find_specific_folder(current_dir, filename,'agent_config')
     io_dir = find_specific_folder(current_dir,filename,'agent_io')

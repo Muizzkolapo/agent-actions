@@ -28,7 +28,8 @@ setup(
         'pandas==2.2.2',
         'openpyxl==3.1.2',
         'beautifulsoup4==4.12.3',
-        'google-api-python-client==2.130.0'
+        'google-api-python-client==2.130.0',
+        'groq'
     ],
     entry_points={
         'console_scripts': [
