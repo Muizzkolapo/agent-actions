@@ -61,6 +61,9 @@ def topological_sort(dependencies):
     return ordered[::-1]
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
+    """
+    Run an agent based on the provided configuration.
+    """
     logger.info(f"Running agent: {agent_config['agent_type']}")
 
     try:
