@@ -2,6 +2,8 @@ import os
 import json
 import google.generativeai as genai
 from agent_actions.core.utils import process_as_string,ensure_list
+import logging
+logging.basicConfig(level=logging.ERROR)
 
 
 
