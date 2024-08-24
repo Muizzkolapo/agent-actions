@@ -18,13 +18,14 @@ try:
     from agent_actions.core.handlers  import validate_agent_config
     from agent_actions.core.tooling import execute_user_defined_function
     from agent_actions.core.utils import find_specific_folder
-    
+    from agent_actions.logging_setup import logger
 except ImportError:
     clean_agent_output = None
     process_and_generate_for_agent = None
     find_config_file = None
     execute_user_defined_function = None
     validate_agent_config = None
+    logger = None
 
 
 def find_agents_name(config):
@@ -63,6 +64,8 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
     """
     Run an agent based on the provided configuration.
     """
+    logger.info(f"Running agent: {agent_config['agent_type']}")
+
     try:
         loader = 'staging_loader' if idx == 0 else 'target_loader'
         function_name = 'generate_staging' if idx == 0 else 'generate_target'
@@ -74,22 +77,24 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
 
         if 'udf' in agent_config:
             udf = agent_config['udf']
-            print(f"Calling UDF: {udf}")
+            logger.info(f"Calling UDF: {udf}")
             result = execute_user_defined_function(udf)
-            print(f"UDF result: {result}")
+            logger.info(f"UDF result: {result}")
 
     except Exception as e:
-        logging.error("Error running agent %s: %s", agent_config['agent_type'], e)
-        print(f"Error running agent {agent_config['agent_type']}: {e}")
+        logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
         raise
 
     return output_folder
+
 
 
 def run_agents(constructor_path, user_code_path, default_path, use_tools):
     """
     Run agents based on the provided constructor path and default path.
     """
+    logger.info(f"Running agents with constructor path: {constructor_path}, user code path: {user_code_path}, default path: {default_path}")
+
     if user_code_path and user_code_path not in sys.path:
         sys.path.insert(0, user_code_path)
 
@@ -100,10 +105,11 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
         default_config = yaml.safe_load(file)
 
     agent_name = find_agents_name(user_config)
+    logger.info(f"Determined agent name: {agent_name}")
 
-    # Check if the configuration file's top-level key matches the expected agent name
     config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
     if agent_name != config_filename:
+        logger.error(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
         raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
 
     user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
@@ -117,25 +123,22 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
             default_agent.update(agent)
             agent_configs[agent_type] = default_agent
 
-    for agent_config in agent_configs.values():
-        pass  # validate_agent_config(agent_config)
-
     dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
     execution_order = topological_sort(dependency_graph)
+    logger.info(f"Execution order determined: {execution_order}")
 
-    # Correctly locate and execute the top-level UDF
     top_level_udf = next((item['udf'] for item in user_config[agent_name] if 'udf' in item), None)
     if top_level_udf:
-        print(f"Executing top-level UDF: {top_level_udf}")
+        logger.info(f"Executing top-level UDF: {top_level_udf}")
         result = execute_user_defined_function(top_level_udf)
-        print(f"Top-level UDF result: {result}")
+        logger.info(f"Top-level UDF result: {result}")
 
     previous_agent_type = None
     ephemeral_directories = []
 
     for idx, agent_type in enumerate(execution_order):
         agent_config = agent_configs[agent_type]
-        print(f"  Agent {idx + 1}: {agent_config['agent_type']}")
+        logger.info(f"Running agent {idx + 1}: {agent_config['agent_type']}")
         output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
         previous_agent_type = agent_type
 
@@ -148,10 +151,10 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
 
     end_workflow_udf = next((agent['end_of_workflow'] for agent in user_agents if 'end_of_workflow' in agent), None)
     if end_workflow_udf:
-        print(f"Executing end-of-workflow UDF: {end_workflow_udf}")
+        logger.info(f"Executing end-of-workflow UDF: {end_workflow_udf}")
         result = execute_user_defined_function(end_workflow_udf)
-        print(f"End-of-workflow UDF result: {result}")
-    
+        logger.info(f"End-of-workflow UDF result: {result}")
+
     directories_cleaned = False
     for i, directory in enumerate(ephemeral_directories):
         if directory['ephemeral'] and i != len(ephemeral_directories) - 1:
@@ -161,7 +164,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
                 directories_cleaned = True
 
     if directories_cleaned:
-        print("Finished cleaning up ephemeral directories.")
+        logger.info("Finished cleaning up ephemeral directories.")
 
 
 
@@ -204,22 +207,21 @@ def main():
     parser.add_argument("-u", "--user_code", help="Path to the user's code folder containing UDFs")
     args = parser.parse_args()
 
-
+    logger.info("Starting agent execution.")
+    logger.info(f"Command-line arguments: {args}")
 
     filename = args.agent
-    #check we are in agent-action directory and use for schema
     current_dir = os.getcwd()
-    agent_config_dir = find_specific_folder(current_dir, filename,'agent_config')
-    io_dir = find_specific_folder(current_dir,filename,'agent_io')
+    agent_config_dir = find_specific_folder(current_dir, filename, 'agent_config')
+    io_dir = find_specific_folder(current_dir, filename, 'agent_io')
     schema_dir = os.path.join(current_dir, 'schema')
-    
 
     default_config_path = os.path.join(current_dir, 'agent_actions.yml')
 
     required_dirs = [agent_config_dir, schema_dir, io_dir]
     for required_dir in required_dirs:
         if not os.path.exists(required_dir):
-            print(f"Error: The directory '{required_dir}' does not exist.")
+            logger.error(f"The directory '{required_dir}' does not exist.")
             sys.exit(1)
 
     if not filename.endswith(".yml"):
@@ -227,55 +229,49 @@ def main():
     full_path = find_config_file(agent_config_dir, filename)
 
     if full_path is None:
-        print(f"Error: The configuration file '{filename}' does not exist in '{agent_config_dir}'.")
+        logger.error(f"The configuration file '{filename}' does not exist in '{agent_config_dir}'.")
         sys.exit(1)
 
     if not os.path.exists(default_config_path):
-        print(f"Error: The default configuration file does not exist in '{current_dir}'.")
+        logger.error(f"The default configuration file does not exist in '{current_dir}'.")
         sys.exit(1)
 
     project_dir = os.path.abspath(os.path.join(current_dir))
     if not check_agent_file_unique(full_path, project_dir):
-        print(f"Error: '{full_path}' is not unique across the entire project.")
+        logger.error(f"'{full_path}' is not unique across the entire project.")
         sys.exit(1)
 
     agent_name = os.path.splitext(filename)[0]
-    print(agent_name)
+    logger.info(f"Agent name determined: {agent_name}")
+
     if not check_agent_name_unique(agent_name, project_dir):
-        print(f"Error: The agent name '{agent_name}' is not unique across the entire project.")
+        logger.error(f"The agent name '{agent_name}' is not unique across the entire project.")
         sys.exit(1)
 
-    # Load the agent configuration file
     with open(full_path, 'r') as config_file:
         config_data = yaml.safe_load(config_file)
 
-    
-    # Extract the agent configurations
     if agent_name not in config_data:
-        print(f"Error: The top-level key '{agent_name}' is not found in the configuration file.")
+        logger.error(f"The top-level key '{agent_name}' is not found in the configuration file.")
         sys.exit(1)
 
     agent_config = config_data[agent_name]
 
-    # Separate UDF entries from agent configurations
     udf_entries = [entry for entry in agent_config if 'udf' in entry]
     agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
 
-    # Print a summary of the loaded agent configuration
-    print(f"Loaded configuration for '{agent_name}' with {len(agent_entries)} agents.")
+    logger.info(f"Loaded configuration for '{agent_name}' with {len(agent_entries)} agents.")
     for idx, agent in enumerate(agent_entries):
         if 'agent_type' in agent:
-            print(f"  Agent {idx + 1}: {agent['agent_type']}")
+            logger.info(f"  Agent {idx + 1}: {agent['agent_type']}")
 
-    # Validate that agent_config is a list
     if not isinstance(agent_config, list):
-        print(f"Error: The configuration for '{filename}' is not a list.")
+        logger.error(f"The configuration for '{filename}' is not a list.")
         sys.exit(1)
 
-    # Validate the agent configuration
     is_valid, message = validate_agent_config(agent_entries)
     if not is_valid:
-        print(f"Error: {message}")
+        logger.error(f"Validation error: {message}")
         sys.exit(1)
 
     use_tools = args.user_code is not None
@@ -283,13 +279,13 @@ def main():
     try:
         run_agents(full_path, args.user_code, default_config_path, use_tools)
     except ValueError as ve:
-        print(f"Configuration error: {ve}. Please make sure the top-level key in the YAML file matches the filename.")
+        logger.error(f"Configuration error: {ve}. Please make sure the top-level key in the YAML file matches the filename.")
         sys.exit(1)
     except FileNotFoundError as fe:
-        print(f"File not found: {fe}")
+        logger.error(f"File not found: {fe}")
         sys.exit(1)
     except yaml.YAMLError as ye:
-        print(f"YAML parsing error: {ye}")
+        logger.error(f"YAML parsing error: {ye}")
         sys.exit(1)
 
 if __name__ == "__main__":
