@@ -90,6 +90,9 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
 
 
 def run_agents(constructor_path, user_code_path, default_path, use_tools):
+    """
+    Run agents based on the provided constructor path and default path.
+    """
     logger.info(f"Running agents with constructor path: {constructor_path}, user code path: {user_code_path}, default path: {default_path}")
 
     if user_code_path and user_code_path not in sys.path:
