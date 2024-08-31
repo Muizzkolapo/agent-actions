@@ -10,6 +10,7 @@ import traceback
 from collections import deque, OrderedDict
 import shutil
 import yaml
+from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
 
 try:
     from agent_actions.core.handlers import clean_agent_output
@@ -92,72 +93,80 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
 def run_agents(constructor_path, user_code_path, default_path, use_tools):
     """
     Run agents based on the provided constructor path and default path.
+    Implements state management and checkpointing.
     """
     logger.info(f"Running agents with constructor path: {constructor_path}, user code path: {user_code_path}, default path: {default_path}")
+
+    # Load checkpoint if available
+    state = load_checkpoint()
+    if not state:
+        state = {
+            'current_agent_idx': 0,
+            'previous_agent_type': None,
+            'ephemeral_directories': [],
+            'constructor_path': constructor_path,
+            'user_code_path': user_code_path,
+            'default_path': default_path,
+            'agent_name': None,
+            'execution_order': [],
+            'agent_configs': {},
+        }
 
     if user_code_path and user_code_path not in sys.path:
         sys.path.insert(0, user_code_path)
 
-    with open(constructor_path, 'r', encoding='utf-8') as file:
-        user_config = yaml.safe_load(file)
+    if not state['agent_name']:
+        with open(constructor_path, 'r', encoding='utf-8') as file:
+            user_config = yaml.safe_load(file)
 
-    with open(default_path, 'r', encoding='utf-8') as file:
-        default_config = yaml.safe_load(file)
+        with open(default_path, 'r', encoding='utf-8') as file:
+            default_config = yaml.safe_load(file)
 
-    agent_name = find_agents_name(user_config)
-    logger.info(f"Determined agent name: {agent_name}")
+        state['agent_name'] = find_agents_name(user_config)
+        logger.info(f"Determined agent name: {state['agent_name']}")
 
-    config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
-    if agent_name != config_filename:
-        logger.error(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
-        raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
+        config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
+        if state['agent_name'] != config_filename:
+            logger.error(f"Top-level key '{state['agent_name']}' does not match the filename '{config_filename}'")
+            raise ValueError(f"Top-level key '{state['agent_name']}' does not match the filename '{config_filename}'")
 
-    user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
-    default_agent_config = default_config['default_agent_config']
+        user_agents = [agent for agent in user_config[state['agent_name']] if isinstance(agent, dict) and 'agent_type' in agent]
+        default_agent_config = default_config['default_agent_config']
 
-    agent_configs = {}
-    for agent in user_agents:
-        if 'agent_type' in agent:
-            agent_type = agent['agent_type']
-            default_agent = default_agent_config.copy()
-            default_agent.update(agent)
-            agent_configs[agent_type] = default_agent
+        for agent in user_agents:
+            if 'agent_type' in agent:
+                agent_type = agent['agent_type']
+                default_agent = default_agent_config.copy()
+                default_agent.update(agent)
+                state['agent_configs'][agent_type] = default_agent
 
-    dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
-    execution_order = topological_sort(dependency_graph)
-    logger.info(f"Execution order determined: {execution_order}")
+        dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
+        state['execution_order'] = topological_sort(dependency_graph)
+        logger.info(f"Execution order determined: {state['execution_order']}")
 
-    top_level_udf = next((item['udf'] for item in user_config[agent_name] if 'udf' in item), None)
-    if top_level_udf:
-        logger.info(f"Executing top-level UDF: {top_level_udf}")
-        result = execute_user_defined_function(top_level_udf)
-        logger.info(f"Top-level UDF result: {result}")
-
-    previous_agent_type = None
-    ephemeral_directories = []
-
-    for idx, agent_type in enumerate(execution_order):
-        agent_config = agent_configs[agent_type]
+    previous_agent_type = state['previous_agent_type']
+    for idx in range(state['current_agent_idx'], len(state['execution_order'])):
+        agent_type = state['execution_order'][idx]
+        agent_config = state['agent_configs'][agent_type]
         logger.info(f"Running agent {idx + 1}: {agent_config['agent_type']}")
-        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
+
+        output_folder = run_agent(agent_config, state['agent_name'], previous_agent_type, idx, use_tools)
         previous_agent_type = agent_type
+        state['previous_agent_type'] = previous_agent_type
 
         directory_info = OrderedDict({
             'output_folder': output_folder,
             'ephemeral': agent_config.get('ephemeral', False)
         })
-
-        ephemeral_directories.append(directory_info)
-
-    end_workflow_udf = next((agent['end_of_workflow'] for agent in user_agents if 'end_of_workflow' in agent), None)
-    if end_workflow_udf:
-        logger.info(f"Executing end-of-workflow UDF: {end_workflow_udf}")
-        result = execute_user_defined_function(end_workflow_udf)
-        logger.info(f"End-of-workflow UDF result: {result}")
+        state['ephemeral_directories'].append(directory_info)
+        
+        # Update the current agent index in the state
+        state['current_agent_idx'] = idx + 1
+        save_checkpoint(state)
 
     directories_cleaned = False
-    for i, directory in enumerate(ephemeral_directories):
-        if directory['ephemeral'] and i != len(ephemeral_directories) - 1:
+    for i, directory in enumerate(state['ephemeral_directories']):
+        if directory['ephemeral'] and i != len(state['ephemeral_directories']) - 1:
             folder_path = directory['output_folder']
             if os.path.exists(folder_path):
                 shutil.rmtree(folder_path)
@@ -166,7 +175,8 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     if directories_cleaned:
         logger.info("Finished cleaning up ephemeral directories.")
 
-
+    # Remove the checkpoint file after successful completion
+    remove_checkpoint()
 
 
 def get_all_agent_paths(base_dir):
