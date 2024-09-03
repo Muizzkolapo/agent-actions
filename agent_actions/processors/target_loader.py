@@ -10,8 +10,8 @@ from agent_actions.core.utils import update_schema_objects
 from agent_actions.core.utils import replace_placeholders
 from agent_actions.core.utils import transform_structure
 from agent_actions.core.utils import replace_guid_placeholder
-from agent_actions.core.handlers import should_update_schema
-from agent_actions.core.handlers import get_content_by_guid
+from agent_actions.core.agent_handlers import should_update_schema
+from agent_actions.core.agent_handlers import get_content_by_guid
 
 
 

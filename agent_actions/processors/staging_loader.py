@@ -14,7 +14,7 @@ import itertools
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import transform_structure
 from agent_actions.core.utils import generate_id
-from agent_actions.core.handlers import split_text_content
+from agent_actions.core.agent_handlers import split_text_content
 
 
 
