@@ -15,12 +15,6 @@ from agent_actions.core.agent_handlers import split_text_content
 
 
 
-
-
-
-
-
-
 def get_file_info(file_path):
     # Check if the file exists
     if not os.path.exists(file_path):

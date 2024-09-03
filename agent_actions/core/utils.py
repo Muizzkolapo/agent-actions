@@ -296,3 +296,16 @@ def topological_sort(dependencies):
         raise ValueError("There is a cycle in the dependencies")
 
     return ordered[::-1]
+
+
+def find_agent_folder(working_directory, folder_name,base_dir):
+    # Define the base path to search within
+    base_path = os.path.join(working_directory, base_dir)    
+    # Walk through the directory tree
+    for root, dirs, files in os.walk(base_path):
+        if folder_name in dirs:
+            # Return the full path to the matching folder
+            return os.path.join(root, folder_name)
+    
+    # If the folder is not found, return None
+    return None
