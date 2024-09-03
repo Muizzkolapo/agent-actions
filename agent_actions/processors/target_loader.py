@@ -3,8 +3,6 @@ import itertools
 from pathlib import Path
 import json
 import os
-import copy
-import traceback
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import update_schema_objects
 from agent_actions.core.utils import replace_placeholders
