@@ -7,6 +7,7 @@ import traceback
 import yaml
 import re
 import uuid
+from collections import deque, OrderedDict
 
 def load_schema(schema_name):
     """
@@ -262,4 +263,49 @@ def find_specific_folder(current_dir, filename, folder_name):
             target_folder_path = os.path.join(root, filename, folder_name)
             if os.path.isdir(target_folder_path):
                 return target_folder_path
+    return None
+
+
+
+
+
+
+
+
+def topological_sort(dependencies):
+    """
+    Perform a topological sort on the dependencies graph.
+    """
+    in_degree = {u: 0 for u in dependencies}
+    for u in dependencies:
+        for v in dependencies[u]:
+            in_degree[v] += 1
+
+    queue = deque([u for u in in_degree if in_degree[u] == 0])
+    ordered = []
+
+    while queue:
+        vertex = queue.popleft()
+        ordered.append(vertex)
+        for neighbor in dependencies[vertex]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
+
+    if len(ordered) != len(dependencies):
+        raise ValueError("There is a cycle in the dependencies")
+
+    return ordered[::-1]
+
+
+def find_agent_folder(working_directory, folder_name,base_dir):
+    # Define the base path to search within
+    base_path = os.path.join(working_directory, base_dir)    
+    # Walk through the directory tree
+    for root, dirs, files in os.walk(base_path):
+        if folder_name in dirs:
+            # Return the full path to the matching folder
+            return os.path.join(root, folder_name)
+    
+    # If the folder is not found, return None
     return None

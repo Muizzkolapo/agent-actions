@@ -66,17 +66,6 @@ def get_folder(agent_name):
 
 
 
-def find_agent_folder(working_directory, folder_name,base_dir):
-    # Define the base path to search within
-    base_path = os.path.join(working_directory, base_dir)    
-    # Walk through the directory tree
-    for root, dirs, files in os.walk(base_path):
-        if folder_name in dirs:
-            # Return the full path to the matching folder
-            return os.path.join(root, folder_name)
-    
-    # If the folder is not found, return None
-    return None
 
 
 
@@ -244,3 +233,42 @@ def get_folder_after_agent_config(path):
             return path_components[agent_config_index + 1]
 
     return None
+
+
+
+
+
+def get_all_agent_paths(base_dir):
+    """
+    Get a list of all agent configuration file paths within the base directory.
+    """
+    agent_paths = []
+    for root, _, files in os.walk(base_dir):
+        for file in files:
+            if file.endswith(".yml"):
+                agent_paths.append(os.path.join(root, file))
+    return agent_paths
+
+
+def check_agent_name_unique(agent_name, base_dir):
+    """
+    Check if the agent name is unique across the entire project.
+    """
+    all_agent_paths = get_all_agent_paths(base_dir)
+    agent_names = [os.path.splitext(os.path.basename(path))[0] for path in all_agent_paths]
+    return agent_names.count(agent_name) == 1
+
+
+def check_agent_file_unique(full_path, base_dir):
+    """
+    Check if the agent configuration file path is unique across the entire project.
+    """
+    all_agent_paths = get_all_agent_paths(base_dir)
+    return all_agent_paths.count(full_path) == 1
+
+
+def find_agents_name(config):
+    """
+    Find the name of the agent from the configuration.
+    """
+    return next(iter(config))
