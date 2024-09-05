@@ -18,13 +18,13 @@ import re
 
 def process_text_with_function_calls(text, tools_path=None, input_documentation_str=None):
     """
-    Replace multiple call_function() calls in text with the result of their corresponding function.
+    Replace multiple dispatch_task() calls in text with the result of their corresponding function.
     Always passes `input_documentation_str` to the function.
     """
      #print(f"Original text: {text}")
 
-    # Regex to match call_function('function_name')
-    function_call_pattern = r"call_function\('(\w+)'\)"
+    # Regex to match dispatch_task('function_name')
+    function_call_pattern = r"dispatch_task\('(\w+)'\)"
     matches = re.findall(function_call_pattern, text)
 
     if matches:
@@ -39,8 +39,8 @@ def process_text_with_function_calls(text, tools_path=None, input_documentation_
             # Ensure transformed_text is a string
             if transformed_text is None:
                 transformed_text = "Error: No valid return from function."
-            # Replace only the specific call_function instance with the transformed text
-            text = text.replace(f"call_function('{function_name}')", transformed_text, 1)
+            # Replace only the specific dispatch_task instance with the transformed text
+            text = text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
         except Exception as e:
             print(f"Error calling function {function_name}: {e}")
 
