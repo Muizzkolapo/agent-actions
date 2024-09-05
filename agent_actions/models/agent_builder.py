@@ -14,32 +14,36 @@ import os
 def list_to_tuples(input_list):
     """Convert a list of lists to a list of tuples."""
     return [tuple(item) for item in input_list]
+import re
+
 def process_text_with_function_calls(text, tools_path=None, input_documentation_str=None):
     """
-    Replace call_function() in text with the result of the function call.
+    Replace multiple call_function() calls in text with the result of their corresponding function.
     Always passes `input_documentation_str` to the function.
     """
-    print(f"Original text: {text}")
+     #print(f"Original text: {text}")
 
     # Regex to match call_function('function_name')
     function_call_pattern = r"call_function\('(\w+)'\)"
     matches = re.findall(function_call_pattern, text)
 
     if matches:
-        print(f"Found function calls: {matches}")
+        #print(f"Found function calls: {matches}")
+        pass
 
+    # Process each function call individually to avoid conflicts
     for function_name in matches:
-        # Always pass the input_documentation_str to the function
-        print(f"Calling function: {function_name} with input_documentation_str")
         try:
+            # Call the user-defined function and pass input_documentation_str
             transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
-            print(f"Function {function_name} returned: {transformed_text}")
-            # Replace the call_function() placeholder with the transformed text
-            text = text.replace(f"call_function('{function_name}')", transformed_text)
+            # Ensure transformed_text is a string
+            if transformed_text is None:
+                transformed_text = "Error: No valid return from function."
+            # Replace only the specific call_function instance with the transformed text
+            text = text.replace(f"call_function('{function_name}')", transformed_text, 1)
         except Exception as e:
             print(f"Error calling function {function_name}: {e}")
 
-    print(f"Transformed text: {text}")
     return text
 
 
@@ -75,7 +79,6 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     :param tools_path: Path to the user's tools directory where custom functions are stored.
     :return: Result of the agent's invocation.
     """
-    print(formatted_prompt)
     input_documentation = json.dumps(input_documentation_str) 
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
