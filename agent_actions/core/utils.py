@@ -209,7 +209,7 @@ def transform_structure(data):
 
 def replace_guid_placeholder(data, guid):
     """
-    Replace the placeholder 'return_{{source_context}}' with the specified GUID
+    Replace the placeholder 'return_collection{{source_context}}' with the specified GUID
     in various data structures, including lists of strings, nested lists, and dictionaries.
 
     Parameters:
@@ -221,7 +221,7 @@ def replace_guid_placeholder(data, guid):
     """
 
     def replace_in_string(text):
-        return text.replace('return_{{source_context}}', guid)
+        return text.replace('return_collection{{source_context}}', guid)
 
     def process_item(item):
         if isinstance(item, str):
