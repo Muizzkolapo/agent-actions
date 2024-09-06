@@ -6,6 +6,7 @@ from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.core.utils import load_schema
 from agent_actions.vendors.groq_llama import GroqLlama3Handler
+from agent_actions.vendors.tools_vendor import ToolHandler
 import importlib
 import sys
 import os
@@ -67,7 +68,7 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
         raise
 
 
-def create_dynamic_agent(agent_config, agent_name, input_documentation_str, formatted_prompt=None, tools_path=None):
+def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_prompt=None, tools_path=None):
     """
     Create a dynamic agent based on the provided configuration, with support for transforming the prompt
     using user-defined Python functions specified in the configuration.
@@ -111,6 +112,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     elif model_vendor.lower() == 'groq_llama3': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, input_documentation, schema)
         response = [response_groq_llama]
+    elif model_vendor.lower() == 'tool': 
+        response_ToolHandler = ToolHandler.invoke(agent_config, input_documentation)
+        response = [response_ToolHandler]
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
     
