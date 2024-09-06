@@ -101,7 +101,6 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
         prompt_config = list_to_tuples(prompt_config)
         response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'gemini':
-        print(prompt_config)
         response = GeminiHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'cohere':
         response_cohere = CohereHandler.invoke(agent_config, prompt_config, input_documentation, schema)
