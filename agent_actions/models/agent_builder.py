@@ -67,7 +67,6 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
         print(f"Error loading function {function_name}: {e}")
         raise
 
-
 def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_prompt=None, tools_path=None):
     """
     Create a dynamic agent based on the provided configuration, with support for transforming the prompt
@@ -84,7 +83,7 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
     else:
-        prompt_config = agent_config['prompt']
+        prompt_config = agent_config.get('prompt', [])
 
     # Dynamically transform the prompt using Python functions, always passing input_documentation_str
     transformed_prompt_config = []
@@ -95,8 +94,10 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     prompt_config = transformed_prompt_config
 
     model_vendor = agent_config['model_vendor']
-    schema_name = agent_config['schema_name']
-    schema = load_schema(schema_name)
+    
+    # Conditionally load schema if model_vendor is not 'tool'
+    schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
+    schema = load_schema(schema_name) if schema_name else None
 
     if model_vendor.lower() == 'openai':
         prompt_config = list_to_tuples(prompt_config)

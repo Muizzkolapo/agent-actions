@@ -24,8 +24,7 @@ class ToolHandler:
         # Dynamically retrieve the UDF from the global context or from a user-defined module
         
         # Process the input documentation and pass it to the UDF
-        input_data = process_as_string(input_documentation)  # Convert the input to a string or desired format
-        response = execute_user_defined_function(model_name, input_data)
+        response = execute_user_defined_function(model_name, input_documentation)
         
-        response_list = ensure_list(response)
-        return response_list
+        rresponse = json.loads(response)
+        return rresponse
