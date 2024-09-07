@@ -6,6 +6,7 @@ from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.core.utils import load_schema
 from agent_actions.vendors.groq_llama import GroqLlama3Handler
+from agent_actions.vendors.tools_vendor import ToolHandler
 import importlib
 import sys
 import os
@@ -66,8 +67,7 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
         print(f"Error loading function {function_name}: {e}")
         raise
 
-
-def create_dynamic_agent(agent_config, agent_name, input_documentation_str, formatted_prompt=None, tools_path=None):
+def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_prompt=None, tools_path=None):
     """
     Create a dynamic agent based on the provided configuration, with support for transforming the prompt
     using user-defined Python functions specified in the configuration.
@@ -83,7 +83,7 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
     else:
-        prompt_config = agent_config['prompt']
+        prompt_config = agent_config.get('prompt', [])
 
     # Dynamically transform the prompt using Python functions, always passing input_documentation_str
     transformed_prompt_config = []
@@ -94,8 +94,10 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     prompt_config = transformed_prompt_config
 
     model_vendor = agent_config['model_vendor']
-    schema_name = agent_config['schema_name']
-    schema = load_schema(schema_name)
+    
+    # Conditionally load schema if model_vendor is not 'tool'
+    schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
+    schema = load_schema(schema_name) if schema_name else None
 
     if model_vendor.lower() == 'openai':
         prompt_config = list_to_tuples(prompt_config)
@@ -111,6 +113,9 @@ def create_dynamic_agent(agent_config, agent_name, input_documentation_str, form
     elif model_vendor.lower() == 'groq_llama3': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, input_documentation, schema)
         response = [response_groq_llama]
+    elif model_vendor.lower() == 'tool': 
+        response_ToolHandler = ToolHandler.invoke(agent_config, input_documentation)
+        response = [response_ToolHandler]
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
     

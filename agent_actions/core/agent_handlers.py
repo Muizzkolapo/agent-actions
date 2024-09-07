@@ -9,12 +9,16 @@ def validate_agent_config(agent_config):
     """
     Validate the agent configuration to ensure all required fields are present and correctly formatted.
     """
-    required_keys = {'agent_type', 'model_name', 'api_key', 'schema_name', 'prompt'}
+    base_required_keys = {'agent_type', 'model_name'}
+    tool_required_keys = {'description'}
+    additional_required_keys = {'api_key', 'schema_name', 'prompt'}
 
     for idx, agent in enumerate(agent_config):
-        # Skip validation for top-level UDFs
-        if 'udf' in agent:
-            continue
+        # Determine the required keys based on the model_vendor
+        if agent.get('model_vendor') == 'tool':
+            required_keys = base_required_keys.union(tool_required_keys)
+        else:
+            required_keys = base_required_keys.union(additional_required_keys)
         
         missing_keys = required_keys - agent.keys()
         if missing_keys:

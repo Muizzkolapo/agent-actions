@@ -26,11 +26,6 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
             function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
             clean_agent_output(agent_name, agent_config['agent_type'], function_name)
 
-        if 'udf' in agent_config:
-            udf = agent_config['udf']
-            logger.info(f"Calling UDF: {udf}")
-            result = execute_user_defined_function(udf)
-            logger.info(f"UDF result: {result}")
 
     except Exception as e:
         logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
