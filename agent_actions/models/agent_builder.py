@@ -22,31 +22,35 @@ def process_text_with_function_calls(text, tools_path=None, input_documentation_
     Replace multiple dispatch_task() calls in text with the result of their corresponding function.
     Always passes `input_documentation_str` to the function.
     """
-     #print(f"Original text: {text}")
+    def process_single_text(single_text):
+        # Regex to match dispatch_task('function_name')
+        function_call_pattern = r"dispatch_task\('(\w+)'\)"
+        matches = re.findall(function_call_pattern, single_text)
 
-    # Regex to match dispatch_task('function_name')
-    function_call_pattern = r"dispatch_task\('(\w+)'\)"
-    matches = re.findall(function_call_pattern, text)
+        if not matches:
+            return single_text  # Proceed as normal if no dispatch_task calls are found
 
-    if matches:
-        #print(f"Found function calls: {matches}")
-        pass
+        # Process each function call individually to avoid conflicts
+        for function_name in matches:
+            try:
+                # Call the user-defined function and pass input_documentation_str
+                transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
+                # Ensure transformed_text is a string
+                if transformed_text is None:
+                    transformed_text = "Error: No valid return from function."
+                # Replace only the specific dispatch_task instance with the transformed text
+                single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
+            except Exception as e:
+                print(f"Error calling function {function_name}: {e}")
 
-    # Process each function call individually to avoid conflicts
-    for function_name in matches:
-        try:
-            # Call the user-defined function and pass input_documentation_str
-            transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
-            # Ensure transformed_text is a string
-            if transformed_text is None:
-                transformed_text = "Error: No valid return from function."
-            # Replace only the specific dispatch_task instance with the transformed text
-            text = text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
-        except Exception as e:
-            print(f"Error calling function {function_name}: {e}")
+        return single_text
 
-    return text
-
+    if isinstance(text, list):
+        # Process each item in the list
+        return [process_single_text(item) for item in text]
+    else:
+        # Process the single text
+        return process_single_text(text)
 
 def call_user_function(function_name, tools_path=None, input_documentation_str=None):
     """
@@ -79,6 +83,11 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     :param tools_path: Path to the user's tools directory where custom functions are stored.
     :return: Result of the agent's invocation.
     """
+    # Load tools_path from configuration if not provided
+    if tools_path is None:
+        config = agent_config
+        tools_path = config.get('tools', {}).get('path')
+
     input_documentation = json.dumps(input_documentation_str) 
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
@@ -93,12 +102,21 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
 
     prompt_config = transformed_prompt_config
 
+    # Check for prompt_debug flag
+    if agent_config.get('prompt_debug', False):
+        print("\n" + "="*40)
+        print("DEBUG: Prompt going into the agent:")
+        print("="*40)
+        for idx, prompt in enumerate(prompt_config):
+            print(f"Prompt {idx + 1}:\n{prompt}\n" + "-"*40)
+        print("="*40 + "\n")
+
     model_vendor = agent_config['model_vendor']
     
     # Conditionally load schema if model_vendor is not 'tool'
     schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
     schema = load_schema(schema_name) if schema_name else None
-
+    
     if model_vendor.lower() == 'openai':
         prompt_config = list_to_tuples(prompt_config)
         response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
