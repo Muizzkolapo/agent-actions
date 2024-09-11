@@ -4,6 +4,32 @@ from langchain.text_splitter import CharacterTextSplitter
 import importlib
 import os 
 from agent_actions.core.utils import find_specific_folder
+import shutil
+
+def clean_agent_directories(agent_name):
+    """
+    Deletes all files under the staging, source, and target folders for the specified agent.
+
+    :param agent_name: Name of the agent
+    """
+    current_dir = os.getcwd()
+    agent_folder = find_specific_folder(current_dir, agent_name, 'agent_io')
+
+    if agent_folder is None:
+        print(f"Agent folder not found for agent: {agent_name}")
+        return
+
+    staging_dir = os.path.join(agent_folder, 'staging')
+    source_dir = os.path.join(agent_folder, 'source')
+    target_dir = os.path.join(agent_folder, 'target')
+
+    for directory in [staging_dir, source_dir, target_dir]:
+        if os.path.exists(directory):
+            shutil.rmtree(directory)
+            print(f"Deleted directory: {directory}")
+        else:
+            print(f"Directory not found: {directory}")
+
 
 def validate_agent_config(agent_config):
     """
