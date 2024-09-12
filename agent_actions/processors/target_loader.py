@@ -7,7 +7,13 @@ from typing import List, Dict, Any
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder
 from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid
+# Constants
+TOOL_VENDOR = 'tool'
+SOURCE_FOLDER = 'source'
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 
@@ -39,17 +45,6 @@ def load_json(file_path):
 
 
 
-
-
-
-
-# Constants
-TOOL_VENDOR = 'tool'
-SOURCE_FOLDER = 'source'
-
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> List[Dict[str, Any]]:
     try:
@@ -109,9 +104,6 @@ def process_item(agent_config, contents, generated_data, guid, side_collection, 
         response_temp = [{guid: generated_data}]
     
     return transform_structure(response_temp)
-
-
-
 
 
 
