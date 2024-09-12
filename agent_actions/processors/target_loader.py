@@ -1,16 +1,19 @@
 """Module for target loader."""
-import itertools
 from pathlib import Path
 import json
 import os
+import logging
+from typing import List, Dict, Any
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import update_schema_objects
-from agent_actions.core.utils import replace_placeholders
-from agent_actions.core.utils import transform_structure
-from agent_actions.core.utils import replace_guid_placeholder
-from agent_actions.core.agent_handlers import should_update_schema
-from agent_actions.core.agent_handlers import get_content_by_guid
+from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder
+from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid
+# Constants
+TOOL_VENDOR = 'tool'
+SOURCE_FOLDER = 'source'
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 
@@ -27,7 +30,7 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     :param output_directory: Directory where the output file will be saved
     """
     data = load_json(file_path)
-    new_data = process_data(data, agent_config, agent_name,file_path)
+    new_data = process_data(data, agent_config, agent_name, file_path)
     save_output(new_data, file_path, base_directory, output_directory)
 
 def load_json(file_path):
@@ -43,67 +46,64 @@ def load_json(file_path):
 
 
 
+def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> List[Dict[str, Any]]:
+    try:
+        source_data = load_source_data(file_path)
+        processed_data = []
+        side_collection = agent_config.get('side_collection', [])
+        selection_keys = [agent_config['agent_type']]
 
+        for items in data:
+            try:
+                processed_item = process_single_item(items, agent_config, agent_name, source_data, side_collection, selection_keys)
+                processed_data.extend(processed_item)
+            except Exception as e:
+                logger.error(f"Error processing item: {e}")
 
+        return processed_data
+    except Exception as e:
+        logger.error(f"Error in process_data: {e}")
+        raise
 
-def process_data(data, agent_config, agent_name,file_path):
-    """
-    Processes the input data based on the agent configuration and generates new data.
+def process_single_item(item: Dict[str, Any], agent_config: Dict[str, Any], agent_name: str, source_data: List[Dict[str, Any]], side_collection: List[str], selection_keys: List[str]) -> List[Dict[str, Any]]:
+    contents = item['content']
+    guid = item['guid']
+    source_content = get_content_by_guid(source_data, guid)
 
-    :param data: List of dictionaries containing the input data
-    :param agent_config: Configuration dictionary for the agent
-    :param agent_name: Name of the agent
-    :return: List of dictionaries containing the processed data
-    """
+    generated_data = generate_data(agent_config, agent_name, contents, source_content)
+    return process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys)
 
-    # Load the source data for the current file being processed
+def load_source_data(file_path):
+    """Load source data from the corresponding file."""
     file_name = os.path.basename(file_path)
     path = Path(file_path)
     base_path = path.parents[2]
-    source_path = os.path.join(base_path, "source",file_name)
+    source_path = os.path.join(base_path, "source", file_name)
     with open(source_path, 'r') as file:
-        source_data = json.load(file)
+        return json.load(file)
 
-
-    processed_data = []
-    side_collection = {agent_config['agent_type']: agent_config['side_collection']}
-    selection_keys = list(side_collection.keys())
-    for items in data:
-        contents = items['content']
-        guid = items['guid']
-
-        # for the provided guid get the source data that generated it at first layer
-        source_content = get_content_by_guid(source_data, guid)
-        raw_prompt = agent_config['prompt']
+def generate_data(agent_config, agent_name, contents, source_content):
+    """Generate data using the appropriate method based on the agent configuration."""
+    if agent_config['model_vendor'].lower() == 'tool':
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
+    else:
+        raw_prompt = agent_config.get('prompt', '')
         source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
-        formated_prompt=replace_placeholders(source_loaded_prompt,contents)
+        formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
 
-
-        # Generate dynamic with agent builder but we dont need the returned source in this case
-        generated_data = agent_builder.create_dynamic_agent(agent_config, agent_name, contents,formated_prompt)
-
-        if should_update_schema(agent_config, selection_keys, side_collection):
-            updated_generated_data = []
-            for data in generated_data:
-                keys_to_update = side_collection[agent_config['agent_type']]
-                merged_questions = update_schema_objects(contents,
-                                                        data,
-                                                        keys_to_update)
-                
-                updated_generated_data.append(merged_questions)
-                
-            updated_generated_data_response_temp = [{guid: updated_generated_data}]
-            updated_transformed_response = transform_structure(updated_generated_data_response_temp) 
-            processed_data.extend(updated_transformed_response)
-        else:
-            transformed_response_temp = [{guid: generated_data}]
-            transformed_response = transform_structure(transformed_response_temp) 
-            processed_data.extend(transformed_response)
-
-
-    return processed_data
-
-
+def process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys):
+    """Process a single item and return the transformed response."""
+    if should_update_schema(agent_config, selection_keys, {agent_config['agent_type']: side_collection}):
+        updated_generated_data = [
+            update_schema_objects(contents, data_item, side_collection)
+            for data_item in generated_data
+        ]
+        response_temp = [{guid: updated_generated_data}]
+    else:
+        response_temp = [{guid: generated_data}]
+    
+    return transform_structure(response_temp)
 
 
 
