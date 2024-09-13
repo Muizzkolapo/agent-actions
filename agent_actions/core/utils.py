@@ -269,33 +269,41 @@ def find_specific_folder(current_dir, filename, folder_name):
 
 
 
+import logging
+from collections import deque
 
 
+import logging
+from collections import deque
 
-def topological_sort(dependencies):
-    """
-    Perform a topological sort on the dependencies graph.
-    """
-    in_degree = {u: 0 for u in dependencies}
-    for u in dependencies:
-        for v in dependencies[u]:
-            in_degree[v] += 1
+# Add this line at the beginning of the file
+logger = logging.getLogger(__name__)
 
-    queue = deque([u for u in in_degree if in_degree[u] == 0])
-    ordered = []
+def topological_sort(graph):
+    in_degree = {node: 0 for node in graph}
+    for node in graph:
+        for neighbor in graph[node]:
+            if neighbor in in_degree:
+                in_degree[neighbor] += 1
+            else:
+                logger.warning(f"Dependency '{neighbor}' of '{node}' not found in the graph")
+
+    queue = deque([node for node in in_degree if in_degree[node] == 0])
+    result = []
 
     while queue:
-        vertex = queue.popleft()
-        ordered.append(vertex)
-        for neighbor in dependencies[vertex]:
-            in_degree[neighbor] -= 1
-            if in_degree[neighbor] == 0:
-                queue.append(neighbor)
+        node = queue.popleft()
+        result.append(node)
+        for neighbor in graph[node]:
+            if neighbor in in_degree:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
 
-    if len(ordered) != len(dependencies):
-        raise ValueError("There is a cycle in the dependencies")
+    if len(result) != len(graph):
+        logger.warning("Circular dependency detected in the graph")
 
-    return ordered[::-1]
+    return result
 
 
 def find_agent_folder(working_directory, folder_name,base_dir):
