@@ -9,9 +9,12 @@ from agent_actions.logging_setup import logger
 from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
 from agent_actions.core.utils import topological_sort
 from agent_actions.core.agent_handlers import find_agents_name
-
+import json
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
+    """
+    Run an agent based on the provided configuration.
+    """
     logger.info(f"Running agent: {agent_config['agent_type']}")
 
     try:
@@ -20,14 +23,9 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
         output_folder = process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
 
         if use_tools:
-            if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
-                # Handle side output for tools
-                side_output_folder = os.path.join(output_folder, 'side_output')
-                if os.path.exists(side_output_folder):
-                    logger.info(f"Side output generated for {agent_config['agent_type']}")
-            else:
-                function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-                clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+            function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
+            clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+
 
     except Exception as e:
         logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
@@ -87,7 +85,18 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
                 default_agent.update(agent)
                 state['agent_configs'][agent_type] = default_agent
 
-        dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
+        dependency_graph = {}
+        for agent in user_agents:
+            if 'agent_type' in agent:
+                agent_type = agent['agent_type']
+                dependencies = agent.get('dependencies', [])
+                # Ensure dependencies is a list of strings
+                if isinstance(dependencies, list):
+                    dependencies = [dep if isinstance(dep, str) else dep.get('agent_type', '') for dep in dependencies]
+                else:
+                    dependencies = []
+                dependency_graph[agent_type] = dependencies
+
         state['execution_order'] = topological_sort(dependency_graph)
         logger.info(f"Execution order determined: {state['execution_order']}")
 
@@ -122,6 +131,71 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
     if directories_cleaned:
         logger.info("Finished cleaning up ephemeral directories.")
 
-    # Remove the checkpoint file after successful completion
+    # After all agents have been processed
+    # Combine side output with final output
+    final_output_folder = state['ephemeral_directories'][-1]['output_folder']
+    side_output_folder = os.path.join(os.path.dirname(final_output_folder), 'side_output')
+    combined_output_folder = os.path.join(os.path.dirname(final_output_folder), 'combined_output')
+
+    if os.path.exists(side_output_folder):
+        merge_json_files(side_output_folder, final_output_folder, combined_output_folder)
+        logger.info("Side output combined with final output successfully.")
+        
+        # Remove the cleanup step
+        # shutil.rmtree(side_output_folder)
+        # logger.info("Side output folder cleaned up.")
+        
+        logger.info("Side output folder preserved for future reference.")
+    else:
+        logger.info("No side output folder found. Skipping combination.")
+
+    # Remove the checkpoint file
     remove_checkpoint()
 
+    return combined_output_folder
+
+
+def merge_json_files(input_dir, output_dir, combined_dir):
+    # Create the combined folder if it doesn't exist
+    if not os.path.exists(combined_dir):
+        os.makedirs(combined_dir)
+
+    # Get list of all files in the input directory
+    input_files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
+    
+    # Iterate through the files in input folder
+    for filename in input_files:
+        # Paths for both the input and output folders
+        file1 = os.path.join(input_dir, filename)
+        file2 = os.path.join(output_dir, filename)
+
+        # Read content of the first file (input)
+        if os.path.exists(file1):
+            with open(file1, 'r') as f1:
+                try:
+                    data1 = json.load(f1)
+                except json.JSONDecodeError:
+                    data1 = []
+        else:
+            data1 = []
+
+        # Read content of the second file (output)
+        if os.path.exists(file2):
+            with open(file2, 'r') as f2:
+                try:
+                    data2 = json.load(f2)
+                except json.JSONDecodeError:
+                    data2 = []
+        else:
+            data2 = []
+
+        # Merge both data
+        merged_data = data1 + data2
+
+        # Write the merged content into the combined folder
+        output_path = os.path.join(combined_dir, filename)
+
+        with open(output_path, 'w') as outfile:
+            json.dump(merged_data, outfile, indent=4)
+
+        print(f"Merged {filename} has been written to {output_path}")
