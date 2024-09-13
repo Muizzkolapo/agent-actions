@@ -21,10 +21,11 @@ class ToolHandler:
             The result of the UDF execution.
         """
         model_name = agent_config['model_name']
-        # Dynamically retrieve the UDF from the global context or from a user-defined module
+        side_output = agent_config.get('side_output', False)
         
-        # Process the input documentation and pass it to the UDF
         response = execute_user_defined_function(model_name, input_documentation)
         
-        rresponse = json.loads(response)
-        return rresponse
+        if side_output:
+            return {'result': response, 'side_output': True}
+        else:
+            return json.loads(response)

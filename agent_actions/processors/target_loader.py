@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import os
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder
 from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid
@@ -30,8 +30,14 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     :param output_directory: Directory where the output file will be saved
     """
     data = load_json(file_path)
-    new_data = process_data(data, agent_config, agent_name, file_path)
-    save_output(new_data, file_path, base_directory, output_directory)
+    
+    if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
+        new_data, side_output_data = process_data_for_side_output(data, agent_config, agent_name, file_path)
+        save_output(new_data, file_path, base_directory, output_directory)
+        save_side_output(side_output_data, file_path, base_directory, output_directory)
+    else:
+        new_data = process_data(data, agent_config, agent_name, file_path)
+        save_output(new_data, file_path, base_directory, output_directory)
 
 def load_json(file_path):
     """
@@ -45,6 +51,9 @@ def load_json(file_path):
 
 
 
+
+
+#==============================================================process data ==================================================================================
 
 def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> List[Dict[str, Any]]:
     try:
@@ -65,6 +74,28 @@ def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent
         logger.error(f"Error in process_data: {e}")
         raise
 
+def process_data_for_side_output(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    try:
+        source_data = load_source_data(file_path)
+        processed_data = []
+        side_output_data = []
+        side_collection = agent_config.get('side_collection', [])
+        selection_keys = [agent_config['agent_type']]
+
+        for items in data:
+            try:
+                processed_item = process_single_item(items, agent_config, agent_name, source_data, side_collection, selection_keys)
+                if isinstance(processed_item, dict) and processed_item.get('side_output'):
+                    side_output_data.append(processed_item['result'])
+                else:
+                    processed_data.extend(processed_item)
+            except Exception as e:
+                logger.error(f"Error processing item: {e}")
+
+        return processed_data, side_output_data
+    except Exception as e:
+        logger.error(f"Error in process_data_for_side_output: {e}")
+        raise
 def process_single_item(item: Dict[str, Any], agent_config: Dict[str, Any], agent_name: str, source_data: List[Dict[str, Any]], side_collection: List[str], selection_keys: List[str]) -> List[Dict[str, Any]]:
     contents = item['content']
     guid = item['guid']
@@ -72,6 +103,11 @@ def process_single_item(item: Dict[str, Any], agent_config: Dict[str, Any], agen
 
     generated_data = generate_data(agent_config, agent_name, contents, source_content)
     return process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys)
+
+#================================================================================================================================================
+
+
+
 
 def load_source_data(file_path):
     """Load source data from the corresponding file."""
@@ -108,6 +144,10 @@ def process_item(agent_config, contents, generated_data, guid, side_collection, 
 
 
 
+
+
+
+
 def save_output(new_data, file_path, base_directory, output_directory):
     """
     Saves the processed data to the specified output directory.
@@ -124,7 +164,13 @@ def save_output(new_data, file_path, base_directory, output_directory):
         json.dump(new_data, file, indent=4)
 
 
-
+def save_side_output(side_output_data, file_path, base_directory, output_directory):
+    relative_path = os.path.relpath(file_path, base_directory)
+    side_output_dir = os.path.join(output_directory, 'side_output')
+    side_output_file_path = os.path.join(side_output_dir, relative_path)
+    os.makedirs(os.path.dirname(side_output_file_path), exist_ok=True)
+    with open(side_output_file_path, 'w', encoding='utf-8') as file:
+        json.dump(side_output_data, file, indent=4)
 
 
 

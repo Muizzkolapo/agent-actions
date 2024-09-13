@@ -12,9 +12,6 @@ from agent_actions.core.agent_handlers import find_agents_name
 
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
-    """
-    Run an agent based on the provided configuration.
-    """
     logger.info(f"Running agent: {agent_config['agent_type']}")
 
     try:
@@ -23,9 +20,14 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
         output_folder = process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
 
         if use_tools:
-            function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-            clean_agent_output(agent_name, agent_config['agent_type'], function_name)
-
+            if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
+                # Handle side output for tools
+                side_output_folder = os.path.join(output_folder, 'side_output')
+                if os.path.exists(side_output_folder):
+                    logger.info(f"Side output generated for {agent_config['agent_type']}")
+            else:
+                function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
+                clean_agent_output(agent_name, agent_config['agent_type'], function_name)
 
     except Exception as e:
         logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
