@@ -8,6 +8,8 @@ import yaml
 import re
 import uuid
 from collections import deque, OrderedDict
+import logging
+from collections import deque
 
 def load_schema(schema_name):
     """
@@ -265,16 +267,6 @@ def find_specific_folder(current_dir, filename, folder_name):
                 return target_folder_path
     return None
 
-
-
-
-
-import logging
-from collections import deque
-
-
-import logging
-from collections import deque
 
 # Add this line at the beginning of the file
 logger = logging.getLogger(__name__)
