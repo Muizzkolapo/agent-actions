@@ -26,6 +26,10 @@ class ToolHandler:
         response = execute_user_defined_function(model_name, input_documentation)
         
         if side_output:
-            return {'result': response, 'side_output': True}
+            condition, result = response
+            if condition:
+                return {'result': json.loads(result), 'side_output': True}
+            else:
+                return json.loads(result)
         else:
             return json.loads(response)
