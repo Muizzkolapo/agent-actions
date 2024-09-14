@@ -76,8 +76,11 @@ function fetchAgentDetails(filename, agentName) {
 }
 
 function displayAgentDetails(data) {
-    const container = document.querySelector('.container');
-    container.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+    const modal = document.getElementById("customModal");
+    const modalText = document.getElementById("modal-text");
+    modalText.innerHTML = `<pre><code class="yaml">${jsyaml.dump(data)}</code></pre>`;
+    modal.style.display = "block";
+    hljs.highlightAll();  // Highlight the code
 }
 
 function handleSearch() {
