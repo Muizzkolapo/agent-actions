@@ -200,11 +200,29 @@ def save_side_output(side_output_data, file_path, base_directory, output_directo
     :param output_directory: Directory where the main output is saved
     """
     relative_path = os.path.relpath(file_path, base_directory)
-    # Create 'side_output' directory at the same level as output_directory
     side_output_dir = os.path.join(os.path.dirname(output_directory), 'side_output')
     side_output_file_path = os.path.join(side_output_dir, os.path.basename(relative_path))
     os.makedirs(os.path.dirname(side_output_file_path), exist_ok=True)
+
+    # If the file exists, load its current contents
+    if os.path.exists(side_output_file_path):
+        with open(side_output_file_path, 'r', encoding='utf-8') as file:
+            try:
+                existing_content = json.load(file)
+            except json.JSONDecodeError:
+                existing_content = []
+    else:
+        existing_content = []
+
+    # Ensure existing content is a list
+    if not isinstance(existing_content, list):
+        existing_content = [existing_content]
+
+    # Append new side output data
+    existing_content.extend(side_output_data)
+
+    # Write back to the file
     with open(side_output_file_path, 'w', encoding='utf-8') as file:
-        json.dump(side_output_data, file, indent=4)
+        json.dump(existing_content, file, indent=4)
 
 

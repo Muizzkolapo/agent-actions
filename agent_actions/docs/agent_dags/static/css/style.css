@@ -69,6 +69,10 @@ span.file {
     align-items: center;
     padding: 5px 10px;
     border-radius: 5px;
+    white-space: nowrap;  /* Prevent text from wrapping */
+    overflow: hidden;     /* Hide overflowed text */
+    text-overflow: ellipsis;  /* Add ellipsis for overflowed text */
+    max-width: 100%;      /* Ensure the text does not exceed the container width */
 }
 
 span.folder {
@@ -96,45 +100,47 @@ span.file:hover {
 svg {
     background-color: #1e2a38;
     border-radius: 5px;
+    display: block;
+    margin: auto;  /* Center the SVG */
 }
 
 /* Custom Modal Styling */
 .modal {
-display: none; /* Hidden by default */
-position: fixed; /* Stay in place */
-z-index: 1; /* Sit on top */
-left: 0;
-top: 0;
-width: 100%; /* Full width */
-height: 100%; /* Full height */
-overflow: auto; /* Enable scroll if needed */
-background-color: rgb(0,0,0); /* Fallback color */
-background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%; /* Full width */
+    height: 100%; /* Full height */
+    overflow: auto; /* Enable scroll if needed */
+    background-color: rgb(0,0,0); /* Fallback color */
+    background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
 }
 
 .modal-content {
-background-color: #fefefe;
-margin: 15% auto; /* 15% from the top and centered */
-padding: 20px;
-border: 1px solid #888;
-width: 80%; /* Could be more or less, depending on screen size */
-max-height: 70%; /* Maximum height to ensure it's not too tall */
-overflow-y: auto; /* Add vertical scrollbar if needed */
-box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-border-radius: 10px;
-word-wrap: break-word; /* Ensures text will wrap */
+    background-color: #fefefe;
+    margin: 15% auto; /* 15% from the top and centered */
+    padding: 20px;
+    border: 1px solid #888;
+    width: 80%; /* Could be more or less, depending on screen size */
+    max-height: 70%; /* Maximum height to ensure it's not too tall */
+    overflow-y: auto; /* Add vertical scrollbar if needed */
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    border-radius: 10px;
+    word-wrap: break-word; /* Ensures text will wrap */
 }
 
 .close-button {
-color: #aaa;
-float: right;
-font-size: 28px;
-font-weight: bold;
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
 }
 
 .close-button:hover,
 .close-button:focus {
-color: black;
-text-decoration: none;
-cursor: pointer;
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
 }

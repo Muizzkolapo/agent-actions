@@ -8,8 +8,6 @@ import yaml
 import re
 import uuid
 from collections import deque, OrderedDict
-import logging
-from collections import deque
 
 def load_schema(schema_name):
     """
@@ -268,34 +266,36 @@ def find_specific_folder(current_dir, filename, folder_name):
     return None
 
 
-# Add this line at the beginning of the file
-logger = logging.getLogger(__name__)
 
-def topological_sort(graph):
-    in_degree = {node: 0 for node in graph}
-    for node in graph:
-        for neighbor in graph[node]:
-            if neighbor in in_degree:
-                in_degree[neighbor] += 1
-            else:
-                logger.warning(f"Dependency '{neighbor}' of '{node}' not found in the graph")
 
-    queue = deque([node for node in in_degree if in_degree[node] == 0])
-    result = []
+
+
+
+
+def topological_sort(dependencies):
+    """
+    Perform a topological sort on the dependencies graph.
+    """
+    in_degree = {u: 0 for u in dependencies}
+    for u in dependencies:
+        for v in dependencies[u]:
+            in_degree[v] += 1
+
+    queue = deque([u for u in in_degree if in_degree[u] == 0])
+    ordered = []
 
     while queue:
-        node = queue.popleft()
-        result.append(node)
-        for neighbor in graph[node]:
-            if neighbor in in_degree:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
+        vertex = queue.popleft()
+        ordered.append(vertex)
+        for neighbor in dependencies[vertex]:
+            in_degree[neighbor] -= 1
+            if in_degree[neighbor] == 0:
+                queue.append(neighbor)
 
-    if len(result) != len(graph):
-        logger.warning("Circular dependency detected in the graph")
+    if len(ordered) != len(dependencies):
+        raise ValueError("There is a cycle in the dependencies")
 
-    return result
+    return ordered[::-1]
 
 
 def find_agent_folder(working_directory, folder_name,base_dir):
