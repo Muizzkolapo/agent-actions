@@ -42,36 +42,36 @@ def get_folder_structure(directory, base_path=''):
 
 def get_yaml_files(directory, base_path=''):
     """
-    Get the YAML files in the specified directory.
+    Get the YAML files in the specified directory and its subdirectories named 'agent_config'.
     """
     structure = []
-    for item in os.listdir(directory):
-        item_path = os.path.join(directory, item)
-        relative_path = os.path.join(base_path, item)
-        if os.path.isdir(item_path):
-            subdir_structure = get_yaml_files(item_path, relative_path)
+    for root, dirs, files in os.walk(directory):
+        if os.path.basename(root) == 'agent_config':
+            relative_path = os.path.relpath(root, directory)
+            subdir_structure = []
+            for file in files:
+                if file.endswith('.yml'):
+                    subdir_structure.append({
+                        'name': file,
+                        'path': os.path.join(relative_path, file),
+                        'type': 'file'
+                    })
             if subdir_structure:
                 structure.append({
-                    'name': item,
+                    'name': os.path.basename(root),
                     'path': relative_path,
                     'type': 'folder',
                     'children': subdir_structure
                 })
-        elif os.path.isfile(item_path) and item.endswith('.yml'):
-            structure.append({
-                'name': item,
-                'path': relative_path,
-                'type': 'file'
-            })
     return structure
-
 
 @app.route('/list_yaml_files', methods=['GET'])
 def list_yaml_files():
     """
-    List all YAML files in the CONFIG_DIR.
+    List all YAML files in the directory containing 'agent_actions.yml' and its subdirectories named 'agent_config'.
     """
-    structure = get_yaml_files(CONFIG_DIR)
+    base_dir = os.path.dirname(os.path.abspath('agent_actions.yml'))
+    structure = get_yaml_files(base_dir)
     return jsonify(structure)
 
 
@@ -79,7 +79,7 @@ def load_single_yaml_file(filename):
     """
     Load a single YAML file.
     """
-    filepath = os.path.join(CONFIG_DIR, filename)
+    filepath = os.path.join(BASE_DIR, filename)
     with open(filepath, 'r', encoding='utf-8') as file:
         content = yaml.safe_load(file)
     return content
@@ -152,11 +152,11 @@ def get_agent_details():
     Get details of a specific agent based on the provided filename and agent name.
     """
     filename = request.json.get('filename')
-    agent_name = request.json.get('agent_name')
-    print(agent_name + "============")
+    agent_name = request.json.get('agentName')  # Ensure the key matches the frontend
+    if not agent_name:
+        return jsonify({'error': 'Agent name is required'}), 400
+
     config_data = load_single_yaml_file(filename)
-
-
 
     for agents in config_data.values():
         if isinstance(agents, list):

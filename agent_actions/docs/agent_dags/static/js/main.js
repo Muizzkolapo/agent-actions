@@ -2,8 +2,6 @@ document.addEventListener('DOMContentLoaded', () => {
     loadYamlFiles();
     document.getElementById('search-bar').addEventListener('input', handleSearch);
     document.getElementById('search-button').addEventListener('click', handleSearch);
-
-   
 });
 
 function loadYamlFiles() {
@@ -22,7 +20,7 @@ function renderFolderStructure(structure, parentElement) {
         if (item.type === 'folder') {
             const span = document.createElement('span');
             span.className = 'folder';
-            span.innerHTML = '<span class="icon">⚙️</span>' + item.name;
+            span.innerHTML = '<span class="icon">📁</span>' + item.name;
             span.onclick = () => {
                 const ul = li.querySelector('ul');
                 if (ul) {
@@ -33,7 +31,7 @@ function renderFolderStructure(structure, parentElement) {
             const ul = document.createElement('ul');
             ul.style.listStyleType = 'none';
             ul.style.marginLeft = '20px';
-            ul.style.display = 'none'; // Hide nested folders initially
+            ul.style.display = 'none';
             li.appendChild(ul);
             parentElement.appendChild(li);
             renderFolderStructure(item.children, ul);
@@ -42,6 +40,7 @@ function renderFolderStructure(structure, parentElement) {
             span.className = 'file';
             span.innerHTML = '<span class="icon">📄</span>' + item.name;
             span.onclick = () => generateAgentLineage(item.path);
+            span.setAttribute('data-path', item.path);  // Store the file path for later use
             li.appendChild(span);
             parentElement.appendChild(li);
         }
@@ -61,7 +60,6 @@ function generateAgentLineage(filename) {
         renderGraph(data.nodes, data.edges, filename);
     });
 }
-
 
 function fetchAgentDetails(filename, agentName) {
     fetch('/get_agent_details', {
@@ -109,58 +107,6 @@ function centerNode(nodeData) {
         d3.zoomIdentity.translate(x, y).scale(1)
     );
 }
-document.addEventListener('DOMContentLoaded', () => {
-    loadYamlFiles();
-    document.getElementById('search-bar').addEventListener('input', handleSearch);
-    document.getElementById('search-button').addEventListener('click', handleSearch);
-});
-
-function loadYamlFiles() {
-    fetch('/list_yaml_files')
-        .then(response => response.json())
-        .then(files => {
-            const fileList = document.getElementById('file-list');
-            fileList.innerHTML = '';
-            renderFolderStructure(files, fileList);
-        });
-}
-
-function renderFolderStructure(structure, parentElement) {
-    structure.forEach(item => {
-        const li = document.createElement('li');
-        if (item.type === 'folder') {
-            const span = document.createElement('span');
-            span.className = 'folder';
-            span.innerHTML = '<span class="icon">📁</span>' + item.name;
-            span.onclick = () => {
-                const ul = li.querySelector('ul');
-                if (ul) {
-                    ul.style.display = ul.style.display === 'none' ? 'block' : 'none';
-                }
-            };
-            li.appendChild(span);
-            const ul = document.createElement('ul');
-            ul.style.listStyleType = 'none';
-            ul.style.marginLeft = '20px';
-            ul.style.display = 'none';
-            li.appendChild(ul);
-            parentElement.appendChild(li);
-            renderFolderStructure(item.children, ul);
-        } else if (item.type === 'file') {
-            const span = document.createElement('span');
-            span.className = 'file';
-            span.innerHTML = '<span class="icon">📄</span>' + item.name;
-            span.onclick = () => generateAgentLineage(item.path);
-            span.setAttribute('data-path', item.path);  // Store the file path for later use
-            li.appendChild(span);
-            parentElement.appendChild(li);
-        }
-    });
-}
-
-
-
-
 
 function renderGraph(nodes, edges, filename) {
     const svg = d3.select("svg"),
@@ -281,78 +227,4 @@ function renderGraph(nodes, edges, filename) {
         .on("start", dragstarted)
         .on("drag", dragged)
         .on("end", dragended));
-}
-
-
-
-
-
-
-
-function generateAgentLineage(filename) {
-    fetch('/generate_agent_lineage', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filename }),
-    })
-    .then(response => response.json())
-    .then(data => {
-        renderGraph(data.nodes, data.edges, filename);
-    });
-}
-
-
-function fetchAgentDetails(filename, agentName) {
-    fetch('/get_agent_details', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ filename, agent_name: agentName }),
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.error) {
-            alert(data.error);
-        } else {
-            showModal(JSON.stringify(data, null, 2));
-        }
-    });
-}
-
-function handleSearch() {
-    const searchTerm = document.getElementById('search-bar').value.toLowerCase();
-    const nodes = d3.selectAll(".nodes text");
-    nodes.each(function(d) {
-        const element = d3.select(this);
-        const parent = d3.select(this.parentNode);
-        if (d.id.toLowerCase().includes(searchTerm)) {
-            element.style.fill = "red";
-            parent.raise();
-            centerNode(d);
-        } else {
-            element.style.fill = "#fff";
-        }
-    });
-}
-
-function showModal(content) {
-    const modal = document.getElementById("customModal");
-    const modalText = document.getElementById("modal-text");
-    modalText.innerText = content;
-    modal.style.display = "block";
-}
-
-function centerNode(nodeData) {
-    const svg = d3.select("svg");
-    const width = +svg.attr("width");
-    const height = +svg.attr("height");
-    const x = width / 2 - nodeData.x;
-    const y = height / 2 - nodeData.y;
-    svg.transition().duration(750).call(
-        d3.zoom().transform,
-        d3.zoomIdentity.translate(x, y).scale(1)
-    );
 }
