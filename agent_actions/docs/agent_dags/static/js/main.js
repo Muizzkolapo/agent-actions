@@ -150,7 +150,9 @@ function renderGraph(nodes, edges, filename) {
         .force("x", d3.forceX(d => d.level * 300).strength(1))  // Increase horizontal spacing
         .force("y", d3.forceY(height / 2).strength(1));
 
-    const link = svg.append("g")
+    const g = svg.append("g");
+
+    const link = g.append("g")
         .attr("class", "links")
         .selectAll("line")
         .data(edges)
@@ -161,7 +163,7 @@ function renderGraph(nodes, edges, filename) {
         .attr("stroke-width", 2)
         .attr("marker-end", "url(#end)");
 
-    const node = svg.append("g")
+    const node = g.append("g")
         .attr("class", "nodes")
         .selectAll("g")
         .data(nodes)
@@ -212,6 +214,14 @@ function renderGraph(nodes, edges, filename) {
 
         node
             .attr("transform", d => `translate(${d.x - d.bbox.width / 2},${d.y - 15})`);  // center the rectangles
+
+        // Center the graph
+        const graphBBox = g.node().getBBox();
+        const graphWidth = graphBBox.width;
+        const graphHeight = graphBBox.height;
+        const offsetX = (width - graphWidth) / 2 - graphBBox.x;
+        const offsetY = (height - graphHeight) / 2 - graphBBox.y;
+        g.attr("transform", `translate(${offsetX},${offsetY})`);
     }
 
     function dragstarted(event, d) {

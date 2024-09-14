@@ -100,6 +100,8 @@ span.file:hover {
 svg {
     background-color: #1e2a38;
     border-radius: 5px;
+    display: block;
+    margin: auto;  /* Center the SVG */
 }
 
 /* Custom Modal Styling */
