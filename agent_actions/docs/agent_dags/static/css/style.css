@@ -69,6 +69,10 @@ span.file {
     align-items: center;
     padding: 5px 10px;
     border-radius: 5px;
+    white-space: nowrap;  /* Prevent text from wrapping */
+    overflow: hidden;     /* Hide overflowed text */
+    text-overflow: ellipsis;  /* Add ellipsis for overflowed text */
+    max-width: 100%;      /* Ensure the text does not exceed the container width */
 }
 
 span.folder {
