@@ -124,10 +124,10 @@ function renderGraph(nodes, edges, filename) {
         .enter().append("marker")
         .attr("id", String)
         .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 15)  // adjust this value to move arrowhead closer/further from the node
+        .attr("refX", 12)  // adjust this value to move arrowhead closer/further from the node
         .attr("refY", 0)
-        .attr("markerWidth", 10)
-        .attr("markerHeight", 10)
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
         .attr("orient", "auto")
         .append("path")
         .attr("d", "M0,-5L10,0L0,5")
@@ -215,14 +215,14 @@ function renderGraph(nodes, edges, filename) {
                 const dx = d.target.x - d.source.x;
                 const dy = d.target.y - d.source.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                const offsetX = (dx / dist) * (d.target.bbox.width / 2 + 10);  // Adjust this value to move arrowhead closer/further from the node
+                const offsetX = (dx / dist) * (d.target.bbox.width / 2 + 5);  // Adjust this value to move arrowhead closer/further from the node
                 return d.target.x - offsetX;
             })
             .attr("y2", d => {
                 const dx = d.target.x - d.source.x;
                 const dy = d.target.y - d.source.y;
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                const offsetY = (dy / dist) * (d.target.bbox.width / 2 + 10);  // Adjust this value to move arrowhead closer/further from the node
+                const offsetY = (dy / dist) * (d.target.bbox.height / 2 + 5);  // Adjust this value to move arrowhead closer/further from the node
                 return d.target.y - offsetY;
             });
 
