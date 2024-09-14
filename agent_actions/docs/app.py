@@ -25,12 +25,21 @@ def get_folder_structure(directory, base_path=''):
         item_path = os.path.join(directory, item)
         relative_path = os.path.join(base_path, item)
         if os.path.isdir(item_path):
-            structure.append({
-                'name': item,
-                'path': relative_path,
-                'type': 'folder',
-                'children': get_folder_structure(item_path, relative_path)
-            })
+            if item == 'agent_config':
+                parent_dir = os.path.basename(os.path.dirname(item_path))
+                structure.append({
+                    'name': parent_dir,
+                    'path': os.path.dirname(relative_path),
+                    'type': 'folder',
+                    'children': get_folder_structure(item_path, relative_path)
+                })
+            else:
+                structure.append({
+                    'name': item,
+                    'path': relative_path,
+                    'type': 'folder',
+                    'children': get_folder_structure(item_path, relative_path)
+                })
         elif os.path.isfile(item_path) and item.endswith('.yml'):
             structure.append({
                 'name': item,
@@ -47,6 +56,7 @@ def get_yaml_files(directory, base_path=''):
     structure = []
     for root, dirs, files in os.walk(directory):
         if os.path.basename(root) == 'agent_config':
+            parent_dir = os.path.basename(os.path.dirname(root))
             relative_path = os.path.relpath(root, directory)
             subdir_structure = []
             for file in files:
@@ -58,8 +68,8 @@ def get_yaml_files(directory, base_path=''):
                     })
             if subdir_structure:
                 structure.append({
-                    'name': os.path.basename(root),
-                    'path': relative_path,
+                    'name': parent_dir,
+                    'path': os.path.dirname(relative_path),
                     'type': 'folder',
                     'children': subdir_structure
                 })
