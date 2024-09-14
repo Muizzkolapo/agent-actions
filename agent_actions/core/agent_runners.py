@@ -10,6 +10,7 @@ from agent_actions.core.state_management import save_checkpoint, load_checkpoint
 from agent_actions.core.utils import topological_sort
 from agent_actions.core.agent_handlers import find_agents_name
 
+import json 
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
     logger.info(f"Running agent: {agent_config['agent_type']}")
@@ -111,16 +112,70 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools):
         state['current_agent_idx'] = idx + 1
         save_checkpoint(state)
 
-    directories_cleaned = False
-    for i, directory in enumerate(state['ephemeral_directories']):
-        if directory['ephemeral'] and i != len(state['ephemeral_directories']) - 1:
-            folder_path = directory['output_folder']
-            if os.path.exists(folder_path):
-                shutil.rmtree(folder_path)
-                directories_cleaned = True
+    # Combine side output with final output
+    final_output_folder = state['ephemeral_directories'][-1]['output_folder']
+    side_output_folder = os.path.join(os.path.dirname(final_output_folder), 'side_output')
+    final_workflow_output = os.path.join(os.path.dirname(final_output_folder), 'final_workflow_output')
 
-    if directories_cleaned:
-        logger.info("Finished cleaning up ephemeral directories.")
+    if os.path.exists(side_output_folder):
+        merge_json_files(side_output_folder, final_output_folder, final_workflow_output)
+        logger.info("Side output combined with final output successfully.")
+        logger.info("Side output folder preserved for future reference.")
+    else:
+        logger.info("No side output folder found. Skipping combination.")
 
-    # Remove the checkpoint file after successful completion
+    # Remove the checkpoint file
     remove_checkpoint()
+
+    return final_workflow_output
+
+
+def merge_json_files(input_dir, output_dir, combined_dir):
+    # Create the combined folder if it doesn't exist
+    if not os.path.exists(combined_dir):
+        os.makedirs(combined_dir)
+
+    # Get list of all files in the input directory
+    input_files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
+
+    # Iterate through the files in input folder
+    for filename in input_files:
+        # Paths for both the input and output folders
+        file1 = os.path.join(input_dir, filename)
+        file2 = os.path.join(output_dir, filename)
+
+        # Read content of the first file (input)
+        if os.path.exists(file1):
+            with open(file1, 'r') as f1:
+                try:
+                    data1 = json.load(f1)
+                except json.JSONDecodeError:
+                    data1 = []
+        else:
+            data1 = []
+
+        # Read content of the second file (output)
+        if os.path.exists(file2):
+            with open(file2, 'r') as f2:
+                try:
+                    data2 = json.load(f2)
+                except json.JSONDecodeError:
+                    data2 = []
+        else:
+            data2 = []
+
+        # Merge both data
+        merged_data = data1 + data2
+
+        # Clean up the merged data by removing the 'side_output' key
+        for item in merged_data:
+            if 'content' in item and 'side_output' in item['content']:
+                del item['content']['side_output']
+
+        # Write the merged content into the combined folder
+        output_path = os.path.join(combined_dir, filename)
+
+        with open(output_path, 'w') as outfile:
+            json.dump(merged_data, outfile, indent=4)
+
+        print(f"Merged {filename} has been written to {output_path}")
