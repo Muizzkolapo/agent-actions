@@ -124,7 +124,7 @@ function renderGraph(nodes, edges, filename) {
         .enter().append("marker")
         .attr("id", String)
         .attr("viewBox", "0 -5 10 10")
-        .attr("refX", 25)  // adjust this value to move arrowhead closer/further from the node
+        .attr("refX", 15)  // adjust this value to move arrowhead closer/further from the node
         .attr("refY", 0)
         .attr("markerWidth", 10)
         .attr("markerHeight", 10)
@@ -175,15 +175,17 @@ function renderGraph(nodes, edges, filename) {
 
     node.append("rect")
         .attr("height", 30)
-        .attr("rx", 10)  // rounded corners
-        .attr("ry", 10)
-        .attr("fill", d => d3.schemeCategory10[d.id % 10]);
+        .attr("rx", 5)  // rounded corners
+        .attr("ry", 5)
+        .attr("fill", "#f0f0f0")
+        .attr("stroke", "#999")
+        .attr("stroke-width", 1);
 
     node.append("text")
         .attr("dx", 10)
         .attr("dy", 20)
         .attr("text-anchor", "start")
-        .attr("fill", "#fff")
+        .attr("fill", "#000")
         .text(d => d.id)
         .each(function(d) {
             const bbox = this.getBBox();
@@ -209,8 +211,20 @@ function renderGraph(nodes, edges, filename) {
         link
             .attr("x1", d => d.source.x)
             .attr("y1", d => d.source.y)
-            .attr("x2", d => d.target.x)
-            .attr("y2", d => d.target.y);
+            .attr("x2", d => {
+                const dx = d.target.x - d.source.x;
+                const dy = d.target.y - d.source.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const offsetX = (dx / dist) * (d.target.bbox.width / 2 + 10);  // Adjust this value to move arrowhead closer/further from the node
+                return d.target.x - offsetX;
+            })
+            .attr("y2", d => {
+                const dx = d.target.x - d.source.x;
+                const dy = d.target.y - d.source.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                const offsetY = (dy / dist) * (d.target.bbox.width / 2 + 10);  // Adjust this value to move arrowhead closer/further from the node
+                return d.target.y - offsetY;
+            });
 
         node
             .attr("transform", d => `translate(${d.x - d.bbox.width / 2},${d.y - 15})`);  // center the rectangles
