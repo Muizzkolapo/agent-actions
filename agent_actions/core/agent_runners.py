@@ -89,7 +89,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         with open(constructor_path, 'r', encoding='utf-8') as file:
             user_config = yaml.safe_load(file)
 
-        logger.info(f"Loaded user config: {user_config}")
+       # logger.info(f"Loaded user config: {user_config}")
 
         with open(default_path, 'r', encoding='utf-8') as file:
             default_config = yaml.safe_load(file)
