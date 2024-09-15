@@ -168,20 +168,76 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         state['current_agent_idx'] = idx + 1
         save_checkpoint(state)
 
-    # Combine side output with final output
+    # Process final output
     if state['ephemeral_directories']:
         final_output_folder = state['ephemeral_directories'][-1]['output_folder']
         side_output_folder = os.path.join(os.path.dirname(final_output_folder), 'side_output')
         final_workflow_output = os.path.join(os.path.dirname(final_output_folder), 'final_workflow_output')
 
+        # Ensure final_workflow_output directory exists
+        os.makedirs(final_workflow_output, exist_ok=True)
+
+        logger.debug(f"Final output folder: {final_output_folder}")
+        logger.debug(f"Side output folder: {side_output_folder}")
+        logger.debug(f"Final workflow output folder: {final_workflow_output}")
+
         if os.path.exists(side_output_folder):
+            logger.debug("Side output folder exists. Merging with final output.")
             merge_json_files(side_output_folder, final_output_folder, final_workflow_output)
-            logger.info("Side output combined with final output successfully.")
-            logger.info("Side output folder preserved for future reference.")
+            logger.info("Side output combined with final output in final_workflow_output.")
+            
+            # Debug: List contents of final_workflow_output after merging
+            logger.debug("Contents of final_workflow_output after merging:")
+            for root, dirs, files in os.walk(final_workflow_output):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    logger.debug(f"  - {file_path}")
+                    # Optionally, print the content of each file (be cautious with large files)
+                    # with open(file_path, 'r') as f:
+                    #     logger.debug(f"    Content: {json.load(f)}")
         else:
-            logger.info("No side output folder found. Skipping combination.")
+            logger.debug("No side output folder. Copying last agent's output.")
+            for file in os.listdir(final_output_folder):
+                src = os.path.join(final_output_folder, file)
+                dst = os.path.join(final_workflow_output, file)
+                shutil.copy(src, dst)
+                logger.debug(f"Copied: {src} -> {dst}")
+                # Optionally, print the content of each copied file
+                # with open(dst, 'r') as f:
+                #     logger.debug(f"  Content: {json.load(f)}")
+
+            logger.info(f"Copied last agent's output to final_workflow_output: {final_workflow_output}")
+
+        # Debug: List final contents of final_workflow_output
+        logger.debug("Final contents of final_workflow_output:")
+        for root, dirs, files in os.walk(final_workflow_output):
+            for file in files:
+                logger.debug(f"  - {os.path.join(root, file)}")
+
+        # Log the contents of final_workflow_output
+        logger.info(f"Contents of final_workflow_output ({final_workflow_output}):")
+        for root, dirs, files in os.walk(final_workflow_output):
+            for file in files:
+                logger.info(f"  - {os.path.join(root, file)}")
+
+        # Log information about copying final_workflow_output
+        if parent_output:
+            logger.info(f"Copying final_workflow_output to parent output: {parent_output}")
+            for item in os.listdir(final_workflow_output):
+                src = os.path.join(final_workflow_output, item)
+                dst = os.path.join(parent_output, item)
+                if os.path.isfile(src):
+                    shutil.copy2(src, dst)
+                    logger.info(f"  Copied file: {src} -> {dst}")
+                elif os.path.isdir(src):
+                    shutil.copytree(src, dst, dirs_exist_ok=True)
+                    logger.info(f"  Copied directory: {src} -> {dst}")
+        else:
+            logger.info("No parent output specified. final_workflow_output will not be copied.")
+
+        logger.info(f"Final workflow output is available at: {final_workflow_output}")
     else:
-        logger.warning("No agents were executed. Skipping output combination.")
+        logger.warning("No agents were executed. No final output generated.")
         final_workflow_output = None
 
     # Remove the checkpoint file
