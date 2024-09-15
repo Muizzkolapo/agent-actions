@@ -6,6 +6,9 @@ import os
 from agent_actions.core.utils import find_specific_folder
 import shutil
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 def clean_agent_directories(agent_name):
     """
@@ -179,6 +182,11 @@ def process_and_generate_for_agent(agent_config,
         traceback.print_exc()
 
 
+import os
+import logging
+
+logger = logging.getLogger(__name__)
+
 def find_config_file(base_dir, target_filename):
     """
     Recursively searches for a configuration file in a directory.
@@ -187,9 +195,14 @@ def find_config_file(base_dir, target_filename):
     :param target_filename: The name of the configuration file to find.
     :return: The full path to the configuration file or None if not found.
     """
-    for root, _, files in os.walk(base_dir):
+    logger.info(f"Searching for {target_filename} in {base_dir}")
+    for root, dirs, files in os.walk(base_dir):
+        logger.debug(f"Checking directory: {root}")
         if target_filename in files:
-            return os.path.join(root, target_filename)
+            full_path = os.path.join(root, target_filename)
+            logger.info(f"Found config file: {full_path}")
+            return full_path
+    logger.warning(f"Config file {target_filename} not found in {base_dir}")
     return None
 
 
