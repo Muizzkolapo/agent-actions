@@ -187,22 +187,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def find_config_file(base_dir, target_filename):
-    """
-    Recursively searches for a configuration file in a directory.
-
-    :param base_dir: The base directory to start the search from.
-    :param target_filename: The name of the configuration file to find.
-    :return: The full path to the configuration file or None if not found.
-    """
-    logger.info(f"Searching for {target_filename} in {base_dir}")
-    for root, dirs, files in os.walk(base_dir):
-        logger.debug(f"Checking directory: {root}")
-        if target_filename in files:
-            full_path = os.path.join(root, target_filename)
+def find_config_file(base_dir, filename):
+    logger.info(f"Searching for {filename} in {base_dir}")
+    for root, _, files in os.walk(base_dir):
+        if filename in files:
+            full_path = os.path.join(root, filename)
             logger.info(f"Found config file: {full_path}")
             return full_path
-    logger.warning(f"Config file {target_filename} not found in {base_dir}")
+    
+    # If not found, search in parent directories
+    parent_dir = os.path.dirname(base_dir)
+    if parent_dir != base_dir:  # Ensure we're not at the root
+        return find_config_file(parent_dir, filename)
+    
+    logger.warning(f"Config file {filename} not found in {base_dir} or its parent directories")
     return None
 
 

@@ -41,7 +41,7 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
 
 from agent_actions.core.agent_handlers import find_config_file
 
-def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None):
+def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
     """
     Run agents based on the provided constructor path and default path.
     Implements state management and checkpointing.
@@ -129,6 +129,24 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
         state['execution_order'] = topological_sort(dependency_graph)
         logger.info(f"Execution order determined: {state['execution_order']}")
+
+    # Execute parent pipeline if present
+    if parent_pipeline:
+        logger.info(f"Attempting to execute parent pipeline: {parent_pipeline}")
+        parent_constructor_path = find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
+        if parent_constructor_path:
+            logger.info(f"Parent pipeline config found at: {parent_constructor_path}")
+            parent_output = run_agents(parent_constructor_path, user_code_path, default_path, use_tools)
+            
+            # Copy parent output to current pipeline's staging directory
+            if parent_output:
+                current_staging_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io', 'staging')
+                os.makedirs(current_staging_dir, exist_ok=True)
+                for file in os.listdir(parent_output):
+                    shutil.copy(os.path.join(parent_output, file), current_staging_dir)
+                logger.info(f"Copied parent output to current staging directory: {current_staging_dir}")
+        else:
+            logger.error(f"Parent pipeline config not found for: {parent_pipeline}")
 
     previous_agent_type = state['previous_agent_type']
     for idx in range(state['current_agent_idx'], len(state['execution_order'])):
