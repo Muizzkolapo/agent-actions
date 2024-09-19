@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import transform_structure
 from agent_actions.core.utils import generate_id
-from agent_actions.core.agent_handlers import split_text_content,load_sample_output
+from agent_actions.core.agent_handlers import split_text_content,load_few_shot_samples
 import random
 from agent_actions.core.utils import find_specific_folder,get_agent_paths
 import logging
@@ -65,28 +65,28 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
 
 
     # Load the sample output path using get_agent_paths
-    _, _, sample_output_path = get_agent_paths(agent_name)
+    _, _, few_shot_samples_path = get_agent_paths(agent_name)
 
     # Retrieve the sample count from the agent configuration
-    sample_count = agent_config.get("use_sample_output", 0)
+    sample_count = agent_config.get("use_few_shot_samples", 0)
     try:
         sample_count = int(sample_count)
     except ValueError:
-        logger.warning("use_sample_output is not an integer. Defaulting to 0.")
+        logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
         sample_count = 0
 
     # Check if sample_count is a positive integer
     if sample_count > 0:
-        logger.info(f"Loading {sample_count} sample outputs.")
-        samples = load_sample_output(
-            sample_output_path,
+        logger.info(f"Loading {sample_count} few shot samples.")
+        samples = load_few_shot_samples(
+            few_shot_samples_path,
             sample_count=sample_count
         )
         # Since input_documentation is a string, append samples to it
         samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
-        input_documentation += "\n\nSample Outputs:\n" + samples_str
+        input_documentation += "\n\nfew shot samples:\n" + samples_str
     else:
-        logger.info("Not using sample outputs.")
+        logger.info("Not using few shot samples.")
 
 
 

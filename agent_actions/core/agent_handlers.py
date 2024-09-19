@@ -308,12 +308,12 @@ def find_agents_name(config):
 
 
 
-def load_sample_output(sample_output_path, sample_count=3):
+def load_few_shot_samples(few_shot_samples_path, sample_count=3):
     """
     Load random sample objects from the JSON files in the sample output directory.
 
     Parameters:
-        sample_output_path (str): Path to the sample output directory.
+        few_shot_samples_path (str): Path to the sample output directory.
         sample_count (int): Number of random sample objects to load.
 
     Returns:
@@ -323,12 +323,12 @@ def load_sample_output(sample_output_path, sample_count=3):
     import json
     import random
 
-    sample_files = [f for f in os.listdir(sample_output_path) if f.endswith('.json')]
+    sample_files = [f for f in os.listdir(few_shot_samples_path) if f.endswith('.json')]
     all_samples = []
 
     # Load all objects from all JSON files
     for sample_file in sample_files:
-        with open(os.path.join(sample_output_path, sample_file), 'r') as file:
+        with open(os.path.join(few_shot_samples_path, sample_file), 'r') as file:
             data = json.load(file)
             # Assuming each file contains a list of objects
             if isinstance(data, list):

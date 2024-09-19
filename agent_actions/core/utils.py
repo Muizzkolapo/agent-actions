@@ -328,7 +328,7 @@ def get_agent_paths(agent_name):
         tuple: A tuple containing:
             - agent_config_dir (str): Path to the agent's configuration directory.
             - io_dir (str): Path to the agent's IO directory.
-            - sample_output_path (str): Path to the agent's sample output directory.
+            - few_shot_samples_path (str): Path to the agent's sample output directory.
     """
     current_dir = os.getcwd()
     agent_config_dir = find_specific_folder(current_dir, agent_name, 'agent_config')
@@ -339,9 +339,9 @@ def get_agent_paths(agent_name):
     if io_dir is None:
         raise FileNotFoundError(f"IO directory not found for agent '{agent_name}'.")
 
-    # Construct the sample_output_path
-    sample_output_path = os.path.join(io_dir, 'sample_output')
-    if not os.path.exists(sample_output_path):
-        raise FileNotFoundError(f"Sample output directory not found at '{sample_output_path}'.")
+    # Construct the few_shot_samples_path
+    few_shot_samples_path = os.path.join(io_dir, 'few_shot_samples')
+    if not os.path.exists(few_shot_samples_path):
+        raise FileNotFoundError(f"Sample output directory not found at '{few_shot_samples_path}'.")
 
-    return agent_config_dir, io_dir, sample_output_path
+    return agent_config_dir, io_dir, few_shot_samples_path
