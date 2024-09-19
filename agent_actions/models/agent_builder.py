@@ -72,6 +72,7 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
         raise
 
 def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_prompt=None, tools_path=None):
+
     """
     Create a dynamic agent based on the provided configuration, with support for transforming the prompt
     using user-defined Python functions specified in the configuration.

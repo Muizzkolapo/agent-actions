@@ -5,8 +5,9 @@ import os
 import logging
 from typing import List, Dict, Any, Tuple
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder
-from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid
+from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder,get_agent_paths
+from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid,load_few_shot_samples
+
 # Constants
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
@@ -63,7 +64,6 @@ def load_json(file_path):
 
 
 
-#==============================================================process data ==================================================================================
 
 def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> List[Dict[str, Any]]:
     try:
@@ -123,7 +123,7 @@ def process_single_item(item: Dict[str, Any], agent_config: Dict[str, Any], agen
     generated_data = generate_data(agent_config, agent_name, contents, source_content)
     return process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys)
 
-#================================================================================================================================================
+
 
 
 
@@ -137,7 +137,13 @@ def load_source_data(file_path):
     with open(source_path, 'r') as file:
         return json.load(file)
 
-def generate_data(agent_config, agent_name, contents, source_content):
+
+
+
+
+
+
+def generate_data_decomissionded(agent_config, agent_name, contents, source_content):
     """Generate data using the appropriate method based on the agent configuration."""
     if agent_config['model_vendor'].lower() == 'tool':
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
@@ -146,6 +152,61 @@ def generate_data(agent_config, agent_name, contents, source_content):
         source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
         formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
+
+
+
+
+def generate_data(agent_config, agent_name, contents, source_content):
+    """
+    Generate data using the appropriate method based on the agent configuration,
+    incorporating few shot samples if specified.
+    """
+
+    # Load the sample output path using get_agent_paths
+    try:
+        _, _, few_shot_samples_path = get_agent_paths(agent_name)
+    except FileNotFoundError as e:
+        logger.error(f"Error finding sample output path: {e}")
+        few_shot_samples_path = None
+
+    # Retrieve the sample count from the agent configuration
+    sample_count = agent_config.get("use_few_shot_samples", 0)
+    try:
+        sample_count = int(sample_count)
+    except ValueError:
+        logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
+        sample_count = 0
+
+    # Check if sample_count is a positive integer and few_shot_samples_path is valid
+    if sample_count > 0 and few_shot_samples_path:
+        logger.info(f"Loading {sample_count} few shot samples.")
+        samples = load_few_shot_samples(
+            few_shot_samples_path,
+            sample_count=sample_count
+        )
+        # Append samples to contents as a new key
+        if isinstance(contents, dict):
+            contents['samples'] = samples
+        else:
+            logger.warning("Contents is not a dictionary. Cannot add samples.")
+    else:
+        logger.info("Not using few shot samples.")
+
+    # Now proceed with data generation
+    if agent_config['model_vendor'].lower() == 'tool':
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
+    else:
+        raw_prompt = agent_config.get('prompt', '')
+        source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
+        formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
+
+
+
+
+
+
+
 
 def process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys):
     """Process a single item and return the transformed response."""

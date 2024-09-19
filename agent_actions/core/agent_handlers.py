@@ -302,3 +302,46 @@ def find_agents_name(config):
     Find the name of the agent from the configuration.
     """
     return next(iter(config))
+
+
+
+
+
+
+def load_few_shot_samples(few_shot_samples_path, sample_count=3):
+    """
+    Load random sample objects from the JSON files in the sample output directory.
+
+    Parameters:
+        few_shot_samples_path (str): Path to the sample output directory.
+        sample_count (int): Number of random sample objects to load.
+
+    Returns:
+        list: List of randomly selected sample objects.
+    """
+    import os
+    import json
+    import random
+
+    sample_files = [f for f in os.listdir(few_shot_samples_path) if f.endswith('.json')]
+    all_samples = []
+
+    # Load all objects from all JSON files
+    for sample_file in sample_files:
+        with open(os.path.join(few_shot_samples_path, sample_file), 'r') as file:
+            data = json.load(file)
+            # Assuming each file contains a list of objects
+            if isinstance(data, list):
+                all_samples.extend(data)
+            # If the file contains a single object (dictionary), add it directly
+            elif isinstance(data, dict):
+                all_samples.append(data)
+            else:
+                continue  # Skip if data is neither a list nor a dict
+
+    # Randomly select sample_count objects from all_samples
+    if sample_count > 0 and all_samples:
+        selected_samples = random.sample(all_samples, min(sample_count, len(all_samples)))
+    else:
+        selected_samples = []
+    return selected_samples
