@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import transform_structure
 from agent_actions.core.utils import generate_id
-from agent_actions.core.agent_handlers import split_text_content
+from agent_actions.core.agent_handlers import split_text_content,load_sample_output
 import random
 from agent_actions.core.utils import find_specific_folder,get_agent_paths
 import logging
@@ -45,43 +45,6 @@ def get_file_info(file_path):
 
 
 
-def load_sample_output(sample_output_path, sample_count=3):
-    """
-    Load random sample objects from the JSON files in the sample output directory.
-
-    Parameters:
-        sample_output_path (str): Path to the sample output directory.
-        sample_count (int): Number of random sample objects to load.
-
-    Returns:
-        list: List of randomly selected sample objects.
-    """
-    import os
-    import json
-    import random
-
-    sample_files = [f for f in os.listdir(sample_output_path) if f.endswith('.json')]
-    all_samples = []
-
-    # Load all objects from all JSON files
-    for sample_file in sample_files:
-        with open(os.path.join(sample_output_path, sample_file), 'r') as file:
-            data = json.load(file)
-            # Assuming each file contains a list of objects
-            if isinstance(data, list):
-                all_samples.extend(data)
-            # If the file contains a single object (dictionary), add it directly
-            elif isinstance(data, dict):
-                all_samples.append(data)
-            else:
-                continue  # Skip if data is neither a list nor a dict
-
-    # Randomly select sample_count objects from all_samples
-    if sample_count > 0 and all_samples:
-        selected_samples = random.sample(all_samples, min(sample_count, len(all_samples)))
-    else:
-        selected_samples = []
-    return selected_samples
 
 
 
@@ -126,7 +89,7 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
         logger.info("Not using sample outputs.")
 
 
-        
+
     # If source_path is provided, attempt to load the source data
     if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
        with open(source_path, 'r') as file:

@@ -5,8 +5,9 @@ import os
 import logging
 from typing import List, Dict, Any, Tuple
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder
-from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid
+from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder,get_agent_paths
+from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid,load_sample_output
+
 # Constants
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
@@ -137,6 +138,12 @@ def load_source_data(file_path):
     with open(source_path, 'r') as file:
         return json.load(file)
 
+
+
+
+
+
+
 def generate_data(agent_config, agent_name, contents, source_content):
     """Generate data using the appropriate method based on the agent configuration."""
     if agent_config['model_vendor'].lower() == 'tool':
@@ -146,6 +153,63 @@ def generate_data(agent_config, agent_name, contents, source_content):
         source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
         formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
+
+
+
+
+#=====================================================to be reviewed===========================================================================================
+def generate_data_with_sample_output(agent_config, agent_name, contents, source_content):
+    """
+    Generate data using the appropriate method based on the agent configuration,
+    incorporating sample outputs if specified.
+    """
+    # Ensure contents is a string
+    if isinstance(contents, dict):
+        contents_str = json.dumps(contents)
+    else:
+        contents_str = contents
+
+    # Load the sample output path using get_agent_paths
+    try:
+        _, _, sample_output_path = get_agent_paths(agent_name)
+    except FileNotFoundError as e:
+        logger.error(f"Error finding sample output path: {e}")
+        sample_output_path = None
+
+    # Retrieve the sample count from the agent configuration
+    sample_count = agent_config.get("use_sample_output", 0)
+    try:
+        sample_count = int(sample_count)
+    except ValueError:
+        logger.warning("use_sample_output is not an integer. Defaulting to 0.")
+        sample_count = 0
+
+    # Check if sample_count is a positive integer
+    if sample_count > 0 and sample_output_path:
+        logger.info(f"Loading {sample_count} sample outputs.")
+        samples = load_sample_output(
+            sample_output_path,
+            sample_count=sample_count
+        )
+        samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
+        contents_str += "\n\nSample Outputs:\n" + samples_str
+    else:
+        logger.info("Not using sample outputs.")
+
+    if agent_config['model_vendor'].lower() == 'tool':
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents_str)
+    else:
+        raw_prompt = agent_config.get('prompt', '')
+        source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
+        formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents_str, formatted_prompt)
+
+#================================================================================================================================================
+
+
+
+
+
 
 def process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys):
     """Process a single item and return the transformed response."""
