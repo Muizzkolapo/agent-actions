@@ -64,7 +64,6 @@ def load_json(file_path):
 
 
 
-#==============================================================process data ==================================================================================
 
 def process_data(data: List[Dict[str, Any]], agent_config: Dict[str, Any], agent_name: str, file_path: str) -> List[Dict[str, Any]]:
     try:
@@ -124,7 +123,7 @@ def process_single_item(item: Dict[str, Any], agent_config: Dict[str, Any], agen
     generated_data = generate_data(agent_config, agent_name, contents, source_content)
     return process_item(agent_config, contents, generated_data, guid, side_collection, selection_keys)
 
-#================================================================================================================================================
+
 
 
 
@@ -144,7 +143,7 @@ def load_source_data(file_path):
 
 
 
-def generate_data2(agent_config, agent_name, contents, source_content):
+def generate_data_decomissionded(agent_config, agent_name, contents, source_content):
     """Generate data using the appropriate method based on the agent configuration."""
     if agent_config['model_vendor'].lower() == 'tool':
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
@@ -157,7 +156,6 @@ def generate_data2(agent_config, agent_name, contents, source_content):
 
 
 
-#=====================================================to be reviewed===========================================================================================
 def generate_data(agent_config, agent_name, contents, source_content):
     """
     Generate data using the appropriate method based on the agent configuration,
@@ -204,7 +202,6 @@ def generate_data(agent_config, agent_name, contents, source_content):
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
 
 
-#================================================================================================================================================
 
 
 
