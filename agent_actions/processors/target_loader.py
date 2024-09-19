@@ -144,7 +144,7 @@ def load_source_data(file_path):
 
 
 
-def generate_data(agent_config, agent_name, contents, source_content):
+def generate_data2(agent_config, agent_name, contents, source_content):
     """Generate data using the appropriate method based on the agent configuration."""
     if agent_config['model_vendor'].lower() == 'tool':
         return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
@@ -158,16 +158,11 @@ def generate_data(agent_config, agent_name, contents, source_content):
 
 
 #=====================================================to be reviewed===========================================================================================
-def generate_data_with_sample_output(agent_config, agent_name, contents, source_content):
+def generate_data(agent_config, agent_name, contents, source_content):
     """
     Generate data using the appropriate method based on the agent configuration,
     incorporating sample outputs if specified.
     """
-    # Ensure contents is a string
-    if isinstance(contents, dict):
-        contents_str = json.dumps(contents)
-    else:
-        contents_str = contents
 
     # Load the sample output path using get_agent_paths
     try:
@@ -184,25 +179,30 @@ def generate_data_with_sample_output(agent_config, agent_name, contents, source_
         logger.warning("use_sample_output is not an integer. Defaulting to 0.")
         sample_count = 0
 
-    # Check if sample_count is a positive integer
+    # Check if sample_count is a positive integer and sample_output_path is valid
     if sample_count > 0 and sample_output_path:
         logger.info(f"Loading {sample_count} sample outputs.")
         samples = load_sample_output(
             sample_output_path,
             sample_count=sample_count
         )
-        samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
-        contents_str += "\n\nSample Outputs:\n" + samples_str
+        # Append samples to contents as a new key
+        if isinstance(contents, dict):
+            contents['samples'] = samples
+        else:
+            logger.warning("Contents is not a dictionary. Cannot add samples.")
     else:
         logger.info("Not using sample outputs.")
 
+    # Now proceed with data generation
     if agent_config['model_vendor'].lower() == 'tool':
-        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents_str)
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents)
     else:
         raw_prompt = agent_config.get('prompt', '')
         source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
         formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
-        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents_str, formatted_prompt)
+        return agent_builder.create_dynamic_agent(agent_config, agent_name, contents, formatted_prompt)
+
 
 #================================================================================================================================================
 
