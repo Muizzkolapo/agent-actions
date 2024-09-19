@@ -28,7 +28,8 @@ class ToolHandler:
         if side_output:
             condition, result = response
             if condition:
-                return {'result': json.loads(result), 'side_output': True}
+                #return {'result': json.loads(result), 'side_output': True}
+                return json.loads(result)
             else:
                 return json.loads(result)
         else:

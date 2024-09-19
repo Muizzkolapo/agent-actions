@@ -11,9 +11,10 @@ from agent_actions.models import agent_builder
 from agent_actions.core.utils import transform_structure
 from agent_actions.core.utils import generate_id
 from agent_actions.core.agent_handlers import split_text_content
-
-
-
+import random
+from agent_actions.core.utils import find_specific_folder,get_agent_paths
+import logging
+logger = logging.getLogger(__name__)
 
 def get_file_info(file_path):
     # Check if the file exists
@@ -40,6 +41,50 @@ def get_file_info(file_path):
 
 
 
+
+
+
+
+def load_sample_output(sample_output_path, sample_count=3):
+    """
+    Load random sample objects from the JSON files in the sample output directory.
+
+    Parameters:
+        sample_output_path (str): Path to the sample output directory.
+        sample_count (int): Number of random sample objects to load.
+
+    Returns:
+        list: List of randomly selected sample objects.
+    """
+    import os
+    import json
+    import random
+
+    sample_files = [f for f in os.listdir(sample_output_path) if f.endswith('.json')]
+    all_samples = []
+
+    # Load all objects from all JSON files
+    for sample_file in sample_files:
+        with open(os.path.join(sample_output_path, sample_file), 'r') as file:
+            data = json.load(file)
+            # Assuming each file contains a list of objects
+            if isinstance(data, list):
+                all_samples.extend(data)
+            # If the file contains a single object (dictionary), add it directly
+            elif isinstance(data, dict):
+                all_samples.append(data)
+            else:
+                continue  # Skip if data is neither a list nor a dict
+
+    # Randomly select sample_count objects from all_samples
+    if sample_count > 0 and all_samples:
+        selected_samples = random.sample(all_samples, min(sample_count, len(all_samples)))
+    else:
+        selected_samples = []
+    return selected_samples
+
+
+
 def staging_dynamic_creator(agent_config, agent_name, input_documentation, source_path=None, formatted_prompt=None):
     """
     Create a dynamic agent for processing input documentation.
@@ -54,6 +99,34 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
     Returns:
         tuple: Transformed response and source text.
     """
+
+
+    # Load the sample output path using get_agent_paths
+    _, _, sample_output_path = get_agent_paths(agent_name)
+
+    # Retrieve the sample count from the agent configuration
+    sample_count = agent_config.get("use_sample_output", 0)
+    try:
+        sample_count = int(sample_count)
+    except ValueError:
+        logger.warning("use_sample_output is not an integer. Defaulting to 0.")
+        sample_count = 0
+
+    # Check if sample_count is a positive integer
+    if sample_count > 0:
+        logger.info(f"Loading {sample_count} sample outputs.")
+        samples = load_sample_output(
+            sample_output_path,
+            sample_count=sample_count
+        )
+        # Since input_documentation is a string, append samples to it
+        samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
+        input_documentation += "\n\nSample Outputs:\n" + samples_str
+    else:
+        logger.info("Not using sample outputs.")
+
+
+        
     # If source_path is provided, attempt to load the source data
     if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
        with open(source_path, 'r') as file:

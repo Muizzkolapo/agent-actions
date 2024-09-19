@@ -3,7 +3,7 @@ import os
 import sys
 import yaml
 from agent_actions.logging_setup import logger
-from agent_actions.core.utils import find_specific_folder
+from agent_actions.core.utils import get_agent_paths
 from agent_actions.core.agent_handlers import validate_agent_config,find_config_file,check_agent_file_unique,check_agent_name_unique,clean_agent_directories
 from agent_actions.core.agent_runners import run_agents
 
@@ -36,8 +36,7 @@ def main():
 
         filename = args.agent
         current_dir = os.getcwd()
-        agent_config_dir = find_specific_folder(current_dir, filename, 'agent_config')
-        io_dir = find_specific_folder(current_dir, filename, 'agent_io')
+        agent_config_dir, io_dir, _ = get_agent_paths(filename)
         schema_dir = os.path.join(current_dir, 'schema')
 
         default_config_path = os.path.join(current_dir, 'agent_actions.yml')
