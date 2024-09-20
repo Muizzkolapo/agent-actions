@@ -80,6 +80,7 @@ def staging_dynamic_creator(agent_config, agent_name, input_documentation, sourc
         logger.info(f"Loading {sample_count} few shot samples.")
         samples = load_few_shot_samples(
             few_shot_samples_path,
+            agent_type=agent_config['agent_type'],
             sample_count=sample_count
         )
         # Since input_documentation is a string, append samples to it
