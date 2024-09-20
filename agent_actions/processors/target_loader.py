@@ -179,11 +179,8 @@ def generate_data(agent_config, agent_name, contents, source_content):
 
     # Check if sample_count is a positive integer and few_shot_samples_path is valid
     if sample_count > 0 and few_shot_samples_path:
-        logger.info(f"Loading {sample_count} few shot samples.")
-        samples = load_few_shot_samples(
-            few_shot_samples_path,
-            sample_count=sample_count
-        )
+        logger.info(f"Loading {sample_count} few shot samples for agent type {agent_config['agent_type']}.")
+        samples = load_few_shot_samples(few_shot_samples_path, agent_config['agent_type'], sample_count)
         # Append samples to contents as a new key
         if isinstance(contents, dict):
             contents['samples'] = samples
