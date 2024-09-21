@@ -99,8 +99,19 @@ def main():
 
         use_tools = args.user_code is not None
 
+        # Extract parent pipeline information
+        parent_pipeline = None
+        for item in agent_config:
+            if isinstance(item, dict) and 'parent' in item:
+                parent_pipeline = item['parent']
+                if isinstance(parent_pipeline, list):
+                    parent_pipeline = parent_pipeline[0]  # Take the first item if it's a list
+                break
+
+        logger.info(f"Parent pipeline detected: {parent_pipeline}")
+
         try:
-            run_agents(full_path, args.user_code, default_config_path, use_tools)
+            run_agents(full_path, args.user_code, default_config_path, use_tools, parent_pipeline=parent_pipeline)
         except ValueError as ve:
             logger.error(f"Configuration error: {ve}. Please make sure the top-level key in the YAML file matches the filename.")
             sys.exit(1)
