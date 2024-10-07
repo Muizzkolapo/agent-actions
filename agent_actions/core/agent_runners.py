@@ -8,9 +8,7 @@ from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.logging_setup import logger
 from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
 from agent_actions.core.utils import topological_sort
-from agent_actions.core.agent_handlers import find_agents_name
-from agent_actions.core.agent_handlers import find_config_file
-
+from agent_actions.core.agent_handlers import find_agents_name,find_config_file
 import json 
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
@@ -39,7 +37,7 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
 
 
 
-from agent_actions.core.agent_handlers import find_config_file
+
 
 def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
     """
@@ -272,6 +270,7 @@ def merge_json_files(input_dir, output_dir, combined_dir):
     # Create the combined folder if it doesn't exist
     if not os.path.exists(combined_dir):
         os.makedirs(combined_dir)
+        logger.info(f"Created combined directory: {combined_dir}")
 
     # Get list of all files in the input directory
     input_files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
@@ -289,6 +288,7 @@ def merge_json_files(input_dir, output_dir, combined_dir):
                     data1 = json.load(f1)
                 except json.JSONDecodeError:
                     data1 = []
+                    logger.error(f"Failed to decode JSON from {file1}")
         else:
             data1 = []
 
@@ -299,6 +299,7 @@ def merge_json_files(input_dir, output_dir, combined_dir):
                     data2 = json.load(f2)
                 except json.JSONDecodeError:
                     data2 = []
+                    logger.error(f"Failed to decode JSON from {file2}")
         else:
             data2 = []
 
@@ -313,7 +314,9 @@ def merge_json_files(input_dir, output_dir, combined_dir):
         # Write the merged content into the combined folder
         output_path = os.path.join(combined_dir, filename)
 
-        with open(output_path, 'w') as outfile:
-            json.dump(merged_data, outfile, indent=4)
-
-        print(f"Merged {filename} has been written to {output_path}")
+        try:
+            with open(output_path, 'w') as outfile:
+                json.dump(merged_data, outfile, indent=4)
+            logger.info(f"Merged {filename} has been written to {output_path}")
+        except Exception as e:
+            logger.error(f"Failed to write merged data to {output_path}: {e}")

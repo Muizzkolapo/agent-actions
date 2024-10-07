@@ -10,6 +10,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+
 def clean_agent_directories(agent_name):
     """
     Deletes all files under the staging, source, and target folders for the specified agent.
@@ -353,3 +355,28 @@ def load_few_shot_samples(few_shot_samples_path, agent_type, sample_count=3):
     else:
         selected_samples = []
     return selected_samples
+
+
+
+def get_file_info(file_path):
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        return f"File '{file_path}' does not exist."
+
+    # Extract the directory and file name from the file path
+    dir_path, file_name = os.path.split(file_path)
+
+    # Extract the path up to the 'summary_agent' directory
+    agent_dir = os.path.dirname(dir_path)
+
+    # Define the source path as '/source' at the same level as 'staging'
+    source_path = os.path.join(agent_dir, 'source')
+
+    # Join the file name with the source path
+    source_file_path = os.path.join(source_path, file_name)
+
+    # Check if the source path exists
+    if os.path.exists(source_path):
+        return source_file_path
+    else:
+        return None
