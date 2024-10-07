@@ -1,31 +1,12 @@
 """Module for staging data loading and processing."""
 import os
-import json
-import csv
-import xml.etree.ElementTree as ET
-import PyPDF2
-from docx import Document
-import pandas as pd
-from bs4 import BeautifulSoup
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import transform_structure
-from agent_actions.core.utils import generate_id
-from agent_actions.core.agent_handlers import load_few_shot_samples,get_file_info
-import random
-from agent_actions.core.utils import find_specific_folder,get_agent_paths
 import logging
-logger = logging.getLogger(__name__)
-
-
-from agent_actions.core.agent_handlers import split_text_content,load_few_shot_samples
-
-
-
-from agent_actions.processors.content_processor import ContentProcessor
-
-
+from agent_actions.core.agent_handlers import split_text_content
+from agent_actions.processors.content_processor import StagingContentProcessor
 from agent_actions.processors.file_processor import FileReader, FileWriter
 
+logger = logging.getLogger(__name__)
 
 
 
@@ -54,7 +35,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     content = file_reader.read()
     chunks = split_text_content(content, agent_config["chunk_config"])
 
-    content_processor = ContentProcessor(agent_config, agent_name)
+    content_processor = StagingContentProcessor(agent_config, agent_name)
     data_chunk, src_text = content_processor.process(chunks, os.path.splitext(file_path)[1].lower())
 
 
@@ -64,7 +45,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
 
     file_writer = FileWriter(output_file_path)
-    file_writer.write(data_chunk)
+    file_writer.write_staging(data_chunk)
 
     base_path = os.path.join(base_directory, "..")
     source_path = os.path.join(base_path, "source")
@@ -72,6 +53,6 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     os.makedirs(os.path.dirname(output_src_path), exist_ok=True)
 
     source_file_writer = FileWriter(output_src_path)
-    source_file_writer.write(src_text)
+    source_file_writer.write_source(src_text)
 
 

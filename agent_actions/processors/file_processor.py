@@ -8,24 +8,8 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
-from agent_actions.models import agent_builder
-from agent_actions.core.utils import transform_structure
-from agent_actions.core.utils import generate_id
-from agent_actions.core.agent_handlers import load_few_shot_samples,get_file_info
-import random
-from agent_actions.core.utils import find_specific_folder,get_agent_paths
 import logging
 logger = logging.getLogger(__name__)
-
-
-from agent_actions.core.agent_handlers import split_text_content,load_few_shot_samples
-
-
-
-
-
-
-
     
 
 
@@ -94,7 +78,7 @@ class FileWriter:
         self.file_path = file_path
         self.file_type = os.path.splitext(file_path)[1].lower()
 
-    def write(self, data):
+    def write_staging(self, data):
         with open(self.file_path, 'w', encoding='utf-8') as file:
             if self.file_type == '.json':
                 json.dump(data, file, indent=4)
@@ -110,4 +94,11 @@ class FileWriter:
                 raise ValueError(f"Unsupported output file type: {self.file_type}")
 
 
+    def write_target(self, data):
+        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+        with open(self.file_path, 'w', encoding='utf-8') as file:
+            json.dump(data, file, indent=4)
 
+    def write_source(self, data):
+        with open(self.file_path, 'w', encoding='utf-8') as file:
+            json.dump(data, file, indent=4)

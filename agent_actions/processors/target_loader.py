@@ -1,12 +1,9 @@
 """Module for target loader."""
-from pathlib import Path
 import json
 import os
 import logging
-from typing import List, Dict, Any, Tuple
-from agent_actions.models import agent_builder
-from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder, get_agent_paths
-from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid, load_few_shot_samples
+from agent_actions.processors.file_processor import FileReader, FileWriter  
+from agent_actions.processors.content_processor import TargetContentProcessor
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -17,150 +14,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class FileReader:
-    def __init__(self, file_path):
-        self.file_path = file_path
 
-    def read(self):
-        with open(self.file_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-
-
-class FileWriter:
-    def __init__(self, file_path):
-        self.file_path = file_path
-
-    def write(self, data):
-        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
-        with open(self.file_path, 'w', encoding='utf-8') as file:
-            json.dump(data, file, indent=4)
-
-
-class ContentProcessor:
-    def __init__(self, agent_config, agent_name):
-        self.agent_config = agent_config
-        self.agent_name = agent_name
-
-    def process(self, data, file_path):
-        try:
-            source_data = self._load_source_data(file_path)
-            processed_data = []
-            side_collection = self.agent_config.get('side_collection', [])
-            selection_keys = [self.agent_config['agent_type']]
-
-            for items in data:
-                try:
-                    processed_item = self._process_single_item(items, source_data, side_collection, selection_keys)
-                    processed_data.extend(processed_item)
-                except Exception as e:
-                    logger.error(f"Error processing item: {e}")
-
-            return processed_data
-        except Exception as e:
-            logger.error(f"Error in process_data: {e}")
-            raise
-
-    def process_for_side_output(self, data, file_path):
-        try:
-            source_data = self._load_source_data(file_path)
-            main_output = []
-            side_output = []
-            side_collection = self.agent_config.get('side_collection', [])
-            selection_keys = [self.agent_config['agent_type']]
-
-            for item in data:
-                try:
-                    processed_item = self._process_single_item(item, source_data, side_collection, selection_keys)
-                    if isinstance(processed_item, list):
-                        for sub_item in processed_item:
-                            content = sub_item.get('content', {})
-                            if isinstance(content, dict):
-                                if content.get('side_output', False):
-                                    side_output.append(sub_item)
-                                else:
-                                    main_output.append(sub_item)
-                            else:
-                                logger.warning(f"Unexpected content format: {content}")
-                    else:
-                        logger.warning(f"Unexpected item format: {processed_item}")
-                except Exception as e:
-                    logger.error(f"Error processing item: {str(e)}")
-
-            return main_output, side_output
-        except Exception as e:
-            logger.error(f"Error in process_data_for_side_output: {str(e)}")
-            raise
-
-    def _process_single_item(self, item, source_data, side_collection, selection_keys):
-        contents = item['content']
-        guid = item['guid']
-        source_content = get_content_by_guid(source_data, guid)
-
-        generated_data = self._generate_data(contents, source_content)
-        return self._process_item(contents, generated_data, guid, side_collection, selection_keys)
-
-    def _load_source_data(self, file_path):
-        """Load source data from the corresponding file."""
-        file_name = os.path.basename(file_path)
-        path = Path(file_path)
-        base_path = path.parents[2]
-        source_path = os.path.join(base_path, "source", file_name)
-        with open(source_path, 'r') as file:
-            return json.load(file)
-
-    def _generate_data(self, contents, source_content):
-        """
-        Generate data using the appropriate method based on the agent configuration,
-        incorporating few shot samples if specified.
-        """
-        # Load the sample output path using get_agent_paths
-        try:
-            _, _, few_shot_samples_path = get_agent_paths(self.agent_name)
-        except FileNotFoundError as e:
-            logger.error(f"Error finding sample output path: {e}")
-            few_shot_samples_path = None
-
-        # Retrieve the sample count from the agent configuration
-        sample_count = self.agent_config.get("use_few_shot_samples", 0)
-        try:
-            sample_count = int(sample_count)
-        except ValueError:
-            logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
-            sample_count = 0
-
-        # Check if sample_count is a positive integer and few_shot_samples_path is valid
-        if sample_count > 0 and few_shot_samples_path:
-            logger.info(f"Loading {sample_count} few shot samples for agent type {self.agent_config['agent_type']}.")
-            samples = load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
-            # Append samples to contents as a new key
-            if isinstance(contents, dict):
-                contents['samples'] = samples
-            else:
-                logger.warning("Contents is not a dictionary. Cannot add samples.")
-        else:
-            logger.info("Not using few shot samples.")
-
-        # Now proceed with data generation
-        if self.agent_config['model_vendor'].lower() == 'tool':
-            return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents)
-        else:
-            raw_prompt = self.agent_config.get('prompt', '')
-            source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
-            formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
-            return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
-
-    def _process_item(self, contents, generated_data, guid, side_collection, selection_keys):
-        """Process a single item and return the transformed response."""
-        if should_update_schema(self.agent_config, selection_keys, {self.agent_config['agent_type']: side_collection}):
-            updated_generated_data = [
-                update_schema_objects(contents, data_item, side_collection)
-                for data_item in generated_data
-            ]
-            response_temp = [{guid: updated_generated_data}]
-        else:
-            response_temp = [{guid: generated_data}]
-
-        return transform_structure(response_temp)
 
 
 def generate_target(agent_config, agent_name, file_path, base_directory, output_directory):
@@ -183,7 +37,7 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     if isinstance(side_output, str):
         side_output = side_output.lower() == 'true'
 
-    content_processor = ContentProcessor(agent_config, agent_name)
+    content_processor = TargetContentProcessor(agent_config, agent_name)
 
     if model_vendor == 'tool' and side_output:
         main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
@@ -209,7 +63,7 @@ def save_output(new_data, file_path, base_directory, output_directory):
     relative_path = os.path.relpath(file_path, base_directory)
     output_file_path = os.path.join(output_directory, relative_path.replace('.json', '.json'))
     file_writer = FileWriter(output_file_path)
-    file_writer.write(new_data)
+    file_writer.write_target(new_data)
 
 
 def save_side_output(side_output_data, file_path, base_directory, output_directory):
