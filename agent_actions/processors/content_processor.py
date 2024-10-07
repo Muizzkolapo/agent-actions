@@ -1,31 +1,18 @@
 """Module for staging data loading and processing."""
 import os
 import json
-from agent_actions.models import agent_builder
-from agent_actions.core.utils import transform_structure
-from agent_actions.core.utils import generate_id
-from agent_actions.core.agent_handlers import load_few_shot_samples,get_file_info
-import random
-from agent_actions.core.utils import get_agent_paths
 import logging
 from pathlib import Path
-import json
-import os
-import logging
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import update_schema_objects, replace_placeholders, transform_structure, replace_guid_placeholder, get_agent_paths
-from agent_actions.core.agent_handlers import should_update_schema, get_content_by_guid, load_few_shot_samples
-
+from agent_actions.core.utils import (
+    transform_structure, generate_id, get_agent_paths,
+    update_schema_objects, replace_placeholders, replace_guid_placeholder
+)
+from agent_actions.core.agent_handlers import (
+    load_few_shot_samples, get_file_info, should_update_schema, get_content_by_guid
+)
 
 logger = logging.getLogger(__name__)
-
-
-from agent_actions.core.agent_handlers import split_text_content,load_few_shot_samples
-
-
-
-
-
 
 class StagingContentProcessor:
     def __init__(self, agent_config, agent_name):
@@ -135,9 +122,7 @@ class StagingContentProcessor:
             src_text.extend(src_collection)
         return data_chunk, src_text
 
-
-
-    def _process_json_content(content, agent_config, agent_name,file_path):
+    def _process_json_content(self, content, agent_config, agent_name, file_path):
         """
         Process JSON content and create dynamic agents for each value in the content.
 
@@ -178,8 +163,7 @@ class StagingContentProcessor:
         
         return data_chunk,src_text
 
-
-    def _process_tabular_content(content, agent_config, agent_name):
+    def _process_tabular_content(self, content, agent_config, agent_name):
         """
         Process tabular content and create dynamic agents for each row in the content.
 
@@ -203,7 +187,6 @@ class StagingContentProcessor:
         
         return data_chunk,src_text
 
-
     def _process_xml_content(self, content, agent_config, agent_name):
         """
         Process XML content and create dynamic agents for each element in the content.
@@ -225,11 +208,6 @@ class StagingContentProcessor:
                 data_chunk.extend(chunk_output)
                 src_text.extend(src_collection)
         return data_chunk,src_text
-
-
-
-
-
 
 class TargetContentProcessor:
     def __init__(self, agent_config, agent_name):
