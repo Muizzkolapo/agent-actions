@@ -1,12 +1,13 @@
 import json 
 import traceback
-from langchain.text_splitter import CharacterTextSplitter
 import importlib
 import os 
 from agent_actions.core.utils import find_specific_folder
 import shutil
 import random
 import logging
+import tiktoken
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,26 @@ def validate_agent_config(agent_config):
         agent.setdefault('dependencies', [])
 
     return True, "Agent configuration is valid."
+
+def num_tokens_from_string(string: str, encoding_name: str) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
+
+def split_text_content(text: str, chunk_size: int, overlap: int, encoding_name: str = "cl100k_base") -> List[str]:
+    """Split text into chunks of a specified size with a specified overlap."""
+    tokens = tiktoken.get_encoding(encoding_name).encode(text)
+    chunks = []
+    start_idx = 0
+    while start_idx < len(tokens):
+        end_idx = min(start_idx + chunk_size, len(tokens))
+        chunk = tokens[start_idx:end_idx]
+        decoded_chunk = tiktoken.get_encoding(encoding_name).decode(chunk)
+        chunks.append(decoded_chunk)
+        start_idx += chunk_size - overlap
+    print(chunks)
+    return chunks
 
 def clean_agent_output(agent_name, agent_type, function_name):
     """
@@ -206,26 +227,6 @@ def find_config_file(base_dir, filename):
     return None
 
 
-def split_text_content(content, chunk_config=None):
-    """
-    Split the given text content into chunks based on the provided chunk configuration.
-
-    Args:
-        content (str): The text content.
-        chunk_config (dict): The configuration for chunk size and overlap. Defaults to None.
-
-    Returns:
-        list: A list of text chunks.
-    """
-    if chunk_config is None:
-        chunk_config = {}
-    chunk_size = chunk_config.get('chunk_size', 300)
-    chunk_overlap = chunk_config.get('chunk_overlap', 10)
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    return text_splitter.split_text(content)
-
-
 
 def should_update_schema(agent_config, keys_list, side_collection):
     """
@@ -316,7 +317,6 @@ def find_agents_name(config):
     Find the name of the agent from the configuration.
     """
     return next(iter(config))
-
 
 
 
