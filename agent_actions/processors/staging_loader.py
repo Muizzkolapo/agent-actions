@@ -33,7 +33,13 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     file_reader = FileReader(file_path)
     content = file_reader.read()
-    chunks = split_text_content(content, agent_config["chunk_config"])
+
+    # Extract chunk_size and overlap from agent_config["chunk_config"]
+    chunk_size = agent_config["chunk_config"]["chunk_size"]
+    overlap = 200
+
+    # Call the split_text_into_chunks function with the required arguments
+    chunks = split_text_content(content, chunk_size, overlap)
 
     content_processor = StagingContentProcessor(agent_config, agent_name)
     data_chunk, src_text = content_processor.process(chunks, os.path.splitext(file_path)[1].lower())
