@@ -38,7 +38,6 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     chunk_size = agent_config["chunk_config"]["chunk_size"]
     overlap = agent_config["chunk_config"]["overlap"]
 
-
     # Call the split_text_into_chunks function with the required arguments
     chunks = split_text_content(content, chunk_size, overlap)
 

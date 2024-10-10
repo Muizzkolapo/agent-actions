@@ -1,0 +1,195 @@
+"""
+Module for generating agent lineage and providing agent details.
+"""
+import os
+import yaml
+from flask import Flask, jsonify, render_template, request
+import networkx as nx
+from flask_cors import CORS
+
+app = Flask(__name__, template_folder='agent_dags/templates', static_folder='agent_dags/static')
+CORS(app)
+
+# Ensure BASE_DIR is the current working directory of the running application
+BASE_DIR = os.getcwd()
+CONFIG_DIR = os.path.join(BASE_DIR, 'agent_config')
+print(CONFIG_DIR)
+
+
+def get_folder_structure(directory, base_path=''):
+    """
+    Get the folder structure of the specified directory.
+    """
+    structure = []
+    for item in os.listdir(directory):
+        item_path = os.path.join(directory, item)
+        relative_path = os.path.join(base_path, item)
+        if os.path.isdir(item_path):
+            if item == 'agent_config':
+                parent_dir = os.path.basename(os.path.dirname(item_path))
+                structure.append({
+                    'name': parent_dir,
+                    'path': os.path.dirname(relative_path),
+                    'type': 'folder',
+                    'children': get_folder_structure(item_path, relative_path)
+                })
+            else:
+                structure.append({
+                    'name': item,
+                    'path': relative_path,
+                    'type': 'folder',
+                    'children': get_folder_structure(item_path, relative_path)
+                })
+        elif os.path.isfile(item_path) and item.endswith('.yml'):
+            structure.append({
+                'name': item,
+                'path': relative_path,
+                'type': 'file'
+            })
+    return structure
+
+
+def get_yaml_files(directory, base_path=''):
+    """
+    Get the YAML files in the specified directory and its subdirectories named 'agent_config'.
+    """
+    structure = []
+    for root, dirs, files in os.walk(directory):
+        if os.path.basename(root) == 'agent_config':
+            parent_dir = os.path.basename(os.path.dirname(root))
+            relative_path = os.path.relpath(root, directory)
+            subdir_structure = []
+            for file in files:
+                if file.endswith('.yml'):
+                    subdir_structure.append({
+                        'name': file,
+                        'path': os.path.join(relative_path, file),
+                        'type': 'file'
+                    })
+            if subdir_structure:
+                structure.append({
+                    'name': parent_dir,
+                    'path': os.path.dirname(relative_path),
+                    'type': 'folder',
+                    'children': subdir_structure
+                })
+    return structure
+
+@app.route('/list_yaml_files', methods=['GET'])
+def list_yaml_files():
+    """
+    List all YAML files in the directory containing 'agent_actions.yml' and its subdirectories named 'agent_config'.
+    """
+    base_dir = os.path.dirname(os.path.abspath('agent_actions.yml'))
+    structure = get_yaml_files(base_dir)
+    return jsonify(structure)
+
+
+def load_single_yaml_file(filename):
+    """
+    Load a single YAML file.
+    """
+    filepath = os.path.join(BASE_DIR, filename)
+    with open(filepath, 'r', encoding='utf-8') as file:
+        content = yaml.safe_load(file)
+    return content
+
+
+def extract_dependencies(config_data):
+    """
+    Extract dependencies from the configuration data.
+    """
+    dependencies = {}
+
+    # Include UDFs in the dependencies
+    if 'udf' in config_data:
+        for udf in config_data['udf']:
+            dependencies[udf] = []
+
+    for agents in config_data.values():
+        if isinstance(agents, list):
+            for agent in agents:
+                agent_name = agent.get('agent_type', 'udf')
+                if agent_name:
+                    agent_dependencies = agent.get('dependencies', [])
+                    dependencies[agent_name] = agent_dependencies
+
+    return dependencies
+
+
+def build_dag(dependencies):
+    """
+    Build a directed acyclic graph (DAG) from the dependencies.
+    """
+    dag = nx.DiGraph()
+    for node, deps in dependencies.items():
+        if not dag.has_node(node):  # Ensure node is added even if it has no dependencies
+            dag.add_node(node)
+        for dep in deps:
+            dag.add_edge(dep, node)
+    return dag
+
+
+@app.route('/list_folder_structure', methods=['GET'])
+def list_folder_structure():
+    """
+    List the folder structure of the CONFIG_DIR.
+    """
+    structure = get_folder_structure(CONFIG_DIR)
+    return jsonify(structure)
+
+
+@app.route('/generate_agent_lineage', methods=['POST'])
+def generate_agent_lineage():
+    """
+    Generate agent lineage based on the provided filename.
+    """
+    filename = request.json.get('filename')
+    config_data = load_single_yaml_file(filename)
+
+    dependencies = extract_dependencies(config_data)
+    dag = build_dag(dependencies)
+
+    edges = [{'source': u, 'target': v} for u, v in dag.edges]
+    nodes = [{'id': n} for n in dag.nodes]
+
+    return jsonify({'nodes': nodes, 'edges': edges})
+
+
+@app.route('/get_agent_details', methods=['POST'])
+def get_agent_details():
+    """
+    Get details of a specific agent based on the provided filename and agent name.
+    """
+    filename = request.json.get('filename')
+    agent_name = request.json.get('agentName')  # Ensure the key matches the frontend
+    if not agent_name:
+        return jsonify({'error': 'Agent name is required'}), 400
+
+    config_data = load_single_yaml_file(filename)
+
+    for agents in config_data.values():
+        if isinstance(agents, list):
+            for agent in agents:
+                if agent.get('agent_type', 'udf') == agent_name:
+                    return jsonify(agent)
+    return jsonify({'error': 'Agent not found'}), 404
+
+
+@app.route('/')
+def index():
+    """
+    Render the index template.
+    """
+    return render_template('index.html')
+
+
+def main():
+    """
+    Run the Flask application.
+    """
+    app.run(debug=True, host='0.0.0.0', port=8000)
+
+
+if __name__ == '__main__':
+    main()
