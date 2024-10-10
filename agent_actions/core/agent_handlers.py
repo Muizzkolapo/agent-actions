@@ -81,7 +81,6 @@ def split_text_content(text: str, chunk_size: int, overlap: int, encoding_name: 
         decoded_chunk = tiktoken.get_encoding(encoding_name).decode(chunk)
         chunks.append(decoded_chunk)
         start_idx += chunk_size - overlap
-    print(chunks)
     return chunks
 
 def clean_agent_output(agent_name, agent_type, function_name):
