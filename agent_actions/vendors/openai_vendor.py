@@ -2,38 +2,39 @@ import json
 from textwrap import dedent
 from openai import OpenAI
 import logging
+import os 
 
 logging.basicConfig(level=logging.ERROR)
 
 class OpenAIHandler:
     @staticmethod
     def invoke(agent_config, prompt_config, input_documentation, schema):
-        # Set up the API key and client
         api_key = agent_config['api_key']
+        api_key =os.environ[api_key]  
+        print(api_key)
         client = OpenAI(api_key=api_key)
 
-        # Retrieve the model name from the agent configuration
         model_name = agent_config['model_name']
 
-        # Use the prompt configuration as the system prompt
-        math_tutor_prompt = prompt_config
+        prompt = f"""
+            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
+            <|begin_of_output_schema|> : list of this [{json.dumps(schema)}] : <|end_of_output_schema|>
 
-        # The question is provided as the input documentation
-        question = input_documentation
+            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
+            RULES: ALWAYS READ INPUT AS STRING
+        """
 
-        # Prepare the messages for the chat completion
         messages = [
             {
                 "role": "system",
-                "content": dedent(math_tutor_prompt)
+                "content": dedent(prompt)
             },
             {
                 "role": "user",
-                "content": question
+                "content": input_documentation
             }
         ]
 
-        # Make the API call to OpenAI's ChatCompletion via client.chat.completions.create
         response = client.chat.completions.create(
             model=model_name,
             messages=messages,
@@ -43,15 +44,10 @@ class OpenAIHandler:
             }
         )
 
-        # Extract the response message
         response_message = response.choices[0].message
-
-        # Parse the JSON content from the response
-        response_content = response_message.content  # Use dot notation instead of subscripting
+        response_content = response_message.content  
         response_data = json.loads(response_content)
 
-        # Ensure the response is a list
         response_list = response_data if isinstance(response_data, list) else [response_data]
-        print(response_list)
 
         return response_list
