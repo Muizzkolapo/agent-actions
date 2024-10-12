@@ -3,10 +3,8 @@ from textwrap import dedent
 from openai import OpenAI
 import logging
 import os 
-from agent_actions.core.utils import process_as_string,ensure_list
+from agent_actions.core.utils import process_as_string
 
-
-logging.basicConfig(level=logging.ERROR)
 
 class OpenAIHandler:
     @staticmethod
