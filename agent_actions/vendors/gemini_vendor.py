@@ -35,5 +35,6 @@ class GeminiHandler:
         """
         response_temp = llm.generate_content(prompt)
         response = json.loads(response_temp.text)
+        print(response)
         response_list = ensure_list(response)
         return response_list
