@@ -119,7 +119,6 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     schema = load_schema(schema_name) if schema_name else None
     
     if model_vendor.lower() == 'openai':
-        prompt_config = list_to_tuples(prompt_config)
         response = OpenAIHandler.invoke(agent_config, prompt_config, input_documentation, schema)
     elif model_vendor.lower() == 'gemini':
         response = GeminiHandler.invoke(agent_config, prompt_config, input_documentation, schema)

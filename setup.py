@@ -17,9 +17,7 @@ setup(
     install_requires=[
         'pyyaml',
         'openai==1.26.0',
-        'langchain==0.1.15',
         'tiktoken==0.6.0',
-        'langchain-openai==0.1.3',
         'flask==3.0.3',
         'flask-cors==4.0.1',
         'networkx==3.3',
