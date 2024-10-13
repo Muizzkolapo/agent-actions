@@ -2,6 +2,7 @@ import os
 import json
 from groq import Groq  # Assuming this is the official Groq API Python package
 from agent_actions.core.utils import process_as_string,ensure_list
+from textwrap import dedent
 
 
 
@@ -19,13 +20,14 @@ class GroqLlama3Handler:
             <|begin_of_text|>:: {input_documentation_str} :<|end_of_text|>\n
             <|begin_of_output_schema|> :WRITE OUTPUTS IN JSON SCHEMA: {json.dumps(schema)}. : <|end_of_output_schema|>
         """
+        prompt_dedent = dedent(prompt)   
 
         try:
             llm = groq.chat.completions.create(
                 messages=[
                     {
                         "role": "system",
-                        "content": prompt,
+                        "content": prompt_dedent,
                     }
                 ],
                 model=model_name,

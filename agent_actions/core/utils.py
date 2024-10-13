@@ -8,6 +8,7 @@ import yaml
 import re
 import uuid
 from collections import deque, OrderedDict
+import textwrap
 
 def load_schema(schema_name):
     """
@@ -221,7 +222,9 @@ def replace_guid_placeholder(data, guid):
     """
 
     def replace_in_string(text):
-        return text.replace('return_collection{{source_context}}', guid)
+        data = text.replace('return_collection{{source_context}}', guid)
+        cleaned_content = textwrap.dedent(data).strip()
+        return cleaned_content
 
     def process_item(item):
         if isinstance(item, str):

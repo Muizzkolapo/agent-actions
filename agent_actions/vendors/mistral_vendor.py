@@ -2,6 +2,7 @@ import os
 import json
 from mistralai import Mistral
 from agent_actions.core.utils import process_as_string
+from textwrap import dedent
 
 class MistralHandler:
     @staticmethod
@@ -20,10 +21,11 @@ class MistralHandler:
 
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             """
+        prompt_dedent = dedent(prompt) 
         messages = [
             {
                 "role": "user",
-                "content": prompt,
+                "content": prompt_dedent,
             }
         ]
         chat_response = client.chat.complete(

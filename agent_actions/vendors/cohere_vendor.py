@@ -1,6 +1,7 @@
 import cohere
 import os
 import json 
+from textwrap import dedent
 from agent_actions.core.utils import process_as_string
 
 class CohereHandler:
@@ -16,10 +17,11 @@ class CohereHandler:
             <|begin_of_output_schema|> : {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>
 
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
-            """        
+            """ 
+        prompt_dedent = dedent(prompt)       
         response = co.chat(
             model=model_name,
-            message=prompt,
+            message=prompt_dedent,
             response_format={
                 "type": "json_object"
             }
