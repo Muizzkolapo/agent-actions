@@ -3,6 +3,8 @@ import json
 import google.generativeai as genai
 from agent_actions.core.utils import process_as_string,ensure_list
 import logging
+from textwrap import dedent
+
 logging.basicConfig(level=logging.ERROR)
 
 
@@ -33,7 +35,8 @@ class GeminiHandler:
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             RULES: ALWAYS READ INPUT AS STRING
         """
-        response_temp = llm.generate_content(prompt)
+        prompt_dedent = dedent(prompt)
+        response_temp = llm.generate_content(prompt_dedent)
         response = json.loads(response_temp.text)
         response_list = ensure_list(response)
         return response_list
