@@ -164,29 +164,38 @@ def replace_placeholders(prompt, content_dict):
             # Process as a sublist
             new_sublist = []
             for string in element:
-                for key, value in content_dict.items():
-                    placeholder = f"return_collection[{key}]"
-                    value = convert_to_string(value)
-                    string = string.replace(placeholder, value) 
+                # Find placeholders in the format return_collection[key1,key2]
+                placeholders = re.findall(r'return_collection\[(.*?)\]', string)
+                for placeholder in placeholders:
+                    keys = [key.strip() for key in placeholder.split(',')]
+                    values = [f"{key}: {convert_to_string(content_dict[key])}" for key in keys if key in content_dict]
+                    replacement = ', '.join(values)
+                    string = string.replace(f'return_collection[{placeholder}]', replacement)
                 new_sublist.append(string)
             new_prompt.append(new_sublist)
         elif isinstance(element, dict):
             # Process dictionary entries
             new_dict = {}
             for key, value in element.items():
-                for k, v in content_dict.items():
-                    placeholder = f"get[{k}]"
-                    v = convert_to_string(v)
-                    new_key = key.replace(placeholder, v)
-                    new_value = value.replace(placeholder, v) if isinstance(value, str) else value
+                # Find placeholders in the format get[key1,key2]
+                placeholders = re.findall(r'get\[(.*?)\]', key)
+                for placeholder in placeholders:
+                    keys = [k.strip() for k in placeholder.split(',')]
+                    values = [f"{k}: {convert_to_string(content_dict[k])}" for k in keys if k in content_dict]
+                    replacement = ', '.join(values)
+                    new_key = key.replace(f'get[{placeholder}]', replacement)
+                    new_value = value.replace(f'get[{placeholder}]', replacement) if isinstance(value, str) else value
                     new_dict[new_key] = new_value
             new_prompt.append(new_dict)
         else:
             # Process as a single string
-            for key, value in content_dict.items():
-                placeholder = f"return_collection[{key}]"
-                value = convert_to_string(value)
-                element = element.replace(placeholder, value)
+            # Find placeholders in the format return_collection[key1,key2]
+            placeholders = re.findall(r'return_collection\[(.*?)\]', element)
+            for placeholder in placeholders:
+                keys = [key.strip() for key in placeholder.split(',')]
+                values = [f"{key}: {convert_to_string(content_dict[key])}" for key in keys if key in content_dict]
+                replacement = ', '.join(values)
+                element = element.replace(f'return_collection[{placeholder}]', replacement)
             new_prompt.append(element)
     
     return new_prompt
