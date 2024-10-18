@@ -117,14 +117,9 @@ def process_as_string(input_text):
     Returns:
     str: The processed string treated as plain text.
     """
-    # Ensure the input is a string
     if not isinstance(input_text, str):
         raise ValueError("Input must be a string")
-
-    # Pattern to identify dictionary-like structures
     pattern = re.compile(r'({.*?})')
-
-    # Escape curly braces to avoid interpretation as dictionary-like structures
     escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
     
     return escaped_text
@@ -279,15 +274,11 @@ def topological_sort(dependencies):
 
 
 def find_agent_folder(working_directory, folder_name,base_dir):
-    # Define the base path to search within
     base_path = os.path.join(working_directory, base_dir)    
-    # Walk through the directory tree
     for root, dirs, files in os.walk(base_path):
         if folder_name in dirs:
-            # Return the full path to the matching folder
             return os.path.join(root, folder_name)
     
-    # If the folder is not found, return None
     return None
 
 
@@ -336,33 +327,28 @@ def process_text_with_function_calls(text, tools_path=None, input_documentation_
     Always passes `input_documentation_str` to the function.
     """
     def process_single_text(single_text):
-        # Regex to match dispatch_task('function_name')
         function_call_pattern = r"dispatch_task\('(\w+)'\)"
         matches = re.findall(function_call_pattern, single_text)
 
         if not matches:
-            return single_text  # Proceed as normal if no dispatch_task calls are found
+            return single_text  
 
-        # Process each function call individually to avoid conflicts
         for function_name in matches:
             try:
-                # Call the user-defined function and pass input_documentation_str
                 transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
-                # Ensure transformed_text is a string
+                print(transformed_text)
+
                 if transformed_text is None:
                     transformed_text = "Error: No valid return from function."
-                # Replace only the specific dispatch_task instance with the transformed text
                 single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
             except Exception as e:
                 print(f"Error calling function {function_name}: {e}")
-
+                
         return single_text
 
     if isinstance(text, list):
-        # Process each item in the list
         return [process_single_text(item) for item in text]
     else:
-        # Process the single text
         return process_single_text(text)
 
 def call_user_function(function_name, tools_path=None, input_documentation_str=None):
@@ -372,16 +358,17 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
     """
     try:
         if tools_path and tools_path not in sys.path:
-            sys.path.insert(0, os.path.abspath(tools_path))  # Ensure tools_path is correctly added to sys.path
-
-        # Import the module (ensure it's in tools_path)
+            sys.path.insert(0, os.path.abspath(tools_path)) 
         module = importlib.import_module(function_name)
         function = getattr(module, function_name)
-        # Pass input_documentation_str as the argument
         result = function(input_documentation_str) if input_documentation_str else function()
         return result
     except Exception as e:
-        print(f"Error loading function {function_name}: {e}")
+        print(f"Error in call_user_function for {function_name}:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
         raise
 
 

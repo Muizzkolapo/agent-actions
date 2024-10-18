@@ -342,12 +342,11 @@ class TargetContentProcessor:
                 formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
                 
                 logger.info("Calling create_dynamic_agent with formatted prompt")
-                outcome = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
                 return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
         except Exception as e:
             logger.error(f"Error in _create_agent_with_data: {str(e)}")
             logger.exception("Full traceback:")
-            raise  # Re-raise the exception to propagate it
+            raise  
 
     def _process_item(self, contents, generated_data, guid, side_collection, selection_keys):
         """Process a single item and return the transformed response."""

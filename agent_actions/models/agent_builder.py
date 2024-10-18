@@ -29,21 +29,17 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     else:
         prompt_config = agent_config.get('prompt', '')
         if isinstance(prompt_config, str) and prompt_config.startswith('$'):
-            print(prompt_config[1:])
-            prompt_config = load_prompt(prompt_config[1:])  # Remove '$' before loading
+            prompt_config = load_prompt(prompt_config[1:])  
 
-    # Load tools_path from configuration if not provided
     if tools_path is None:
         tools_path = agent_config.get('tools', {}).get('path')
 
     input_documentation = json.dumps(input_documentation_str) 
 
-    # Dynamically transform the prompt using Python functions, always passing input_documentation_str
     transformed_prompt_config = process_text_with_function_calls(prompt_config, tools_path, input_documentation)
     
     prompt_config = transformed_prompt_config
 
-    # Check for prompt_debug flag
     if agent_config.get('prompt_debug', False):
         print("\n" + "="*40)
         print("DEBUG: Prompt going into the agent:")
@@ -53,7 +49,6 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
 
     model_vendor = agent_config['model_vendor']
     
-    # Conditionally load schema if model_vendor is not 'tool'
     schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
     schema = load_schema(schema_name) if schema_name else None
     
