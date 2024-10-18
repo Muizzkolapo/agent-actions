@@ -2,7 +2,7 @@ import json
 import traceback
 import importlib
 import os 
-from agent_actions.core.utils import find_specific_folder
+from agent_actions.core.utils import FileHandler
 import shutil
 import random
 import logging
@@ -20,7 +20,7 @@ def clean_agent_directories(agent_name):
     :param agent_name: Name of the agent
     """
     current_dir = os.getcwd()
-    agent_folder = find_specific_folder(current_dir, agent_name, 'agent_io')
+    agent_folder = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
 
     if agent_folder is None:
         print(f"Agent folder not found for agent: {agent_name}")
@@ -142,7 +142,7 @@ def process_and_generate_for_agent(agent_config,
     """
     try:
         current_dir = os.getcwd()
-        agent_folder = find_specific_folder(current_dir,agent_name,'agent_io')
+        agent_folder = FileHandler.find_specific_folder(current_dir,agent_name,'agent_io')
         
         if agent_folder is None:
             raise FileNotFoundError(f"Agent folder not found for agent: {agent_name}")

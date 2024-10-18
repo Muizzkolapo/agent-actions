@@ -4,10 +4,7 @@ import json
 import logging
 from pathlib import Path
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import (
-    transform_structure, generate_id, get_agent_paths,
-    update_schema_objects, replace_placeholders, replace_guid_placeholder
-)
+from agent_actions.core.utils import StringProcessor, DataTransformer, Utils, FileHandler
 from agent_actions.core.agent_handlers import (
     load_few_shot_samples, get_file_info, should_update_schema, get_content_by_guid
 )
@@ -32,7 +29,7 @@ class StagingContentProcessor:
             tuple: Transformed response and source text.
         """
         # Load the sample output path using get_agent_paths
-        _, _, few_shot_samples_path = get_agent_paths(self.agent_name)
+        _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
 
         # Retrieve the sample count from the agent configuration
         sample_count = self.agent_config.get("use_few_shot_samples", 0)
@@ -67,7 +64,7 @@ class StagingContentProcessor:
                         input_documentation_new = input_documentation["content"]
                         response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
                         transformed_response_temp = [{guid_key: response}]
-                        transformed_response = transform_structure(transformed_response_temp)
+                        transformed_response = DataTransformer.transform_structure(transformed_response_temp)
                         src_text = [item]
                         return transformed_response, src_text
 
@@ -77,16 +74,16 @@ class StagingContentProcessor:
                         response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
                         guid = input_documentation["guid"]
                         transformed_response_temp = [{guid: response}]
-                        transformed_response = transform_structure(transformed_response_temp)
+                        transformed_response = DataTransformer.transform_structure(transformed_response_temp)
                         src_text = [{guid: input_documentation_new}]
                         return transformed_response, src_text
 
         else:
             # This block handles the scenario where source_path is None or keys are missing
             response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation)
-            guid = generate_id()
+            guid = Utils.generate_id()
             transformed_response_temp = [{guid: response}]
-            transformed_response = transform_structure(transformed_response_temp)
+            transformed_response = DataTransformer.transform_structure(transformed_response_temp)
             src_text = [{guid: input_documentation}]
 
             return transformed_response, src_text
@@ -292,7 +289,7 @@ class TargetContentProcessor:
         sample_count = self._parse_sample_count()
         
         try:
-            _, _, few_shot_samples_path = get_agent_paths(self.agent_name)
+            _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
         except FileNotFoundError as e:
             logger.error(f"Error finding sample output path: {e}")
             return
@@ -338,8 +335,8 @@ class TargetContentProcessor:
                     raw_prompt = "Process the following content: {content}"
 
                 logger.info("Preparing formatted prompt")
-                source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
-                formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
+                source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
+                formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, contents)
                 
                 logger.info("Calling create_dynamic_agent with formatted prompt")
                 return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
@@ -352,11 +349,11 @@ class TargetContentProcessor:
         """Process a single item and return the transformed response."""
         if should_update_schema(self.agent_config, selection_keys, {self.agent_config['agent_type']: side_collection}):
             updated_generated_data = [
-                update_schema_objects(contents, data_item, side_collection)
+                DataTransformer.update_schema_objects(contents, data_item, side_collection)
                 for data_item in generated_data
             ]
             response_temp = [{guid: updated_generated_data}]
         else:
             response_temp = [{guid: generated_data}]
 
-        return transform_structure(response_temp)
+        return DataTransformer.transform_structure(response_temp)

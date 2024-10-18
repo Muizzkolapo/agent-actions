@@ -1,7 +1,7 @@
 import os
 import json
 import google.generativeai as genai
-from agent_actions.core.utils import process_as_string,ensure_list
+from agent_actions.core.utils import StringProcessor,DataTransformer
 import logging
 from textwrap import dedent
 
@@ -25,7 +25,7 @@ class GeminiHandler:
             generation_config={"response_mime_type": "application/json"}
         )
         
-        input_documentation_str = process_as_string(input_documentation)
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
         
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
@@ -38,5 +38,5 @@ class GeminiHandler:
         prompt_dedent = dedent(prompt)
         response_temp = llm.generate_content(prompt_dedent)
         response = json.loads(response_temp.text)
-        response_list = ensure_list(response)
+        response_list = DataTransformer.ensure_list(response)
         return response_list

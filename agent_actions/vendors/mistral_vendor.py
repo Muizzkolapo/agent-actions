@@ -1,7 +1,7 @@
 import os
 import json
 from mistralai import Mistral
-from agent_actions.core.utils import process_as_string
+from agent_actions.core.utils import StringProcessor,DataTransformer
 from textwrap import dedent
 
 class MistralHandler:
@@ -13,7 +13,7 @@ class MistralHandler:
 
         client = Mistral(api_key=api_key)
 
-        input_documentation_str = process_as_string(input_documentation)
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
             <|begin_of_text|>: {input_documentation_str} :<|end_of_text|>

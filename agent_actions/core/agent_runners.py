@@ -7,7 +7,7 @@ from agent_actions.core.agent_handlers import clean_agent_output, process_and_ge
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.logging_setup import logger
 from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
-from agent_actions.core.utils import topological_sort
+from agent_actions.core.utils import Utils
 from agent_actions.core.agent_handlers import find_agents_name,find_config_file
 import json 
 
@@ -125,7 +125,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
                 state['agent_configs'][agent_type] = default_agent
 
         dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
-        state['execution_order'] = topological_sort(dependency_graph)
+        state['execution_order'] = Utils.topological_sort(dependency_graph)
         logger.info(f"Execution order determined: {state['execution_order']}")
 
     # Execute parent pipeline if present
