@@ -334,36 +334,36 @@ def process_text_with_function_calls(text, tools_path=None, input_documentation_
     """
     Replace multiple dispatch_task() calls in text with the result of their corresponding function.
     Always passes `input_documentation_str` to the function.
-
-    Parameters:
-    text (str): The input text containing dispatch_task() calls.
-    tools_path (str): The path to the tools module.
-    input_documentation_str (str): The input documentation string to pass to each function.
-
-    Returns:
-    str: The processed text with dispatch_task() calls replaced by their results.
     """
-    # Regex to match dispatch_task('function_name')
-    function_call_pattern = r"dispatch_task\('(\w+)'\)"
-    matches = re.findall(function_call_pattern, text)
+    def process_single_text(single_text):
+        # Regex to match dispatch_task('function_name')
+        function_call_pattern = r"dispatch_task\('(\w+)'\)"
+        matches = re.findall(function_call_pattern, single_text)
 
-    if not matches:
-        return text  # Return original text if no dispatch_task calls are found
+        if not matches:
+            return single_text  # Proceed as normal if no dispatch_task calls are found
 
-    # Process each function call individually to avoid conflicts
-    for function_name in matches:
-        try:
-            # Call the user-defined function and pass input_documentation_str
-            transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
-            # Ensure transformed_text is a string
-            if transformed_text is None:
-                transformed_text = "Error: No valid return from function."
-            # Replace only the specific dispatch_task instance with the transformed text
-            text = text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
-        except Exception as e:
-            print(f"Error calling function {function_name}: {e}")
+        # Process each function call individually to avoid conflicts
+        for function_name in matches:
+            try:
+                # Call the user-defined function and pass input_documentation_str
+                transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
+                # Ensure transformed_text is a string
+                if transformed_text is None:
+                    transformed_text = "Error: No valid return from function."
+                # Replace only the specific dispatch_task instance with the transformed text
+                single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
+            except Exception as e:
+                print(f"Error calling function {function_name}: {e}")
 
-    return text
+        return single_text
+
+    if isinstance(text, list):
+        # Process each item in the list
+        return [process_single_text(item) for item in text]
+    else:
+        # Process the single text
+        return process_single_text(text)
 
 def call_user_function(function_name, tools_path=None, input_documentation_str=None):
     """

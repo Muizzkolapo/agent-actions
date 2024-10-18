@@ -9,7 +9,6 @@ from agent_actions.core.tooling import execute_user_defined_function
 class ToolHandler:
     @staticmethod
     def invoke(agent_config, input_documentation):
-        print(input_documentation)
         """
         Invoke a user-defined function (UDF) specified in the configuration.
 

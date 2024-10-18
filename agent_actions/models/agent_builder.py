@@ -72,7 +72,6 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
         response = [response_groq_llama]
     elif model_vendor.lower() == 'tool': 
         response_ToolHandler = ToolHandler.invoke(agent_config, input_documentation)
-        print(response_ToolHandler)
         response = [response_ToolHandler]
     else:
         raise ValueError(f"Unsupported model vendor: {model_vendor}")
