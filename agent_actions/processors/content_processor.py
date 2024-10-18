@@ -234,6 +234,7 @@ class TargetContentProcessor:
             raise
 
     def process_for_side_output(self, data, file_path):
+
         try:
             source_data = self._load_source_data(file_path)
             main_output = []
@@ -282,30 +283,23 @@ class TargetContentProcessor:
             return json.load(file)
 
     def _generate_data(self, contents, source_content):
-        """
-        Generate data using the appropriate method based on the agent configuration,
-        incorporating few shot samples if specified.
-        """
-        # Load the sample output path using get_agent_paths
+        """Generate data using the appropriate method based on the agent configuration."""
+        self._add_few_shot_samples(contents)
+        return self._create_agent_with_data(contents, source_content)
+
+    def _add_few_shot_samples(self, contents):
+        """Add few-shot samples to the contents if specified in the configuration."""
+        sample_count = self._parse_sample_count()
+        
         try:
             _, _, few_shot_samples_path = get_agent_paths(self.agent_name)
         except FileNotFoundError as e:
             logger.error(f"Error finding sample output path: {e}")
-            few_shot_samples_path = None
+            return
 
-        # Retrieve the sample count from the agent configuration
-        sample_count = self.agent_config.get("use_few_shot_samples", 0)
-        try:
-            sample_count = int(sample_count)
-        except ValueError:
-            logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
-            sample_count = 0
-
-        # Check if sample_count is a positive integer and few_shot_samples_path is valid
-        if sample_count > 0 and few_shot_samples_path:
+        if sample_count > 0:
             logger.info(f"Loading {sample_count} few shot samples for agent type {self.agent_config['agent_type']}.")
             samples = load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
-            # Append samples to contents as a new key
             if isinstance(contents, dict):
                 contents['samples'] = samples
             else:
@@ -313,14 +307,46 @@ class TargetContentProcessor:
         else:
             logger.info("Not using few shot samples.")
 
-        # Now proceed with data generation
-        if self.agent_config['model_vendor'].lower() == 'tool':
-            return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents)
-        else:
-            raw_prompt = self.agent_config.get('prompt', '')
-            source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
-            formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
-            return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
+    def _parse_sample_count(self):
+        """Parse and validate the sample count from the agent configuration."""
+        sample_count = self.agent_config.get("use_few_shot_samples", 0)
+        try:
+            return int(sample_count)
+        except ValueError:
+            logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
+            return 0
+
+    def _create_agent_with_data(self, contents, source_content):
+        """Create a dynamic agent with the prepared data."""
+        try:
+            logger.info(f"Entering _create_agent_with_data method")
+            logger.info(f"Contents type: {type(contents)}")
+            logger.info(f"Model vendor: {self.agent_config.get('model_vendor', 'Not specified')}")
+
+            if not isinstance(contents, dict):
+                logger.warning(f"Expected contents to be a dict, but got {type(contents)}")
+                contents = {"data": contents}  # Wrapping non-dict content in a dict
+
+            if self.agent_config['model_vendor'].lower() == 'tool':
+                logger.info(f"Creating dynamic agent with tool: {self.agent_name}")
+                return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents)
+            else:
+                logger.info(f"Creating dynamic agent with model: {self.agent_config['model_vendor']}")
+                raw_prompt = self.agent_config.get('prompt', '')
+                if not raw_prompt:
+                    logger.warning("No prompt found in agent_config. Using default prompt.")
+                    raw_prompt = "Process the following content: {content}"
+
+                logger.info("Preparing formatted prompt")
+                source_loaded_prompt = replace_guid_placeholder(raw_prompt, str(source_content))
+                formatted_prompt = replace_placeholders(source_loaded_prompt, contents)
+                
+                logger.info("Calling create_dynamic_agent with formatted prompt")
+                return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
+        except Exception as e:
+            logger.error(f"Error in _create_agent_with_data: {str(e)}")
+            logger.exception("Full traceback:")
+            raise  
 
     def _process_item(self, contents, generated_data, guid, side_collection, selection_keys):
         """Process a single item and return the transformed response."""

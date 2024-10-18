@@ -6,6 +6,8 @@ import os
 import traceback
 import yaml
 import re
+import importlib
+import sys
 import uuid
 from collections import deque, OrderedDict
 import textwrap
@@ -115,14 +117,9 @@ def process_as_string(input_text):
     Returns:
     str: The processed string treated as plain text.
     """
-    # Ensure the input is a string
     if not isinstance(input_text, str):
         raise ValueError("Input must be a string")
-
-    # Pattern to identify dictionary-like structures
     pattern = re.compile(r'({.*?})')
-
-    # Escape curly braces to avoid interpretation as dictionary-like structures
     escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
     
     return escaped_text
@@ -149,6 +146,16 @@ def flatten_to_list_of_dicts(nested_lists):
 
 
 def replace_placeholders(prompt, content_dict):
+    """
+    Replace placeholders in the prompt string with values from content_dict.
+
+    Parameters:
+    prompt (str): The prompt string containing placeholders.
+    content_dict (dict): A dictionary containing the values to replace placeholders.
+
+    Returns:
+    str: The prompt with placeholders replaced by actual values.
+    """
     def convert_to_string(value):
         if isinstance(value, list):
             return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
@@ -158,47 +165,15 @@ def replace_placeholders(prompt, content_dict):
     if not isinstance(content_dict, dict) or not content_dict:
         return prompt
 
-    new_prompt = []
-    for element in prompt:
-        if isinstance(element, list):
-            # Process as a sublist
-            new_sublist = []
-            for string in element:
-                # Find placeholders in the format return_collection[key1,key2]
-                placeholders = re.findall(r'return_collection\[(.*?)\]', string)
-                for placeholder in placeholders:
-                    keys = [key.strip() for key in placeholder.split(',')]
-                    values = [f"{key}: {convert_to_string(content_dict[key])}" for key in keys if key in content_dict]
-                    replacement = ', '.join(values)
-                    string = string.replace(f'return_collection[{placeholder}]', replacement)
-                new_sublist.append(string)
-            new_prompt.append(new_sublist)
-        elif isinstance(element, dict):
-            # Process dictionary entries
-            new_dict = {}
-            for key, value in element.items():
-                # Find placeholders in the format get[key1,key2]
-                placeholders = re.findall(r'get\[(.*?)\]', key)
-                for placeholder in placeholders:
-                    keys = [k.strip() for k in placeholder.split(',')]
-                    values = [f"{k}: {convert_to_string(content_dict[k])}" for k in keys if k in content_dict]
-                    replacement = ', '.join(values)
-                    new_key = key.replace(f'get[{placeholder}]', replacement)
-                    new_value = value.replace(f'get[{placeholder}]', replacement) if isinstance(value, str) else value
-                    new_dict[new_key] = new_value
-            new_prompt.append(new_dict)
-        else:
-            # Process as a single string
-            # Find placeholders in the format return_collection[key1,key2]
-            placeholders = re.findall(r'return_collection\[(.*?)\]', element)
-            for placeholder in placeholders:
-                keys = [key.strip() for key in placeholder.split(',')]
-                values = [f"{key}: {convert_to_string(content_dict[key])}" for key in keys if key in content_dict]
-                replacement = ', '.join(values)
-                element = element.replace(f'return_collection[{placeholder}]', replacement)
-            new_prompt.append(element)
-    
-    return new_prompt
+    # Find placeholders in the format return_collection[key1,key2]
+    placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
+    for placeholder in placeholders:
+        keys = [key.strip() for key in placeholder.split(',')]
+        values = [f"{key}: {convert_to_string(content_dict[key])}" for key in keys if key in content_dict]
+        replacement = ', '.join(values)
+        prompt = prompt.replace(f'return_collection[{placeholder}]', replacement)
+
+    return prompt
 
 
 def transform_structure(data):
@@ -220,33 +195,21 @@ def transform_structure(data):
 def replace_guid_placeholder(data, guid):
     """
     Replace the placeholder 'return_collection{{source_context}}' with the specified GUID
-    in various data structures, including lists of strings, nested lists, and dictionaries.
+    in a string.
 
     Parameters:
-    data (list): The data to process, which can include lists of strings, nested lists, or dictionaries.
+    data (str): The string to process.
     guid (str): The GUID to replace the placeholder with.
 
     Returns:
-    list: The updated data with the placeholder replaced.
+    str: The updated string with the placeholder replaced.
     """
+    if not isinstance(data, str):
+        return data
 
-    def replace_in_string(text):
-        data = text.replace('return_collection{{source_context}}', guid)
-        cleaned_content = textwrap.dedent(data).strip()
-        return cleaned_content
-
-    def process_item(item):
-        if isinstance(item, str):
-            return replace_in_string(item)
-        elif isinstance(item, list):
-            return [process_item(sub_item) for sub_item in item]
-        elif isinstance(item, dict):
-            return {key: process_item(value) for key, value in item.items() if isinstance(value, str)}
-        else:
-            return item
-
-    # Process each element in the input data
-    return [process_item(item) for item in data]
+    replaced_data = data.replace('return_collection{{source_context}}', guid)
+    cleaned_content = textwrap.dedent(replaced_data).strip()
+    return cleaned_content
 
 def generate_id():
     """Generate a unique identifier."""
@@ -311,15 +274,11 @@ def topological_sort(dependencies):
 
 
 def find_agent_folder(working_directory, folder_name,base_dir):
-    # Define the base path to search within
     base_path = os.path.join(working_directory, base_dir)    
-    # Walk through the directory tree
     for root, dirs, files in os.walk(base_path):
         if folder_name in dirs:
-            # Return the full path to the matching folder
             return os.path.join(root, folder_name)
     
-    # If the folder is not found, return None
     return None
 
 
@@ -357,3 +316,116 @@ def get_agent_paths(agent_name):
         few_shot_samples_path = None
 
     return agent_config_dir, io_dir, few_shot_samples_path
+
+
+
+
+
+def process_text_with_function_calls(text, tools_path=None, input_documentation_str=None):
+    """
+    Replace multiple dispatch_task() calls in text with the result of their corresponding function.
+    Always passes `input_documentation_str` to the function.
+    """
+    def process_single_text(single_text):
+        function_call_pattern = r"dispatch_task\('(\w+)'\)"
+        matches = re.findall(function_call_pattern, single_text)
+
+        if not matches:
+            return single_text  
+
+        for function_name in matches:
+            try:
+                transformed_text = call_user_function(function_name, tools_path, input_documentation_str)
+                print(transformed_text)
+
+                if transformed_text is None:
+                    transformed_text = "Error: No valid return from function."
+                single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
+            except Exception as e:
+                print(f"Error calling function {function_name}: {e}")
+                
+        return single_text
+
+    if isinstance(text, list):
+        return [process_single_text(item) for item in text]
+    else:
+        return process_single_text(text)
+
+def call_user_function(function_name, tools_path=None, input_documentation_str=None):
+    """
+    Dynamically loads and executes a user-defined function from the tools folder.
+    Always passes `input_documentation_str` as input.
+    """
+    try:
+        if tools_path and tools_path not in sys.path:
+            sys.path.insert(0, os.path.abspath(tools_path)) 
+        module = importlib.import_module(function_name)
+        function = getattr(module, function_name)
+        result = function(input_documentation_str) if input_documentation_str else function()
+        return result
+    except Exception as e:
+        print(f"Error in call_user_function for {function_name}:")
+        print(f"Exception type: {type(e).__name__}")
+        print(f"Exception message: {str(e)}")
+        print("Traceback:")
+        traceback.print_exc()
+        raise
+
+
+
+
+
+
+
+
+
+
+
+
+def extract_prompt(content, prompt_name):
+    # Regular expression to match the prompt block
+    pattern = re.compile(rf"\{{prompt {prompt_name}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
+    
+    # Search for the prompt using the pattern
+    match = pattern.search(content)
+    
+    if match:
+        return match.group(1).strip()
+    else:
+        return "Prompt not found."
+    
+def load_prompt(prompt_name):
+    """
+    Retrieve and generate a JSON prompt based on the prompt name provided.
+    """
+    try:
+        # Get the current working directory and define the prompt directory
+        current_dir = os.getcwd()
+        prompt_dir = os.path.join(current_dir, "prompt_store")
+
+        # Check if the prompt directory exists
+        if not os.path.exists(prompt_dir):
+            raise FileNotFoundError("Prompt directory not found.")
+
+        # Extract the prompt file name and the prompt key
+        prompt_file_name, prompt_key = prompt_name.split('.', 1)
+
+        # Search for the file in the prompt directory
+        prompt_file_path = find_file_in_directory(prompt_dir, f"{prompt_file_name}.md")
+
+        # Raise an error if the file is not found
+        if not prompt_file_path:
+            raise FileNotFoundError(f"Prompt file not found: {prompt_file_name}.md")
+
+        # Read the content of the prompt file
+        with open(prompt_file_path, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        prompt_data = extract_prompt(content,prompt_key)
+        
+        
+        return prompt_data
+
+
+    except Exception as e:
+        raise e
