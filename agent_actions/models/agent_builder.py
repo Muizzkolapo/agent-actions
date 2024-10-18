@@ -3,7 +3,7 @@ from agent_actions.vendors.openai_vendor import OpenAIHandler
 from agent_actions.vendors.gemini_vendor import GeminiHandler
 from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
-from agent_actions.core.utils import load_schema,process_text_with_function_calls
+from agent_actions.core.utils import load_schema,process_text_with_function_calls,load_prompt
 from agent_actions.vendors.groq_llama import GroqLlama3Handler
 from agent_actions.vendors.tools_vendor import ToolHandler
 
@@ -12,36 +12,36 @@ from agent_actions.vendors.tools_vendor import ToolHandler
 
 
 def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_prompt=None, tools_path=None):
-
     """
     Create a dynamic agent based on the provided configuration, with support for transforming the prompt
     using user-defined Python functions specified in the configuration.
 
     :param agent_config: Configuration for the prompt.
-    :param agent_name: Name of the agent.
+    :param udf: User-defined functions.
     :param input_documentation_str: Input documentation for the agent.
     :param formatted_prompt: Preformatted prompt if available.
     :param tools_path: Path to the user's tools directory where custom functions are stored.
     :return: Result of the agent's invocation.
     """
-
-    # Load tools_path from configuration if not provided
-    if tools_path is None:
-        config = agent_config
-        tools_path = config.get('tools', {}).get('path')
-
-    input_documentation = json.dumps(input_documentation_str) 
+    # Handle prompt loading first
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
     else:
-        prompt_config = agent_config.get('prompt', [])
+        prompt_config = agent_config.get('prompt', '')
+        if isinstance(prompt_config, str) and prompt_config.startswith('$'):
+            print(prompt_config[1:])
+            prompt_config = load_prompt(prompt_config[1:])  # Remove '$' before loading
+
+    # Load tools_path from configuration if not provided
+    if tools_path is None:
+        tools_path = agent_config.get('tools', {}).get('path')
+
+    input_documentation = json.dumps(input_documentation_str) 
 
     # Dynamically transform the prompt using Python functions, always passing input_documentation_str
     transformed_prompt_config = process_text_with_function_calls(prompt_config, tools_path, input_documentation)
     
-
     prompt_config = transformed_prompt_config
-
 
     # Check for prompt_debug flag
     if agent_config.get('prompt_debug', False):

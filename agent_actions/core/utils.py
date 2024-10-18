@@ -383,3 +383,62 @@ def call_user_function(function_name, tools_path=None, input_documentation_str=N
     except Exception as e:
         print(f"Error loading function {function_name}: {e}")
         raise
+
+
+
+
+
+
+
+
+
+
+
+
+def extract_prompt(content, prompt_name):
+    # Regular expression to match the prompt block
+    pattern = re.compile(rf"\{{prompt {prompt_name}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
+    
+    # Search for the prompt using the pattern
+    match = pattern.search(content)
+    
+    if match:
+        return match.group(1).strip()
+    else:
+        return "Prompt not found."
+    
+def load_prompt(prompt_name):
+    """
+    Retrieve and generate a JSON prompt based on the prompt name provided.
+    """
+    try:
+        # Get the current working directory and define the prompt directory
+        current_dir = os.getcwd()
+        prompt_dir = os.path.join(current_dir, "prompt_store")
+
+        # Check if the prompt directory exists
+        if not os.path.exists(prompt_dir):
+            raise FileNotFoundError("Prompt directory not found.")
+
+        # Extract the prompt file name and the prompt key
+        prompt_file_name, prompt_key = prompt_name.split('.', 1)
+
+        # Search for the file in the prompt directory
+        prompt_file_path = find_file_in_directory(prompt_dir, f"{prompt_file_name}.md")
+
+        # Raise an error if the file is not found
+        if not prompt_file_path:
+            raise FileNotFoundError(f"Prompt file not found: {prompt_file_name}.md")
+
+        # Read the content of the prompt file
+        with open(prompt_file_path, 'r', encoding='utf-8') as file:
+            content = file.read()
+
+        prompt_data = extract_prompt(content,prompt_key)
+        
+        
+        return prompt_data
+
+
+    except Exception as e:
+        raise e
