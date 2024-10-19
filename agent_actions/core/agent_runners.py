@@ -6,9 +6,9 @@ from collections import OrderedDict
 from agent_actions.logging_setup import logger
 from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
 from agent_actions.core.utils import Utils
-from agent_actions.core.agent_handlers import AgentManager
-from agent_actions.processors.config_constructor import ConfigValidator
-from agent_actions.processors.file_processor import FileHandler
+from agent_actions.handlers.agent_handlers import AgentManager
+from agent_actions.handlers.config_handler import ConfigValidator
+from agent_actions.handlers.file_handler import FileHandler
 import json 
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):

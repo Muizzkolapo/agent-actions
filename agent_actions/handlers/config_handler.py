@@ -1,10 +1,9 @@
 """Module for Configuration Validation Functions."""
 import os
 import logging
-from agent_actions.processors.file_processor import FileHandler
+from agent_actions.handlers.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
-from agent_actions.processors.file_processor import FileHandler
 
 
 

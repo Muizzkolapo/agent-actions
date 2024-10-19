@@ -3,8 +3,8 @@ import os
 import sys
 import yaml
 from agent_actions.logging_setup import logger
-from agent_actions.processors.file_processor import FileHandler
-from agent_actions.processors.config_constructor import ConfigValidator
+from agent_actions.handlers.file_handler import FileHandler
+from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.core.agent_runners import run_agents
 from agent_actions.core.agent_runners import AgentManager
 

@@ -2,7 +2,7 @@
 import json
 import os
 import logging
-from agent_actions.processors.file_processor import FileReader, FileWriter  
+from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.content_processor import TargetContentProcessor
 
 # Constants

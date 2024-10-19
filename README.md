@@ -8,3 +8,31 @@
 - we have importing prompt
 - we have return source and some keys retrin collection and source context 
 - we have side collection
+
+
+agent-actions/
+├── agent_actions_core/
+│   ├── core/
+│   ├── processors/
+│   ├── vendors/
+│   └── __init__.py
+├── agent_actions_cli/
+│   ├── commands/
+│   └── __init__.py
+├── agent_actions_web/
+│   ├── static/
+│   ├── templates/
+│   └── __init__.py
+├── config/
+│   ├── default_config.yml
+│   └── agent_actions.yml
+├── docs/
+│   └── web_interface/
+├── tests/
+│   ├── unit/
+│   └── integration/
+├── setup.py
+├── requirements.txt
+├── README.md
+├── MANIFEST.in
+└── Makefile

@@ -2,7 +2,7 @@ import json
 from textwrap import dedent
 from openai import OpenAI
 import os 
-from agent_actions.processors.string_transformer import StringProcessor
+from agent_actions.transformers.string_transformer import StringProcessor
 
 
 class OpenAIHandler:

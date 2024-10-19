@@ -5,11 +5,11 @@ import logging
 from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
-from agent_actions.core.agent_handlers import AgentManager
-from agent_actions.processors.config_constructor import ConfigValidator
-from agent_actions.processors.data_transformer import DataTransformer
-from agent_actions.processors.file_processor import FileHandler
-from agent_actions.processors.string_transformer import StringProcessor
+from agent_actions.handlers.agent_handlers import AgentManager
+from agent_actions.handlers.config_handler import ConfigValidator
+from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.handlers.file_handler import FileHandler
+from agent_actions.transformers.string_transformer import StringProcessor
 
 
 logger = logging.getLogger(__name__)

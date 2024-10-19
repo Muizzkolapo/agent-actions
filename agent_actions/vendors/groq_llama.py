@@ -1,9 +1,9 @@
 import os
 import json
 from groq import Groq  # Assuming this is the official Groq API Python package
-from agent_actions.processors.string_transformer import StringProcessor
+from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
-from agent_actions.processors.data_transformer import DataTransformer
+from agent_actions.transformers.data_transformer import DataTransformer
 
 
 

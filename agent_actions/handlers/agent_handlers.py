@@ -2,7 +2,7 @@ import json
 import traceback
 import importlib
 import os 
-from agent_actions.processors.file_processor import FileHandler
+from agent_actions.handlers.file_handler import FileHandler
 import shutil
 import random
 import logging
