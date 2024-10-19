@@ -15,6 +15,7 @@ setup(
     packages=find_packages(),
     include_package_data=True,
     install_requires=[
+        'click',
         'pyyaml',
         'openai==1.26.0',
         'tiktoken==0.6.0',
@@ -32,9 +33,6 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'agent-run=agent_actions.core.main:main',
-            'agent-init=agent_actions.core.init:main',
-            'agent-dags=agent_actions.docs.app:main',
             'agent=agent_actions.core.main:main'
         ],
     },

@@ -1,8 +1,9 @@
 import os
 import json
 from groq import Groq  # Assuming this is the official Groq API Python package
-from agent_actions.core.utils import process_as_string,ensure_list
+from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
+from agent_actions.transformers.data_transformer import DataTransformer
 
 
 
@@ -13,7 +14,7 @@ class GroqLlama3Handler:
         groq = Groq(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
 
-        input_documentation_str = process_as_string(input_documentation)
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
         
         prompt = f"""
             <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n
@@ -35,7 +36,7 @@ class GroqLlama3Handler:
             )
             response_temp =  llm.choices[0].message.content
             response = json.loads(response_temp)
-            response_list = ensure_list(response)
+            response_list = DataTransformer.ensure_list(response)
             return response_list
 
         except Exception as e:

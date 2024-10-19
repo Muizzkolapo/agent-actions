@@ -1,9 +1,8 @@
 import json
 from textwrap import dedent
 from openai import OpenAI
-import logging
 import os 
-from agent_actions.core.utils import process_as_string
+from agent_actions.transformers.string_transformer import StringProcessor
 
 
 class OpenAIHandler:
@@ -16,7 +15,7 @@ class OpenAIHandler:
         model_name = agent_config['model_name']
 
 
-        input_documentation_str = process_as_string(input_documentation)
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
 
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>

@@ -2,9 +2,9 @@
 import os
 from agent_actions.models import agent_builder
 import logging
-from agent_actions.core.agent_handlers import split_text_content
+from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.content_processor import StagingContentProcessor
-from agent_actions.processors.file_processor import FileReader, FileWriter
+from agent_actions.handlers.file_handler import FileReader, FileWriter
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
 
     # Call the split_text_into_chunks function with the required arguments
-    chunks = split_text_content(content, chunk_size, overlap)
+    chunks = Tokenizer.split_text_content(content, chunk_size, overlap)
 
     content_processor = StagingContentProcessor(agent_config, agent_name)
     data_chunk, src_text = content_processor.process(chunks, os.path.splitext(file_path)[1].lower())
