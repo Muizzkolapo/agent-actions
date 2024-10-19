@@ -33,9 +33,6 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'agent-run=agent_actions.core.main:main',
-            'agent-init=agent_actions.core.init:main',
-            'agent-dags=agent_actions.docs.app:main',
             'agent=agent_actions.core.main:main'
         ],
     },

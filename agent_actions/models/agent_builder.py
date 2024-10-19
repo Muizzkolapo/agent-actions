@@ -46,6 +46,7 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
         print("DEBUG: Prompt going into the agent:")
         print("="*40)
         print(prompt_config)
+        print(formatted_prompt)
         print("="*40 + "\n")
 
     model_vendor = agent_config['model_vendor']

@@ -10,6 +10,7 @@ from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.handlers.agent_handlers import PromptLoader
 
 
 logger = logging.getLogger(__name__)
@@ -333,6 +334,8 @@ class TargetContentProcessor:
             else:
                 logger.info(f"Creating dynamic agent with model: {self.agent_config['model_vendor']}")
                 raw_prompt = self.agent_config.get('prompt', '')
+                if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
+                    raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])  
                 if not raw_prompt:
                     logger.warning("No prompt found in agent_config. Using default prompt.")
                     raw_prompt = "Process the following content: {content}"

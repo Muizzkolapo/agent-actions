@@ -7,11 +7,40 @@ from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.core.agent_runners import run_agents
 from agent_actions.core.agent_runners import AgentManager
+from agent_actions.docs.app import run_app
+from agent_actions.core.init import init_project
+
+
+# Import the init_project function
+from agent_actions.core.init import init_project
 
 @click.group()
 def main():
-    """Main entry point for the CLI."""
+    """Agent CLI Tool"""
     pass
+
+@main.command()
+@click.argument('project_name')
+def init(project_name):
+    """Initialize a new Agent Actions project."""
+    try:
+        init_project(project_name)
+    except Exception as e:
+        logger.error(f"An error occurred during initialization: {e}")
+        sys.exit(1)
+
+@main.command()
+@click.option('--host', default='0.0.0.0', help='Host for the Flask app.')
+@click.option('--port', default=8000, help='Port for the Flask app.')
+@click.option('--debug', is_flag=True, default=False, help='Run the Flask app in debug mode.')
+def docs(host, port, debug):
+    """Generate or display agent documentation."""
+    try:
+        run_app(host, port, debug)
+    except Exception as e:
+        logger.error(f"An error occurred while generating docs: {e}")
+        sys.exit(1)
+
 
 @main.command()
 @click.option('-a', '--agent', required=True, help="Name of the schema (agent configuration file without path)")
