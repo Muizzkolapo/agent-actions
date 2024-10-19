@@ -51,19 +51,24 @@ class StagingContentProcessor:
                 agent_type=self.agent_config['agent_type'],
                 sample_count=sample_count
             )
-            # Since input_documentation is a string, append samples to it
             samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
-            input_documentation += "\n\nfew shot samples:\n" + samples_str
+
+            # If input_documentation is a dictionary, convert it to a string
+            if isinstance(input_documentation, dict):
+                input_documentation_str = json.dumps(input_documentation, indent=2)
+                input_documentation_str += "\n\nfew shot samples:\n" + samples_str
+            else:
+                input_documentation += "\n\nfew shot samples:\n" + samples_str
         else:
             logger.info("Not using few shot samples.")
 
+        # Handle the rest of the logic to process input_documentation as needed
         # If source_path is provided, attempt to load the source data
         if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
             with open(source_path, 'r') as file:
                 source_data = json.load(file)
                 for item in source_data:
                     guid_key = list(item.keys())[0]
-                    # Check if the loaded data has the required structure
                     if guid_key == input_documentation["guid"]:
                         input_documentation_new = input_documentation["content"]
                         response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
@@ -71,19 +76,15 @@ class StagingContentProcessor:
                         transformed_response = DataTransformer.transform_structure(transformed_response_temp)
                         src_text = [item]
                         return transformed_response, src_text
-
-                    elif guid_key != input_documentation["guid"] or guid_key not in input_documentation:
+                    else:
                         input_documentation_new = input_documentation["content"]
-                        # This block handles the scenario where source_path is None or keys are missing
                         response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
                         guid = input_documentation["guid"]
                         transformed_response_temp = [{guid: response}]
                         transformed_response = DataTransformer.transform_structure(transformed_response_temp)
                         src_text = [{guid: input_documentation_new}]
                         return transformed_response, src_text
-
         else:
-            # This block handles the scenario where source_path is None or keys are missing
             response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation)
             guid = Utils.generate_id()
             transformed_response_temp = [{guid: response}]

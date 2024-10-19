@@ -99,6 +99,8 @@ class StringProcessor:
             str or list: The text with dispatch_task() calls replaced by function outputs.
         """
         def process_single_text(single_text):
+            if not isinstance(single_text, str):
+                single_text = str(single_text)  # Ensure the input is a string
             function_call_pattern = r"dispatch_task\('(\w+)'\)"
             function_calls = re.findall(function_call_pattern, single_text)
 
@@ -117,9 +119,12 @@ class StringProcessor:
             return single_text
 
         if isinstance(text, list):
-            return [process_single_text(item) for item in text]
-        else:
+            return [process_single_text(str(item)) for item in text]  # Ensure all list items are strings
+        elif isinstance(text, str):
             return process_single_text(text)
+        else:
+            raise TypeError(f"Expected text to be a string or list, got {type(text)}")
+
 
     @staticmethod
     def call_user_function(function_name, tools_path=None, input_documentation_str=None):
