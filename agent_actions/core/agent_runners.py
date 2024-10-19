@@ -2,13 +2,13 @@ import os
 import sys
 import yaml
 import shutil
-from collections import deque, OrderedDict
-from agent_actions.core.agent_handlers import clean_agent_output, process_and_generate_for_agent
-from agent_actions.core.tooling import execute_user_defined_function
+from collections import OrderedDict
 from agent_actions.logging_setup import logger
 from agent_actions.core.state_management import save_checkpoint, load_checkpoint, remove_checkpoint
 from agent_actions.core.utils import Utils
-from agent_actions.core.agent_handlers import find_agents_name,find_config_file
+from agent_actions.core.agent_handlers import AgentManager
+from agent_actions.processors.config_constructor import ConfigValidator
+from agent_actions.processors.file_processor import FileHandler
 import json 
 
 def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
@@ -17,7 +17,7 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
     try:
         loader = 'staging_loader' if idx == 0 else 'target_loader'
         function_name = 'generate_staging' if idx == 0 else 'generate_target'
-        output_folder = process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
+        output_folder = AgentManager.process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
 
         if use_tools:
             if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
@@ -27,7 +27,7 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
                     logger.info(f"Side output generated for {agent_config['agent_type']}")
             else:
                 function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-                clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+                AgentManager.clean_agent_output(agent_name, agent_config['agent_type'], function_name)
 
     except Exception as e:
         logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
@@ -92,7 +92,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         with open(default_path, 'r', encoding='utf-8') as file:
             default_config = yaml.safe_load(file)
 
-        state['agent_name'] = find_agents_name(user_config)
+        state['agent_name'] = ConfigValidator.find_agent_name(user_config)
         logger.info(f"Determined agent name: {state['agent_name']}")
 
         config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
@@ -131,7 +131,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
     # Execute parent pipeline if present
     if parent_pipeline:
         logger.info(f"Attempting to execute parent pipeline: {parent_pipeline}")
-        parent_constructor_path = find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
+        parent_constructor_path = FileHandler.find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
         if parent_constructor_path:
             logger.info(f"Parent pipeline config found at: {parent_constructor_path}")
             parent_output = run_agents(parent_constructor_path, user_code_path, default_path, use_tools)
@@ -248,7 +248,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         child_filename = f"{state['child_pipeline']}.yml"
         logger.info(f"Searching for child pipeline config in base directory: {base_dir}")
         logger.info(f"Looking for file: {child_filename}")
-        child_constructor_path = find_config_file(base_dir, child_filename)
+        child_constructor_path = FileHandler.find_config_file(base_dir, child_filename)
         if child_constructor_path:
             logger.info(f"Child pipeline config found at: {child_constructor_path}")
             # Pass the final output folder and source folder of the parent pipeline to the child pipeline

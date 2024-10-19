@@ -1,7 +1,8 @@
 import os
 import json
 import google.generativeai as genai
-from agent_actions.core.utils import StringProcessor,DataTransformer
+from agent_actions.processors.string_transformer import StringProcessor
+from agent_actions.processors.data_transformer import DataTransformer
 import logging
 from textwrap import dedent
 

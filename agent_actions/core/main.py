@@ -3,9 +3,10 @@ import os
 import sys
 import yaml
 from agent_actions.logging_setup import logger
-from agent_actions.core.utils import FileHandler
-from agent_actions.core.agent_handlers import validate_agent_config,find_config_file,check_agent_file_unique,check_agent_name_unique,clean_agent_directories
+from agent_actions.processors.file_processor import FileHandler
+from agent_actions.processors.config_constructor import ConfigValidator
 from agent_actions.core.agent_runners import run_agents
+from agent_actions.core.agent_runners import AgentManager
 
 
 def main():
@@ -27,7 +28,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "clean":
-        clean_agent_directories(args.agent)
+        AgentManager.clean_agent_directories(args.agent)
         return
 
     if args.command == "run":
@@ -49,7 +50,7 @@ def main():
 
         if not filename.endswith(".yml"):
             filename += ".yml"
-        full_path = find_config_file(agent_config_dir, filename)
+        full_path = FileHandler.find_config_file(agent_config_dir, filename)
 
         if full_path is None:
             logger.error(f"The configuration file '{filename}' does not exist in '{agent_config_dir}'.")
@@ -60,14 +61,14 @@ def main():
             sys.exit(1)
 
         project_dir = os.path.abspath(os.path.join(current_dir))
-        if not check_agent_file_unique(full_path, project_dir):
+        if not ConfigValidator.check_agent_file_unique(full_path, project_dir):
             logger.error(f"'{full_path}' is not unique across the entire project.")
             sys.exit(1)
 
         agent_name = os.path.splitext(filename)[0]
         logger.info(f"Agent name determined: {agent_name}")
 
-        if not check_agent_name_unique(agent_name, project_dir):
+        if not ConfigValidator.check_agent_name_unique(agent_name, project_dir):
             logger.error(f"The agent name '{agent_name}' is not unique across the entire project.")
             sys.exit(1)
 
@@ -92,7 +93,7 @@ def main():
             logger.error(f"The configuration for '{filename}' is not a list.")
             sys.exit(1)
 
-        is_valid, message = validate_agent_config(agent_entries)
+        is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
         if not is_valid:
             logger.error(f"Validation error: {message}")
             sys.exit(1)

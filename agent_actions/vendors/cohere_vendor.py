@@ -2,7 +2,7 @@ import cohere
 import os
 import json 
 from textwrap import dedent
-from agent_actions.core.utils import StringProcessor
+from agent_actions.processors.string_transformer import StringProcessor
 
 class CohereHandler:
     @staticmethod

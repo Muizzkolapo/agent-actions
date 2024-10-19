@@ -1,9 +1,8 @@
 import json
 from textwrap import dedent
 from openai import OpenAI
-import logging
 import os 
-from agent_actions.core.utils import StringProcessor
+from agent_actions.processors.string_transformer import StringProcessor
 
 
 class OpenAIHandler:

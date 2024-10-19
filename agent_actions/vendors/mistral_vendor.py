@@ -1,7 +1,7 @@
 import os
 import json
 from mistralai import Mistral
-from agent_actions.core.utils import StringProcessor,DataTransformer
+from agent_actions.processors.string_transformer import StringProcessor
 from textwrap import dedent
 
 class MistralHandler:

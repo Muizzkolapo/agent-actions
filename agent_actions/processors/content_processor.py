@@ -4,10 +4,13 @@ import json
 import logging
 from pathlib import Path
 from agent_actions.models import agent_builder
-from agent_actions.core.utils import StringProcessor, DataTransformer, Utils, FileHandler
-from agent_actions.core.agent_handlers import (
-    load_few_shot_samples, get_file_info, should_update_schema, get_content_by_guid
-)
+from agent_actions.core.utils import Utils
+from agent_actions.core.agent_handlers import AgentManager
+from agent_actions.processors.config_constructor import ConfigValidator
+from agent_actions.processors.data_transformer import DataTransformer
+from agent_actions.processors.file_processor import FileHandler
+from agent_actions.processors.string_transformer import StringProcessor
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +45,7 @@ class StagingContentProcessor:
         # Check if sample_count is a positive integer
         if sample_count > 0:
             logger.info(f"Loading {sample_count} few shot samples.")
-            samples = load_few_shot_samples(
+            samples = AgentManager.load_few_shot_samples(
                 few_shot_samples_path,
                 agent_type=self.agent_config['agent_type'],
                 sample_count=sample_count
@@ -133,7 +136,7 @@ class StagingContentProcessor:
         """
         data_chunk = []
         src_text = []
-        src_legacy_path = get_file_info(file_path)
+        src_legacy_path = FileHandler.get_file_info(file_path)
         
         # Check if content is a list
         if isinstance(content, list):
@@ -265,7 +268,7 @@ class TargetContentProcessor:
     def _process_single_item(self, item, source_data, side_collection, selection_keys):
         contents = item['content']
         guid = item['guid']
-        source_content = get_content_by_guid(source_data, guid)
+        source_content = DataTransformer.get_content_by_guid(source_data, guid)
 
         generated_data = self._generate_data(contents, source_content)
         return self._process_item(contents, generated_data, guid, side_collection, selection_keys)
@@ -296,7 +299,7 @@ class TargetContentProcessor:
 
         if sample_count > 0:
             logger.info(f"Loading {sample_count} few shot samples for agent type {self.agent_config['agent_type']}.")
-            samples = load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
+            samples = AgentManager.load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
             if isinstance(contents, dict):
                 contents['samples'] = samples
             else:
@@ -347,7 +350,7 @@ class TargetContentProcessor:
 
     def _process_item(self, contents, generated_data, guid, side_collection, selection_keys):
         """Process a single item and return the transformed response."""
-        if should_update_schema(self.agent_config, selection_keys, {self.agent_config['agent_type']: side_collection}):
+        if ConfigValidator.should_update_schema(self.agent_config, selection_keys, {self.agent_config['agent_type']: side_collection}):
             updated_generated_data = [
                 DataTransformer.update_schema_objects(contents, data_item, side_collection)
                 for data_item in generated_data
