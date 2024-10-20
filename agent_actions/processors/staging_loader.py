@@ -23,6 +23,75 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         file_path (str): Path to the input file.
         base_directory (str): Base directory for the relative file path.
         output_directory (str): Directory where the output file will be saved.
+
+    Raises:
+        ValueError: If the file type is not supported.
+    """
+    if agent_builder is None:
+        raise ImportError("Unable to import 'agent_actions.agent_utils.agent_builder'")
+
+    # Use FileReader to read the file content
+    file_reader = FileReader(file_path)
+    content = file_reader.read()
+
+    file_type = file_reader.file_type  # Get the file type
+
+    # Create an instance of StagingContentProcessor
+    content_processor = StagingContentProcessor(agent_config, agent_name)
+
+    # Process the content based on the file type
+    if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
+        # Text-based content: Split into chunks and process
+        chunks = Tokenizer.split_text_content(content, agent_config["chunk_config"]["chunk_size"], agent_config["chunk_config"]["overlap"])
+        data_chunk, src_text = content_processor._process_chunks(chunks)
+
+    elif file_type == '.json':
+        # Process JSON content
+        data_chunk, src_text = content_processor._process_json_content(content, agent_config, agent_name, file_path)
+
+    elif file_type in ('.csv', '.xlsx'):
+        # Process tabular content (CSV or Excel)
+        data_chunk, src_text = content_processor._process_tabular_content(content, agent_config, agent_name)
+
+    elif file_type == '.xml':
+        # Process XML content
+        data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
+
+    else:
+        raise ValueError(f"Unsupported file type: {file_type}")
+
+    #--sorting out output target
+    relative_path = os.path.relpath(file_path, base_directory)
+    output_file_path = os.path.join(output_directory, relative_path.replace(file_type, '.json'))
+    os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
+
+    # Write the processed data to the output file
+    file_writer = FileWriter(output_file_path)
+    file_writer.write_staging(data_chunk)
+
+    #--sorting out output source_text folder
+    base_path = os.path.join(base_directory, "..")
+    source_path = os.path.join(base_path, "source")
+    output_src_path = os.path.join(source_path, relative_path.replace(file_type, '.json'))
+    os.makedirs(os.path.dirname(output_src_path), exist_ok=True)
+
+    # Write the source content to the source output file
+    source_file_writer = FileWriter(output_src_path)
+    source_file_writer.write_source(src_text)
+
+
+
+def generate_stagingold(agent_config, agent_name, file_path, base_directory, output_directory):
+    """
+    Processes a file by splitting its content into chunks or looping through its objects/rows,
+    and generating data using an agent.
+
+    Parameters:
+        agent_config: Configuration for the agent.
+        agent_name (str): Name of the agent.
+        file_path (str): Path to the input file.
+        base_directory (str): Base directory for the relative file path.
+        output_directory (str): Directory where the output file will be saved.
         chunk_config (dict, optional): Configuration for chunking the content.
 
     Raises:

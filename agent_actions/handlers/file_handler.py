@@ -33,44 +33,51 @@ class FileReader:
         }
 
         if self.file_type in file_type_handlers:
-            with open(self.file_path, 'r', encoding='utf-8') as file:
-                return file_type_handlers[self.file_type](file)
+            return file_type_handlers[self.file_type]()
         else:
             raise ValueError(f"Unsupported file type: {self.file_type}")
 
-    def _read_json(self, file):
-        return json.load(file)
+    def _read_json(self):
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            return json.load(file)
 
-    def _read_text(self, file):
-        return file.read()
+    def _read_text(self):
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            return file.read()
 
-    def _read_csv(self, file):
-        reader = csv.reader(file)
-        return list(reader)
+    def _read_csv(self):
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            reader = csv.reader(file)
+            return list(reader)
 
-    def _read_pdf(self, file):
-        reader = PyPDF2.PdfReader(file)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
+    def _read_pdf(self):
+        with open(self.file_path, 'rb') as file:
+            reader = PyPDF2.PdfReader(file)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text()
+            return text
 
-    def _read_xml(self, file):
-        tree = ET.parse(file)
+    def _read_xml(self):
+        tree = ET.parse(self.file_path)
         root = tree.getroot()
         return tree, root
 
-    def _read_docx(self, file_path):
-        doc = Document(file_path)
+    def _read_docx(self):
+        # Document() takes the file path directly
+        doc = Document(self.file_path)
         return '\n'.join([para.text for para in doc.paragraphs])
 
-    def _read_xlsx(self, file):
-        df = pd.read_excel(file)
+    def _read_xlsx(self):
+        # Pandas can read Excel files directly from the file path
+        df = pd.read_excel(self.file_path)
         return df.to_dict(orient='records')
 
-    def _read_html(self, file):
-        soup = BeautifulSoup(file, 'html.parser')
-        return soup.get_text()
+    def _read_html(self):
+        with open(self.file_path, 'r', encoding='utf-8') as file:
+            soup = BeautifulSoup(file, 'html.parser')
+            return soup.get_text()
+
 
 
 class FileWriter:
