@@ -5,6 +5,7 @@ import logging
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.content_processor import StagingContentProcessor
 from agent_actions.handlers.file_handler import FileReader, FileWriter
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     elif file_type == '.json':
         # Process JSON content
-        data_chunk, src_text = content_processor._process_json_content(content, agent_config, agent_name, file_path)
+        data_chunk, src_text = content_processor._process_json_content(content, file_path)
 
     elif file_type in ('.csv', '.xlsx'):
         # Process tabular content (CSV or Excel)
@@ -75,9 +76,25 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     output_src_path = os.path.join(source_path, relative_path.replace(file_type, '.json'))
     os.makedirs(os.path.dirname(output_src_path), exist_ok=True)
 
-    # Write the source content to the source output file
-    source_file_writer = FileWriter(output_src_path)
-    source_file_writer.write_source(src_text)
+    # Check if the source file already exists
+    if os.path.exists(output_src_path):
+        with open(output_src_path, 'r') as existing_file:
+            existing_source = json.load(existing_file)
+        
+        # Check if any new GUIDs need to be added
+        new_guids = [list(item.keys())[0] for item in src_text if list(item.keys())[0] not in [list(existing_item.keys())[0] for existing_item in existing_source]]
+        
+        if new_guids:
+            # Append only the new items to the existing source
+            existing_source.extend([item for item in src_text if list(item.keys())[0] in new_guids])
+            
+            # Write the updated source content to the source output file
+            source_file_writer = FileWriter(output_src_path)
+            source_file_writer.write_source(existing_source)
+    else:
+        # If the file doesn't exist, write the entire src_text
+        source_file_writer = FileWriter(output_src_path)
+        source_file_writer.write_source(src_text)
 
 
 

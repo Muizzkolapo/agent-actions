@@ -62,31 +62,49 @@ class StagingContentProcessor:
         else:
             logger.info("Not using few shot samples.")
 
+        # Add prompt handling similar to TargetContentProcessor
+        raw_prompt = self.agent_config.get('prompt', '')
+        if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
+            raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
+        if not raw_prompt:
+            logger.warning("No prompt found in agent_config. Using default prompt.")
+            raw_prompt = "Process the following content: {content}"
+
+        # Handle source content and format prompt
+        source_content = None
+        if source_path:
+            source_content = self._load_source_content(source_path, input_documentation)
+        
+        source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
+        formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, input_documentation)
+
+        # Use the formatted prompt when creating the dynamic agent
+        response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation, formatted_prompt)
+
         # Handle the rest of the logic to process input_documentation as needed
-        # If source_path is provided, attempt to load the source data
-        if source_path is not None and "guid" in input_documentation and "content" in input_documentation:
-            with open(source_path, 'r') as file:
-                source_data = json.load(file)
-                for item in source_data:
-                    guid_key = list(item.keys())[0]
-                    if guid_key == input_documentation["guid"]:
-                        input_documentation_new = input_documentation["content"]
-                        response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
-                        transformed_response_temp = [{guid_key: response}]
-                        transformed_response = DataTransformer.transform_structure(transformed_response_temp)
-                        src_text = [item]
-                        return transformed_response, src_text
-                    else:
-                        input_documentation_new = input_documentation["content"]
-                        response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new)
-                        guid = input_documentation["guid"]
-                        transformed_response_temp = [{guid: response}]
-                        transformed_response = DataTransformer.transform_structure(transformed_response_temp)
-                        src_text = [{guid: input_documentation_new}]
-                        return transformed_response, src_text
+        if source_path is not None and isinstance(input_documentation, dict) and "guid" in input_documentation and "content" in input_documentation:
+            guid = input_documentation["guid"]
+            input_documentation_new = input_documentation["content"]
+            
+            # Use the formatted prompt that includes the source content
+            response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation_new, formatted_prompt)
+            
+            transformed_response_temp = [{guid: response}]
+
+            transformed_response = DataTransformer.transform_structure(transformed_response_temp)
+            
+            # Use the original source content for src_text
+            print("==========using this=======")
+            print(source_loaded_prompt)
+            src_text = [{guid: source_loaded_prompt}]
+            
+            return transformed_response, src_text
         else:
-            response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation)
-            guid = Utils.generate_id()
+            # If no source_path or input_documentation is not in the expected format,
+            # process without source content
+            response = agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, input_documentation, formatted_prompt)
+            
+            guid = Utils.generate_id() if not isinstance(input_documentation, dict) or "guid" not in input_documentation else input_documentation["guid"]
             transformed_response_temp = [{guid: response}]
             transformed_response = DataTransformer.transform_structure(transformed_response_temp)
             src_text = [{guid: input_documentation}]
@@ -124,7 +142,7 @@ class StagingContentProcessor:
             src_text.extend(src_collection)
         return data_chunk, src_text
 
-    def _process_json_content(self, content, agent_config, agent_name, file_path):
+    def _process_json_content(self, content, file_path):
         """
         Process JSON content and create dynamic agents for each value in the content.
 
@@ -144,7 +162,7 @@ class StagingContentProcessor:
         if isinstance(content, list):
             for obj in content:
                 # Create a dynamic agent for each object in the list
-                dynamic_agent,src_collection = self.staging_dynamic_creator(obj,src_legacy_path)
+                dynamic_agent,src_collection = self.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
                 data_chunk.extend(dynamic_agent)
                 src_text.extend(src_collection)
         
@@ -154,12 +172,12 @@ class StagingContentProcessor:
                 if isinstance(value, list):
                     for obj in value:
                         # Create a dynamic agent for each object in the list
-                        dynamic_agent,src_collection = self.staging_dynamic_creator(obj)
+                        dynamic_agent,src_collection = self.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
                         data_chunk.extend(dynamic_agent)
                         src_text.extend(src_collection)
                 else:
                     # Create a dynamic agent for the entire dictionary content
-                    generated_content,src_collection  = self.staging_dynamic_creator(content)
+                    generated_content,src_collection  = self.staging_dynamic_creator(input_documentation=content,source_path=src_legacy_path)
                     data_chunk.extend(generated_content)
                     src_text.extend(src_collection)
         
@@ -210,6 +228,20 @@ class StagingContentProcessor:
                 data_chunk.extend(chunk_output)
                 src_text.extend(src_collection)
         return data_chunk,src_text
+
+    def _load_source_content(self, source_path, input_documentation):
+        """Load source content based on the input documentation's GUID."""
+        try:
+            with open(source_path, 'r') as file:
+                source_data = json.load(file)
+                if isinstance(input_documentation, dict) and "guid" in input_documentation:
+                    guid = input_documentation["guid"]
+                    for item in source_data:
+                        if guid in item:
+                            return item[guid]
+        except Exception as e:
+            logger.error(f"Error loading source content: {e}")
+        return None
 
 class TargetContentProcessor:
     def __init__(self, agent_config, agent_name):
@@ -364,3 +396,5 @@ class TargetContentProcessor:
             response_temp = [{guid: generated_data}]
 
         return DataTransformer.transform_structure(response_temp)
+
+
