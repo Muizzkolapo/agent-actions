@@ -1,4 +1,3 @@
-"""Module for staging data loading and processing."""
 import os
 import json
 import logging
@@ -12,23 +11,34 @@ from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.agent_handlers import PromptLoader
 
-
 logger = logging.getLogger(__name__)
+
 class TargetContentProcessor:
     def __init__(self, agent_config, agent_name):
+        """
+        Initialize the TargetContentProcessor with the given agent configuration and agent name.
+        
+        :param agent_config: Configuration details for the agent.
+        :param agent_name: Name of the agent being processed.
+        """
         self.agent_config = agent_config
         self.agent_name = agent_name
 
     def process(self, data, file_path):
+        """
+        Process the given data using the agent configuration and source data from the file path.
+        
+        :param data: List of items to process.
+        :param file_path: Path to the source data file.
+        :return: List of processed items.
+        """
         try:
             source_data = self._load_source_data(file_path)
             processed_data = []
-            side_collection = self.agent_config.get('side_collection', [])
-            selection_keys = [self.agent_config['agent_type']]
 
             for items in data:
                 try:
-                    processed_item = self._process_single_item(items, source_data, side_collection, selection_keys)
+                    processed_item = self._process_single_item(items, source_data)
                     processed_data.extend(processed_item)
                 except Exception as e:
                     logger.error(f"Error processing item: {e}")
@@ -39,133 +49,142 @@ class TargetContentProcessor:
             raise
 
     def process_for_side_output(self, data, file_path):
-
+        """
+        Process the data and segregate main output and side output based on the configuration.
+        
+        :param data: List of items to process.
+        :param file_path: Path to the source data file.
+        :return: Tuple of (main_output, side_output).
+        """
         try:
             source_data = self._load_source_data(file_path)
-            main_output = []
-            side_output = []
-            side_collection = self.agent_config.get('side_collection', [])
-            selection_keys = [self.agent_config['agent_type']]
+            main_output, side_output = [], []
 
             for item in data:
                 try:
-                    processed_item = self._process_single_item(item, source_data, side_collection, selection_keys)
+                    processed_item = self._process_single_item(item, source_data)
                     if isinstance(processed_item, list):
                         for sub_item in processed_item:
-                            content = sub_item.get('content', {})
-                            if isinstance(content, dict):
-                                if content.get('side_output', False):
-                                    side_output.append(sub_item)
-                                else:
-                                    main_output.append(sub_item)
+                            if isinstance(sub_item.get('content', {}), dict) and sub_item['content'].get('side_output', False):
+                                side_output.append(sub_item)
                             else:
-                                logger.warning(f"Unexpected content format: {content}")
+                                main_output.append(sub_item)
                     else:
                         logger.warning(f"Unexpected item format: {processed_item}")
                 except Exception as e:
-                    logger.error(f"Error processing item: {str(e)}")
+                    logger.error(f"Error processing item: {e}")
 
             return main_output, side_output
         except Exception as e:
-            logger.error(f"Error in process_data_for_side_output: {str(e)}")
+            logger.error(f"Error in process_data_for_side_output: {e}")
             raise
 
-    def _process_single_item(self, item, source_data, side_collection, selection_keys):
-        contents = item['content']
-        guid = item['guid']
+    def _process_single_item(self, item, source_data):
+        """
+        Process a single item using the source data and agent configuration.
+        
+        :param item: Item to process.
+        :param source_data: Loaded source data corresponding to the item.
+        :return: Processed item as a list of transformed objects.
+        """
+        contents, guid = item['content'], item['guid']
         source_content = DataTransformer.get_content_by_guid(source_data, guid)
-
         generated_data = self._generate_data(contents, source_content)
-        return self._process_item(contents, generated_data, guid, side_collection, selection_keys)
+        return self._process_item(contents, generated_data, guid)
 
     def _load_source_data(self, file_path):
-        """Load source data from the corresponding file."""
-        file_name = os.path.basename(file_path)
-        path = Path(file_path)
-        base_path = path.parents[2]
-        source_path = os.path.join(base_path, "source", file_name)
-        with open(source_path, 'r') as file:
-            return json.load(file)
+        """
+        Load source data from the file corresponding to the provided path.
+        
+        :param file_path: Path to the source data file.
+        :return: Loaded source data as a dictionary.
+        """
+        try:
+            source_path = Path(file_path).parents[2] / "source" / os.path.basename(file_path)
+            with open(source_path, 'r') as file:
+                return json.load(file)
+        except Exception as e:
+            logger.error(f"Error loading source data from {file_path}: {e}")
+            raise
 
     def _generate_data(self, contents, source_content):
-        """Generate data using the appropriate method based on the agent configuration."""
+        """
+        Generate data using the appropriate method based on the agent configuration.
+        
+        :param contents: Content of the current item being processed.
+        :param source_content: Content from the source data corresponding to the current item.
+        :return: Generated data based on the provided contents and source content.
+        """
         self._add_few_shot_samples(contents)
         return self._create_agent_with_data(contents, source_content)
 
     def _add_few_shot_samples(self, contents):
-        """Add few-shot samples to the contents if specified in the configuration."""
-        sample_count = self._parse_sample_count()
+        """
+        Add few-shot samples to the contents if specified in the configuration.
         
-        try:
-            _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
-        except FileNotFoundError as e:
-            logger.error(f"Error finding sample output path: {e}")
-            return
-
+        :param contents: Content of the current item being processed.
+        """
+        sample_count = self._parse_sample_count()
         if sample_count > 0:
-            logger.info(f"Loading {sample_count} few shot samples for agent type {self.agent_config['agent_type']}.")
-            samples = AgentManager.load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
-            if isinstance(contents, dict):
-                contents['samples'] = samples
-            else:
-                logger.warning("Contents is not a dictionary. Cannot add samples.")
+            try:
+                _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
+                samples = AgentManager.load_few_shot_samples(few_shot_samples_path, self.agent_config['agent_type'], sample_count)
+                if isinstance(contents, dict):
+                    contents['samples'] = samples
+                else:
+                    logger.warning("Contents is not a dictionary. Cannot add samples.")
+            except FileNotFoundError as e:
+                logger.error(f"Few-shot samples path not found: {e}")
         else:
-            logger.info("Not using few shot samples.")
+            logger.debug("No few-shot samples loaded.")
 
     def _parse_sample_count(self):
-        """Parse and validate the sample count from the agent configuration."""
-        sample_count = self.agent_config.get("use_few_shot_samples", 0)
+        """
+        Parse and validate the sample count from the agent configuration.
+        
+        :return: Sample count as an integer.
+        """
         try:
-            return int(sample_count)
+            return int(self.agent_config.get("use_few_shot_samples", 0))
         except ValueError:
-            logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
+            logger.warning("Invalid value for 'use_few_shot_samples'. Defaulting to 0.")
             return 0
 
     def _create_agent_with_data(self, contents, source_content):
-        """Create a dynamic agent with the prepared data."""
+        """
+        Create a dynamic agent with the prepared data.
+        
+        :param contents: Content of the current item being processed.
+        :param source_content: Content from the source data corresponding to the current item.
+        :return: Generated agent with prepared data.
+        """
         try:
-            logger.info(f"Entering _create_agent_with_data method")
-            logger.info(f"Contents type: {type(contents)}")
-            logger.info(f"Model vendor: {self.agent_config.get('model_vendor', 'Not specified')}")
-
             if not isinstance(contents, dict):
-                logger.warning(f"Expected contents to be a dict, but got {type(contents)}")
-                contents = {"data": contents}  # Wrapping non-dict content in a dict
+                contents = {"data": contents}
 
-            if self.agent_config['model_vendor'].lower() == 'tool':
-                logger.info(f"Creating dynamic agent with tool: {self.agent_name}")
-                return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents)
-            else:
-                logger.info(f"Creating dynamic agent with model: {self.agent_config['model_vendor']}")
-                raw_prompt = self.agent_config.get('prompt', '')
-                if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
-                    raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])  
-                if not raw_prompt:
-                    logger.warning("No prompt found in agent_config. Using default prompt.")
-                    raw_prompt = "Process the following content: {content}"
+            raw_prompt = self.agent_config.get('prompt', '')
+            if raw_prompt.startswith('$'):
+                raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
 
-                logger.info("Preparing formatted prompt")
-                source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
-                formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, contents)
-                
-                logger.info("Calling create_dynamic_agent with formatted prompt")
-                return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
+            formatted_prompt = StringProcessor.replace_guid_placeholder(raw_prompt or "Process the following content: {content}", str(source_content))
+            formatted_prompt = StringProcessor.replace_placeholders(formatted_prompt, contents)
+            
+            return agent_builder.create_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt)
         except Exception as e:
-            logger.error(f"Error in _create_agent_with_data: {str(e)}")
-            logger.exception("Full traceback:")
-            raise  
+            logger.error(f"Error in _create_agent_with_data: {e}")
+            raise
 
-    def _process_item(self, contents, generated_data, guid, side_collection, selection_keys):
-        """Process a single item and return the transformed response."""
-        if ConfigValidator.should_update_schema(self.agent_config, selection_keys, {self.agent_config['agent_type']: side_collection}):
-            updated_generated_data = [
-                DataTransformer.update_schema_objects(contents, data_item, side_collection)
-                for data_item in generated_data
-            ]
-            response_temp = [{guid: updated_generated_data}]
+    def _process_item(self, contents, generated_data, guid):
+        """
+        Process a single item and return the transformed response.
+        
+        :param contents: Original content of the current item.
+        :param generated_data: Generated data based on the provided contents.
+        :param guid: GUID of the current item.
+        :return: Transformed item as a structured response.
+        """
+        if ConfigValidator.should_update_schema(self.agent_config, [self.agent_config['agent_type']], {self.agent_config['agent_type']: []}):
+            updated_data = [DataTransformer.update_schema_objects(contents, data, []) for data in generated_data]
+            return DataTransformer.transform_structure([{guid: updated_data}])
         else:
-            response_temp = [{guid: generated_data}]
-
-        return DataTransformer.transform_structure(response_temp)
-
-
+            return DataTransformer.transform_structure([{guid: generated_data}])
