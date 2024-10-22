@@ -3,7 +3,7 @@ import json
 import os
 import logging
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
-from agent_actions.processors.content_processor import TargetContentProcessor
+from agent_actions.processors.target_content import TargetContentProcessor
 
 # Constants
 TOOL_VENDOR = 'tool'

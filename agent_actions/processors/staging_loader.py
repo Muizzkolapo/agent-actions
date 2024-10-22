@@ -3,7 +3,7 @@ import os
 from agent_actions.models import agent_builder
 import logging
 from agent_actions.transformers.string_transformer import Tokenizer
-from agent_actions.processors.content_processor import StagingContentProcessor
+from agent_actions.processors.staging_content import StagingContentProcessor
 from agent_actions.handlers.file_handler import FileReader, FileWriter
 import json
 
