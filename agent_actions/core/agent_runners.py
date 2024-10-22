@@ -44,8 +44,6 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
     Run agents based on the provided constructor path and default path.
     Implements state management and checkpointing.
     """
-    logger.info(f"Running agents with constructor path: {constructor_path}, user code path: {user_code_path}, default path: {default_path}")
-
     # Load checkpoint if available
     state = load_checkpoint()
     if not state:

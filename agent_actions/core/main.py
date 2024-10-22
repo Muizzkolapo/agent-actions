@@ -44,7 +44,6 @@ def docs(host, port, debug):
 @click.option('-u', '--user_code', help="Path to the user's code folder containing UDFs")
 def run(agent, user_code):
     """Run agents with a specified agent configuration."""
-    logger.info("Starting agent execution.")
 
     filename = agent
     current_dir = os.getcwd()

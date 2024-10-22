@@ -208,11 +208,9 @@ class FileHandler:
 
     @staticmethod
     def find_config_file(base_dir, filename):
-        logger.info(f"Searching for {filename} in {base_dir}")
         for root, _, files in os.walk(base_dir):
             if filename in files:
                 full_path = os.path.join(root, filename)
-                logger.info(f"Found config file: {full_path}")
                 return full_path
 
         # If not found, search in parent directories
