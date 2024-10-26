@@ -10,139 +10,83 @@ from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
 import json 
 
-def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
-    try:
-        loader = 'staging_loader' if idx == 0 else 'target_loader'
-        function_name = 'generate_staging' if idx == 0 else 'generate_target'
-        output_folder = AgentManager.process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
+def copy_parent_output_to_child_staging(parent_output, child_base_dir):
+    if parent_output and os.path.exists(parent_output):
+        child_staging_dir = os.path.join(child_base_dir, 'staging')
+        os.makedirs(child_staging_dir, exist_ok=True)
+        for file in os.listdir(parent_output):
+            shutil.copy(os.path.join(parent_output, file), child_staging_dir)
+        logger.info(f"Copied parent output to child staging directory: {child_staging_dir}")
 
-        if use_tools:
-            if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
-                # Handle side output for tools
-                side_output_folder = os.path.join(output_folder, 'side_output')
-                if os.path.exists(side_output_folder):
-                    logger.info(f"Side output generated for {agent_config['agent_type']}")
-            else:
-                function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-                AgentManager.clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+def copy_parent_source_to_child_source(parent_source, child_base_dir):
+    if parent_source and os.path.exists(parent_source):
+        child_source_dir = os.path.join(child_base_dir, 'source')
+        os.makedirs(child_source_dir, exist_ok=True)
+        for file in os.listdir(parent_source):
+            shutil.copy(os.path.join(parent_source, file), child_source_dir)
+        logger.info(f"Copied parent source to child source directory: {child_source_dir}")
 
-    except Exception as e:
-        logger.error("Error running agent %s: %s", agent_config['agent_type'], e, exc_info=True)
-        raise
+def load_configs(constructor_path, default_path):
+    with open(constructor_path, 'r', encoding='utf-8') as file:
+        user_config = yaml.safe_load(file)
 
-    return output_folder
+    with open(default_path, 'r', encoding='utf-8') as file:
+        default_config = yaml.safe_load(file)
 
-def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
-    """
-    Run agents based on the provided constructor path and default path.
-    """
-    # Initialize variables
-    current_agent_idx = 0
-    previous_agent_type = None
-    ephemeral_directories = []
-    agent_name = None
-    execution_order = []
+    return user_config, default_config
+
+def validate_agent_name(agent_name, constructor_path):
+    config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
+    if agent_name != config_filename:
+        logger.error(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
+        raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
+
+def check_child_pipeline(user_config, agent_name):
+    for item in user_config[agent_name]:
+        if isinstance(item, dict) and 'child' in item:
+            return item['child'][0]
+    return None
+
+def get_user_agents(user_config, agent_name):
+    if 'agents' in user_config[agent_name]:
+        return user_config[agent_name]['agents']
+    else:
+        return [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
+
+def merge_agent_configs(user_agents, default_agent_config):
     agent_configs = {}
-    child_pipeline = None
+    for agent in user_agents:
+        if 'agent_type' in agent:
+            agent_type = agent['agent_type']
+            default_agent = default_agent_config.copy()
+            default_agent.update(agent)
+            agent_configs[agent_type] = default_agent
+    return agent_configs
 
-    # If this is a child pipeline and we have parent output/source, copy them to the appropriate directories
-    if parent_output or parent_source:
-        child_base_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io')
+def determine_execution_order(user_agents):
+    dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
+    execution_order = Utils.topological_sort(dependency_graph)
+    logger.info(f"Execution order determined: {execution_order}")
+    return execution_order
+
+def execute_parent_pipeline(parent_pipeline, constructor_path, user_code_path, default_path, use_tools):
+    logger.info(f"Attempting to execute parent pipeline: {parent_pipeline}")
+    parent_constructor_path = FileHandler.find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
+    if parent_constructor_path:
+        logger.info(f"Parent pipeline config found at: {parent_constructor_path}")
+        parent_output = run_agents(parent_constructor_path, user_code_path, default_path, use_tools)
         
-        if parent_output and os.path.exists(parent_output):
-            child_staging_dir = os.path.join(child_base_dir, 'staging')
-            os.makedirs(child_staging_dir, exist_ok=True)
+        # Copy parent output to current pipeline's staging directory
+        if parent_output:
+            current_staging_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io', 'staging')
+            os.makedirs(current_staging_dir, exist_ok=True)
             for file in os.listdir(parent_output):
-                shutil.copy(os.path.join(parent_output, file), child_staging_dir)
-            logger.info(f"Copied parent output to child staging directory: {child_staging_dir}")
+                shutil.copy(os.path.join(parent_output, file), current_staging_dir)
+            logger.info(f"Copied parent output to current staging directory: {current_staging_dir}")
+    else:
+        logger.error(f"Parent pipeline config not found for: {parent_pipeline}")
 
-        if parent_source and os.path.exists(parent_source):
-            child_source_dir = os.path.join(child_base_dir, 'source')
-            os.makedirs(child_source_dir, exist_ok=True)
-            for file in os.listdir(parent_source):
-                shutil.copy(os.path.join(parent_source, file), child_source_dir)
-            logger.info(f"Copied parent source to child source directory: {child_source_dir}")
-
-    if user_code_path and user_code_path not in sys.path:
-        sys.path.insert(0, user_code_path)
-
-    if not agent_name:
-        with open(constructor_path, 'r', encoding='utf-8') as file:
-            user_config = yaml.safe_load(file)
-
-        with open(default_path, 'r', encoding='utf-8') as file:
-            default_config = yaml.safe_load(file)
-
-        agent_name = ConfigValidator.find_agent_name(user_config)
-        logger.info(f"Running agent workflow: {agent_name}")
-
-        config_filename = os.path.splitext(os.path.basename(constructor_path))[0]
-        if agent_name != config_filename:
-            logger.error(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
-            raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
-
-        # Check for child pipeline
-        for item in user_config[agent_name]:
-            if isinstance(item, dict) and 'child' in item:
-                child_pipeline = item['child'][0]
-                logger.info(f"Child pipeline detected: {child_pipeline}")
-                break
-        else:
-            pass
-            #logger.info("No child pipeline detected in the configuration.")
-
-        # Handle nested 'agents' key
-        if 'agents' in user_config[agent_name]:
-            user_agents = user_config[agent_name]['agents']
-        else:
-            user_agents = [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
-
-        default_agent_config = default_config['default_agent_config']
-
-        for agent in user_agents:
-            if 'agent_type' in agent:
-                agent_type = agent['agent_type']
-                default_agent = default_agent_config.copy()
-                default_agent.update(agent)
-                agent_configs[agent_type] = default_agent
-
-        dependency_graph = {agent['agent_type']: agent.get('dependencies', []) for agent in user_agents if 'agent_type' in agent}
-        execution_order = Utils.topological_sort(dependency_graph)
-        logger.info(f"Execution order determined: {execution_order}")
-
-    # Execute parent pipeline if present
-    if parent_pipeline:
-        logger.info(f"Attempting to execute parent pipeline: {parent_pipeline}")
-        parent_constructor_path = FileHandler.find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
-        if parent_constructor_path:
-            logger.info(f"Parent pipeline config found at: {parent_constructor_path}")
-            parent_output = run_agents(parent_constructor_path, user_code_path, default_path, use_tools)
-            
-            # Copy parent output to current pipeline's staging directory
-            if parent_output:
-                current_staging_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io', 'staging')
-                os.makedirs(current_staging_dir, exist_ok=True)
-                for file in os.listdir(parent_output):
-                    shutil.copy(os.path.join(parent_output, file), current_staging_dir)
-                logger.info(f"Copied parent output to current staging directory: {current_staging_dir}")
-        else:
-            logger.error(f"Parent pipeline config not found for: {parent_pipeline}")
-
-    for idx in range(current_agent_idx, len(execution_order)):
-        agent_type = execution_order[idx]
-        agent_config = agent_configs[agent_type]
-        logger.info(f"Running agent {idx + 1}: {agent_config['agent_type']}")
-
-        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
-        previous_agent_type = agent_type
-
-        directory_info = OrderedDict({
-            'output_folder': output_folder,
-            'ephemeral': agent_config.get('ephemeral', False)
-        })
-        ephemeral_directories.append(directory_info)
-
-    # Process final output
+def process_final_output(ephemeral_directories, parent_output, constructor_path):
     if ephemeral_directories:
         final_output_folder = ephemeral_directories[-1]['output_folder']
         side_output_folder = os.path.join(os.path.dirname(final_output_folder), 'side_output')
@@ -201,7 +145,9 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         logger.warning("No agents were executed. No final output generated.")
         final_workflow_output = None
 
-    # Execute child pipeline if present
+    return final_workflow_output
+
+def execute_child_pipeline(child_pipeline, constructor_path, user_code_path, default_path, use_tools, ephemeral_directories):
     if child_pipeline:
         logger.info(f"Attempting to execute child pipeline: {child_pipeline}")
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(constructor_path)))
@@ -223,7 +169,86 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
     else:
         logger.info("No child pipeline to execute.")
 
+def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
+    """
+    Run agents based on the provided constructor path and default path.
+    """
+    # Initialize variables
+    current_agent_idx = 0
+    previous_agent_type = None
+    ephemeral_directories = []
+    agent_name = None
+    execution_order = []
+    agent_configs = {}
+    child_pipeline = None
+
+    # If this is a child pipeline and we have parent output/source, copy them to the appropriate directories
+    if parent_output or parent_source:
+        child_base_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io')
+        copy_parent_output_to_child_staging(parent_output, child_base_dir)
+        copy_parent_source_to_child_source(parent_source, child_base_dir)
+
+    if user_code_path and user_code_path not in sys.path:
+        sys.path.insert(0, user_code_path)
+
+    if not agent_name:
+        user_config, default_config = load_configs(constructor_path, default_path)
+        agent_name = ConfigValidator.find_agent_name(user_config)
+        logger.info(f"Running agent workflow: {agent_name}")
+        validate_agent_name(agent_name, constructor_path)
+        child_pipeline = check_child_pipeline(user_config, agent_name)
+        user_agents = get_user_agents(user_config, agent_name)
+        default_agent_config = default_config['default_agent_config']
+        agent_configs = merge_agent_configs(user_agents, default_agent_config)
+        execution_order = determine_execution_order(user_agents)
+
+    # Execute parent pipeline if present
+    if parent_pipeline:
+        execute_parent_pipeline(parent_pipeline, constructor_path, user_code_path, default_path, use_tools)
+
+    for idx in range(current_agent_idx, len(execution_order)):
+        agent_type = execution_order[idx]
+        agent_config = agent_configs[agent_type]
+        logger.info(f"Running agent {idx + 1}: {agent_config['agent_type']}")
+
+        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
+        previous_agent_type = agent_type
+
+        directory_info = OrderedDict({
+            'output_folder': output_folder,
+            'ephemeral': agent_config.get('ephemeral', False)
+        })
+        ephemeral_directories.append(directory_info)
+
+    # Process final output
+    final_workflow_output = process_final_output(ephemeral_directories, parent_output, constructor_path)
+
+    # Execute child pipeline if present
+    execute_child_pipeline(child_pipeline, constructor_path, user_code_path, default_path, use_tools, ephemeral_directories)
+
     return final_workflow_output
+
+def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
+    try:
+        loader = 'staging_loader' if idx == 0 else 'target_loader'
+        function_name = 'generate_staging' if idx == 0 else 'generate_target'
+        output_folder = AgentManager.process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
+
+        if use_tools:
+            if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
+                # Handle side output for tools
+                side_output_folder = os.path.join(output_folder, 'side_output')
+                if os.path.exists(side_output_folder):
+                    logger.info(f"Side output generated for {agent_config['agent_type']}")
+            else:
+                function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
+                AgentManager.clean_agent_output(agent_name, agent_config['agent_type'], function_name)
+
+    except Exception as e:
+        logger.exception("Error running agent %s: %s", agent_config['agent_type'], e)
+        raise
+
+    return output_folder
 
 def merge_json_files(input_dir, output_dir, combined_dir):
     # Create the combined folder if it doesn't exist
