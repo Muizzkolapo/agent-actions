@@ -9,6 +9,7 @@ from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
 import json 
+import logging
 
 def copy_parent_output_to_child_staging(parent_output, child_base_dir):
     if parent_output and os.path.exists(parent_output):
@@ -211,7 +212,7 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
         agent_config = agent_configs[agent_type]
         logger.info(f"Running agent {idx + 1}: {agent_config['agent_type']}")
 
-        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools)
+        output_folder = run_agent(agent_config, agent_name, previous_agent_type, idx, len(execution_order), use_tools)
         previous_agent_type = agent_type
 
         directory_info = OrderedDict({
@@ -228,27 +229,40 @@ def run_agents(constructor_path, user_code_path, default_path, use_tools, parent
 
     return final_workflow_output
 
-def run_agent(agent_config, agent_name, previous_agent_type, idx, use_tools):
+def run_agent(agent_config, agent_name, previous_agent_type, idx, total_agents, use_tools):
+    logger = logging.getLogger('agent_actions.core.agent_runners')
     try:
+        # Show workflow name and total agents only at start
+        if idx == 0:
+            print(f"\n📋 Starting Workflow: {agent_name} ({total_agents} agents)")
+            
+        # Show current agent being executed with progress
+        print(f"  ▶️  Running Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
+        
         loader = 'staging_loader' if idx == 0 else 'target_loader'
         function_name = 'generate_staging' if idx == 0 else 'generate_target'
-        output_folder = AgentManager.process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, loader, function_name)
+        
+        # Detailed info goes to log file only
+        logger.debug(f"Processing agent {agent_config['agent_type']} in workflow {agent_name}")
+        
+        output_folder = AgentManager.process_and_generate_for_agent(
+            agent_config, agent_name, previous_agent_type, loader, function_name)
 
-        if use_tools:
-            if agent_config['model_vendor'].lower() == 'tool' and agent_config.get('side_output', False):
-                # Handle side output for tools
-                side_output_folder = os.path.join(output_folder, 'side_output')
-                if os.path.exists(side_output_folder):
-                    logger.info(f"Side output generated for {agent_config['agent_type']}")
-            else:
-                function_name = 'extract_all_lists' if idx == 0 else 'flatten_nested_dictionaries'
-                AgentManager.clean_agent_output(agent_name, agent_config['agent_type'], function_name)
-
+        # Show agent completion
+        print(f"  ✅ Completed Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
+        
+        # Show workflow completion on last agent
+        if idx == total_agents - 1:
+            print(f"\n🎉 Workflow Complete: {agent_name}")
+            print(f"   All {total_agents} agents completed successfully\n")
+        
+        return output_folder
     except Exception as e:
-        logger.exception("Error running agent %s: %s", agent_config['agent_type'], e)
+        print(f"  ❌ Failed Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
+        print(f"\n❌ Workflow Failed: {agent_name}")
+        print(f"   Failed at agent {idx + 1} of {total_agents}\n")
+        logger.error(f"Error in agent {agent_config['agent_type']}: {str(e)}")
         raise
-
-    return output_folder
 
 def merge_json_files(input_dir, output_dir, combined_dir):
     # Create the combined folder if it doesn't exist
@@ -304,3 +318,14 @@ def merge_json_files(input_dir, output_dir, combined_dir):
             logger.info(f"Merged {filename} has been written to {output_path}")
         except Exception as e:
             logger.error(f"Failed to write merged data to {output_path}: {e}")
+
+def run_workflow(workflow_name, agents):
+    try:
+        for idx, agent in enumerate(agents):
+            run_agent(agent, workflow_name, previous_agent_type, idx, use_tools)
+        
+        # Show workflow completion
+        print(f"\n✨ Workflow Complete: {workflow_name}\n")
+    except Exception as e:
+        print(f"\n❌ Workflow Failed: {workflow_name}\n")
+        raise

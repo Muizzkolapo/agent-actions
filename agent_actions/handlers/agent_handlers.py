@@ -109,8 +109,7 @@ class AgentManager:
                 module = importlib.import_module(f"agent_actions.processors.{loader}")
                 function_call = getattr(module, function_name)
             except (ImportError, AttributeError) as e:
-                print(f"Failed to import {function_name} from module {loader}: {e}")
-                traceback.print_exc()
+                logger.error(f"Failed to import {function_name} from module {loader}: {e}")
                 return
 
             if function_call and callable(function_call):
@@ -120,22 +119,18 @@ class AgentManager:
                         files_processed = True
                     for file in files:
                         file_path = os.path.join(root, file)
-                        print(f"Processing {file_path}")
+                        logger.debug(f"Processing file: {file_path}")
                         try:
                             function_call(agent_config,
-                                          agent_name,
-                                          file_path,
-                                          input_directory,
-                                          output_directory)
-                        except (IOError, OSError, json.JSONDecodeError) as e:
-                            print(f"Failed to process {file}: {e}")
-                        except ValueError as e:
-                            print(f"Invalid data encountered while processing {file}: {e}")
-                        except KeyError as e:
-                            print(f"Missing key encountered while processing {file}: {e}")
+                                        agent_name,
+                                        file_path,
+                                        input_directory,
+                                        output_directory)
+                        except Exception as e:
+                            logger.error(f"Error processing {file}: {str(e)}")
 
                 if not files_processed:
-                    print(f"No files found in the input directory: {input_directory}")
+                    logger.warning(f"No files found in: {input_directory}")
             else:
                 print(f"Function {function_name} not found in module {loader}.")
                 traceback.print_exc()

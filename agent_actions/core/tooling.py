@@ -17,7 +17,6 @@ def load_user_defined_function(module_name, function_name):
         raise
 
 def execute_user_defined_function(udf_name, input_data):
-    print(input_data)
     """
     Dynamically execute a user-defined function (UDF).
     

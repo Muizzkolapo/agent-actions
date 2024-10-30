@@ -13,7 +13,6 @@ CORS(app)
 # Ensure BASE_DIR is the current working directory of the running application
 BASE_DIR = os.getcwd()
 CONFIG_DIR = os.path.join(BASE_DIR, 'agent_config')
-print(CONFIG_DIR)
 
 
 def get_folder_structure(directory, base_path=''):
