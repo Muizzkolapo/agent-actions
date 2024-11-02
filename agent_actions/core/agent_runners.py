@@ -7,9 +7,10 @@ from agent_actions.core.utils import Utils
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
-import json 
+import json
 import logging
 from agent_actions.logging_setup import setup_logging
+
 logger = setup_logging()
 
 def copy_parent_output_to_child_staging(parent_output, child_base_dir):
@@ -29,12 +30,15 @@ def copy_parent_source_to_child_source(parent_source, child_base_dir):
         logger.info(f"Copied parent source to child source directory: {child_source_dir}")
 
 def load_configs(constructor_path, default_path):
+    logger.debug(f"Loading user config from: {constructor_path}")
     with open(constructor_path, 'r', encoding='utf-8') as file:
         user_config = yaml.safe_load(file)
 
+    logger.debug(f"Loading default config from: {default_path}")
     with open(default_path, 'r', encoding='utf-8') as file:
         default_config = yaml.safe_load(file)
 
+    logger.debug("Configs loaded successfully")
     return user_config, default_config
 
 def validate_agent_name(agent_name, constructor_path):
@@ -44,18 +48,25 @@ def validate_agent_name(agent_name, constructor_path):
         raise ValueError(f"Top-level key '{agent_name}' does not match the filename '{config_filename}'")
 
 def check_child_pipeline(user_config, agent_name):
+    logger.debug(f"Checking for child pipeline in agent: {agent_name}")
     for item in user_config[agent_name]:
         if isinstance(item, dict) and 'child' in item:
-            return item['child'][0]
+            child_pipeline = item['child'][0]
+            logger.debug(f"Child pipeline found: {child_pipeline}")
+            return child_pipeline
+    logger.debug("No child pipeline found")
     return None
 
 def get_user_agents(user_config, agent_name):
     if 'agents' in user_config[agent_name]:
+        logger.debug(f"Agents found under 'agents' key for agent {agent_name}")
         return user_config[agent_name]['agents']
     else:
+        logger.debug(f"Agents found directly under agent {agent_name}")
         return [agent for agent in user_config[agent_name] if isinstance(agent, dict) and 'agent_type' in agent]
 
 def merge_agent_configs(user_agents, default_agent_config):
+    logger.debug("Merging user agent configs with default configs")
     agent_configs = {}
     for agent in user_agents:
         if 'agent_type' in agent:
@@ -63,6 +74,7 @@ def merge_agent_configs(user_agents, default_agent_config):
             default_agent = default_agent_config.copy()
             default_agent.update(agent)
             agent_configs[agent_type] = default_agent
+            logger.debug(f"Merged config for agent_type: {agent_type}")
     return agent_configs
 
 def determine_execution_order(user_agents):
@@ -76,8 +88,8 @@ def execute_parent_pipeline(parent_pipeline, constructor_path, user_code_path, d
     parent_constructor_path = FileHandler.find_config_file(os.path.dirname(constructor_path), f"{parent_pipeline}.yml")
     if parent_constructor_path:
         logger.info(f"Parent pipeline config found at: {parent_constructor_path}")
-        parent_output = run_agents(parent_constructor_path, user_code_path, default_path, use_tools)
-        
+        parent_output = run_agent_workflow(parent_constructor_path, user_code_path, default_path, use_tools)
+
         # Copy parent output to current pipeline's staging directory
         if parent_output:
             current_staging_dir = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io', 'staging')
@@ -162,7 +174,7 @@ def execute_child_pipeline(child_pipeline, constructor_path, user_code_path, def
             # Pass the final output folder and source folder of the parent pipeline to the child pipeline
             parent_final_output = ephemeral_directories[-1]['output_folder'] if ephemeral_directories else None
             parent_source = os.path.join(os.path.dirname(constructor_path), '..', 'agent_io', 'source')
-            run_agents(child_constructor_path, user_code_path, default_path, use_tools, 
+            run_agent_workflow(child_constructor_path, user_code_path, default_path, use_tools,
                        parent_output=parent_final_output, parent_source=parent_source)
         else:
             logger.error(f"Child pipeline config not found for: {child_pipeline}")
@@ -171,7 +183,7 @@ def execute_child_pipeline(child_pipeline, constructor_path, user_code_path, def
     else:
         logger.info("No child pipeline to execute.")
 
-def run_agents(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
+def run_agent_workflow(constructor_path, user_code_path, default_path, use_tools, parent_output=None, parent_source=None, parent_pipeline=None):
     """
     Run agents based on the provided constructor path and default path.
     """
@@ -236,27 +248,28 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, total_agents, 
         # Show workflow name and total agents only at start
         if idx == 0:
             print(f"\n📋 Starting Workflow: {agent_name} ({total_agents} agents)")
-            
+
         # Show current agent being executed with progress
         print(f"  ▶️  Running Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
-        
-        loader = 'staging_loader' if idx == 0 else 'target_loader'
-        function_name = 'generate_staging' if idx == 0 else 'generate_target'
-        
+
         # Detailed info goes to log file only
         logger.debug(f"Processing agent {agent_config['agent_type']} in workflow {agent_name}")
-        
+
+        loader = 'staging_loader' if idx == 0 else 'target_loader'
+        function_name = 'generate_staging' if idx == 0 else 'generate_target'
+
+        # Remove 'use_tools' from the arguments
         output_folder = AgentManager.process_and_generate_for_agent(
             agent_config, agent_name, previous_agent_type, loader, function_name)
 
         # Show agent completion
         print(f"  ✅ Completed Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
-        
+
         # Show workflow completion on last agent
         if idx == total_agents - 1:
             print(f"\n🎉 Workflow Complete: {agent_name}")
             print(f"   All {total_agents} agents completed successfully\n")
-        
+
         return output_folder
     except Exception as e:
         print(f"  ❌ Failed Agent [{idx + 1}/{total_agents}]: {agent_config['agent_type']}")
@@ -264,6 +277,7 @@ def run_agent(agent_config, agent_name, previous_agent_type, idx, total_agents, 
         print(f"   Failed at agent {idx + 1} of {total_agents}\n")
         logger.error(f"Error in agent {agent_config['agent_type']}: {str(e)}")
         raise
+
 
 def merge_json_files(input_dir, output_dir, combined_dir):
     # Create the combined folder if it doesn't exist
@@ -319,14 +333,3 @@ def merge_json_files(input_dir, output_dir, combined_dir):
             logger.info(f"Merged {filename} has been written to {output_path}")
         except Exception as e:
             logger.error(f"Failed to write merged data to {output_path}: {e}")
-
-def run_workflow(workflow_name, agents):
-    try:
-        for idx, agent in enumerate(agents):
-            run_agent(agent, workflow_name, previous_agent_type, idx, use_tools)
-        
-        # Show workflow completion
-        print(f"\n✨ Workflow Complete: {workflow_name}\n")
-    except Exception as e:
-        print(f"\n❌ Workflow Failed: {workflow_name}\n")
-        raise
