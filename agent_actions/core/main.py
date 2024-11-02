@@ -12,8 +12,6 @@ from agent_actions.logging_setup import setup_logging
 
 logger = setup_logging()
 
-logger.info("Initializing command-line interface")
-
 @click.group()
 def main():
     """Agent CLI Tool"""
@@ -24,11 +22,9 @@ def main():
 def init(project_name):
     """Initialize a new Agent Actions project."""
     try:
-        logger.info(f"Starting project initialization for '{project_name}'")
         init_project(project_name)
-        logger.info(f"Project '{project_name}' initialized successfully")
     except Exception as e:
-        logger.error(f"An error occurred during initialization of '{project_name}': {e}", exc_info=True)
+        logger.error(f"Failed to initialize project '{project_name}': {e}")
         sys.exit(1)
 
 @main.command()
@@ -38,12 +34,9 @@ def init(project_name):
 def docs(host, port, debug):
     """Generate or display agent documentation."""
     try:
-        logger.info("Starting documentation server")
-        logger.debug(f"Server running on host {host} and port {port}, debug={debug}")
         run_app(host, port, debug)
-        logger.info("Documentation server started successfully")
     except Exception as e:
-        logger.error(f"An error occurred while generating docs: {e}", exc_info=True)
+        logger.error(f"Failed to start documentation server: {e}")
         sys.exit(1)
 
 @main.command()
@@ -51,8 +44,6 @@ def docs(host, port, debug):
 @click.option('-u', '--user_code', help="Path to the user's code folder containing UDFs")
 def run(agent, user_code):
     """Run agents with a specified agent configuration."""
-
-    logger.info(f"Starting agent run for '{agent}'")
     filename = agent
     current_dir = os.getcwd()
     agent_config_dir, io_dir, _ = FileHandler.get_agent_paths(filename)
@@ -91,7 +82,6 @@ def run(agent, user_code):
             sys.exit(1)
 
         agent_config = config_data[agent_name]
-        udf_entries = [entry for entry in agent_config if 'udf' in entry]
         agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
 
         if not isinstance(agent_config, list):
@@ -105,13 +95,11 @@ def run(agent, user_code):
 
         use_tools = user_code is not None
         parent_pipeline = next((item.get('parent', [None])[0] for item in agent_config if isinstance(item, dict) and 'parent' in item), None)
-        logger.info("Running agent workflow")
 
         run_agent_workflow(full_path, user_code, default_config_path, use_tools, parent_pipeline=parent_pipeline)
-        logger.info(f"Agent workflow for '{agent}' completed successfully")
 
     except (ValueError, FileNotFoundError, yaml.YAMLError) as e:
-        logger.error(f"Execution error during agent run: {e}", exc_info=True)
+        logger.error(f"Failed to run agent workflow: {e}")
         sys.exit(1)
 
 @main.command()
@@ -119,11 +107,9 @@ def run(agent, user_code):
 def clean(agent):
     """Clean agent directories."""
     try:
-        logger.info(f"Cleaning directories for agent '{agent}'")
         AgentManager.clean_agent_directories(agent)
-        logger.info(f"Directories for agent '{agent}' cleaned successfully")
     except Exception as e:
-        logger.error(f"An error occurred during cleanup for agent '{agent}': {e}", exc_info=True)
+        logger.error(f"Failed to clean agent directories for '{agent}': {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
