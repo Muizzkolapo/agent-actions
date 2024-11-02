@@ -8,7 +8,8 @@ import textwrap
 import traceback
 from typing import List
 import tiktoken
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 class StringProcessor:
     """
     A class for processing strings, including placeholder replacement and function call processing.

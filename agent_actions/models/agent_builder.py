@@ -7,7 +7,8 @@ from agent_actions.vendors.groq_llama import GroqLlama3Handler
 from agent_actions.vendors.tools_vendor import ToolHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.agent_handlers import SchemaLoader, PromptLoader
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 
 

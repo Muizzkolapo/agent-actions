@@ -10,7 +10,8 @@ import pandas as pd
 from bs4 import BeautifulSoup
 import logging
 logger = logging.getLogger(__name__)
-    
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 
 

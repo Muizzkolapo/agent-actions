@@ -11,7 +11,8 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.agent_handlers import PromptLoader
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class StagingContentProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
+        self.logger = logging.getLogger('agent_actions.processors.staging_content')
 
     def staging_dynamic_creator(self, input_documentation, source_path=None, formatted_prompt=None):
         """
@@ -45,7 +47,7 @@ class StagingContentProcessor:
 
         # Check if sample_count is a positive integer
         if sample_count > 0:
-            logger.info(f"Loading {sample_count} few shot samples.")
+            self.logger.debug(f"Loading {sample_count} few shot samples.")
             samples = AgentManager.load_few_shot_samples(
                 few_shot_samples_path,
                 agent_type=self.agent_config['agent_type'],

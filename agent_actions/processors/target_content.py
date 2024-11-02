@@ -10,7 +10,8 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.agent_handlers import PromptLoader
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 logger = logging.getLogger(__name__)
 
 class TargetContentProcessor:

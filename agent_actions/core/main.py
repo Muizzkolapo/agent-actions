@@ -2,14 +2,17 @@ import os
 import sys
 import yaml
 import click
-from agent_actions.logging_setup import logger
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.config_handler import ConfigValidator
-from agent_actions.core.agent_runners import run_agents
+from agent_actions.core.agent_runners import run_agent_workflow
 from agent_actions.core.agent_runners import AgentManager
 from agent_actions.docs.app import run_app
 from agent_actions.core.init import init_project
+from agent_actions.logging_setup import setup_logging
 
+logger = setup_logging()
+
+logger.info("Initializing command-line interface")
 
 @click.group()
 def main():
@@ -21,9 +24,11 @@ def main():
 def init(project_name):
     """Initialize a new Agent Actions project."""
     try:
+        logger.info(f"Starting project initialization for '{project_name}'")
         init_project(project_name)
+        logger.info(f"Project '{project_name}' initialized successfully")
     except Exception as e:
-        logger.error(f"An error occurred during initialization: {e}")
+        logger.error(f"An error occurred during initialization of '{project_name}': {e}", exc_info=True)
         sys.exit(1)
 
 @main.command()
@@ -33,11 +38,13 @@ def init(project_name):
 def docs(host, port, debug):
     """Generate or display agent documentation."""
     try:
+        logger.info("Starting documentation server")
+        logger.debug(f"Server running on host {host} and port {port}, debug={debug}")
         run_app(host, port, debug)
+        logger.info("Documentation server started successfully")
     except Exception as e:
-        logger.error(f"An error occurred while generating docs: {e}")
+        logger.error(f"An error occurred while generating docs: {e}", exc_info=True)
         sys.exit(1)
-
 
 @main.command()
 @click.option('-a', '--agent', required=True, help="Name of the schema (agent configuration file without path)")
@@ -45,19 +52,18 @@ def docs(host, port, debug):
 def run(agent, user_code):
     """Run agents with a specified agent configuration."""
 
+    logger.info(f"Starting agent run for '{agent}'")
     filename = agent
     current_dir = os.getcwd()
     agent_config_dir, io_dir, _ = FileHandler.get_agent_paths(filename)
     schema_dir = os.path.join(current_dir, 'schema')
     default_config_path = os.path.join(current_dir, 'agent_actions.yml')
 
-    # Check for required directories
     for required_dir in [agent_config_dir, schema_dir, io_dir]:
         if not os.path.exists(required_dir):
             logger.error(f"Missing directory: {required_dir}")
             sys.exit(1)
 
-    # Ensure correct file extension
     if not filename.endswith(".yml"):
         filename += ".yml"
     full_path = FileHandler.find_config_file(agent_config_dir, filename)
@@ -66,7 +72,7 @@ def run(agent, user_code):
         logger.error(f"Missing configuration file: {filename}")
         sys.exit(1)
 
-    project_dir = os.path.abspath(os.path.join(current_dir))
+    project_dir = os.path.abspath(current_dir)
     if not ConfigValidator.check_agent_file_unique(full_path, project_dir):
         logger.error(f"Duplicate configuration file: {full_path}")
         sys.exit(1)
@@ -76,43 +82,49 @@ def run(agent, user_code):
         logger.error(f"Duplicate agent name: {agent_name}")
         sys.exit(1)
 
-    with open(full_path, 'r') as config_file:
-        config_data = yaml.safe_load(config_file)
-
-    if agent_name not in config_data:
-        logger.error(f"Missing top-level key '{agent_name}' in configuration file.")
-        sys.exit(1)
-
-    agent_config = config_data[agent_name]
-
-    # Validate configuration entries
-    udf_entries = [entry for entry in agent_config if 'udf' in entry]
-    agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
-    if not isinstance(agent_config, list):
-        logger.error(f"Invalid configuration format for '{filename}'")
-        sys.exit(1)
-
-    is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
-    if not is_valid:
-        logger.error(f"Validation error: {message}")
-        sys.exit(1)
-
-    use_tools = user_code is not None
-
-    # Extract parent pipeline information
-    parent_pipeline = next((item.get('parent', [None])[0] for item in agent_config if isinstance(item, dict) and 'parent' in item), None)
-
     try:
-        run_agents(full_path, user_code, default_config_path, use_tools, parent_pipeline=parent_pipeline)
+        with open(full_path, 'r') as config_file:
+            config_data = yaml.safe_load(config_file)
+
+        if agent_name not in config_data:
+            logger.error(f"Missing top-level key '{agent_name}' in configuration file.")
+            sys.exit(1)
+
+        agent_config = config_data[agent_name]
+        udf_entries = [entry for entry in agent_config if 'udf' in entry]
+        agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
+
+        if not isinstance(agent_config, list):
+            logger.error(f"Invalid configuration format for '{filename}'")
+            sys.exit(1)
+
+        is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
+        if not is_valid:
+            logger.error(f"Validation error: {message}")
+            sys.exit(1)
+
+        use_tools = user_code is not None
+        parent_pipeline = next((item.get('parent', [None])[0] for item in agent_config if isinstance(item, dict) and 'parent' in item), None)
+        logger.info("Running agent workflow")
+
+        run_agent_workflow(full_path, user_code, default_config_path, use_tools, parent_pipeline=parent_pipeline)
+        logger.info(f"Agent workflow for '{agent}' completed successfully")
+
     except (ValueError, FileNotFoundError, yaml.YAMLError) as e:
-        logger.error(f"Execution error: {e}")
+        logger.error(f"Execution error during agent run: {e}", exc_info=True)
         sys.exit(1)
 
 @main.command()
 @click.option('-a', '--agent', required=True, help="Agent name")
 def clean(agent):
     """Clean agent directories."""
-    AgentManager.clean_agent_directories(agent)
+    try:
+        logger.info(f"Cleaning directories for agent '{agent}'")
+        AgentManager.clean_agent_directories(agent)
+        logger.info(f"Directories for agent '{agent}' cleaned successfully")
+    except Exception as e:
+        logger.error(f"An error occurred during cleanup for agent '{agent}': {e}", exc_info=True)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

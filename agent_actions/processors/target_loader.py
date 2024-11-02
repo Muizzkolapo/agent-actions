@@ -4,7 +4,8 @@ import os
 import logging
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.target_content import TargetContentProcessor
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 # Constants
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
