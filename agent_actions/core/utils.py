@@ -5,7 +5,8 @@ Module containing utility classes and functions for data aggregation, transforma
 import logging
 import uuid
 from collections import deque
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 # Set up logging
 logger = logging.getLogger(__name__)

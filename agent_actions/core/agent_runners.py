@@ -3,13 +3,14 @@ import sys
 import yaml
 import shutil
 from collections import OrderedDict
-from agent_actions.logging_setup import logger
 from agent_actions.core.utils import Utils
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
 import json 
 import logging
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 def copy_parent_output_to_child_staging(parent_output, child_base_dir):
     if parent_output and os.path.exists(parent_output):

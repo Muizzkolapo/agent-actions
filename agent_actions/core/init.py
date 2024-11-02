@@ -3,6 +3,8 @@ Module for initializing a new Agent Actions project.
 """
 import os
 import yaml
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 def create_directory(path):
     """

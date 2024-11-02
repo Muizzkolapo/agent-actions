@@ -6,7 +6,8 @@ from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_content import StagingContentProcessor
 from agent_actions.handlers.file_handler import FileReader, FileWriter
 import json
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 logger = logging.getLogger(__name__)
 
 

@@ -3,6 +3,8 @@ Module for Loading and running user-defined function from a specified module.
 """
 import importlib
 import logging
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 def load_user_defined_function(module_name, function_name):
     """

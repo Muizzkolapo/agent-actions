@@ -3,8 +3,8 @@ import os
 import logging
 from agent_actions.handlers.file_handler import FileHandler
 
-logger = logging.getLogger(__name__)
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 
 class ConfigValidator:

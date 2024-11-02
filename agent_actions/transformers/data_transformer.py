@@ -4,7 +4,8 @@ import copy
 
 logger = logging.getLogger(__name__)
 
-
+from agent_actions.logging_setup import setup_logging
+logger = setup_logging()
 
 
 class DataTransformer:
