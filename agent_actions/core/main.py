@@ -4,8 +4,8 @@ import yaml
 import click
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.config_handler import ConfigValidator
-from agent_actions.core.agent_runners import run_agent_workflow
-from agent_actions.core.agent_runners import AgentManager
+from agent_actions.core.agent_runners import AgentWorkflow  
+from agent_actions.handlers.agent_handlers import AgentManager  
 from agent_actions.docs.app import run_app
 from agent_actions.core.init import init_project
 from agent_actions.logging_setup import setup_logging
@@ -82,11 +82,12 @@ def run(agent, user_code):
             sys.exit(1)
 
         agent_config = config_data[agent_name]
-        agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
 
         if not isinstance(agent_config, list):
             logger.error(f"Invalid configuration format for '{filename}'")
             sys.exit(1)
+
+        agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
 
         is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
         if not is_valid:
@@ -94,12 +95,26 @@ def run(agent, user_code):
             sys.exit(1)
 
         use_tools = user_code is not None
-        parent_pipeline = next((item.get('parent', [None])[0] for item in agent_config if isinstance(item, dict) and 'parent' in item), None)
+        parent_pipeline = next(
+            (item.get('parent', [None])[0] for item in agent_config if isinstance(item, dict) and 'parent' in item),
+            None
+        )
 
-        run_agent_workflow(full_path, user_code, default_config_path, use_tools, parent_pipeline=parent_pipeline)
+        # Create an instance of AgentWorkflow and run it
+        workflow = AgentWorkflow(
+            constructor_path=full_path,
+            user_code_path=user_code,
+            default_path=default_config_path,
+            use_tools=use_tools,
+            parent_pipeline=parent_pipeline
+        )
+        workflow.run()
 
     except (ValueError, FileNotFoundError, yaml.YAMLError) as e:
         logger.error(f"Failed to run agent workflow: {e}")
+        sys.exit(1)
+    except Exception as e:
+        logger.error(f"An unexpected error occurred: {e}")
         sys.exit(1)
 
 @main.command()
