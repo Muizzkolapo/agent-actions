@@ -6,11 +6,10 @@ from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.logging_setup import setup_logging
 from rich.console import Console
 from rich.table import Table
-from time import sleep  
+from rich.live import Live
+from time import sleep
 
 logger = setup_logging()
-
-
 
 
 class AgentRunner:
@@ -106,7 +105,8 @@ class AgentWorkflow:
 
         # For real-time status updates in the console
         self.console = Console()
-        self.agent_status = {agent: "⏳ Loading" for agent in self.execution_order}
+        self.agent_status = {agent: {"status": "⏳ Pending", "prompt": ""} for agent in self.execution_order}
+        self.live_display = None
 
     def _load_configs(self):
         self.config_manager.load_configs()
@@ -123,47 +123,61 @@ class AgentWorkflow:
     def _log(self, message, level='info'):
         self.logs.append((level, message))
 
-    def print_table(self):
-        self.console.clear()
+    def create_status_table(self):
         table = Table(title="Workflow Execution Status")
-        table.add_column("#", justify="center")
-        table.add_column("Agent Name", justify="left")
-        table.add_column("Status", justify="center")
+        table.add_column("#", justify="center", style="cyan")
+        table.add_column("Agent Name", justify="left", style="green")
+        table.add_column("Status", justify="center", style="yellow")
+        table.add_column("Prompt", justify="left", style="blue", max_width=60)
+        table.add_column("Schema", justify="left", style="magenta", max_width=40)
 
-        for idx, (agent_name, status) in enumerate(self.agent_status.items(), start=1):
-            table.add_row(str(idx), agent_name, status)
+        for idx, (agent_name, details) in enumerate(self.agent_status.items(), start=1):
+            agent_config = self.agent_configs[agent_name]
+            schema = str(agent_config.get('schema_name', 'No schema specified'))
 
-        self.console.print(table)
+            table.add_row(
+                str(idx),
+                agent_name,
+                details["status"],
+                details["prompt"],
+                schema
+            )
+
+        return table
 
     def run(self):
         try:
             total_agents = len(self.execution_order)
-            self.print_table()  # Initial display
 
-            for idx, agent_type in enumerate(self.execution_order):
-                agent_config = self.agent_configs[agent_type]
-                self.agent_status[agent_type] = "⏳ Running"
-                self.print_table()  # Show agent as running
+            with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
+                for idx, agent_type in enumerate(self.execution_order):
+                    agent_config = self.agent_configs[agent_type]
+                    self.agent_status[agent_type]["status"] = "⏳ Running"
+                    self.agent_status[agent_type]["prompt"] = agent_config.get('prompt', 'No prompt specified')
 
-                sleep(1)  # Replace with actual processing
+                    # Update live display
+                    live.update(self.create_status_table())
 
-                self.agent_status[agent_type] = "✅ Completed"
-                self.print_table()  # Show completion
+                    # Agent processing
+                    output_folder = self.agent_runner.run_agent(
+                        agent_config, self.agent_name, self.previous_agent_type, idx, total_agents
+                    )
 
-                output_folder = self.agent_runner.run_agent(
-                    agent_config, self.agent_name, self.previous_agent_type, idx, total_agents
-                )
-                self.previous_agent_type = agent_type
-                self.ephemeral_directories.append({
-                    'output_folder': output_folder,
-                    'ephemeral': agent_config.get('ephemeral', False)
-                })
+                    self.agent_status[agent_type]["status"] = "✅ Completed"
+                    live.update(self.create_status_table())
 
-            self.output_processor.process_final_output(self.ephemeral_directories)
-            self.console.print("\n🎉 Workflow Complete")
+                    self.previous_agent_type = agent_type
+                    self.ephemeral_directories.append({
+                        'output_folder': output_folder,
+                        'ephemeral': agent_config.get('ephemeral', False)
+                    })
+
+            # Move the completion message outside the 'with Live' block
+            self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         except Exception as e:
             self.failed = True
             for level, message in self.logs:
                 getattr(logger, level)(message)
             logger.error(f"Workflow failed with error: {e}")
+            self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
             raise
