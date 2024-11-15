@@ -1,89 +1,16 @@
 import os
 import sys
-import json
-import yaml
 import shutil
-from collections import OrderedDict
-from agent_actions.core.utils import Utils
 from agent_actions.handlers.agent_handlers import AgentManager
-from agent_actions.handlers.config_handler import ConfigValidator
-from agent_actions.handlers.file_handler import FileHandler
+from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.logging_setup import setup_logging
 from rich.console import Console
 from rich.table import Table
-from time import sleep  # Simulate time for agent processing
+from time import sleep  
 
 logger = setup_logging()
 
 
-class ConfigManager:
-    def __init__(self, constructor_path, default_path):
-        self.constructor_path = constructor_path
-        self.default_path = default_path
-        self.user_config = None
-        self.default_config = None
-        self.agent_name = None
-        self.agent_configs = {}
-        self.execution_order = []
-        self.child_pipeline = None
-        self.logs = []
-
-    def _log(self, message, level='info'):
-        self.logs.append((level, message))
-
-    def load_configs(self):
-        try:
-            with open(self.constructor_path, 'r', encoding='utf-8') as file:
-                self.user_config = yaml.safe_load(file)
-        except Exception as e:
-            self._log(f"Error loading constructor config: {self.constructor_path}, Error: {e}", level='error')
-            raise
-
-        try:
-            with open(self.default_path, 'r', encoding='utf-8') as file:
-                self.default_config = yaml.safe_load(file)
-        except Exception as e:
-            self._log(f"Error loading default config: {self.default_path}, Error: {e}", level='error')
-            raise
-
-    def validate_agent_name(self):
-        self.agent_name = ConfigValidator.find_agent_name(self.user_config)
-        config_filename = os.path.splitext(os.path.basename(self.constructor_path))[0]
-        if self.agent_name != config_filename:
-            error_msg = f"Top-level key '{self.agent_name}' does not match the filename '{config_filename}'"
-            self._log(error_msg, level='error')
-            raise ValueError(error_msg)
-
-    def check_child_pipeline(self):
-        for item in self.user_config[self.agent_name]:
-            if isinstance(item, dict) and 'child' in item:
-                self.child_pipeline = item['child'][0]
-                return
-        self.child_pipeline = None
-
-    def get_user_agents(self):
-        agents_section = self.user_config[self.agent_name]
-        if 'agents' in agents_section:
-            user_agents = agents_section['agents']
-        else:
-            user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
-        return user_agents
-
-    def merge_agent_configs(self, user_agents):
-        default_agent_config = self.default_config['default_agent_config']
-        for agent in user_agents:
-            agent_type = agent.get('agent_type')
-            if agent_type:
-                merged_agent_config = default_agent_config.copy()
-                merged_agent_config.update(agent)
-                self.agent_configs[agent_type] = merged_agent_config
-
-    def determine_execution_order(self, user_agents):
-        dependency_graph = {
-            agent['agent_type']: agent.get('dependencies', [])
-            for agent in user_agents if 'agent_type' in agent
-        }
-        self.execution_order = Utils.topological_sort(dependency_graph)
 
 
 class AgentRunner:
