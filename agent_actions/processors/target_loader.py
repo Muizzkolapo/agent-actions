@@ -33,10 +33,15 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     data = file_reader.read()
 
     model_vendor = agent_config.get('model_vendor', '').lower()
+    agent_type = agent_config.get('agent_type', '').lower()
     side_output = agent_config.get('side_output', False)
 
     if isinstance(side_output, str):
         side_output = side_output.lower() == 'true'
+
+    if side_output and not isinstance(data, (tuple)):
+        logger.error(f"Invalid configurations for {agent_type}. Please review your configuration.")
+        return
 
     content_processor = TargetContentProcessor(agent_config, agent_name)
 
