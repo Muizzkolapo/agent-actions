@@ -59,7 +59,7 @@ def save_output(new_data, file_path, base_directory, output_directory):
     :param new_data: List of dictionaries containing the processed data
     :param file_path: Path to the input JSON file
     :param base_directory: Base directory for calculating relative paths
-    :param output_directory: Directory where the output file will be saved
+    :param output_directory: Directory where the output file will be saved.
     """
     relative_path = os.path.relpath(file_path, base_directory)
     output_file_path = os.path.join(output_directory, relative_path.replace('.json', '.json'))
