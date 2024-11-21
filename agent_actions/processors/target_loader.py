@@ -6,11 +6,10 @@ from agent_actions.handlers.file_handler import FileReader, FileWriter
 from agent_actions.processors.target_content import TargetContentProcessor
 from agent_actions.logging_setup import setup_logging
 logger = setup_logging()
-# Constants
+
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
 
-# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -33,15 +32,9 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     data = file_reader.read()
 
     model_vendor = agent_config.get('model_vendor', '').lower()
-    agent_type = agent_config.get('agent_type', '').lower()
     side_output = agent_config.get('side_output', False)
 
-    if isinstance(side_output, str):
-        side_output = side_output.lower() == 'true'
 
-    if side_output and not isinstance(data, (tuple)):
-        logger.error(f"Invalid configurations for {agent_type}. Please review your configuration.")
-        return
 
     content_processor = TargetContentProcessor(agent_config, agent_name)
 
@@ -86,7 +79,6 @@ def save_side_output(side_output_data, file_path, base_directory, output_directo
     side_output_file_path = os.path.join(side_output_dir, os.path.basename(relative_path))
     os.makedirs(os.path.dirname(side_output_file_path), exist_ok=True)
 
-    # If the file exists, load its current contents
     if os.path.exists(side_output_file_path):
         with open(side_output_file_path, 'r', encoding='utf-8') as file:
             try:
@@ -96,13 +88,10 @@ def save_side_output(side_output_data, file_path, base_directory, output_directo
     else:
         existing_content = []
 
-    # Ensure existing content is a list
     if not isinstance(existing_content, list):
         existing_content = [existing_content]
 
-    # Append new side output data
     existing_content.extend(side_output_data)
 
-    # Write back to the file
     with open(side_output_file_path, 'w', encoding='utf-8') as file:
         json.dump(existing_content, file, indent=4)
