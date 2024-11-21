@@ -175,25 +175,20 @@ class StagingContentLoader:
         src_text = []
         src_legacy_path = FileHandler.get_file_info(file_path)
         
-        # Check if content is a list
         if isinstance(content, list):
             for obj in content:
-                # Create a dynamic agent for each object in the list
                 dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
                 data_chunk.extend(dynamic_agent)
                 src_text.extend(src_collection)
-        
-        # Check if content is a dictionary
+    
         elif isinstance(content, dict):
             for value in content.values():
                 if isinstance(value, list):
                     for obj in value:
-                        # Create a dynamic agent for each object in the list
                         dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
                         data_chunk.extend(dynamic_agent)
                         src_text.extend(src_collection)
                 else:
-                    # Create a dynamic agent for the entire dictionary content
                     generated_content,src_collection  = self.staging_processor.staging_dynamic_creator(input_documentation=content,source_path=src_legacy_path)
                     data_chunk.extend(generated_content)
                     src_text.extend(src_collection)
@@ -215,9 +210,7 @@ class StagingContentLoader:
         data_chunk = []
         src_text = []
         
-        # Iterate over each row in the content
         for row in content:
-            # Create a dynamic agent for each row
             dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(row)
             data_chunk.extend(dynamic_agent)
             src_text.extend(src_collection)
