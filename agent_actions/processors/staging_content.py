@@ -16,7 +16,7 @@ logger = setup_logging()
 
 logger = logging.getLogger(__name__)
 
-class StagingContentProcessor:
+class PromptProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
@@ -126,8 +126,7 @@ class StagingContentLoader:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.staging_processor = StagingContentProcessor(agent_config, agent_name)
-
+        self.staging_processor = PromptProcessor(agent_config, agent_name)
     def process(self, content, file_type, file_path=None):
         if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
             return self._process_chunks(content)
