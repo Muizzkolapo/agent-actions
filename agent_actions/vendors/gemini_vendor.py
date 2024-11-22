@@ -35,8 +35,7 @@ class GeminiHandler:
         prompt_dedent = dedent(prompt)
         response_temp = llm.generate_content(prompt_dedent)
         response = json.loads(response_temp.text)
-        response_list = DataTransformer.ensure_list(response)
-        return response_list
+        return [response]
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, input_documentation):

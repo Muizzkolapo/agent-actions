@@ -44,7 +44,36 @@ class GroqLlama3Handler:
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, input_documentation):
-        pass
+        api_key = agent_config['api_key']
+        groq = Groq(api_key=os.environ[api_key])
+        model_name = agent_config['model_name']
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+
+
+        prompt = f"""
+                Instructions: {prompt_config}
+                Input Text: {str(input_documentation_str)}
+                
+                Please provide a direct response without any JSON formatting.
+                Begin your response here:
+            """
+
+        prompt_dedent = dedent(prompt).strip()
+        completion_kwargs = {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": prompt_dedent,
+                }
+            ],
+            "model": model_name,
+            "temperature": 0.7,   
+            "max_tokens": 1000,   
+        }
+        response = groq.chat.completions.create(**completion_kwargs)
+        response_content = response.choices[0].message.content
+        
+        return [response_content]
 
     @staticmethod
     def invoke(agent_config, prompt_config, input_documentation, schema):
