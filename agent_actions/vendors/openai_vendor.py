@@ -19,7 +19,6 @@ class OpenAIHandler:
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
             <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
-            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>
 
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             RULES: ALWAYS READ INPUT AS STRING

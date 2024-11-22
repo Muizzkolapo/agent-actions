@@ -6,7 +6,7 @@ from textwrap import dedent
 
 class MistralHandler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = os.getenv(agent_config['api_key'])
         api_key = os.environ["MISTRAL_API_KEY"]
         model_name = agent_config['model_name']
@@ -36,3 +36,21 @@ class MistralHandler:
 
         data = json.loads(chat_response.choices[0].message.content)
         return data
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        pass
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return MistralHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return MistralHandler.call_non_json(agent_config, prompt_config, input_documentation)
+

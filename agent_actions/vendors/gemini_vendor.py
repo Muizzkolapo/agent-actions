@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.ERROR)
 
 class GeminiHandler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = agent_config['api_key']
         genai.configure(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
@@ -41,3 +41,21 @@ class GeminiHandler:
         response = json.loads(response_temp.text)
         response_list = DataTransformer.ensure_list(response)
         return response_list
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        pass
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return GeminiHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return GeminiHandler.call_non_json(agent_config, prompt_config, input_documentation)
+

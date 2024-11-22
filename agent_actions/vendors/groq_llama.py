@@ -9,7 +9,7 @@ from agent_actions.transformers.data_transformer import DataTransformer
 
 class GroqLlama3Handler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = agent_config['api_key']
         groq = Groq(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
@@ -41,3 +41,21 @@ class GroqLlama3Handler:
 
         except Exception as e:
             raise Exception(f"Failed to create chat completion with Groq Llama 3: {str(e)}")
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        pass
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return GroqLlama3Handler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return GroqLlama3Handler.call_non_json(agent_config, prompt_config, input_documentation)
+

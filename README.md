@@ -42,3 +42,8 @@ agent-actions/
 
 
 * we had a situation where we had code objects in json and need to load the source along side them into staging, what we did was to create the code and ensure they had guid and we used tooling as the first to extract
+
+
+
+- gemini and cohere usses the gemini schema format
+- Openai has its own schema formatclear
