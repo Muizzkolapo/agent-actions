@@ -64,7 +64,7 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
     elif model_vendor.lower() == 'mistral':
         response_cohere = MistralHandler.invoke(agent_config, prompt_config, input_documentation, schema)
         response = [response_cohere]
-    elif model_vendor.lower() == 'groq_llama3': 
+    elif model_vendor.lower() == 'groq': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, input_documentation, schema)
         response = [response_groq_llama]
     elif model_vendor.lower() == 'tool': 

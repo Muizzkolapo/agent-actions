@@ -9,7 +9,7 @@ from agent_actions.transformers.data_transformer import DataTransformer
 
 class GroqLlama3Handler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = agent_config['api_key']
         groq = Groq(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
@@ -41,3 +41,50 @@ class GroqLlama3Handler:
 
         except Exception as e:
             raise Exception(f"Failed to create chat completion with Groq Llama 3: {str(e)}")
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        api_key = agent_config['api_key']
+        groq = Groq(api_key=os.environ[api_key])
+        model_name = agent_config['model_name']
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+
+
+        prompt = f"""
+                Instructions: {prompt_config}
+                Input Text: {str(input_documentation_str)}
+                
+                Please provide a direct response without any JSON formatting.
+                Begin your response here:
+            """
+
+        prompt_dedent = dedent(prompt).strip()
+        completion_kwargs = {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": prompt_dedent,
+                }
+            ],
+            "model": model_name,
+            "temperature": 0.7,   
+            "max_tokens": 1000,   
+        }
+        response = groq.chat.completions.create(**completion_kwargs)
+        response_content = response.choices[0].message.content
+        
+        return [response_content]
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return GroqLlama3Handler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return GroqLlama3Handler.call_non_json(agent_config, prompt_config, input_documentation)
+

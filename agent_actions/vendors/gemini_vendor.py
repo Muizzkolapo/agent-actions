@@ -9,13 +9,9 @@ from textwrap import dedent
 logging.basicConfig(level=logging.ERROR)
 
 
-
-
-
-
 class GeminiHandler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = agent_config['api_key']
         genai.configure(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
@@ -39,5 +35,39 @@ class GeminiHandler:
         prompt_dedent = dedent(prompt)
         response_temp = llm.generate_content(prompt_dedent)
         response = json.loads(response_temp.text)
-        response_list = DataTransformer.ensure_list(response)
-        return response_list
+        return [response]
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        api_key = agent_config['api_key']
+        genai.configure(api_key=os.environ[api_key])
+        model_name = agent_config['model_name']
+
+        llm = genai.GenerativeModel(
+            model_name,
+            system_instruction="Return only JSON",
+            generation_config={"response_mime_type": "application/json"}
+        )
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        prompt = f"""
+            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
+            <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
+        """
+        prompt_dedent = dedent(prompt)
+        response_temp = llm.generate_content(prompt_dedent)
+        response_list = response_temp.text
+        return [response_list]
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return GeminiHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return GeminiHandler.call_non_json(agent_config, prompt_config, input_documentation)
+

@@ -4,9 +4,10 @@ import json
 from textwrap import dedent
 from agent_actions.transformers.string_transformer import StringProcessor
 
+
 class CohereHandler:
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, input_documentation, schema):
         api_key = os.environ.get(agent_config['api_key'])
         model_name = agent_config['model_name']
         input_documentation_str = StringProcessor.process_as_string(input_documentation)
@@ -14,8 +15,7 @@ class CohereHandler:
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
             <|begin_of_text|>: {input_documentation_str} :<|end_of_text|>
-            <|begin_of_output_schema|> : {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>
-
+            <|begin_of_output_schema|> : GENERATE JSON with the fields {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             """ 
         prompt_dedent = dedent(prompt)       
@@ -30,7 +30,47 @@ class CohereHandler:
         intermediate_json = response.text 
         final_data = json.loads(intermediate_json)        
         return final_data  
+   
 
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, input_documentation):
+        api_key = os.environ.get(agent_config['api_key'])
+        co = cohere.ClientV2(api_key=api_key)
+        model_name = agent_config['model_name']
+
+        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        prompt = f"""
+            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
+            <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
+        """
+        messages=[
+                {
+                    "role": "user",
+                    "content": dedent(prompt)
+                }
+            ]     
+        response = co.chat(
+            model=model_name,
+            messages=messages
+        )
+
+        response_message = response.message.content[0].text
+
+        return [response_message]
+
+    @staticmethod
+    def invoke(agent_config, prompt_config, input_documentation, schema):
+        """
+        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
+        """
+        json_mode = agent_config.get('json_mode', True)
+
+
+        if json_mode:
+            return CohereHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+        else:
+            return CohereHandler.call_non_json(agent_config, prompt_config, input_documentation)
 
 
 

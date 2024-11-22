@@ -42,3 +42,33 @@ agent-actions/
 
 
 * we had a situation where we had code objects in json and need to load the source along side them into staging, what we did was to create the code and ensure they had guid and we used tooling as the first to extract
+
+
+
+- gemini and cohere usses the gemini schema format
+- Openai has its own schema formatclear
+
+
+  - agent_type: step_7_dbt_exam_options_reviewer
+    dependencies: ['step_6_tool_add_option_lengths']
+    api_key: GROQ_API_KEY
+    model_vendor: "llama3-8b-8192"
+    model_name: "gemini-1.5-flash"
+    schema_name: gemini_question
+    use_few_shot_samples: 0
+    side_collection: []
+    prompt: $exam_question_pipeline.step_6_tool_add_option_lengths
+
+
+    api_key: GEMINI_API_KEY
+    model_name: "gemini-1.5-flash"
+    model_vendor: "Gemini"
+
+    api_key: MISTRAL_API_KEY
+    model_vendor: "mistral"
+    model_name: "mistral-large-latest"
+
+    api_key: COHERE_API_KEY
+    model_vendor: "cohere"
+    model_name: "command-r-plus-08-2024"
+    schema_name: gemini_question
