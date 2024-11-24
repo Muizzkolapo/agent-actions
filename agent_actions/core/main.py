@@ -2,6 +2,7 @@ import os
 import sys
 import yaml
 import click
+from jinja2 import Environment, FileSystemLoader
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.core.agent_runners import AgentWorkflow  
@@ -9,6 +10,7 @@ from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.docs.app import run_app
 from agent_actions.core.init import init_project
 from agent_actions.logging_setup import setup_logging
+from agent_actions.processors.render_template import render_template  
 
 logger = setup_logging()
 
@@ -125,6 +127,22 @@ def clean(agent):
         AgentManager.clean_agent_directories(agent)
     except Exception as e:
         logger.error(f"Failed to clean agent directories for '{agent}': {e}")
+        sys.exit(1)
+
+@main.command()
+@click.argument('agent_name')
+def render(agent_name):
+    """Render a Jinja template for the specified agent."""
+    try:
+        agent_config_dir, _, _ = FileHandler.get_agent_paths(agent_name)
+        agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
+
+        demo = render_template(agent_config_file)
+        print(demo)
+
+
+    except Exception as e:
+        logger.error(f"Failed to render template for agent '{agent_name}': {e}")
         sys.exit(1)
 
 if __name__ == "__main__":
