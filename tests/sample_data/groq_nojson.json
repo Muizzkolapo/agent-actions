@@ -1,0 +1,8 @@
+[
+    {
+        "guid": "2ef41767-522c-4483-acef-d11356e52ab8",
+        "content": [
+            "This document appears to be a tutorial or guidance on building a data warehouse using the dbt (Data Build Tool) framework. The document focuses on the concept of \"Marts\", which are business-defined entities that are used to represent a specific concept or entity at a unique grain.\n\nThe author begins by explaining that the Marts layer is where everything comes together, and that it is where they arrange all the atoms (staging models) and molecules (intermediate models) into full-fledged cells that have identity and purpose. They also mention that unlike traditional Kimball star schema, modern data warehousing involves denormalizing data to make it more efficient and flexible.\n\nThe author then provides guidance on how to structure the Marts layer, including:\n\n* Grouping by department or area of concern\n* Naming files based on the concept that forms the grain of the mart\n* Avoiding building the same concept differently for different teams\n\nThe document also includes examples of how to name files and folders in the Marts layer, as well as a few sample scenarios and questions related to dbt configuration and troubleshooting.\n\nOverall, the document appears to be a comprehensive guide to building a data warehouse using dbt, with a focus on the Marts layer and best practices for structuring and naming files and folders."
+        ]
+    }
+]

@@ -1,0 +1,17 @@
+[
+    {
+        "guid": "4ee1a27b-f7d5-446d-b410-bd1da5bcc896",
+        "content": {
+            "scenario": "You are a data engineer working on a project to build a data warehouse for a large e-commerce company. The project involves using dbt (data build tool) to transform and model data from various sources into a structured format for analysis.",
+            "question": "Which approach should you consider when organizing data models in the Marts layer to ensure efficient data querying and maintain a clear structure?",
+            "options": [
+                "A) Create separate data models for each data element (atoms) and link them through complex relationships.",
+                "B) Combine all data elements into a single large table to simplify the structure.",
+                "C) Group data models by functional areas, representing entities with distinct tables, and include related data for denormalization.",
+                "D) Build multiple versions of the same concept to cater to different teams' preferences."
+            ],
+            "answer": "C",
+            "explanation": "The correct approach is to group data models by functional areas or departments, such as finance and marketing. Each entity or concept should be represented by a distinct data model or table, and related data can be included in these models to support denormalization. This strategy simplifies querying, reduces complexity, and ensures a consistent representation of entities across the organization. Options A and B are not recommended as they can lead to a complex and disorganized structure, while option D may result in confusion and unnecessary complexity."
+        }
+    }
+]

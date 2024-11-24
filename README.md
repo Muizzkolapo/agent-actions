@@ -45,7 +45,7 @@ agent-actions/
 
 
 
-- gemini and cohere usses the gemini schema format
+- gemini, cohere and,mistral usses the gemini schema format
 - Openai has its own schema formatclear
 
 
