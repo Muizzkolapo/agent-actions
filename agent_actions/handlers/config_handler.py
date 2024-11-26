@@ -4,6 +4,7 @@ import yaml
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.core.utils import Utils
 from agent_actions.logging_setup import setup_logging
+from agent_actions.processors.render_template import render_pipeline_with_templates  
 logger = setup_logging()
 
 
@@ -88,21 +89,22 @@ class ConfigManager:
         self.execution_order = []
         self.child_pipeline = None
         self.logs = []
+        self.template_dir = os.path.join(os.getcwd(), "templates")
 
     def _log(self, message, level='info'):
         self.logs.append((level, message))
 
     def load_configs(self):
         try:
-            with open(self.constructor_path, 'r', encoding='utf-8') as file:
-                self.user_config = yaml.safe_load(file)
+            config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
+            self.user_config = yaml.safe_load(config_data)
         except Exception as e:
             self._log(f"Error loading constructor config: {self.constructor_path}, Error: {e}", level='error')
             raise
 
         try:
-            with open(self.default_path, 'r', encoding='utf-8') as file:
-                self.default_config = yaml.safe_load(file)
+            default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
+            self.default_config = yaml.safe_load(default_config_data)
         except Exception as e:
             self._log(f"Error loading default config: {self.default_path}, Error: {e}", level='error')
             raise

@@ -79,6 +79,7 @@ def run(agent, user_code):
         current_dir = os.getcwd()
         template_dir = os.path.join(current_dir, "templates")
         config_data = render_pipeline_with_templates(full_path,template_dir)
+        config_data = yaml.safe_load(config_data)
 
 
         if agent_name not in config_data:
