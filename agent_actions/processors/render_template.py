@@ -33,6 +33,9 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
     template = env.from_string(yaml_content)
     rendered_yaml_content = template.render()
 
+    # Parse the rendered YAML content
+    rendered_config = yaml.safe_load(rendered_yaml_content)
+
     # Optionally save the rendered configuration
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as out_file:

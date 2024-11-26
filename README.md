@@ -80,8 +80,7 @@ agent-actions/
 
 sample usage of template
 exam_question_pipeline:
-  {{ apikey() | trim }}
-
+  - {{ test() }}
   - agent_type: step_2_adversarial_reviewer
     dependencies: [step_1_scenario_question_generator]
     api_key: {{ api_key }}
@@ -91,3 +90,17 @@ exam_question_pipeline:
     use_few_shot_samples: 0
     side_collection: []
     prompt: $exam_question_pipeline.step_2_adversarial_reviewer
+--macrosfile
+{% macro test() -%}
+    agent_type: step_1_scenario_question_generator
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: question_schema
+    use_few_shot_samples: 3
+    side_collection: []  
+    prompt: $exam_question_pipeline.step_1_scenario_question_generator
+{%- endmacro %}
+
+{% set api_key = 'OPENAI_API_KEY' %}
