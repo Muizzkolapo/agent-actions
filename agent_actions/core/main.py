@@ -141,8 +141,8 @@ def render(agent_name):
         agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
         current_dir = os.getcwd()
         template_dir = os.path.join(current_dir, "templates")
-        demo = render_pipeline_with_templates(agent_config_file,template_dir)
-        print(demo)
+        render_templates = render_pipeline_with_templates(agent_config_file,template_dir)
+        print(render_templates)
 
 
     except Exception as e:
