@@ -24,39 +24,37 @@ class Utils:
     def topological_sort(dependencies):
         """
         Perform a topological sort on the dependencies graph.
-        Only includes active agents in the sort.
-        
-        Args:
-            dependencies (dict): Dictionary of dependencies for active agents
-            
-        Returns:
-            list: Sorted list of agent types in execution order
-            
-        Raises:
-            ValueError: If a cycle is detected in dependencies
-        """
-        from collections import deque
 
+        Parameters:
+            dependencies (dict): A dictionary representing the dependency graph where each key is a node and the value is a list of nodes it depends on.
+
+        Returns:
+            list: A list of nodes in topologically sorted order.
+
+        Raises:
+            ValueError: If there is a cycle in the dependencies.
+        """
         # Calculate in-degrees
         in_degree = {node: 0 for node in dependencies}
-        for deps in dependencies.values():
-            for dep in deps:
-                in_degree[dep] = in_degree.get(dep, 0) + 1
+        for node, dependent_nodes in dependencies.items():
+            for dependent_node in dependent_nodes:
+                in_degree[dependent_node] += 1
 
-        # Find nodes with no dependencies
-        queue = deque([node for node, degree in in_degree.items() if degree == 0])
+        # Initialize queue with nodes having zero in-degree
+        queue = deque([node for node in in_degree if in_degree[node] == 0])
         sorted_nodes = []
 
         while queue:
-            node = queue.popleft()
-            sorted_nodes.append(node)
-            
-            for dep in dependencies.get(node, []):
-                in_degree[dep] -= 1
-                if in_degree[dep] == 0:
-                    queue.append(dep)
+            current_node = queue.popleft()
+            sorted_nodes.append(current_node)
 
+            for neighbor in dependencies[current_node]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+
+        # Check for cycles
         if len(sorted_nodes) != len(dependencies):
-            raise ValueError("Cycle detected in agent dependencies")
+            raise ValueError("There is a cycle in the dependencies")
 
-        return sorted_nodes
+        return sorted_nodes[::-1]
