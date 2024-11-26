@@ -10,7 +10,7 @@ from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.docs.app import run_app
 from agent_actions.core.init import init_project
 from agent_actions.logging_setup import setup_logging
-from agent_actions.processors.render_template import render_template  
+from agent_actions.processors.render_template import render_pipeline_with_templates  
 
 logger = setup_logging()
 
@@ -76,8 +76,10 @@ def run(agent, user_code):
         sys.exit(1)
 
     try:
-        with open(full_path, 'r') as config_file:
-            config_data = yaml.safe_load(config_file)
+        current_dir = os.getcwd()
+        template_dir = os.path.join(current_dir, "templates")
+        config_data = render_pipeline_with_templates(full_path,template_dir)
+
 
         if agent_name not in config_data:
             logger.error(f"Missing top-level key '{agent_name}' in configuration file.")
@@ -136,8 +138,9 @@ def render(agent_name):
     try:
         agent_config_dir, _, _ = FileHandler.get_agent_paths(agent_name)
         agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
-
-        demo = render_template(agent_config_file)
+        current_dir = os.getcwd()
+        template_dir = os.path.join(current_dir, "templates")
+        demo = render_pipeline_with_templates(agent_config_file,template_dir)
         print(demo)
 
 

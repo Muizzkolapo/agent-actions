@@ -2,24 +2,40 @@ import os
 import sys
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from agent_actions.handlers.file_handler import FileHandler
 
+def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
+    """
+    Render a YAML pipeline configuration by resolving macros from Jinja2 templates.
 
-# When we do agent render exam_question_pipeline we load the template defined by the user and print it out
-def get_template_name(agent_config_file):
-    with open(agent_config_file, 'r') as f:
-        config = yaml.safe_load(f)
-        exam_pipeline = config.get('exam_question_pipeline', {})
-        template_name = exam_pipeline.get('template_name_tocheck', None)
-        
-        return template_name
+    :param yaml_path: Path to the input YAML file.
+    :param templates_folder: Path to the folder containing Jinja2 templates.
+    :param output_file: Path to save the rendered output (optional).
+    :return: The rendered YAML as a string.
+    """
+    # Set up Jinja2 Environment
+    env = Environment(loader=FileSystemLoader(templates_folder))
 
-def render_template(agent_config_file):
-    template_name = get_template_name(agent_config_file)
-    current_dir = os.getcwd()
-    template_dir = os.path.join(current_dir, "templates")
-    template_file = os.path.join(template_dir, template_name)
-    with open(template_file, 'r') as file:
-        content = file.read()
-    print(content)
-    
+    # Load macros from all templates in the templates folder
+    template_files = [f for f in os.listdir(templates_folder) if f.endswith(('.j2', '.jinja2'))]
+    for template_file in template_files:
+        try:
+            template = env.get_template(template_file)
+            module = template.module
+            env.globals.update(vars(module))
+        except Exception as e:
+            print(f"Error loading template {template_file}: {e}")
+
+    # Load and render the entire YAML content
+    with open(yaml_path, 'r', encoding='utf-8') as yaml_file:
+        yaml_content = yaml_file.read()
+
+    # Render the YAML content as a Jinja2 template
+    template = env.from_string(yaml_content)
+    rendered_yaml_content = template.render()
+
+    # Optionally save the rendered configuration
+    if output_file:
+        with open(output_file, 'w', encoding='utf-8') as out_file:
+            out_file.write(rendered_yaml_content)
+
+    return rendered_yaml_content
