@@ -41,6 +41,43 @@ class ConfigValidator:
         return True, "Agent configuration is valid."
 
     @staticmethod
+    def validate_dependencies(agent_configs):
+        """
+        Validates that no active agent depends on a deactivated agent.
+        
+        Args:
+            agent_configs (dict): Dictionary of agent configurations
+            
+        Raises:
+            ValueError: If an active agent depends on a deactivated agent
+        """
+        # Identify active and deactivated agents
+        active_agents = {
+            agent_type for agent_type, config in agent_configs.items() 
+            if not config.get('deactivated', False)
+        }
+        deactivated_agents = {
+            agent_type for agent_type, config in agent_configs.items() 
+            if config.get('deactivated', False)
+        }
+
+        # Check dependencies of active agents
+        for agent_type, config in agent_configs.items():
+            if agent_type in active_agents:
+                dependencies = config.get('dependencies', [])
+                for dep in dependencies:
+                    if dep in deactivated_agents:
+                        raise ValueError(
+                            f"Agent '{agent_type}' depends on deactivated agent '{dep}'. "
+                            f"Please either reactivate '{dep}' or remove it from the dependencies."
+                        )
+                    elif dep not in agent_configs:
+                        raise ValueError(
+                            f"Agent '{agent_type}' depends on non-existent agent '{dep}'. "
+                            f"Please check your configuration."
+                        )
+
+    @staticmethod
     def should_update_schema(agent_config, keys_list, side_collection):
         """
         Determines whether the schema should be updated based on the agent configuration.
@@ -142,8 +179,19 @@ class ConfigManager:
                 self.agent_configs[agent_type] = merged_agent_config
 
     def determine_execution_order(self, user_agents):
-        dependency_graph = {
-            agent['agent_type']: agent.get('dependencies', [])
-            for agent in user_agents if 'agent_type' in agent
-        }
+        """
+        Determines the execution order of agents based on their dependencies,
+        considering only active agents.
+        """
+        ConfigValidator.validate_dependencies(self.agent_configs)
+        
+        dependency_graph = {}
+        for agent_type, config in self.agent_configs.items():
+            if not config.get('deactivated', False):
+                dependencies = [
+                    dep for dep in config.get('dependencies', [])
+                    if not self.agent_configs[dep].get('deactivated', False)
+                ]
+                dependency_graph[agent_type] = dependencies
+
         self.execution_order = Utils.topological_sort(dependency_graph)
