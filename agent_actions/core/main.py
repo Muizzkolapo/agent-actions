@@ -82,9 +82,8 @@ def run(agent, user_code):
         config_data = render_pipeline_with_templates(full_path,template_dir)
         config_data = yaml.safe_load(config_data)
 
-
         if agent_name not in config_data:
-            logger.error(f"Missing top-level key '{agent_name}' in configuration file.")
+            logger.error(f"The config file name '{agent_name}' does not match any workflow name {list(config_data.keys())} in configuration file.")
             sys.exit(1)
 
         agent_config = config_data[agent_name]
