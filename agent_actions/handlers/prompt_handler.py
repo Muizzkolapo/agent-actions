@@ -1,12 +1,12 @@
-import traceback
-import os 
-from agent_actions.handlers.file_handler import FileHandler
+import os
 import re
-
+import traceback
+from collections import Counter
+from agent_actions.handlers.file_handler import FileHandler
 
 class PromptLoader:
     """
-    A class for loading prompts.
+    A class for loading and validating prompts.
     """
 
     @staticmethod
@@ -22,7 +22,7 @@ class PromptLoader:
             str: The extracted prompt or "Prompt not found."
         """
         # Regular expression to match the prompt block
-        pattern = re.compile(rf"\{{prompt {prompt_name}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
+        pattern = re.compile(rf"\{{prompt {re.escape(prompt_name)}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
 
         # Search for the prompt using the pattern
         match = pattern.search(content)
@@ -31,6 +31,38 @@ class PromptLoader:
             return match.group(1).strip()
         else:
             return "Prompt not found."
+
+    @staticmethod
+    def get_all_prompt_names(content):
+        """
+        Extracts all prompt names from the content.
+
+        Parameters:
+            content (str): The content containing the prompts.
+
+        Returns:
+            list: A list of prompt names found in the content.
+        """
+        # Regular expression to find all prompt names
+        pattern = re.compile(r"\{prompt\s+(\w+)\}")
+        return pattern.findall(content)
+
+    @staticmethod
+    def validate_unique_prompts(filename,content):
+        """
+        Validates that all prompt names in the content are unique.
+
+        Parameters:
+            content (str): The content containing the prompts.
+            filename (str): The name of the file being validated.
+
+        Raises:
+            ValueError: If duplicate prompt names are found.
+        """
+        prompt_names = PromptLoader.get_all_prompt_names(content)
+        duplicates = [item for item, count in Counter(prompt_names).items() if count > 1]
+        if duplicates:
+            raise ValueError(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
 
     @staticmethod
     def load_prompt(prompt_name):
@@ -62,6 +94,12 @@ class PromptLoader:
             # Read the content of the prompt file
             with open(prompt_file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
+
+            # Get the filename from the path
+            filename = os.path.basename(prompt_file_path)
+
+            # Validate that prompt names are unique
+            PromptLoader.validate_unique_prompts(content, filename)
 
             prompt_data = PromptLoader.extract_prompt(content, prompt_key)
 

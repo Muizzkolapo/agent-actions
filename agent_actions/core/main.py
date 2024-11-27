@@ -11,6 +11,7 @@ from agent_actions.docs.app import run_app
 from agent_actions.core.init import init_project
 from agent_actions.logging_setup import setup_logging
 from agent_actions.processors.render_template import render_pipeline_with_templates  
+from agent_actions.handlers.prompt_handler import PromptLoader
 
 logger = setup_logging()
 
@@ -46,37 +47,47 @@ def docs(host, port, debug):
 @click.option('-u', '--user_code', help="Path to the user's code folder containing UDFs")
 def run(agent, user_code):
     """Run agents with a specified agent configuration."""
-    filename = agent
-    current_dir = os.getcwd()
-    agent_config_dir, io_dir, _ = FileHandler.get_agent_paths(filename)
-    schema_dir = os.path.join(current_dir, 'schema')
-    default_config_path = os.path.join(current_dir, 'agent_actions.yml')
+    try:
+        # Add prompt validation at process start
+        prompt_dir = os.path.join(os.getcwd(), "prompt_store")
+        if os.path.exists(prompt_dir):
+            for prompt_file in os.listdir(prompt_dir):
+                if prompt_file.endswith('.md'):
+                    file_path = os.path.join(prompt_dir, prompt_file)
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        PromptLoader.validate_unique_prompts(prompt_file,content)
+        
+        filename = agent
+        current_dir = os.getcwd()
+        agent_config_dir, io_dir, _ = FileHandler.get_agent_paths(filename)
+        schema_dir = os.path.join(current_dir, 'schema')
+        default_config_path = os.path.join(current_dir, 'agent_actions.yml')
 
-    for required_dir in [agent_config_dir, schema_dir, io_dir]:
-        if not os.path.exists(required_dir):
-            logger.error(f"Missing directory: {required_dir}")
+        for required_dir in [agent_config_dir, schema_dir, io_dir]:
+            if not os.path.exists(required_dir):
+                logger.error(f"Missing directory: {required_dir}")
+                sys.exit(1)
+
+        if not filename.endswith(".yml"):
+            filename += ".yml"
+        full_path = FileHandler.find_config_file(agent_config_dir, filename)
+
+        if full_path is None or not os.path.exists(default_config_path):
+            logger.error(f"Missing configuration file: {filename}")
             sys.exit(1)
 
-    if not filename.endswith(".yml"):
-        filename += ".yml"
-    full_path = FileHandler.find_config_file(agent_config_dir, filename)
+        project_dir = os.path.abspath(current_dir)
+        if not ConfigValidator.check_agent_file_unique(full_path, project_dir):
+            logger.error(f"Duplicate configuration file: {full_path}")
+            sys.exit(1)
 
-    if full_path is None or not os.path.exists(default_config_path):
-        logger.error(f"Missing configuration file: {filename}")
-        sys.exit(1)
+        agent_name = os.path.splitext(filename)[0]
+        is_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, project_dir)
+        if not is_unique:
+            print(error_msg)
+            sys.exit(1)
 
-    project_dir = os.path.abspath(current_dir)
-    if not ConfigValidator.check_agent_file_unique(full_path, project_dir):
-        logger.error(f"Duplicate configuration file: {full_path}")
-        sys.exit(1)
-
-    agent_name = os.path.splitext(filename)[0]
-    is_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, project_dir)
-    if not is_unique:
-        print(error_msg)
-        sys.exit(1)
-
-    try:
         current_dir = os.getcwd()
         template_dir = os.path.join(current_dir, "templates")
         config_data = render_pipeline_with_templates(full_path,template_dir)
