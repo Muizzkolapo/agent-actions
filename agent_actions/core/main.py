@@ -12,8 +12,12 @@ from agent_actions.core.init import init_project
 from agent_actions.logging_setup import setup_logging
 from agent_actions.processors.render_template import render_pipeline_with_templates  
 from agent_actions.handlers.prompt_handler import PromptLoader
-
+from agent_actions.handlers.schema_handler import SchemaLoader
 logger = setup_logging()
+
+
+
+
 
 @click.group()
 def main():
@@ -92,6 +96,21 @@ def run(agent, user_code):
         template_dir = os.path.join(current_dir, "templates")
         config_data = render_pipeline_with_templates(full_path,template_dir)
         config_data = yaml.safe_load(config_data)
+
+
+        schema_error = SchemaLoader.validate_schemas_exist(agent_name,schema_dir)
+
+        if schema_error is not None:
+            logger.error(f"Missing configuration file: {filename}")
+            sys.exit(1)
+        
+
+        
+
+
+
+
+
 
         if agent_name not in config_data:
             logger.error(f"The config file name '{agent_name}' does not match any workflow name {list(config_data.keys())} in configuration file.")
