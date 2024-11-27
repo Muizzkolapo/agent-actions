@@ -12,10 +12,7 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
     :param output_file: Path to save the rendered output (optional).
     :return: The rendered YAML as a string.
     """
-    # Set up Jinja2 Environment
     env = Environment(loader=FileSystemLoader(templates_folder))
-
-    # Load macros from all templates in the templates folder
     template_files = [f for f in os.listdir(templates_folder) if f.endswith(('.j2', '.jinja2'))]
     for template_file in template_files:
         try:
@@ -25,18 +22,10 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         except Exception as e:
             print(f"Error loading template {template_file}: {e}")
 
-    # Load and render the entire YAML content
     with open(yaml_path, 'r', encoding='utf-8') as yaml_file:
         yaml_content = yaml_file.read()
-
-    # Render the YAML content as a Jinja2 template
     template = env.from_string(yaml_content)
     rendered_yaml_content = template.render()
-
-    # Parse the rendered YAML content
-    rendered_config = yaml.safe_load(rendered_yaml_content)
-
-    # Optionally save the rendered configuration
     if output_file:
         with open(output_file, 'w', encoding='utf-8') as out_file:
             out_file.write(rendered_yaml_content)

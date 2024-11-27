@@ -94,7 +94,10 @@ def run(agent, user_code):
 
         current_dir = os.getcwd()
         template_dir = os.path.join(current_dir, "templates")
-        config_data = render_pipeline_with_templates(full_path,template_dir)
+        rendered_workflows_dir = os.path.join(current_dir, "rendered_workflows")
+        os.makedirs(rendered_workflows_dir, exist_ok=True)
+        rendered_workflows = os.path.join(rendered_workflows_dir, f"{agent_name}.yml")
+        config_data = render_pipeline_with_templates(full_path,template_dir,rendered_workflows)
         config_data = yaml.safe_load(config_data)
 
 
