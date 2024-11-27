@@ -71,8 +71,9 @@ def run(agent, user_code):
         sys.exit(1)
 
     agent_name = os.path.splitext(filename)[0]
-    if not ConfigValidator.check_agent_name_unique(agent_name, project_dir):
-        logger.error(f"Duplicate agent name: {agent_name}")
+    is_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, project_dir)
+    if not is_unique:
+        print(error_msg)
         sys.exit(1)
 
     try:

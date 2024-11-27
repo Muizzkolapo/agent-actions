@@ -5,6 +5,7 @@ from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.core.utils import Utils
 from agent_actions.logging_setup import setup_logging
 from agent_actions.processors.render_template import render_pipeline_with_templates  
+import glob
 logger = setup_logging()
 
 
@@ -92,11 +93,46 @@ class ConfigValidator:
     @staticmethod
     def check_agent_name_unique(agent_name, base_dir):
         """
-        Check if the agent name is unique across the entire project.
+        Check if the agent name is unique across all agent_config folders in the project.
+        Returns (bool, str): (is_unique, error_message if any)
         """
-        all_agent_paths = FileHandler.get_all_agent_paths(base_dir)
-        agent_names = [os.path.splitext(os.path.basename(path))[0] for path in all_agent_paths]
-        return agent_names.count(agent_name) == 1
+        def find_agent_config_dirs(start_path):
+            agent_config_dirs = []
+            for root, dirs, _ in os.walk(start_path):
+                if "agent_config" in dirs:
+                    agent_config_dirs.append(os.path.join(root, "agent_config"))
+            return agent_config_dirs
+
+        name_locations = {}
+        duplicates = {}
+        
+        for config_dir in find_agent_config_dirs(base_dir):
+            yaml_files = glob.glob(os.path.join(config_dir, "*.yaml"))
+            yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
+            all_files = yaml_files + yml_files
+            
+            for file_path in all_files:
+                name = os.path.splitext(os.path.basename(file_path))[0]
+                
+                if name in name_locations:
+                    if name not in duplicates:
+                        duplicates[name] = [name_locations[name]]
+                    duplicates[name].append(file_path)
+                else:
+                    name_locations[name] = file_path
+
+        if duplicates:
+            error_msg = "ERROR: Duplicate agent configurations detected!\n"
+            error_msg += "=" * 50 + "\n"
+            for name, paths in duplicates.items():
+                error_msg += f"\nAgent '{name}' is defined in multiple locations:\n"
+                for i, path in enumerate(paths, 1):
+                    rel_path = os.path.relpath(path, base_dir)
+                    error_msg += f"{i}. {rel_path}\n"
+                error_msg += "\nPlease remove duplicate configurations before proceeding."
+            return False, error_msg
+
+        return True, ""
 
     @staticmethod
     def check_agent_file_unique(full_path, base_dir):
@@ -195,3 +231,7 @@ class ConfigManager:
                 dependency_graph[agent_type] = dependencies
 
         self.execution_order = Utils.topological_sort(dependency_graph)
+
+class DuplicateAgentError(Exception):
+    """Raised when duplicate agents are found in the configuration."""
+    pass
