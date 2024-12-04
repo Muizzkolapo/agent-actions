@@ -83,7 +83,7 @@ class DataGenerator:
         self.agent_config = agent_config
         self.agent_name = agent_name
 
-    def create_agent_with_data(self, contents, source_content):
+    def create_agent_with_data(self, contents, source_content=None):
         try:
             if not isinstance(contents, dict):
                 contents = {"data": contents}
@@ -181,12 +181,16 @@ class TargetContentProcessor(ContentProcessor):
     def _process_single_item(self, item, source_data):
         contents, guid = item['content'], item['guid']
         source_content = DataTransformer.get_content_by_guid(source_data, guid)
-
-        # Add few-shot samples
         self.sample_manager.add_few_shot_samples(contents)
-
-        # Generate data
         generated_data = self.data_generator.create_agent_with_data(contents, source_content)
-
-        # Process item
         return self.data_processor.process_item(contents, generated_data, guid)
+
+    def process_file_level(self, data):
+
+        try:
+            generated_data = self.data_generator.create_agent_with_data(data)
+
+            return generated_data
+        except Exception as e:
+            logger.error(f"Error in process_file_level: {e}")
+            raise
