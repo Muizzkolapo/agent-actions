@@ -51,7 +51,7 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
         print("="*40 + "\n")
 
     model_vendor = agent_config['model_vendor']
-    transform_level = agent_config['transform_level']
+    granularity = agent_config.get('granularity', 'record').lower()
     
     schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
     schema = SchemaLoader.load_schema(schema_name) if schema_name else None
@@ -71,7 +71,7 @@ def create_dynamic_agent(agent_config, udf, input_documentation_str, formatted_p
         response = [response_groq_llama]
     elif model_vendor.lower() == 'tool': 
         response_ToolHandler = ToolHandler.invoke(agent_config, input_documentation)
-        if transform_level:
+        if granularity == 'file':
             response = response_ToolHandler
         else:
             response = [response_ToolHandler]

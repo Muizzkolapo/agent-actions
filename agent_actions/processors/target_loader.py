@@ -32,14 +32,14 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     data = file_reader.read()#--we have all the data here
 
     model_vendor = agent_config.get('model_vendor', '').lower()
-    transform_level = agent_config.get('transform_level', '').lower()
+    granularity = agent_config.get('granularity', '').lower()
     side_output = agent_config.get('side_output', False)
 
 
 
     content_processor = TargetContentProcessor(agent_config, agent_name)
 
-    if model_vendor == 'tool' and side_output:
+    if model_vendor == 'tool' and granularity == 'record' and side_output:
         main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
         save_output(main_output, file_path, base_directory, output_directory)
 
@@ -47,11 +47,11 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
             side_output_directory = output_directory
             save_side_output(side_output_data, file_path, base_directory, side_output_directory)
 
-    elif model_vendor == 'tool' and transform_level=='file':
+    elif model_vendor == 'tool' and granularity=='file':
         main_output = content_processor.process_file_level(data)
         save_output(main_output, file_path, base_directory, output_directory)
 
-    elif transform_level=='record':
+    elif granularity == 'record':
         new_data = content_processor.process(data, file_path)
         save_output(new_data, file_path, base_directory, output_directory)
 

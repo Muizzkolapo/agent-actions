@@ -44,22 +44,22 @@ class ConfigValidator:
     @staticmethod
     def validate_dependencies(agent_configs):
         """
-        Validates that no active agent depends on a deactivated agent.
+        Validates that no active agent depends on an inactive agent.
         
         Args:
             agent_configs (dict): Dictionary of agent configurations
             
         Raises:
-            ValueError: If an active agent depends on a deactivated agent
+            ValueError: If an active agent depends on an inactive agent
         """
-        # Identify active and deactivated agents
+        # Identify active and inactive agents
         active_agents = {
             agent_type for agent_type, config in agent_configs.items() 
-            if not config.get('deactivated', False)
+            if config.get('is_operational', True)
         }
-        deactivated_agents = {
+        inactive_agents = {
             agent_type for agent_type, config in agent_configs.items() 
-            if config.get('deactivated', False)
+            if not config.get('is_operational', True)
         }
 
         # Check dependencies of active agents
@@ -67,10 +67,10 @@ class ConfigValidator:
             if agent_type in active_agents:
                 dependencies = config.get('dependencies', [])
                 for dep in dependencies:
-                    if dep in deactivated_agents:
+                    if dep in inactive_agents:
                         raise ValueError(
-                            f"Agent '{agent_type}' depends on deactivated agent '{dep}'. "
-                            f"Please either reactivate '{dep}' or remove it from the dependencies."
+                            f"Agent '{agent_type}' depends on inactive agent '{dep}'. "
+                            f"Please either activate '{dep}' or remove it from the dependencies."
                         )
                     elif dep not in agent_configs:
                         raise ValueError(
@@ -217,16 +217,16 @@ class ConfigManager:
     def determine_execution_order(self, user_agents):
         """
         Determines the execution order of agents based on their dependencies,
-        considering only active agents.
+        considering only is_operational agents.
         """
         ConfigValidator.validate_dependencies(self.agent_configs)
         
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
-            if not config.get('deactivated', False):
+            if config.get('is_operational', True):
                 dependencies = [
                     dep for dep in config.get('dependencies', [])
-                    if not self.agent_configs[dep].get('deactivated', False)
+                    if self.agent_configs[dep].get('is_operational', True)
                 ]
                 dependency_graph[agent_type] = dependencies
 
