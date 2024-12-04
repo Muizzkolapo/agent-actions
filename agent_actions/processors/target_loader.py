@@ -32,7 +32,7 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     data = file_reader.read()#--we have all the data here
 
     model_vendor = agent_config.get('model_vendor', '').lower()
-    transform_level = agent_config.get('transform_level', False)
+    transform_level = agent_config.get('transform_level', '').lower()
     side_output = agent_config.get('side_output', False)
 
 
@@ -47,11 +47,11 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
             side_output_directory = output_directory
             save_side_output(side_output_data, file_path, base_directory, side_output_directory)
 
-    elif model_vendor == 'tool' and transform_level:
+    elif model_vendor == 'tool' and transform_level=='file':
         main_output = content_processor.process_file_level(data)
         save_output(main_output, file_path, base_directory, output_directory)
 
-    else:
+    elif transform_level=='record':
         new_data = content_processor.process(data, file_path)
         save_output(new_data, file_path, base_directory, output_directory)
 
