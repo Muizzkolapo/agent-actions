@@ -114,11 +114,12 @@ class DataProcessor:
         self.agent_config = agent_config
 
     def process_item(self, contents, generated_data, guid):
+        
         if ConfigValidator.should_update_schema(
             self.agent_config,
             [self.agent_config['agent_type']],
             {self.agent_config['agent_type']: []}
-        ):
+        ):            
             updated_data = [
                 DataTransformer.update_schema_objects(contents, data, [])
                 for data in generated_data

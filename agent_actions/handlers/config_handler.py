@@ -52,7 +52,6 @@ class ConfigValidator:
         Raises:
             ValueError: If an active agent depends on an inactive agent
         """
-        # Identify active and inactive agents
         active_agents = {
             agent_type for agent_type, config in agent_configs.items() 
             if config.get('is_operational', True)
@@ -62,7 +61,6 @@ class ConfigValidator:
             if not config.get('is_operational', True)
         }
 
-        # Check dependencies of active agents
         for agent_type, config in agent_configs.items():
             if agent_type in active_agents:
                 dependencies = config.get('dependencies', [])
@@ -88,7 +86,8 @@ class ConfigValidator:
         :param side_collection: Dictionary containing the select list
         :return: Boolean indicating whether the schema should be updated
         """
-        return agent_config['agent_type'] == keys_list[0] and side_collection[agent_config['agent_type']]
+        return (agent_config['agent_type'] == keys_list[0] and 
+                bool(agent_config.get('side_collection')))
 
     @staticmethod
     def check_agent_name_unique(agent_name, base_dir):
