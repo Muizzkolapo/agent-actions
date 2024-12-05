@@ -77,7 +77,6 @@ class FewShotSampleManager:
             logger.warning("Invalid value for 'use_few_shot_samples'. Defaulting to 0.")
             return 0
 
-# Data Generator
 class DataGenerator:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
@@ -108,27 +107,22 @@ class DataGenerator:
             logger.error(f"Error in create_agent_with_data: {e}")
             raise
 
-# Data Processor
 class DataProcessor:
     def __init__(self, agent_config):
         self.agent_config = agent_config
 
     def process_item(self, contents, generated_data, guid):
+        side_collection = self.agent_config.get('side_collection', [])
         
-        if ConfigValidator.should_update_schema(
-            self.agent_config,
-            [self.agent_config['agent_type']],
-            {self.agent_config['agent_type']: []}
-        ):            
+        if side_collection:
             updated_data = [
-                DataTransformer.update_schema_objects(contents, data, [])
+                DataTransformer.update_schema_objects(contents, data, side_collection)
                 for data in generated_data
             ]
             return DataTransformer.transform_structure([{guid: updated_data}])
         else:
             return DataTransformer.transform_structure([{guid: generated_data}])
 
-# Refactored TargetContentProcessor
 class TargetContentProcessor(ContentProcessor):
     def __init__(self, agent_config, agent_name):
         super().__init__(agent_config, agent_name)

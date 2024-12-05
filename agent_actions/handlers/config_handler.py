@@ -80,11 +80,6 @@ class ConfigValidator:
     def should_update_schema(agent_config, keys_list, side_collection):
         """
         Determines whether the schema should be updated based on the agent configuration.
-
-        :param agent_config: Configuration dictionary for the agent
-        :param keys_list: List of keys in the select list
-        :param side_collection: Dictionary containing the select list
-        :return: Boolean indicating whether the schema should be updated
         """
         return (agent_config['agent_type'] == keys_list[0] and 
                 bool(agent_config.get('side_collection')))
