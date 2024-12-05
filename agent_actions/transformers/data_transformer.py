@@ -16,36 +16,36 @@ class DataTransformer:
     @staticmethod
     def update_schema_objects(data_old, data_new, keys_to_update):
         """
-        Updates specified keys in old data with values from new data.
+        Updates data based on structure comparison:
+        - If the value types match for a given key, replace `data_new` value with `data_old` value.
+        - If the value types differ, append the `data_old` key/value into `data_new`.
 
         Parameters:
-            data_old (dict): Dictionary containing original data.
-            data_new (dict): Dictionary containing new data with updates.
-            keys_to_update (list): List of keys for which values should be updated from the new data.
+            data_old (dict): Original data dictionary.
+            data_new (dict): Dictionary to be updated.
+            keys_to_update (list): Keys to be considered for updating.
 
         Returns:
-            dict: Dictionary with updated values.
-
-        Raises:
-            KeyError: If a key is missing.
-            Exception: For other exceptions.
+            dict: Updated data_new dictionary.
         """
-        try:
-            # Create a new updated data by copying the old data
-            updated_data = copy.deepcopy(data_old)
+        updated_data = copy.deepcopy(data_new)
 
-            # Update specified keys from the new data
-            for key in keys_to_update:
-                if key in data_new:
-                    print(f"Updating key '{key}' from new data")
-                    updated_data[key] = data_new[key]
-            return updated_data
+        for key in keys_to_update:
+            if key in data_old:
+                old_value = data_old[key]
+                new_value = updated_data.get(key, None)
 
-        except KeyError as e:
-            print(f"KeyError: {e}. Please check the data structures.")
-        except Exception as e:
-            print(f"An unexpected error occurred in update_schema_objects: {e}")
-            return None
+                if new_value is not None:
+                    if isinstance(old_value, type(new_value)):
+                        updated_data[key] = old_value
+                    else:
+                        updated_data[key] = [new_value, old_value]
+                else:
+                    updated_data[key] = old_value
+
+        return updated_data
+
+
 
     @staticmethod
     def extract_objects(input_data):
@@ -137,11 +137,8 @@ class DataTransformer:
         Returns:
             str: The content associated with the GUID, or a message if not found.
         """
-        # Iterate through the list of dictionaries
         for item in data:
-            # Check if the guid is a key in the dictionary
             if guid in item:
                 return item[guid]
-        # Return None or an appropriate message if not found
         return "GUID not found."
 
