@@ -42,6 +42,7 @@ class SchemaLoader:
     def load_schema(schema_name):
         """
         Retrieve and generate a JSON schema based on the schema name provided.
+        Searches recursively through all directories for the schema file.
 
         Parameters:
             schema_name (str): The name of the schema to load.
@@ -51,23 +52,44 @@ class SchemaLoader:
         """
         try:
             current_dir = os.getcwd()
-            schema_dir = os.path.join(current_dir, "schema")
+            schema_paths = []
 
-            if not os.path.exists(schema_dir):
-                raise FileNotFoundError("Schema directory not found.")
+            # Walk through all directories
+            for root, _, files in os.walk(current_dir):
+                for file in files:
+                    if file == f"{schema_name}.yml" or file == f"{schema_name}.yaml":
+                        schema_paths.append(os.path.join(root, file))
 
-            schema_file_path = FileHandler.find_file_in_directory(schema_dir, f"{schema_name}.yml")
-
-            if not schema_file_path:
+            if not schema_paths:
                 raise FileNotFoundError(f"Schema file not found: {schema_name}.yml")
 
-            with open(schema_file_path, 'r', encoding='utf-8') as file:
+            # If multiple schemas found, use the one in the closest schema directory
+            selected_path = None
+            shortest_path_length = float('inf')
+            
+            for path in schema_paths:
+                path_parts = path.split(os.sep)
+                if 'schema' in path_parts:
+                    schema_index = len(path_parts) - path_parts[::-1].index('schema')
+                    if schema_index < shortest_path_length:
+                        shortest_path_length = schema_index
+                        selected_path = path
+
+            # If no schema directory found, use the first found schema file
+            if not selected_path and schema_paths:
+                selected_path = schema_paths[0]
+                logger.warning(f"No schema directory found. Using schema from: {selected_path}")
+
+            if not selected_path:
+                raise FileNotFoundError(f"No valid schema file found for: {schema_name}")
+
+            with open(selected_path, 'r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
 
             return documents
 
         except Exception as e:
-            print(f"An error occurred in load_schema: {e}")
+            logger.error(f"An error occurred in load_schema: {e}")
             traceback.print_exc()
             return None
 
@@ -75,11 +97,11 @@ class SchemaLoader:
     @staticmethod  
     def validate_schemas_exist(agent_name, directory):
         """
-        Validates that each schema file exists in the given directory.
+        Validates that each schema file exists anywhere in the project.
         
         Args:
-            schema_names (list): A list of schema names to validate.
-            directory (str): The directory to check for schema files.
+            agent_name (str): The name of the agent.
+            directory (str): The base directory to start searching from.
         
         Returns:
             None: If all schema files exist.
@@ -87,11 +109,13 @@ class SchemaLoader:
         """
         schema_names = SchemaLoader.return_schema(agent_name)
         missing_files = []
+        
         for schema_name in schema_names:
-            schema_file = f"{schema_name}.yml"
-            schema_path = os.path.join(directory, schema_file)
-            if not os.path.isfile(schema_path):
-                missing_files.append(schema_file)
+            try:
+                if not SchemaLoader.load_schema(schema_name):
+                    missing_files.append(f"{schema_name}.yml")
+            except FileNotFoundError:
+                missing_files.append(f"{schema_name}.yml")
         
         if missing_files:
             if len(missing_files) == 1:

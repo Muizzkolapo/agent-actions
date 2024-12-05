@@ -1,8 +1,6 @@
 import logging
 import os
 
-# Define the path for the log file (inside the logs directory)
-LOG_FILE_PATH = os.path.join(os.path.dirname(__file__), '..', 'logs', 'agent_actions.log')
 
 def setup_logging(log_file='logs/agent_actions.log', level=logging.INFO):
     project_root = os.getcwd()
