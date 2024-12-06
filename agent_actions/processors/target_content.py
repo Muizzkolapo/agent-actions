@@ -113,10 +113,17 @@ class DataProcessor:
 
     def process_item(self, contents, generated_data, guid):
         side_collection = self.agent_config.get('side_collection', [])
+        remove_collection = self.agent_config.get('remove_collection', [])
         
         if side_collection:
             updated_data = [
                 DataTransformer.update_schema_objects(contents, data, side_collection)
+                for data in generated_data
+            ]
+            return DataTransformer.transform_structure([{guid: updated_data}])
+        elif remove_collection:
+            updated_data = [
+                DataTransformer.remove_schema_objects(data, remove_collection)
                 for data in generated_data
             ]
             return DataTransformer.transform_structure([{guid: updated_data}])
