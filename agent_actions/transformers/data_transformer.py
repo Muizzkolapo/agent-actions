@@ -44,7 +44,24 @@ class DataTransformer:
                     updated_data[key] = old_value
 
         return updated_data
+    
+    @staticmethod
+    def remove_schema_objects(data, keys_to_update):
+        """
+        Removes specified keys from a given data dictionary.
 
+        Parameters:
+            data (dict): The dictionary from which keys should be removed.
+            keys_to_update (list): A list of keys to remove from the dictionary.
+
+        Returns:
+            dict: The updated dictionary with the specified keys removed.
+        """
+        updated_data = copy.deepcopy(data)
+        for key in keys_to_update:
+            if key in updated_data:
+                del updated_data[key]
+        return updated_data
 
 
     @staticmethod
