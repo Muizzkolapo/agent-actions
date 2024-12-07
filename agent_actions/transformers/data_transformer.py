@@ -77,15 +77,17 @@ class DataTransformer:
         """
         try:
             if isinstance(input_data, list):
-                for field_name, field_value in input_data[0].items():
-                    if isinstance(field_value, list):
-                        return field_value
+                if input_data and isinstance(input_data[0], dict):
+                    for field_value in input_data[0].values():
+                        if isinstance(field_value, list):
+                            return field_value
+                return input_data  
             else:
-                for field_name, field_value in input_data.items():
+                for field_value in input_data.values():
                     if isinstance(field_value, list):
                         return field_value
         except Exception as e:
-            print(f"An error occurred while extracting summaries: {e}")
+            logger.error(f"An error occurred while extracting summaries: {e}")
         return []
 
     @staticmethod

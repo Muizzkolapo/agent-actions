@@ -188,11 +188,10 @@ class TargetContentProcessor(ContentProcessor):
         return self.data_processor.process_item(contents, generated_data, guid)
 
     def process_file_level(self, data):
-
+        contents, guid = data[0]['content'], data[0]['guid']
         try:
             generated_data = self.data_generator.create_agent_with_data(data)
-
-            return generated_data
+            return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
             logger.error(f"Error in process_file_level: {e}")
             raise
