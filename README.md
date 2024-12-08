@@ -104,3 +104,27 @@ exam_question_pipeline:
 {%- endmacro %}
 
 {% set api_key = 'OPENAI_API_KEY' %}
+
+
+
+
+
+
+
+-- for a side collection to work the key to be selected needs to be part of the outer key directly under content key
+not this anything within key_ideas cant be side collected
+        "content": {
+            "TITLE": "Searching GitHub Methods and Features",
+            "DESCRIPTION": "This section explains the different methods available for searching repositories on GitHub, including global search and scoped search, and their functionalities and limitations.",
+            "KEY_IDEAS": [
+                {
+                    "CONCEPT": "Global Search",
+                    "DEFINITION": "A comprehensive search method that allows users to search across all of GitHub, using a complete search syntax to find key terms across multiple result types and repositories.",
+                    "EXAMPLES": [
+                        "Searching for the term 'sidebar' across GitHub to find related code, issues, and pull requests."
+                    ],
+                    "LINK": "\\nhttps://learn.microsoft.com/en-gb/training/modules/search-organize-repository-history-github/2-search-organize-repository-history-github\""
+                }
+            ]
+        }
+
