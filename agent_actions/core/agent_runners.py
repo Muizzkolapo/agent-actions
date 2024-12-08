@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import shutil
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
@@ -46,33 +47,66 @@ class OutputProcessor:
     def _log(self, message, level='info'):
         self.logs.append((level, message))
 
+
+
+    def combine_json_arrays(self,dir_1, dir_2, output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+        
+        files_dir_1 = set([f for f in os.listdir(dir_1) if f.endswith('.json')])
+        files_dir_2 = set([f for f in os.listdir(dir_2) if f.endswith('.json')])
+        
+        common_files = files_dir_1.intersection(files_dir_2)
+        
+        for filename in common_files:
+            file_path_1 = os.path.join(dir_1, filename)
+            file_path_2 = os.path.join(dir_2, filename)
+            
+            with open(file_path_1, 'r') as f1:
+                data1 = json.load(f1)
+            with open(file_path_2, 'r') as f2:
+                data2 = json.load(f2)
+            
+            combined_data = data1 + data2
+            
+            output_path = os.path.join(output_dir, filename)
+            with open(output_path, 'w') as out_f:
+                json.dump(combined_data, out_f, indent=2)
+        
+        files_only_in_dir_1 = files_dir_1 - common_files
+        for filename in files_only_in_dir_1:
+            file_path_1 = os.path.join(dir_1, filename)
+            with open(file_path_1, 'r') as f:
+                data = json.load(f)
+            output_path = os.path.join(output_dir, filename)
+            with open(output_path, 'w') as out_f:
+                json.dump(data, out_f, indent=2)
+            print(f"Copied {filename} from dir_1 to {output_path}")
+        
+        files_only_in_dir_2 = files_dir_2 - common_files
+        for filename in files_only_in_dir_2:
+            file_path_2 = os.path.join(dir_2, filename)
+            with open(file_path_2, 'r') as f:
+                data = json.load(f)
+            output_path = os.path.join(output_dir, filename)
+            with open(output_path, 'w') as out_f:
+                json.dump(data, out_f, indent=2)
+            print(f"Copied {filename} from dir_2 to {output_path}")
+
+
     def process_final_output(self, ephemeral_directories):
         if not ephemeral_directories:
             self._log("No agents were executed. No final output generated.", level='warning')
             return None
 
-        final_output_folder = ephemeral_directories[-1]['output_folder']
-        final_workflow_output = os.path.join(os.path.dirname(final_output_folder), 'final_workflow_output')
+        final_agent_output_folder = ephemeral_directories[-1]['output_folder']
+        final_workflow_output = os.path.join(os.path.dirname(final_agent_output_folder), 'final_workflow_output')
         os.makedirs(final_workflow_output, exist_ok=True)
-        self.copy_output_files(final_output_folder, final_workflow_output)
 
-        if self.parent_output:
-            self.copy_to_parent_output(final_workflow_output, self.parent_output)
+        side_output_dir = os.path.join(os.path.dirname(final_agent_output_folder), 'side_output')
 
-        return final_workflow_output
+        self.combine_json_arrays(final_agent_output_folder,side_output_dir,final_workflow_output)
+   
 
-    def copy_output_files(self, source_dir, destination_dir):
-        for file in os.listdir(source_dir):
-            shutil.copy(os.path.join(source_dir, file), destination_dir)
-
-    def copy_to_parent_output(self, final_workflow_output, parent_output):
-        for item in os.listdir(final_workflow_output):
-            src = os.path.join(final_workflow_output, item)
-            dst = os.path.join(parent_output, item)
-            if os.path.isfile(src):
-                shutil.copy2(src, dst)
-            elif os.path.isdir(src):
-                shutil.copytree(src, dst, dirs_exist_ok=True)
 
 
 class AgentWorkflow:
@@ -171,6 +205,9 @@ class AgentWorkflow:
                         'output_folder': output_folder,
                         'ephemeral': agent_config.get('ephemeral', False)
                     })
+
+                # Process final output
+                self.output_processor.process_final_output(self.ephemeral_directories)
 
             # Move the completion message outside the 'with Live' block
             self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
