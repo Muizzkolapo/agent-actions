@@ -104,7 +104,16 @@ class OutputProcessor:
 
         side_output_dir = os.path.join(os.path.dirname(final_agent_output_folder), 'side_output')
 
-        self.combine_json_arrays(final_agent_output_folder,side_output_dir,final_workflow_output)
+        if os.path.exists(side_output_dir):
+            self.combine_json_arrays(final_agent_output_folder, side_output_dir, final_workflow_output)
+        else:
+            self._log(f"Side output directory not found: {side_output_dir}", level='warning')
+            # Option 1: Skip the combination step
+            # shutil.copytree(final_agent_output_folder, final_workflow_output)
+            
+            # Option 2: Create the side_output_dir if it doesn't exist
+            # os.makedirs(side_output_dir, exist_ok=True)
+            # self.combine_json_arrays(final_agent_output_folder, side_output_dir, final_workflow_output)
    
 
 
@@ -212,9 +221,9 @@ class AgentWorkflow:
             # Move the completion message outside the 'with Live' block
             self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         except Exception as e:
-            self.failed = True
             for level, message in self.logs:
                 getattr(logger, level)(message)
             logger.error(f"Workflow failed with error: {e}")
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
+            self.failed = True
             raise
