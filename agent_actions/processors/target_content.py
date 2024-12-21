@@ -157,7 +157,6 @@ class TargetContentProcessor(ContentProcessor):
             logger.error(f"Error in process: {e}")
             raise
 
-# This is the function we need to c
     def re_process(self, data, file_path, conditional_clause):
         try:
             source_data = self.source_loader.load_source_data(file_path)
