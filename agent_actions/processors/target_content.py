@@ -14,6 +14,7 @@ from agent_actions.logging_setup import setup_logging
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
 
+
 logger = setup_logging()
 logger = logging.getLogger(__name__)
 
@@ -157,20 +158,20 @@ class TargetContentProcessor(ContentProcessor):
             raise
 
 # This is the function we need to c
-    def re_process(self, data, file_path, re_process_data=True):
+    def re_process(self, data, file_path, conditional_clause):
         try:
             source_data = self.source_loader.load_source_data(file_path)
             processed_data = []
-
-            if re_process_data:
-                for item in data:
+            for item in data:
+                response = execute_user_defined_function(conditional_clause, item)
+                if response:
                     try:
                         processed_item = self._process_single_item(item, source_data)
                         processed_data.extend(processed_item)
                     except Exception as e:
                         logger.error(f"Error processing item: {e}")
-            else:
-                processed_data = data
+                else:
+                    processed_data.append(item)
 
             return processed_data
         except Exception as e:

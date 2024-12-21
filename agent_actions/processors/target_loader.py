@@ -5,7 +5,6 @@ import logging
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.target_content import TargetContentProcessor
 from agent_actions.logging_setup import setup_logging
-from agent_actions.core.tooling import execute_user_defined_function
 
 
 logger = setup_logging()
@@ -56,11 +55,7 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
         save_output(main_output, file_path, base_directory, output_directory)
 
     elif granularity == 'record' and conditional_clause:
-        response = execute_user_defined_function(conditional_clause, data)
-        print("\n" + "="*40)
-        print(response)
-        print("\n" + "="*40)
-        new_data = content_processor.re_process(data, file_path,re_process_data=response)
+        new_data = content_processor.re_process(data, file_path,conditional_clause)
         save_output(new_data, file_path, base_directory, output_directory)
 
     elif granularity == 'record':
