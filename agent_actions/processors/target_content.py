@@ -12,6 +12,7 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.logging_setup import setup_logging
 from abc import ABC, abstractmethod
+from agent_actions.core.tooling import execute_user_defined_function
 
 logger = setup_logging()
 logger = logging.getLogger(__name__)
@@ -155,6 +156,27 @@ class TargetContentProcessor(ContentProcessor):
             logger.error(f"Error in process: {e}")
             raise
 
+# This is the function we need to c
+    def re_process(self, data, file_path, re_process_data=True):
+        try:
+            source_data = self.source_loader.load_source_data(file_path)
+            processed_data = []
+
+            if re_process_data:
+                for item in data:
+                    try:
+                        processed_item = self._process_single_item(item, source_data)
+                        processed_data.extend(processed_item)
+                    except Exception as e:
+                        logger.error(f"Error processing item: {e}")
+            else:
+                processed_data = data
+
+            return processed_data
+        except Exception as e:
+            logger.error(f"Error in process: {e}")
+            raise
+
     def process_for_side_output(self, data, file_path):
         try:
             source_data = self.source_loader.load_source_data(file_path)
@@ -187,11 +209,11 @@ class TargetContentProcessor(ContentProcessor):
         generated_data = self.data_generator.create_agent_with_data(contents, source_content)
         return self.data_processor.process_item(contents, generated_data, guid)
 
-    def process_file_level(self, data):
+    def process_file_level_tool(self, data):
         contents, guid = data[0]['content'], data[0]['guid']
         try:
             generated_data = self.data_generator.create_agent_with_data(data)
-            return self.data_processor.process_item(contents, generated_data, guid)
+            return generated_data
         except Exception as e:
             logger.error(f"Error in process_file_level: {e}")
             raise
