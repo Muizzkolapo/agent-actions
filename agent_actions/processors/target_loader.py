@@ -5,8 +5,6 @@ import logging
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.target_content import TargetContentProcessor
 from agent_actions.logging_setup import setup_logging
-
-
 logger = setup_logging()
 
 TOOL_VENDOR = 'tool'
@@ -36,7 +34,6 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     model_vendor = agent_config.get('model_vendor', '').lower()
     granularity = agent_config.get('granularity', '').lower()
     side_output = agent_config.get('side_output', False)
-    conditional_clause = agent_config.get('conditional_clause', '').lower()
 
 
 
@@ -51,18 +48,12 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
             save_side_output(side_output_data, file_path, base_directory, side_output_directory)
 
     elif model_vendor == 'tool' and granularity=='file':
-        main_output = content_processor.process_file_level_tool(data)
+        main_output = content_processor.process_file_level(data)
         save_output(main_output, file_path, base_directory, output_directory)
-
-    elif granularity == 'record' and conditional_clause:
-        new_data = content_processor.re_process(data, file_path,conditional_clause)
-        save_output(new_data, file_path, base_directory, output_directory)
 
     elif granularity == 'record':
         new_data = content_processor.process(data, file_path)
         save_output(new_data, file_path, base_directory, output_directory)
-
-
 
 
 def save_output(new_data, file_path, base_directory, output_directory):

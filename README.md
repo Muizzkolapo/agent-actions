@@ -128,35 +128,3 @@ not this anything within key_ideas cant be side collected
             ]
         }
 
-
-
-
----this is the sample data when processing at a file level
-{
-    'data': [
-        {
-            'guid': '412fceb5-2e06-488c-9274-d5f4b7034e36',
-            'content': [
-                {'what_to_test_for': 'Understanding of GitHub search methods (global vs context search).'},
-                {'what_to_test_for': "Knowledge of GitHub's search syntax and how to apply search filters effectively."},
-                {'what_to_test_for': 'Ability to utilize the `git blame` command to track commit history and contributions to a file.'},
-                {'what_to_test_for': "Distinguishing between different types of search results (e.g., code, issues, pull requests) when using GitHub's search functions."},
-                {'what_to_test_for': 'Familiarity with using advanced search options to refine search results on GitHub.'}
-            ]
-        },
-        {
-            'guid': '2146889e-cc00-4f38-b67e-fdc945dde82c',
-            'content': [
-                {'what_to_test_for': "Understanding 'git blame' functionality and its user interface on GitHub"},
-                {'what_to_test_for': 'Methods to access the blame view in GitHub'},
-                {'what_to_test_for': 'Importance of linking issues, commits, and other elements in collaborative projects'},
-                {'what_to_test_for': 'Usage of autolinked references and their impact on project documentation'},
-                {'what_to_test_for': 'Functionality and benefits of using @mentions in discussions on GitHub'}
-            ]
-        }
-    ]
-}
-
-
-
--- when using tool json loads for input and json dumps for output
