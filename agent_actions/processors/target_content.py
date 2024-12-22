@@ -12,6 +12,7 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.logging_setup import setup_logging
 from abc import ABC, abstractmethod
+from agent_actions.core.tooling import execute_user_defined_function
 
 logger = setup_logging()
 logger = logging.getLogger(__name__)
@@ -184,8 +185,17 @@ class TargetContentProcessor(ContentProcessor):
         contents, guid = item['content'], item['guid']
         source_content = DataTransformer.get_content_by_guid(source_data, guid)
         self.sample_manager.add_few_shot_samples(contents)
-        generated_data = self.data_generator.create_agent_with_data(contents, source_content)
-        return self.data_processor.process_item(contents, generated_data, guid)
+
+        conditional_clause = self.agent_config.get('conditional_clause', '').lower()
+        if conditional_clause:
+            if execute_user_defined_function(conditional_clause, contents):
+                generated_data = self.data_generator.create_agent_with_data(contents, source_content)
+                return self.data_processor.process_item(contents, generated_data, guid)
+            else:
+                return self.data_processor.process_item(contents, [contents], guid)
+        else:
+            generated_data = self.data_generator.create_agent_with_data(contents, source_content)
+            return self.data_processor.process_item(contents, generated_data, guid)
 
     def process_file_level(self, data):
         contents, guid = data[0]['content'], data[0]['guid']
