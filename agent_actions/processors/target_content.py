@@ -187,10 +187,6 @@ class TargetContentProcessor(ContentProcessor):
         self.sample_manager.add_few_shot_samples(contents)
 
         conditional_clause = self.agent_config.get('conditional_clause', '').lower()
-        print("\n" + "="*40)
-        print(execute_user_defined_function(conditional_clause, contents))
-        print(contents)
-        print("\n" + "="*40)
         if conditional_clause:
             if execute_user_defined_function(conditional_clause, contents):
                 generated_data = self.data_generator.create_agent_with_data(contents, source_content)
