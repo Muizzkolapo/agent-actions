@@ -47,8 +47,24 @@ class PromptProcessor:
                 input_documentation_new,
                 formatted_prompt
             )
-            transformed_response_temp = [{guid: response}]
-            transformed_response = DataTransformer.transform_structure(transformed_response_temp)
+            side_collection = self.agent_config.get('side_collection', [])
+            remove_collection = self.agent_config.get('remove_collection', [])
+
+            if side_collection:
+                updated_response = [
+                    DataTransformer.update_schema_objects(input_documentation_new, data, side_collection)
+                    for data in response
+                ]
+                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+            elif remove_collection:
+                updated_response = [
+                    DataTransformer.remove_schema_objects(data, remove_collection)
+                    for data in response
+                ]
+                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+            else:
+                transformed_response = DataTransformer.transform_structure([{guid: response}])
+
             src_text = [{guid: formatted_prompt}]
         else:
             response = agent_builder.create_dynamic_agent(
@@ -58,8 +74,24 @@ class PromptProcessor:
                 formatted_prompt
             )
             guid = Utils.generate_id() if not isinstance(input_documentation, dict) or "guid" not in input_documentation else input_documentation["guid"]
-            transformed_response_temp = [{guid: response}]
-            transformed_response = DataTransformer.transform_structure(transformed_response_temp)
+            side_collection = self.agent_config.get('side_collection', [])
+            remove_collection = self.agent_config.get('remove_collection', [])
+
+            if side_collection:
+                updated_response = [
+                    DataTransformer.update_schema_objects(input_documentation, data, side_collection)
+                    for data in response
+                ]
+                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+            elif remove_collection:
+                updated_response = [
+                    DataTransformer.remove_schema_objects(data, remove_collection)
+                    for data in response
+                ]
+                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+            else:
+                transformed_response = DataTransformer.transform_structure([{guid: response}])
+
             src_text = [{guid: input_documentation}]
 
         return transformed_response, src_text
