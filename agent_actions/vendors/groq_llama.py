@@ -9,16 +9,16 @@ from agent_actions.transformers.data_transformer import DataTransformer
 
 class GroqLlama3Handler:
     @staticmethod
-    def call_json(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, context_data, schema):
         api_key = agent_config['api_key']
         groq = Groq(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
 
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
         
         prompt = f"""
             <|begin_of_user_instruction|>:{prompt_config} :<|end_of_user_instruction|>\n
-            <|begin_of_text|>:: {input_documentation_str} :<|end_of_text|>\n
+            <|begin_of_text|>:: {context_data_str} :<|end_of_text|>\n
             <|begin_of_output_schema|> :WRITE OUTPUTS IN JSON SCHEMA: {json.dumps(schema)}. : <|end_of_output_schema|>
         """
         prompt_dedent = dedent(prompt)   
@@ -43,16 +43,16 @@ class GroqLlama3Handler:
             raise Exception(f"Failed to create chat completion with Groq Llama 3: {str(e)}")
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, input_documentation):
+    def call_non_json(agent_config, prompt_config, context_data):
         api_key = agent_config['api_key']
         groq = Groq(api_key=os.environ[api_key])
         model_name = agent_config['model_name']
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
 
 
         prompt = f"""
                 Instructions: {prompt_config}
-                Input Text: {str(input_documentation_str)}
+                Input Text: {str(context_data_str)}
                 
                 Please provide a direct response without any JSON formatting.
                 Begin your response here:
@@ -76,7 +76,7 @@ class GroqLlama3Handler:
         return [response_content]
 
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def invoke(agent_config, prompt_config, context_data, schema):
         """
         Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
         """
@@ -84,7 +84,7 @@ class GroqLlama3Handler:
 
 
         if json_mode:
-            return GroqLlama3Handler.call_json(agent_config, prompt_config, input_documentation, schema)
+            return GroqLlama3Handler.call_json(agent_config, prompt_config, context_data, schema)
         else:
-            return GroqLlama3Handler.call_non_json(agent_config, prompt_config, input_documentation)
+            return GroqLlama3Handler.call_non_json(agent_config, prompt_config, context_data)
 

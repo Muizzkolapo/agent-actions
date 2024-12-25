@@ -7,14 +7,14 @@ from agent_actions.transformers.string_transformer import StringProcessor
 
 class CohereHandler:
     @staticmethod
-    def call_json(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, context_data, schema):
         api_key = os.environ.get(agent_config['api_key'])
         model_name = agent_config['model_name']
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
         co = cohere.Client(api_key=api_key)
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
-            <|begin_of_text|>: {input_documentation_str} :<|end_of_text|>
+            <|begin_of_text|>: {context_data_str} :<|end_of_text|>
             <|begin_of_output_schema|> : GENERATE JSON with the fields {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             """ 
@@ -34,15 +34,15 @@ class CohereHandler:
 
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, input_documentation):
+    def call_non_json(agent_config, prompt_config, context_data):
         api_key = os.environ.get(agent_config['api_key'])
         co = cohere.ClientV2(api_key=api_key)
         model_name = agent_config['model_name']
 
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
-            <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
+            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
         """
         messages=[
                 {
@@ -60,7 +60,7 @@ class CohereHandler:
         return [response_message]
 
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def invoke(agent_config, prompt_config, context_data, schema):
         """
         Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
         """
@@ -68,9 +68,9 @@ class CohereHandler:
 
 
         if json_mode:
-            return CohereHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+            return CohereHandler.call_json(agent_config, prompt_config, context_data, schema)
         else:
-            return CohereHandler.call_non_json(agent_config, prompt_config, input_documentation)
+            return CohereHandler.call_non_json(agent_config, prompt_config, context_data)
 
 
 

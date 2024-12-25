@@ -22,29 +22,29 @@ class PromptProcessor:
         self.agent_name = agent_name
         self.logger = logging.getLogger('agent_actions.processors.staging_content')
 
-    def staging_dynamic_creator(self, input_documentation, source_path=None, formatted_prompt=None):
+    def staging_dynamic_creator(self, context_data, source_path=None, formatted_prompt=None):
         """
         Create a dynamic agent for processing input documentation.
 
         Parameters:
-            input_documentation (str): Documentation or input data to be processed.
+            context_data (str): Documentation or input data to be processed.
             source_path (str, optional): Path to the source data file.
             formatted_prompt (str, optional): Optional formatted prompt.
 
         Returns:
             tuple: Transformed response and source text.
         """
-        input_documentation = self._append_few_shot_samples(input_documentation)
+        context_data = self._append_few_shot_samples(context_data)
         raw_prompt = self._get_raw_prompt()
-        source_content = self._load_source_content(source_path, input_documentation) if source_path else None
-        formatted_prompt = self._format_prompt(raw_prompt, source_content, input_documentation)
-        if source_path is not None and isinstance(input_documentation, dict) and "guid" in input_documentation and "content" in input_documentation:
-            guid = input_documentation["guid"]
-            input_documentation_new = input_documentation["content"]
+        source_content = self._load_source_content(source_path, context_data) if source_path else None
+        formatted_prompt = self._format_prompt(raw_prompt, source_content, context_data)
+        if source_path is not None and isinstance(context_data, dict) and "guid" in context_data and "content" in context_data:
+            guid = context_data["guid"]
+            context_data_enriched = context_data["content"]
             response = agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
-                input_documentation_new,
+                context_data_enriched,
                 formatted_prompt
             )
             side_collection = self.agent_config.get('side_collection', [])
@@ -52,7 +52,7 @@ class PromptProcessor:
 
             if side_collection:
                 updated_response = [
-                    DataTransformer.update_schema_objects(input_documentation_new, data, side_collection)
+                    DataTransformer.update_schema_objects(context_data_enriched, data, side_collection)
                     for data in response
                 ]
                 transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
@@ -70,16 +70,16 @@ class PromptProcessor:
             response = agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
-                input_documentation,
+                context_data,
                 formatted_prompt
             )
-            guid = Utils.generate_id() if not isinstance(input_documentation, dict) or "guid" not in input_documentation else input_documentation["guid"]
+            guid = Utils.generate_id() if not isinstance(context_data, dict) or "guid" not in context_data else context_data["guid"]
             side_collection = self.agent_config.get('side_collection', [])
             remove_collection = self.agent_config.get('remove_collection', [])
 
             if side_collection:
                 updated_response = [
-                    DataTransformer.update_schema_objects(input_documentation, data, side_collection)
+                    DataTransformer.update_schema_objects(context_data, data, side_collection)
                     for data in response
                 ]
                 transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
@@ -92,11 +92,11 @@ class PromptProcessor:
             else:
                 transformed_response = DataTransformer.transform_structure([{guid: response}])
 
-            src_text = [{guid: input_documentation}]
+            src_text = [{guid: context_data}]
 
         return transformed_response, src_text
 
-    def _append_few_shot_samples(self, input_documentation):
+    def _append_few_shot_samples(self, context_data):
         """Append few shot samples to the input documentation if configured."""
         _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
         sample_count = self.agent_config.get("use_few_shot_samples", 0)
@@ -115,13 +115,13 @@ class PromptProcessor:
             )
             samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
 
-            if isinstance(input_documentation, dict):
-                input_documentation = json.dumps(input_documentation, indent=2)
-            input_documentation += "\n\nfew shot samples:\n" + samples_str
+            if isinstance(context_data, dict):
+                context_data = json.dumps(context_data, indent=2)
+            context_data += "\n\nfew shot samples:\n" + samples_str
         else:
             self.logger.info("Not using few shot samples.")
 
-        return input_documentation
+        return context_data
 
     def _get_raw_prompt(self):
         """Retrieve and process the raw prompt from the agent configuration."""
@@ -133,19 +133,19 @@ class PromptProcessor:
             raw_prompt = "Process the following content: {content}"
         return raw_prompt
 
-    def _format_prompt(self, raw_prompt, source_content, input_documentation):
+    def _format_prompt(self, raw_prompt, source_content, context_data):
         """Replace placeholders in the raw prompt with source content and input documentation."""
         source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
-        formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, input_documentation)
+        formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, context_data)
         return formatted_prompt
 
-    def _load_source_content(self, source_path, input_documentation):
+    def _load_source_content(self, source_path, context_data):
         """Load source content based on the input documentation's GUID."""
         try:
             with open(source_path, 'r') as file:
                 source_data = json.load(file)
-                if isinstance(input_documentation, dict) and "guid" in input_documentation:
-                    guid = input_documentation["guid"]
+                if isinstance(context_data, dict) and "guid" in context_data:
+                    guid = context_data["guid"]
                     for item in source_data:
                         if guid in item:
                             return item[guid]
@@ -183,9 +183,9 @@ class StagingContentLoader:
         """
         data_chunk = []
         src_text = []
-        for input_documentation in chunks:
+        for context_data in chunks:
             dynamic_agent, src_collection = self.staging_processor.staging_dynamic_creator(
-                input_documentation)
+                context_data)
             data_chunk.extend(dynamic_agent)
             src_text.extend(src_collection)
         return data_chunk, src_text
@@ -208,7 +208,7 @@ class StagingContentLoader:
         
         if isinstance(content, list):
             for obj in content:
-                dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
+                dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(context_data=obj,source_path=src_legacy_path)
                 data_chunk.extend(dynamic_agent)
                 src_text.extend(src_collection)
     
@@ -216,11 +216,11 @@ class StagingContentLoader:
             for value in content.values():
                 if isinstance(value, list):
                     for obj in value:
-                        dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(input_documentation=obj,source_path=src_legacy_path)
+                        dynamic_agent,src_collection = self.staging_processor.staging_dynamic_creator(context_data=obj,source_path=src_legacy_path)
                         data_chunk.extend(dynamic_agent)
                         src_text.extend(src_collection)
                 else:
-                    generated_content,src_collection  = self.staging_processor.staging_dynamic_creator(input_documentation=content,source_path=src_legacy_path)
+                    generated_content,src_collection  = self.staging_processor.staging_dynamic_creator(context_data=content,source_path=src_legacy_path)
                     data_chunk.extend(generated_content)
                     src_text.extend(src_collection)
         

@@ -86,15 +86,15 @@ class StringProcessor:
         return cleaned_content
 
     @staticmethod
-    def process_text_with_function_calls(text, tools_path=None, input_documentation_str=None):
+    def process_text_with_function_calls(text, tools_path=None, context_data_str=None):
         """
         Replace multiple dispatch_task() calls in text with the result of their corresponding function.
-        Always passes `input_documentation_str` to the function.
+        Always passes `context_data_str` to the function.
 
         Parameters:
             text (str or list): The text containing dispatch_task() calls.
             tools_path (str): The path to the tools directory.
-            input_documentation_str (str): Documentation string to pass to the functions.
+            context_data_str (str): Documentation string to pass to the functions.
 
         Returns:
             str or list: The text with dispatch_task() calls replaced by function outputs.
@@ -110,7 +110,7 @@ class StringProcessor:
 
             for function_name in function_calls:
                 try:
-                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, input_documentation_str)
+                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
                     if transformed_text is None:
                         transformed_text = "Error: No valid return from function."
                     single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
@@ -128,15 +128,15 @@ class StringProcessor:
 
 
     @staticmethod
-    def call_user_function(function_name, tools_path=None, input_documentation_str=None):
+    def call_user_function(function_name, tools_path=None, context_data_str=None):
         """
         Dynamically loads and executes a user-defined function from the tools folder.
-        Always passes `input_documentation_str` as input.
+        Always passes `context_data_str` as input.
 
         Parameters:
             function_name (str): Name of the function to call.
             tools_path (str): Path to the tools directory.
-            input_documentation_str (str): Documentation string to pass to the function.
+            context_data_str (str): Documentation string to pass to the function.
 
         Returns:
             Any: The result returned by the user function.
@@ -149,7 +149,7 @@ class StringProcessor:
                 sys.path.insert(0, os.path.abspath(tools_path))
             module = importlib.import_module(function_name)
             function = getattr(module, function_name)
-            result = function(input_documentation_str) if input_documentation_str else function()
+            result = function(context_data_str) if context_data_str else function()
             return result
         except Exception as exception:
             print(f"Error in call_user_function for {function_name}:")
