@@ -7,18 +7,18 @@ from agent_actions.transformers.string_transformer import StringProcessor
 
 class OpenAIHandler:
     @staticmethod
-    def call_json(agent_config, prompt_config, input_documentation, schema):
+    def call_json(agent_config, prompt_config, context_data, schema):
         api_key_config = agent_config['api_key']
         api_key = os.environ[api_key_config]
         client = OpenAI(api_key=api_key)
 
         model_name = agent_config['model_name']
 
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
 
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
-            <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
+            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
 
             RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
             RULES: ALWAYS READ INPUT AS STRING
@@ -48,18 +48,18 @@ class OpenAIHandler:
         return response_list
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, input_documentation):
+    def call_non_json(agent_config, prompt_config, context_data):
         api_key_config = agent_config['api_key']
         api_key = os.environ[api_key_config]
         client = OpenAI(api_key=api_key)
 
         model_name = agent_config['model_name']
 
-        input_documentation_str = StringProcessor.process_as_string(input_documentation)
+        context_data_str = StringProcessor.process_as_string(context_data)
 
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
-            <|begin_of_text|>: {str(input_documentation_str)} :<|end_of_text|>
+            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
         """
 
         messages = [
@@ -80,7 +80,7 @@ class OpenAIHandler:
         return [response_content]
 
     @staticmethod
-    def invoke(agent_config, prompt_config, input_documentation, schema):
+    def invoke(agent_config, prompt_config, context_data, schema):
         """
         Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
         """
@@ -88,7 +88,7 @@ class OpenAIHandler:
 
 
         if json_mode:
-            return OpenAIHandler.call_json(agent_config, prompt_config, input_documentation, schema)
+            return OpenAIHandler.call_json(agent_config, prompt_config, context_data, schema)
         else:
-            return OpenAIHandler.call_non_json(agent_config, prompt_config, input_documentation)
+            return OpenAIHandler.call_non_json(agent_config, prompt_config, context_data)
 
