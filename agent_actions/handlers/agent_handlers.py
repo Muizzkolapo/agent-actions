@@ -2,7 +2,13 @@ import json
 import traceback
 import importlib
 import os 
-from agent_actions.handlers.file_handler import FileHandler
+from agent_actions.handlers.file_handler import FileHandler, FileWriter
+from agent_actions.exceptions import (
+    raise_module_import_error,
+    raise_function_call_error,
+    raise_file_processing_error,
+    raise_no_files_found_error
+)
 import shutil
 import random
 import logging
@@ -75,14 +81,7 @@ class AgentManager:
                                        loader,
                                        function_name):
         """
-        Processes and generates data for an agent by applying a specified function
-        to each file in the input directory and saving the output in the target directory.
-
-        :param agent_config: Configuration dictionary for the agent.
-        :param agent_name: Name of the agent.
-        :param previous_agent_type: Type of the previous agent, if applicable.
-        :param loader: Name of the loader module.
-        :param function_name: Name of the function to apply to the data.
+        Processes and generates data for an agent.
         """
         try:
             current_dir = os.getcwd()
@@ -99,7 +98,6 @@ class AgentManager:
                 agent_folder,
                 'staging'
             )
-
             output_directory = os.path.join(
                 agent_folder,
                 'target',
@@ -110,37 +108,29 @@ class AgentManager:
                 module = importlib.import_module(f"agent_actions.processors.{loader}")
                 function_call = getattr(module, function_name)
             except (ImportError, AttributeError) as e:
-                logger.error(f"Failed to import {function_name} from module {loader}: {e}")
-                return
+                raise_module_import_error(function_name, loader, str(e))
 
-            if function_call and callable(function_call):
-                files_processed = False
-                for root, _, files in os.walk(input_directory):
-                    if files:
-                        files_processed = True
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        logger.debug(f"Processing file: {file_path}")
-                        try:
-                            function_call(agent_config,
-                                        agent_name,
-                                        file_path,
-                                        input_directory,
-                                        output_directory)
-                        except Exception as e:
-                            logger.error(f"Error processing {file}: {str(e)}")
+            if not function_call or not callable(function_call):
+                raise_function_call_error(function_name, loader)
 
-                if not files_processed:
-                    logger.warning(f"No files found in: {input_directory}")
-            else:
-                print(f"Function {function_name} not found in module {loader}.")
-                traceback.print_exc()
-            return output_directory  # Return the output directory path
-        except FileNotFoundError as fnf_error:
-            print(f"File not found error: {fnf_error}")
+            files_processed = False
+            for root, _, files in os.walk(input_directory):
+                if files:
+                    files_processed = True
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    try:
+                        function_call(agent_config, agent_name, file_path, input_directory, output_directory)
+                    except Exception as e:
+                        raise_file_processing_error(file, str(e))
+
+            if not files_processed:
+                raise_no_files_found_error(input_directory)
+
+            return output_directory
+
         except Exception as e:
-            print(f"An error occurred in process_and_generate_for_agent: {e}")
-            traceback.print_exc()
+            raise e
 
     @staticmethod
     def load_few_shot_samples(few_shot_samples_path, agent_type, sample_count=3):

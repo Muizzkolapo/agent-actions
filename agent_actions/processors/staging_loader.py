@@ -1,18 +1,14 @@
 """Module for staging data loading and processing."""
 import os
 from agent_actions.models import agent_builder
-import logging
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_content import StagingContentLoader
 from agent_actions.handlers.file_handler import FileReader, FileWriter
 import json
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
-logger = logging.getLogger(__name__)
-
-
-
-
+from agent_actions.exceptions import (
+    raise_file_type_error,
+    raise_agent_builder_import_error
+)
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
     """
@@ -25,18 +21,13 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         file_path (str): Path to the input file.
         base_directory (str): Base directory for the relative file path.
         output_directory (str): Directory where the output file will be saved.
-
-    Raises:
-        ValueError: If the file type is not supported.
     """
     if agent_builder is None:
-        raise ImportError("Unable to import 'agent_actions.agent_utils.agent_builder'")
+        raise_agent_builder_import_error()
 
     file_reader = FileReader(file_path)
     content = file_reader.read()
-
     file_type = file_reader.file_type  
-
     content_processor = StagingContentLoader(agent_config, agent_name)
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
@@ -53,13 +44,14 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
 
     else:
-        raise ValueError(f"Unsupported file type: {file_type}")
+        raise_file_type_error(file_type)
 
     relative_path = os.path.relpath(file_path, base_directory)
     output_file_path = os.path.join(output_directory, relative_path.replace(file_type, '.json'))
     os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
     file_writer = FileWriter(output_file_path)
     file_writer.write_staging(data_chunk)
+    
     base_path = os.path.join(base_directory, "..")
     source_path = os.path.join(base_path, "source")
     output_src_path = os.path.join(source_path, relative_path.replace(file_type, '.json'))

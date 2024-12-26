@@ -1,6 +1,5 @@
 import os
 import json
-import logging
 from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
@@ -10,19 +9,20 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.logging_setup import setup_logging
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
-
-logger = setup_logging()
-logger = logging.getLogger(__name__)
+from agent_actions.exceptions import (
+    raise_source_data_load_error,
+    raise_few_shot_sample_parse_error,
+    raise_few_shot_sample_path_error,
+    raise_content_type_error
+)
 
 # Abstract Base Class
 class ContentProcessor(ABC):
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.logger = logging.getLogger(f'agent_actions.processors.{self.__class__.__name__}')
 
     @abstractmethod
     def process(self, data, file_path):
@@ -43,8 +43,7 @@ class SourceDataLoader:
             with open(source_path, 'r') as file:
                 return json.load(file)
         except Exception as e:
-            logger.error(f"Error loading source data from {file_path}: {e}")
-            raise
+            raise_source_data_load_error(file_path, str(e))
 
 # Few-Shot Sample Manager
 class FewShotSampleManager:
@@ -65,18 +64,15 @@ class FewShotSampleManager:
                 if isinstance(contents, dict):
                     contents['samples'] = samples
                 else:
-                    logger.warning("Contents is not a dictionary. Cannot add samples.")
+                    raise_content_type_error()
             except FileNotFoundError as e:
-                logger.error(f"Few-shot samples path not found: {e}")
-        else:
-            logger.debug("No few-shot samples loaded.")
+                raise_few_shot_sample_path_error(str(e))
 
     def _parse_sample_count(self):
         try:
             return int(self.agent_config.get("use_few_shot_samples", 0))
-        except ValueError:
-            logger.warning("Invalid value for 'use_few_shot_samples'. Defaulting to 0.")
-            return 0
+        except ValueError as e:
+            raise_few_shot_sample_parse_error(self.agent_config.get("use_few_shot_samples"))
 
 class DataGenerator:
     def __init__(self, agent_config, agent_name):
