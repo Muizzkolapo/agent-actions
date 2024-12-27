@@ -1,6 +1,4 @@
 import os
-import sys
-import yaml
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.exceptions import raise_template_load_error, raise_yaml_render_error
 

@@ -2,7 +2,7 @@ import json
 import traceback
 import importlib
 import os 
-from agent_actions.handlers.file_handler import FileHandler, FileWriter
+from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.exceptions import (
     raise_module_import_error,
     raise_function_call_error,
@@ -15,12 +15,10 @@ import logging
 import re
 import yaml
 from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
-logger = logging.getLogger(__name__)
 
 
 
-# Agent Management Functions
+
 
 class AgentManager:
     """

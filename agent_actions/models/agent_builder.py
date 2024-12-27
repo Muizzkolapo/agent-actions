@@ -26,7 +26,6 @@ def create_dynamic_agent(agent_config, udf, context_data_str, formatted_prompt=N
     :param tools_path: Path to the user's tools directory where custom functions are stored.
     :return: Result of the agent's invocation.
     """
-    # Handle prompt loading first
     if formatted_prompt is not None:
         prompt_config = formatted_prompt
     else:

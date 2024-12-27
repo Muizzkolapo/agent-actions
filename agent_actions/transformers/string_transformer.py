@@ -5,11 +5,15 @@ import os
 import re
 import sys
 import textwrap
-import traceback
 from typing import List
 import tiktoken
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
+from agent_actions.exceptions import (
+    raise_invalid_input_error,
+    raise_function_call_error,
+    raise_tokenization_error,
+    raise_user_function_error
+)
+
 class StringProcessor:
     """
     A class for processing strings, including placeholder replacement and function call processing.
@@ -27,10 +31,11 @@ class StringProcessor:
             str: The processed string treated as plain text.
 
         Raises:
-            ValueError: If the input is not a string.
+            InvalidInputError: If the input is not a string.
         """
         if not isinstance(input_text, str):
-            raise ValueError("Input must be a string")
+            raise_invalid_input_error(type(input_text).__name__)
+            
         pattern = re.compile(r'({.*?})')
         escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
         return escaped_text
@@ -52,11 +57,9 @@ class StringProcessor:
                 return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
             return str(value)
 
-        # Check if content_dict is a dictionary and has keys
         if not isinstance(content_dict, dict) or not content_dict:
             return prompt
 
-        # Find placeholders in the format return_collection[key1,key2]
         placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
         for placeholder in placeholders:
             placeholder_keys = [key.strip() for key in placeholder.split(',')]
@@ -101,7 +104,7 @@ class StringProcessor:
         """
         def process_single_text(single_text):
             if not isinstance(single_text, str):
-                single_text = str(single_text)  # Ensure the input is a string
+                single_text = str(single_text)
             function_call_pattern = r"dispatch_task\('(\w+)'\)"
             function_calls = re.findall(function_call_pattern, single_text)
 
@@ -115,17 +118,16 @@ class StringProcessor:
                         transformed_text = "Error: No valid return from function."
                     single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
                 except Exception as e:
-                    print(f"Error calling function {function_name}: {e}")
+                    raise_function_call_error(function_name, str(e))
 
             return single_text
 
         if isinstance(text, list):
-            return [process_single_text(str(item)) for item in text]  # Ensure all list items are strings
+            return [process_single_text(str(item)) for item in text]
         elif isinstance(text, str):
             return process_single_text(text)
         else:
-            raise TypeError(f"Expected text to be a string or list, got {type(text)}")
-
+            raise_invalid_input_error(type(text).__name__)
 
     @staticmethod
     def call_user_function(function_name, tools_path=None, context_data_str=None):
@@ -142,7 +144,7 @@ class StringProcessor:
             Any: The result returned by the user function.
 
         Raises:
-            Exception: If the function cannot be called or an error occurs.
+            UserFunctionError: If the function cannot be called or an error occurs.
         """
         try:
             if tools_path and tools_path not in sys.path:
@@ -151,17 +153,9 @@ class StringProcessor:
             function = getattr(module, function_name)
             result = function(context_data_str) if context_data_str else function()
             return result
-        except Exception as exception:
-            print(f"Error in call_user_function for {function_name}:")
-            print(f"Exception type: {type(exception).__name__}")
-            print(f"Exception message: {str(exception)}")
-            print("Traceback:")
-            traceback.print_exc()
-            raise
+        except Exception as e:
+            raise_user_function_error(function_name, str(e))
 
-
-
-# Tokenization Functions
 
 class Tokenizer:
     """
@@ -171,21 +165,27 @@ class Tokenizer:
     @staticmethod
     def num_tokens_from_string(string: str, encoding_name: str) -> int:
         """Returns the number of tokens in a text string."""
-        encoding = tiktoken.get_encoding(encoding_name)
-        num_tokens = len(encoding.encode(string))
-        return num_tokens
+        try:
+            encoding = tiktoken.get_encoding(encoding_name)
+            num_tokens = len(encoding.encode(string))
+            return num_tokens
+        except Exception as e:
+            raise_tokenization_error(string[:100] + "...", str(e))
 
     @staticmethod
     def split_text_content(text: str, chunk_size: int, overlap: int, encoding_name: str = "cl100k_base") -> List[str]:
         """Split text into chunks of a specified size with a specified overlap."""
-        encoding = tiktoken.get_encoding(encoding_name)
-        tokens = encoding.encode(text)
-        chunks = []
-        start_idx = 0
-        while start_idx < len(tokens):
-            end_idx = min(start_idx + chunk_size, len(tokens))
-            chunk = tokens[start_idx:end_idx]
-            decoded_chunk = encoding.decode(chunk)
-            chunks.append(decoded_chunk)
-            start_idx += chunk_size - overlap
-        return chunks
+        try:
+            encoding = tiktoken.get_encoding(encoding_name)
+            tokens = encoding.encode(text)
+            chunks = []
+            start_idx = 0
+            while start_idx < len(tokens):
+                end_idx = min(start_idx + chunk_size, len(tokens))
+                chunk = tokens[start_idx:end_idx]
+                decoded_chunk = encoding.decode(chunk)
+                chunks.append(decoded_chunk)
+                start_idx += chunk_size - overlap
+            return chunks
+        except Exception as e:
+            raise_tokenization_error(text[:100] + "...", str(e))

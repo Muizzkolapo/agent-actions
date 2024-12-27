@@ -50,24 +50,29 @@ class StagingContentError(AgentActionsError):
     """Base class for staging content-related errors"""
     pass
 
+class PromptProcessingError(StagingContentError):
+    def __init__(self, error_msg: str):
+        msg = f"Error processing prompt: {error_msg}"
+        super().__init__(msg)
+
+class FewShotSampleError(StagingContentError):
+    def __init__(self, error_msg: str):
+        msg = f"Error loading few shot samples: {error_msg}"
+        super().__init__(msg)
+
 class SourceContentError(StagingContentError):
     def __init__(self, source_path: str, error_msg: str):
         msg = f"Error loading source content from {source_path}: {error_msg}"
         super().__init__(msg)
 
-class FewShotSampleError(StagingContentError):
-    def __init__(self, sample_count: Any):
-        msg = f"Invalid few-shot sample count: {sample_count}. Must be an integer."
+class DynamicAgentError(StagingContentError):
+    def __init__(self, agent_name: str, error_msg: str):
+        msg = f"Error creating dynamic agent '{agent_name}': {error_msg}"
         super().__init__(msg)
 
-class PromptError(StagingContentError):
-    def __init__(self):
-        msg = "No prompt found in agent_config"
-        super().__init__(msg)
-
-class ContentProcessingError(StagingContentError):
-    def __init__(self, content_type: str, error_msg: str):
-        msg = f"Error processing {content_type} content: {error_msg}"
+class DataTransformError(StagingContentError):
+    def __init__(self, error_msg: str):
+        msg = f"Error transforming data: {error_msg}"
         super().__init__(msg)
 
 # Template Rendering Exceptions
@@ -125,6 +130,26 @@ class ContentTypeError(TargetContentError):
         msg = "Contents is not a dictionary. Cannot add samples."
         super().__init__(msg)
 
+class ItemProcessingError(TargetContentError):
+    def __init__(self, guid: str, error_msg: str):
+        msg = f"Error processing item with GUID {guid}: {error_msg}"
+        super().__init__(msg)
+
+class ContentProcessingError(TargetContentError):
+    def __init__(self, error_msg: str):
+        msg = f"Error in content processing: {error_msg}"
+        super().__init__(msg)
+
+class SideOutputProcessingError(TargetContentError):
+    def __init__(self, error_msg: str):
+        msg = f"Error processing side output: {error_msg}"
+        super().__init__(msg)
+
+class UnexpectedFormatError(TargetContentError):
+    def __init__(self, item_format: str):
+        msg = f"Unexpected item format: {item_format}"
+        super().__init__(msg)
+
 # Agent Handler Exceptions
 class AgentHandlerError(AgentActionsError):
     """Base class for agent handler-related errors"""
@@ -155,14 +180,149 @@ class SchemaError(AgentActionsError):
     """Base class for schema-related errors"""
     pass
 
-class SchemaValidationError(SchemaError):
-    def __init__(self, schema_name: str, error_msg: str):
-        msg = f"Schema validation failed for {schema_name}: {error_msg}"
+class SchemaNotFoundError(SchemaError):
+    def __init__(self, schema_name: str):
+        msg = f"Schema file not found: {schema_name}.yml"
         super().__init__(msg)
 
-class SchemaLoadError(SchemaError):
-    def __init__(self, schema_path: str, error_msg: str):
-        msg = f"Failed to load schema from {schema_path}: {error_msg}"
+class SchemaRenderError(SchemaError):
+    def __init__(self, agent_name: str, error_msg: str):
+        msg = f"Failed to render template for agent '{agent_name}': {error_msg}"
+        super().__init__(msg)
+
+class MultipleSchemaMissingError(SchemaError):
+    def __init__(self, missing_files: List[str]):
+        msg = f"The following schema files are missing: {', '.join(missing_files)}"
+        super().__init__(msg)
+
+class SingleSchemaMissingError(SchemaError):
+    def __init__(self, schema_file: str):
+        msg = f"The schema file '{schema_file}' is missing."
+        super().__init__(msg)
+
+# Prompt Handler Exceptions
+class PromptError(AgentActionsError):
+    """Base class for prompt-related errors"""
+    pass
+
+class DuplicatePromptError(PromptError):
+    def __init__(self, filename: str, duplicates: List[str]):
+        msg = f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}"
+        super().__init__(msg)
+
+class PromptNotFoundError(PromptError):
+    def __init__(self, prompt_name: str):
+        msg = f"Prompt '{prompt_name}' not found"
+        super().__init__(msg)
+
+class PromptDirectoryError(PromptError):
+    def __init__(self):
+        msg = "Prompt directory not found"
+        super().__init__(msg)
+
+class PromptFileNotFoundError(PromptError):
+    def __init__(self, filename: str):
+        msg = f"Prompt file not found: {filename}"
+        super().__init__(msg)
+
+# Target Loader Exceptions
+class TargetLoaderError(AgentActionsError):
+    """Base class for target loader-related errors"""
+    pass
+
+class TargetProcessingError(TargetLoaderError):
+    def __init__(self, file_path: str, error_msg: str):
+        msg = f"Error processing target file {file_path}: {error_msg}"
+        super().__init__(msg)
+
+class TargetSaveError(TargetLoaderError):
+    def __init__(self, file_path: str, error_msg: str):
+        msg = f"Error saving target file {file_path}: {error_msg}"
+        super().__init__(msg)
+
+class SideOutputError(TargetLoaderError):
+    def __init__(self, file_path: str, error_msg: str):
+        msg = f"Error processing side output for {file_path}: {error_msg}"
+        super().__init__(msg)
+
+# Data Transformer Exceptions
+class DataTransformerError(AgentActionsError):
+    """Base class for data transformer-related errors"""
+    pass
+
+class DataExtractionError(DataTransformerError):
+    def __init__(self, error_msg: str):
+        msg = f"An error occurred while extracting data: {error_msg}"
+        super().__init__(msg)
+
+class SchemaUpdateError(DataTransformerError):
+    def __init__(self, key: str, error_msg: str):
+        msg = f"Error updating schema for key '{key}': {error_msg}"
+        super().__init__(msg)
+
+class GUIDNotFoundError(DataTransformerError):
+    def __init__(self, guid: str):
+        msg = f"GUID '{guid}' not found in data"
+        super().__init__(msg)
+
+class DataTypeError(DataTransformerError):
+    def __init__(self, expected_type: str, received_type: str):
+        msg = f"Invalid data type. Expected {expected_type}, received {received_type}"
+        super().__init__(msg)
+
+# String Transformer Exceptions
+class StringTransformerError(AgentActionsError):
+    """Base class for string transformer-related errors"""
+    pass
+
+class InvalidInputError(StringTransformerError):
+    def __init__(self, input_type: str):
+        msg = f"Input must be a string, got {input_type}"
+        super().__init__(msg)
+
+class FunctionCallError(StringTransformerError):
+    def __init__(self, function_name: str, error_msg: str):
+        msg = f"Error calling function {function_name}: {error_msg}"
+        super().__init__(msg)
+
+class TokenizationError(StringTransformerError):
+    def __init__(self, text: str, error_msg: str):
+        msg = f"Error tokenizing text: {error_msg}"
+        super().__init__(msg)
+
+class UserFunctionError(StringTransformerError):
+    def __init__(self, function_name: str, error_msg: str):
+        msg = f"Error in call_user_function for {function_name}: {error_msg}"
+        super().__init__(msg)
+
+# File Handler Exceptions
+class FileHandlerError(AgentActionsError):
+    """Base class for file handler-related errors"""
+    pass
+
+class FileTypeError(FileHandlerError):
+    def __init__(self, file_type: str):
+        msg = f"Unsupported file type: {file_type}"
+        super().__init__(msg)
+
+class FileReadError(FileHandlerError):
+    def __init__(self, file_path: str, error_msg: str):
+        msg = f"Error reading file {file_path}: {error_msg}"
+        super().__init__(msg)
+
+class FileWriteError(FileHandlerError):
+    def __init__(self, file_path: str, error_msg: str):
+        msg = f"Error writing to file {file_path}: {error_msg}"
+        super().__init__(msg)
+
+class AgentFolderError(FileHandlerError):
+    def __init__(self, agent_name: str):
+        msg = f"Agent folder not found for agent: {agent_name}"
+        super().__init__(msg)
+
+class ConfigFileError(FileHandlerError):
+    def __init__(self, filename: str, error_msg: str):
+        msg = f"Error with config file {filename}: {error_msg}"
         super().__init__(msg)
 
 # Helper Functions
@@ -178,8 +338,8 @@ def raise_udf_execution_error(function_name: str, error_msg: str) -> NoReturn:
 def raise_source_content_error(source_path: str, error_msg: str) -> NoReturn:
     raise SourceContentError(source_path, error_msg)
 
-def raise_few_shot_sample_error(sample_count: Any) -> NoReturn:
-    raise FewShotSampleError(sample_count)
+def raise_few_shot_sample_error(error_msg: str) -> NoReturn:
+    raise FewShotSampleError(error_msg)
 
 def raise_prompt_error() -> NoReturn:
     raise PromptError()
@@ -229,6 +389,93 @@ def raise_schema_validation_error(schema_name: str, error_msg: str) -> NoReturn:
 def raise_schema_load_error(schema_path: str, error_msg: str) -> NoReturn:
     raise SchemaLoadError(schema_path, error_msg)
 
+def raise_duplicate_prompt_error(filename: str, duplicates: List[str]) -> NoReturn:
+    raise DuplicatePromptError(filename, duplicates)
+
+def raise_prompt_not_found_error(prompt_name: str) -> NoReturn:
+    raise PromptNotFoundError(prompt_name)
+
+def raise_prompt_directory_error() -> NoReturn:
+    raise PromptDirectoryError()
+
+def raise_prompt_file_not_found_error(filename: str) -> NoReturn:
+    raise PromptFileNotFoundError(filename)
+
+def raise_schema_not_found_error(schema_name: str) -> NoReturn:
+    raise SchemaNotFoundError(schema_name)
+
+def raise_schema_render_error(agent_name: str, error_msg: str) -> NoReturn:
+    raise SchemaRenderError(agent_name, error_msg)
+
+def raise_multiple_schema_missing_error(missing_files: List[str]) -> NoReturn:
+    raise MultipleSchemaMissingError(missing_files)
+
+def raise_single_schema_missing_error(schema_file: str) -> NoReturn:
+    raise SingleSchemaMissingError(schema_file)
+
+def raise_target_processing_error(file_path: str, error_msg: str) -> NoReturn:
+    raise TargetProcessingError(file_path, error_msg)
+
+def raise_target_save_error(file_path: str, error_msg: str) -> NoReturn:
+    raise TargetSaveError(file_path, error_msg)
+
+def raise_side_output_error(file_path: str, error_msg: str) -> NoReturn:
+    raise SideOutputError(file_path, error_msg)
+
+def raise_data_extraction_error(error_msg: str) -> NoReturn:
+    raise DataExtractionError(error_msg)
+
+def raise_schema_update_error(key: str, error_msg: str) -> NoReturn:
+    raise SchemaUpdateError(key, error_msg)
+
+def raise_guid_not_found_error(guid: str) -> NoReturn:
+    raise GUIDNotFoundError(guid)
+
+def raise_data_type_error(expected_type: str, received_type: str) -> NoReturn:
+    raise DataTypeError(expected_type, received_type)
+
+def raise_invalid_input_error(input_type: str) -> NoReturn:
+    raise InvalidInputError(input_type)
+
+def raise_tokenization_error(text: str, error_msg: str) -> NoReturn:
+    raise TokenizationError(text, error_msg)
+
+def raise_user_function_error(function_name: str, error_msg: str) -> NoReturn:
+    raise UserFunctionError(function_name, error_msg)
+
+def raise_file_read_error(file_path: str, error_msg: str) -> NoReturn:
+    raise FileReadError(file_path, error_msg)
+
+def raise_file_write_error(file_path: str, error_msg: str) -> NoReturn:
+    raise FileWriteError(file_path, error_msg)
+
+def raise_agent_folder_error(agent_name: str) -> NoReturn:
+    raise AgentFolderError(agent_name)
+
+def raise_config_file_error(filename: str, error_msg: str) -> NoReturn:
+    raise ConfigFileError(filename, error_msg)
+
+def raise_prompt_processing_error(error_msg: str) -> NoReturn:
+    raise PromptProcessingError(error_msg)
+
+def raise_dynamic_agent_error(agent_name: str, error_msg: str) -> NoReturn:
+    raise DynamicAgentError(agent_name, error_msg)
+
+def raise_data_transform_error(error_msg: str) -> NoReturn:
+    raise DataTransformError(error_msg)
+
+def raise_item_processing_error(guid: str, error_msg: str) -> NoReturn:
+    raise ItemProcessingError(guid, error_msg)
+
+def raise_content_processing_error(error_msg: str) -> NoReturn:
+    raise ContentProcessingError(error_msg)
+
+def raise_side_output_processing_error(error_msg: str) -> NoReturn:
+    raise SideOutputProcessingError(error_msg)
+
+def raise_unexpected_format_error(item_format: str) -> NoReturn:
+    raise UnexpectedFormatError(item_format)
+
 # Context wrapper
 def wrapper(agent_config):
     def wrap(func):
@@ -263,6 +510,37 @@ CONTEXT_EXPORTS = {
         raise_no_files_found_error,
         raise_schema_validation_error,
         raise_schema_load_error,
+        raise_duplicate_prompt_error,
+        raise_prompt_not_found_error,
+        raise_prompt_directory_error,
+        raise_prompt_file_not_found_error,
+        raise_schema_not_found_error,
+        raise_schema_render_error,
+        raise_multiple_schema_missing_error,
+        raise_single_schema_missing_error,
+        raise_target_processing_error,
+        raise_target_save_error,
+        raise_side_output_error,
+        raise_data_extraction_error,
+        raise_schema_update_error,
+        raise_guid_not_found_error,
+        raise_data_type_error,
+        raise_invalid_input_error,
+        raise_tokenization_error,
+        raise_user_function_error,
+        raise_file_read_error,
+        raise_file_write_error,
+        raise_agent_folder_error,
+        raise_config_file_error,
+        raise_prompt_processing_error,
+        raise_few_shot_sample_error,
+        raise_source_content_error,
+        raise_dynamic_agent_error,
+        raise_data_transform_error,
+        raise_item_processing_error,
+        raise_content_processing_error,
+        raise_side_output_processing_error,
+        raise_unexpected_format_error,
     ]
 }
 

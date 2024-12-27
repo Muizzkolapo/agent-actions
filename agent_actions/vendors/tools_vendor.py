@@ -1,7 +1,4 @@
-import os
 import json
-import logging
-logging.basicConfig(level=logging.ERROR)
 from agent_actions.core.tooling import execute_user_defined_function
 
 
