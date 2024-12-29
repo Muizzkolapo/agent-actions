@@ -4,23 +4,17 @@ import json
 import shutil
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
-from agent_actions.logging_setup import setup_logging
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
 from time import sleep
 
-logger = setup_logging()
 
 
 class AgentRunner:
     def __init__(self, use_tools):
         self.use_tools = use_tools
-        self.logs = []
         self.failed = False
-
-    def _log(self, message, level='info'):
-        self.logs.append((level, message))
 
     def run_agent(self, agent_config, agent_name, previous_agent_type, idx, total_agents):
         try:
@@ -32,7 +26,6 @@ class AgentRunner:
             )
             return output_folder
         except Exception as e:
-            self._log(f"Error in agent {agent_config['agent_type']}: {str(e)}", level='error')
             self.failed = True
             raise
 
@@ -41,11 +34,7 @@ class OutputProcessor:
     def __init__(self, parent_output, constructor_path):
         self.parent_output = parent_output
         self.constructor_path = constructor_path
-        self.logs = []
         self.failed = False
-
-    def _log(self, message, level='info'):
-        self.logs.append((level, message))
 
 
 
@@ -95,7 +84,6 @@ class OutputProcessor:
 
     def process_final_output(self, ephemeral_directories):
         if not ephemeral_directories:
-            self._log("No agents were executed. No final output generated.", level='warning')
             return None
 
         final_agent_output_folder = ephemeral_directories[-1]['output_folder']
@@ -107,7 +95,7 @@ class OutputProcessor:
         if os.path.exists(side_output_dir):
             self.combine_json_arrays(final_agent_output_folder, side_output_dir, final_workflow_output)
         else:
-            self._log(f"Side output directory not found: {side_output_dir}", level='warning')
+            pass
             # Option 1: Skip the combination step
             # shutil.copytree(final_agent_output_folder, final_workflow_output)
             
@@ -132,7 +120,6 @@ class AgentWorkflow:
         self.current_agent_idx = 0
         self.previous_agent_type = None
         self.ephemeral_directories = []
-        self.logs = []
         self.failed = False
 
         if self.user_code_path and self.user_code_path not in sys.path:
@@ -162,9 +149,7 @@ class AgentWorkflow:
         self.execution_order = self.config_manager.execution_order
         self.agent_configs = self.config_manager.agent_configs
         self.child_pipeline = self.config_manager.child_pipeline
-
-    def _log(self, message, level='info'):
-        self.logs.append((level, message))
+        
 
     def create_status_table(self):
         table = Table(title="Workflow Execution Status")
@@ -221,9 +206,7 @@ class AgentWorkflow:
             # Move the completion message outside the 'with Live' block
             self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         except Exception as e:
-            for level, message in self.logs:
-                getattr(logger, level)(message)
-            logger.error(f"Workflow failed with error: {e}")
+            pass
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
             self.failed = True
             raise

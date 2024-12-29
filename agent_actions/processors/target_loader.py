@@ -1,21 +1,16 @@
 """Module for target loader."""
 import json
 import os
-import logging
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.target_content import TargetContentProcessor
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
+from agent_actions.exceptions import (
+    raise_target_processing_error,
+    raise_target_save_error,
+    raise_side_output_error
+)
 
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-
-
-
 
 def generate_target(agent_config, agent_name, file_path, base_directory, output_directory):
     """
@@ -28,33 +23,43 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     :param base_directory: Base directory for calculating relative paths
     :param output_directory: Directory where the output file will be saved
     """
-    file_reader = FileReader(file_path)
-    data = file_reader.read()#--we have all the data here
+    try:
+        file_reader = FileReader(file_path)
+        data = file_reader.read()
 
-    model_vendor = agent_config.get('model_vendor', '').lower()
-    granularity = agent_config.get('granularity', '').lower()
-    side_output = agent_config.get('side_output', False)
+        model_vendor = agent_config.get('model_vendor', '').lower()
+        granularity = agent_config.get('granularity', '').lower()
+        side_output = agent_config.get('side_output', False)
 
+        content_processor = TargetContentProcessor(agent_config, agent_name)
 
+        if model_vendor == 'tool' and granularity == 'record' and side_output:
+            try:
+                main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
+                save_output(main_output, file_path, base_directory, output_directory)
 
-    content_processor = TargetContentProcessor(agent_config, agent_name)
+                if side_output_data:
+                    side_output_directory = output_directory
+                    save_side_output(side_output_data, file_path, base_directory, side_output_directory)
+            except Exception as e:
+                raise_side_output_error(file_path, str(e))
 
-    if model_vendor == 'tool' and granularity == 'record' and side_output:
-        main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
-        save_output(main_output, file_path, base_directory, output_directory)
+        elif model_vendor == 'tool' and granularity=='file':
+            try:
+                main_output = content_processor.process_file_level(data)
+                save_output(main_output, file_path, base_directory, output_directory)
+            except Exception as e:
+                raise_target_processing_error(file_path, str(e))
 
-        if side_output_data:
-            side_output_directory = output_directory
-            save_side_output(side_output_data, file_path, base_directory, side_output_directory)
+        elif granularity == 'record':
+            try:
+                new_data = content_processor.process(data, file_path)
+                save_output(new_data, file_path, base_directory, output_directory)
+            except Exception as e:
+                raise_target_processing_error(file_path, str(e))
 
-    elif model_vendor == 'tool' and granularity=='file':
-        main_output = content_processor.process_file_level(data)
-        save_output(main_output, file_path, base_directory, output_directory)
-
-    elif granularity == 'record':
-        new_data = content_processor.process(data, file_path)
-        save_output(new_data, file_path, base_directory, output_directory)
-
+    except Exception as e:
+        raise_target_processing_error(file_path, str(e))
 
 def save_output(new_data, file_path, base_directory, output_directory):
     """
@@ -65,11 +70,13 @@ def save_output(new_data, file_path, base_directory, output_directory):
     :param base_directory: Base directory for calculating relative paths
     :param output_directory: Directory where the output file will be saved.
     """
-    relative_path = os.path.relpath(file_path, base_directory)
-    output_file_path = os.path.join(output_directory, relative_path.replace('.json', '.json'))
-    file_writer = FileWriter(output_file_path)
-    file_writer.write_target(new_data)
-
+    try:
+        relative_path = os.path.relpath(file_path, base_directory)
+        output_file_path = os.path.join(output_directory, relative_path)
+        file_writer = FileWriter(output_file_path)
+        file_writer.write_target(new_data)
+    except Exception as e:
+        raise_target_save_error(output_file_path, str(e))
 
 def save_side_output(side_output_data, file_path, base_directory, output_directory):
     """
@@ -80,24 +87,27 @@ def save_side_output(side_output_data, file_path, base_directory, output_directo
     :param base_directory: Base directory for calculating relative paths
     :param output_directory: Directory where the main output is saved
     """
-    relative_path = os.path.relpath(file_path, base_directory)
-    side_output_dir = os.path.join(os.path.dirname(output_directory), 'side_output')
-    side_output_file_path = os.path.join(side_output_dir, os.path.basename(relative_path))
-    os.makedirs(os.path.dirname(side_output_file_path), exist_ok=True)
+    try:
+        relative_path = os.path.relpath(file_path, base_directory)
+        side_output_dir = os.path.join(os.path.dirname(output_directory), 'side_output')
+        side_output_file_path = os.path.join(side_output_dir, os.path.basename(relative_path))
+        os.makedirs(os.path.dirname(side_output_file_path), exist_ok=True)
 
-    if os.path.exists(side_output_file_path):
-        with open(side_output_file_path, 'r', encoding='utf-8') as file:
-            try:
-                existing_content = json.load(file)
-            except json.JSONDecodeError:
-                existing_content = []
-    else:
-        existing_content = []
+        if os.path.exists(side_output_file_path):
+            with open(side_output_file_path, 'r', encoding='utf-8') as file:
+                try:
+                    existing_content = json.load(file)
+                except json.JSONDecodeError:
+                    existing_content = []
+        else:
+            existing_content = []
 
-    if not isinstance(existing_content, list):
-        existing_content = [existing_content]
+        if not isinstance(existing_content, list):
+            existing_content = [existing_content]
 
-    existing_content.extend(side_output_data)
+        existing_content.extend(side_output_data)
 
-    with open(side_output_file_path, 'w', encoding='utf-8') as file:
-        json.dump(existing_content, file, indent=4)
+        with open(side_output_file_path, 'w', encoding='utf-8') as file:
+            json.dump(existing_content, file, indent=4)
+    except Exception as e:
+        raise_side_output_error(side_output_file_path, str(e))

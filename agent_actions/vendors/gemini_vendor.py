@@ -3,10 +3,8 @@ import json
 import google.generativeai as genai
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.transformers.data_transformer import DataTransformer
-import logging
 from textwrap import dedent
 
-logging.basicConfig(level=logging.ERROR)
 
 
 class GeminiHandler:

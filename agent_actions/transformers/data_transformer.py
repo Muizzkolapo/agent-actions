@@ -1,12 +1,11 @@
 """Module for Data Manipulation Functions."""
-import logging
 import copy
-
-logger = logging.getLogger(__name__)
-
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
-
+from agent_actions.exceptions import (
+    raise_data_extraction_error,
+    raise_schema_update_error,
+    raise_guid_not_found_error,
+    raise_data_type_error
+)
 
 class DataTransformer:
     """
@@ -28,23 +27,26 @@ class DataTransformer:
         Returns:
             dict: Updated data_new dictionary.
         """
-        updated_data = copy.deepcopy(data_new)
+        try:
+            updated_data = copy.deepcopy(data_new)
 
-        for key in keys_to_update:
-            if key in data_old:
-                old_value = data_old[key]
-                new_value = updated_data.get(key, None)
+            for key in keys_to_update:
+                if key in data_old:
+                    old_value = data_old[key]
+                    new_value = updated_data.get(key, None)
 
-                if new_value is not None:
-                    if isinstance(old_value, type(new_value)):
-                        updated_data[key] = old_value
+                    if new_value is not None:
+                        if isinstance(old_value, type(new_value)):
+                            updated_data[key] = old_value
+                        else:
+                            updated_data[key] = [new_value, old_value]
                     else:
-                        updated_data[key] = [new_value, old_value]
-                else:
-                    updated_data[key] = old_value
+                        updated_data[key] = old_value
 
-        return updated_data
-    
+            return updated_data
+        except Exception as e:
+            raise_schema_update_error(key, str(e))
+
     @staticmethod
     def remove_schema_objects(data, keys_to_update):
         """
@@ -57,12 +59,14 @@ class DataTransformer:
         Returns:
             dict: The updated dictionary with the specified keys removed.
         """
-        updated_data = copy.deepcopy(data)
-        for key in keys_to_update:
-            if key in updated_data:
-                del updated_data[key]
-        return updated_data
-
+        try:
+            updated_data = copy.deepcopy(data)
+            for key in keys_to_update:
+                if key in updated_data:
+                    del updated_data[key]
+            return updated_data
+        except Exception as e:
+            raise_schema_update_error(key, str(e))
 
     @staticmethod
     def extract_objects(input_data):
@@ -76,19 +80,22 @@ class DataTransformer:
             list: List of summaries.
         """
         try:
+            if not isinstance(input_data, (dict, list)):
+                raise_data_type_error("dict or list", type(input_data).__name__)
+
             if isinstance(input_data, list):
                 if input_data and isinstance(input_data[0], dict):
                     for field_value in input_data[0].values():
                         if isinstance(field_value, list):
                             return field_value
-                return input_data  
+                return input_data
             else:
                 for field_value in input_data.values():
                     if isinstance(field_value, list):
                         return field_value
+            return []
         except Exception as e:
-            logger.error(f"An error occurred while extracting summaries: {e}")
-        return []
+            raise_data_extraction_error(str(e))
 
     @staticmethod
     def flatten_to_list_of_dicts(nested_lists):
@@ -154,10 +161,10 @@ class DataTransformer:
             guid (str): The GUID to search for.
 
         Returns:
-            str: The content associated with the GUID, or a message if not found.
+            str: The content associated with the GUID.
         """
         for item in data:
             if guid in item:
                 return item[guid]
-        return "GUID not found."
+        raise_guid_not_found_error(guid)
 

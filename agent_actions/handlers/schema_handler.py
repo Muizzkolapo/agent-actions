@@ -1,13 +1,14 @@
-import traceback
 import os 
 from agent_actions.handlers.file_handler import FileHandler
-import logging
 import yaml
-from agent_actions.logging_setup import setup_logging
+from agent_actions.processors.render_template import render_pipeline_with_templates
 import sys
-from agent_actions.processors.render_template import render_pipeline_with_templates  
-logger = setup_logging()
-
+from agent_actions.exceptions import (
+    raise_schema_not_found_error,
+    raise_schema_render_error,
+    raise_multiple_schema_missing_error,
+    raise_single_schema_missing_error
+)
 
 class SchemaLoader:
     """
@@ -20,7 +21,7 @@ class SchemaLoader:
             agent_config_file = FileHandler.find_config_file(agent_config_dir, f"{agent_name}.yml")
             current_dir = os.getcwd()
             template_dir = os.path.join(current_dir, "templates")
-            render_templates = render_pipeline_with_templates(agent_config_file,template_dir)
+            render_templates = render_pipeline_with_templates(agent_config_file, template_dir)
             data = yaml.safe_load(render_templates)
             dynamic_schema_names = set()
 
@@ -32,11 +33,8 @@ class SchemaLoader:
 
             return dynamic_schema_names
 
-
-
         except Exception as e:
-            logger.error(f"Failed to render template for agent '{agent_name}': {e}")
-            sys.exit(1)
+            raise_schema_render_error(agent_name, str(e))
 
     @staticmethod
     def load_schema(schema_name):
@@ -54,16 +52,14 @@ class SchemaLoader:
             current_dir = os.getcwd()
             schema_paths = []
 
-            # Walk through all directories
             for root, _, files in os.walk(current_dir):
                 for file in files:
                     if file == f"{schema_name}.yml" or file == f"{schema_name}.yaml":
                         schema_paths.append(os.path.join(root, file))
 
             if not schema_paths:
-                raise FileNotFoundError(f"Schema file not found: {schema_name}.yml")
+                raise_schema_not_found_error(schema_name)
 
-            # If multiple schemas found, use the one in the closest schema directory
             selected_path = None
             shortest_path_length = float('inf')
             
@@ -74,14 +70,11 @@ class SchemaLoader:
                     if schema_index < shortest_path_length:
                         shortest_path_length = schema_index
                         selected_path = path
-
-            # If no schema directory found, use the first found schema file
             if not selected_path and schema_paths:
                 selected_path = schema_paths[0]
-                logger.warning(f"No schema directory found. Using schema from: {selected_path}")
 
             if not selected_path:
-                raise FileNotFoundError(f"No valid schema file found for: {schema_name}")
+                raise_schema_not_found_error(schema_name)
 
             with open(selected_path, 'r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
@@ -89,10 +82,7 @@ class SchemaLoader:
             return documents
 
         except Exception as e:
-            logger.error(f"An error occurred in load_schema: {e}")
-            traceback.print_exc()
-            return None
-
+            raise_schema_render_error(schema_name, str(e))
 
     @staticmethod  
     def validate_schemas_exist(agent_name, directory):
@@ -103,9 +93,9 @@ class SchemaLoader:
             agent_name (str): The name of the agent.
             directory (str): The base directory to start searching from.
         
-        Returns:
-            None: If all schema files exist.
-            Raises FileNotFoundError: If any schema file is missing.
+        Raises:
+            SingleSchemaMissingError: If one schema file is missing.
+            MultipleSchemaMissingError: If multiple schema files are missing.
         """
         schema_names = SchemaLoader.return_schema(agent_name)
         missing_files = []
@@ -119,6 +109,6 @@ class SchemaLoader:
         
         if missing_files:
             if len(missing_files) == 1:
-                raise FileNotFoundError(f"The schema file '{missing_files[0]}' is missing.")
+                raise_single_schema_missing_error(missing_files[0])
             else:
-                raise FileNotFoundError(f"The following schema files are missing: {', '.join(missing_files)}")
+                raise_multiple_schema_missing_error(missing_files)

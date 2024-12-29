@@ -1,6 +1,6 @@
+"""Module for target content processing."""
 import os
 import json
-import logging
 from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
@@ -10,19 +10,23 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.logging_setup import setup_logging
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.exceptions import (
+    raise_source_data_load_error,
+    raise_few_shot_sample_parse_error,
+    raise_few_shot_sample_path_error,
+    raise_content_type_error,
+    raise_item_processing_error,
+    raise_content_processing_error,
+    raise_side_output_processing_error,
+    raise_unexpected_format_error
+)
 
-logger = setup_logging()
-logger = logging.getLogger(__name__)
-
-# Abstract Base Class
 class ContentProcessor(ABC):
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.logger = logging.getLogger(f'agent_actions.processors.{self.__class__.__name__}')
 
     @abstractmethod
     def process(self, data, file_path):
@@ -32,7 +36,6 @@ class ContentProcessor(ABC):
     def process_for_side_output(self, data, file_path):
         pass
 
-# Source Data Loader
 class SourceDataLoader:
     def __init__(self, agent_name):
         self.agent_name = agent_name
@@ -43,8 +46,7 @@ class SourceDataLoader:
             with open(source_path, 'r') as file:
                 return json.load(file)
         except Exception as e:
-            logger.error(f"Error loading source data from {file_path}: {e}")
-            raise
+            raise_source_data_load_error(file_path, str(e))
 
 # Few-Shot Sample Manager
 class FewShotSampleManager:
@@ -65,18 +67,15 @@ class FewShotSampleManager:
                 if isinstance(contents, dict):
                     contents['samples'] = samples
                 else:
-                    logger.warning("Contents is not a dictionary. Cannot add samples.")
+                    raise_content_type_error()
             except FileNotFoundError as e:
-                logger.error(f"Few-shot samples path not found: {e}")
-        else:
-            logger.debug("No few-shot samples loaded.")
+                raise_few_shot_sample_path_error(str(e))
 
     def _parse_sample_count(self):
         try:
             return int(self.agent_config.get("use_few_shot_samples", 0))
-        except ValueError:
-            logger.warning("Invalid value for 'use_few_shot_samples'. Defaulting to 0.")
-            return 0
+        except ValueError as e:
+            raise_few_shot_sample_parse_error(self.agent_config.get("use_few_shot_samples"))
 
 class DataGenerator:
     def __init__(self, agent_config, agent_name):
@@ -149,12 +148,11 @@ class TargetContentProcessor(ContentProcessor):
                     processed_item = self._process_single_item(items, source_data)
                     processed_data.extend(processed_item)
                 except Exception as e:
-                    logger.error(f"Error processing item: {e}")
+                    raise_item_processing_error(items.get('guid', 'unknown'), str(e))
 
             return processed_data
         except Exception as e:
-            logger.error(f"Error in process: {e}")
-            raise
+            raise_content_processing_error(str(e))
 
     def process_for_side_output(self, data, file_path):
         try:
@@ -172,36 +170,37 @@ class TargetContentProcessor(ContentProcessor):
                             else:
                                 main_output.append(sub_item)
                     else:
-                        logger.warning(f"Unexpected item format: {processed_item}")
+                        raise_unexpected_format_error(str(processed_item))
                 except Exception as e:
-                    logger.error(f"Error processing item: {e}")
+                    raise_item_processing_error(item.get('guid', 'unknown'), str(e))
 
             return main_output, side_output
         except Exception as e:
-            logger.error(f"Error in process_for_side_output: {e}")
-            raise
+            raise_side_output_processing_error(str(e))
 
     def _process_single_item(self, item, source_data):
-        contents, guid = item['content'], item['guid']
-        source_content = DataTransformer.get_content_by_guid(source_data, guid)
-        self.sample_manager.add_few_shot_samples(contents)
+        try:
+            contents, guid = item['content'], item['guid']
+            source_content = DataTransformer.get_content_by_guid(source_data, guid)
+            self.sample_manager.add_few_shot_samples(contents)
 
-        conditional_clause = self.agent_config.get('conditional_clause', '').lower()
-        if conditional_clause:
-            if execute_user_defined_function(conditional_clause, contents):
+            conditional_clause = self.agent_config.get('conditional_clause', '').lower()
+            if conditional_clause:
+                if execute_user_defined_function(conditional_clause, contents):
+                    generated_data = self.data_generator.create_agent_with_data(contents, source_content)
+                    return self.data_processor.process_item(contents, generated_data, guid)
+                else:
+                    return self.data_processor.process_item(contents, [contents], guid)
+            else:
                 generated_data = self.data_generator.create_agent_with_data(contents, source_content)
                 return self.data_processor.process_item(contents, generated_data, guid)
-            else:
-                return self.data_processor.process_item(contents, [contents], guid)
-        else:
-            generated_data = self.data_generator.create_agent_with_data(contents, source_content)
-            return self.data_processor.process_item(contents, generated_data, guid)
+        except Exception as e:
+            raise_item_processing_error(guid, str(e))
 
     def process_file_level(self, data):
-        contents, guid = data[0]['content'], data[0]['guid']
         try:
+            contents, guid = data[0]['content'], data[0]['guid']
             generated_data = self.data_generator.create_agent_with_data(data)
             return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
-            logger.error(f"Error in process_file_level: {e}")
-            raise
+            raise_content_processing_error(str(e))

@@ -1,4 +1,3 @@
-
 """Module for staging data loading and processing."""
 import os
 import json
@@ -8,12 +7,13 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
-import logging
-logger = logging.getLogger(__name__)
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
-
-
+from agent_actions.exceptions import (
+    raise_file_type_error,
+    raise_file_read_error,
+    raise_file_write_error,
+    raise_agent_folder_error,
+    raise_config_file_error
+)
 
 class FileReader:
     def __init__(self, file_path):
@@ -34,9 +34,12 @@ class FileReader:
         }
 
         if self.file_type in file_type_handlers:
-            return file_type_handlers[self.file_type]()
+            try:
+                return file_type_handlers[self.file_type]()
+            except Exception as e:
+                raise_file_read_error(self.file_path, str(e))
         else:
-            raise ValueError(f"Unsupported file type: {self.file_type}")
+            raise_file_type_error(self.file_type)
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
@@ -65,12 +68,10 @@ class FileReader:
         return tree, root
 
     def _read_docx(self):
-        # Document() takes the file path directly
         doc = Document(self.file_path)
         return '\n'.join([para.text for para in doc.paragraphs])
 
     def _read_xlsx(self):
-        # Pandas can read Excel files directly from the file path
         df = pd.read_excel(self.file_path)
         return df.to_dict(orient='records')
 
@@ -79,42 +80,43 @@ class FileReader:
             soup = BeautifulSoup(file, 'html.parser')
             return soup.get_text()
 
-
-
 class FileWriter:
     def __init__(self, file_path):
         self.file_path = file_path
         self.file_type = os.path.splitext(file_path)[1].lower()
 
     def write_staging(self, data):
-        with open(self.file_path, 'w', encoding='utf-8') as file:
-            if self.file_type == '.json':
-                json.dump(data, file, indent=4)
-            elif self.file_type == '.txt':
-                if isinstance(data, list):
-                    file.write('\n'.join(data))
+        try:
+            with open(self.file_path, 'w', encoding='utf-8') as file:
+                if self.file_type == '.json':
+                    json.dump(data, file, indent=4)
+                elif self.file_type == '.txt':
+                    if isinstance(data, list):
+                        file.write('\n'.join(data))
+                    else:
+                        file.write(data)
+                elif self.file_type == '.csv':
+                    writer = csv.writer(file)
+                    writer.writerows(data)
                 else:
-                    file.write(data)
-            elif self.file_type == '.csv':
-                writer = csv.writer(file)
-                writer.writerows(data)
-            else:
-                raise ValueError(f"Unsupported output file type: {self.file_type}")
-
+                    raise_file_type_error(self.file_type)
+        except Exception as e:
+            raise_file_write_error(self.file_path, str(e))
 
     def write_target(self, data):
-        os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
-        with open(self.file_path, 'w', encoding='utf-8') as file:
-            json.dump(data, file, indent=4)
+        try:
+            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            with open(self.file_path, 'w', encoding='utf-8') as file:
+                json.dump(data, file, indent=4)
+        except Exception as e:
+            raise_file_write_error(self.file_path, str(e))
 
     def write_source(self, data):
-        with open(self.file_path, 'w', encoding='utf-8') as file:
-            json.dump(data, file, indent=4)
-
-
-
-
-# File and Directory Operations
+        try:
+            with open(self.file_path, 'w', encoding='utf-8') as file:
+                json.dump(data, file, indent=4)
+        except Exception as e:
+            raise_file_write_error(self.file_path, str(e))
 
 class FileHandler:
     """
@@ -180,27 +182,23 @@ class FileHandler:
     @staticmethod
     def get_agent_paths(agent_name):
         """
-        Returns the agent configuration directory, IO directory, and sample output path for the given agent name.
+        Returns the agent configuration directory, IO directory, and sample output path.
 
         Parameters:
             agent_name (str): The name of the agent.
 
         Returns:
-            tuple: A tuple containing:
-                - agent_config_dir (str): Path to the agent's configuration directory.
-                - io_dir (str): Path to the agent's IO directory.
-                - few_shot_samples_path (str or None): Path to the agent's sample output directory, or None if it doesn't exist.
+            tuple: (agent_config_dir, io_dir, few_shot_samples_path)
         """
         current_dir = os.getcwd()
         agent_config_dir = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_config')
         io_dir = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
 
         if agent_config_dir is None:
-            raise FileNotFoundError(f"Agent configuration directory not found for agent '{agent_name}'.")
+            raise_agent_folder_error(f"Configuration directory for agent '{agent_name}'")
         if io_dir is None:
-            raise FileNotFoundError(f"IO directory not found for agent '{agent_name}'.")
+            raise_agent_folder_error(f"IO directory for agent '{agent_name}'")
 
-        # Construct the few_shot_samples_path
         few_shot_samples_path = os.path.join(io_dir, 'few_shot_samples')
         if not os.path.exists(few_shot_samples_path):
             few_shot_samples_path = None
@@ -209,26 +207,36 @@ class FileHandler:
 
     @staticmethod
     def find_config_file(base_dir, filename):
+        """
+        Recursively searches for a configuration file in the base directory and its parents.
+
+        Parameters:
+            base_dir (str): The directory to start searching from.
+            filename (str): The name of the configuration file.
+
+        Returns:
+            str or None: The path to the configuration file if found.
+        """
         for root, _, files in os.walk(base_dir):
             if filename in files:
-                full_path = os.path.join(root, filename)
-                return full_path
+                return os.path.join(root, filename)
 
-        # If not found, search in parent directories
         parent_dir = os.path.dirname(base_dir)
         if parent_dir != base_dir:  # Ensure we're not at the root
             return FileHandler.find_config_file(parent_dir, filename)
 
-        logger.warning(f"Config file {filename} not found in {base_dir} or its parent directories")
-        return None
+        raise_config_file_error(filename, f"Config file not found in {base_dir} or its parent directories")
 
     @staticmethod
     def get_folder_after_agent_config(path):
         """
-        Extracts the folder name immediately following 'agent_config' in a given path.
+        Extracts the folder name immediately following 'agent_config' in a path.
 
-        :param path: The file path to analyze.
-        :return: The folder name following 'agent_config' or None if not found.
+        Parameters:
+            path (str): The file path to analyze.
+
+        Returns:
+            str or None: The folder name following 'agent_config' or None if not found.
         """
         path_components = path.split(os.sep)
 
@@ -246,10 +254,13 @@ class FileHandler:
     @staticmethod
     def get_folder(agent_name):
         """
-        Retrieves the folder name immediately following 'agent_config' for the given agent.
+        Gets the folder name and full path for an agent's configuration.
 
-        :param agent_name: The name of the agent.
-        :return: The folder name or None if not found.
+        Parameters:
+            agent_name (str): The name of the agent.
+
+        Returns:
+            tuple: (folder_name, full_path) or (None, None) if not found.
         """
         agent_config_dir = os.path.join(os.getcwd(), 'agent_config')
         filename = f"{agent_name}.yml" if not agent_name.endswith(".yml") else agent_name
@@ -259,7 +270,13 @@ class FileHandler:
     @staticmethod
     def get_all_agent_paths(base_dir):
         """
-        Get a list of all agent configuration file paths within the base directory.
+        Gets all agent configuration file paths within the base directory.
+
+        Parameters:
+            base_dir (str): The base directory to search in.
+
+        Returns:
+            list: A list of paths to agent configuration files.
         """
         agent_paths = []
         for root, _, files in os.walk(base_dir):
@@ -271,31 +288,22 @@ class FileHandler:
     @staticmethod
     def get_file_info(file_path):
         """
-        Retrieves the source file path corresponding to the given file in the staging directory.
+        Gets information about a file in the staging directory.
 
         Parameters:
             file_path (str): The file path in the staging directory.
 
         Returns:
-            str or None: The source file path if found, otherwise None.
+            str: The source file path or an error message.
         """
-        # Check if the file exists
         if not os.path.exists(file_path):
             return f"File '{file_path}' does not exist."
 
-        # Extract the directory and file name from the file path
         dir_path, file_name = os.path.split(file_path)
-
-        # Extract the path up to the agent directory
         agent_dir = os.path.dirname(dir_path)
-
-        # Define the source path as '/source' at the same level as 'staging'
         source_path = os.path.join(agent_dir, 'source')
-
-        # Join the file name with the source path
         source_file_path = os.path.join(source_path, file_name)
 
-        # Check if the source path exists
         if os.path.exists(source_path):
             return source_file_path
         else:

@@ -1,26 +1,23 @@
 """Module for staging data loading and processing."""
-import os
 import json
-import logging
-from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
 from agent_actions.handlers.agent_handlers import AgentManager
-from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
-
-logger = logging.getLogger(__name__)
+from agent_actions.exceptions import (
+    raise_prompt_processing_error,
+    raise_few_shot_sample_error,
+    raise_source_content_error,
+    raise_dynamic_agent_error
+    )
 
 class PromptProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.logger = logging.getLogger('agent_actions.processors.staging_content')
 
     def staging_dynamic_creator(self, context_data, source_path=None, formatted_prompt=None):
         """
@@ -34,110 +31,118 @@ class PromptProcessor:
         Returns:
             tuple: Transformed response and source text.
         """
-        context_data = self._append_few_shot_samples(context_data)
-        raw_prompt = self._get_raw_prompt()
-        source_content = self._load_source_content(source_path, context_data) if source_path else None
-        formatted_prompt = self._format_prompt(raw_prompt, source_content, context_data)
-        if source_path is not None and isinstance(context_data, dict) and "guid" in context_data and "content" in context_data:
-            guid = context_data["guid"]
-            context_data_enriched = context_data["content"]
-            response = agent_builder.create_dynamic_agent(
-                self.agent_config,
-                self.agent_name,
-                context_data_enriched,
-                formatted_prompt
-            )
-            side_collection = self.agent_config.get('side_collection', [])
-            remove_collection = self.agent_config.get('remove_collection', [])
+        try:
+            context_data = self._append_few_shot_samples(context_data)
+            raw_prompt = self._get_raw_prompt()
+            source_content = self._load_source_content(source_path, context_data) if source_path else None
+            formatted_prompt = self._format_prompt(raw_prompt, source_content, context_data)
 
-            if side_collection:
-                updated_response = [
-                    DataTransformer.update_schema_objects(context_data_enriched, data, side_collection)
-                    for data in response
-                ]
-                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
-            elif remove_collection:
-                updated_response = [
-                    DataTransformer.remove_schema_objects(data, remove_collection)
-                    for data in response
-                ]
-                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+            if source_path is not None and isinstance(context_data, dict) and "guid" in context_data and "content" in context_data:
+                guid = context_data["guid"]
+                context_data_enriched = context_data["content"]
+                response = agent_builder.create_dynamic_agent(
+                    self.agent_config,
+                    self.agent_name,
+                    context_data_enriched,
+                    formatted_prompt
+                )
+                side_collection = self.agent_config.get('side_collection', [])
+                remove_collection = self.agent_config.get('remove_collection', [])
+
+                if side_collection:
+                    updated_response = [
+                        DataTransformer.update_schema_objects(context_data_enriched, data, side_collection)
+                        for data in response
+                    ]
+                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+                elif remove_collection:
+                    updated_response = [
+                        DataTransformer.remove_schema_objects(data, remove_collection)
+                        for data in response
+                    ]
+                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+                else:
+                    transformed_response = DataTransformer.transform_structure([{guid: response}])
+
+                src_text = [{guid: formatted_prompt}]
             else:
-                transformed_response = DataTransformer.transform_structure([{guid: response}])
+                response = agent_builder.create_dynamic_agent(
+                    self.agent_config,
+                    self.agent_name,
+                    context_data,
+                    formatted_prompt
+                )
+                guid = Utils.generate_id() if not isinstance(context_data, dict) or "guid" not in context_data else context_data["guid"]
+                side_collection = self.agent_config.get('side_collection', [])
+                remove_collection = self.agent_config.get('remove_collection', [])
 
-            src_text = [{guid: formatted_prompt}]
-        else:
-            response = agent_builder.create_dynamic_agent(
-                self.agent_config,
-                self.agent_name,
-                context_data,
-                formatted_prompt
-            )
-            guid = Utils.generate_id() if not isinstance(context_data, dict) or "guid" not in context_data else context_data["guid"]
-            side_collection = self.agent_config.get('side_collection', [])
-            remove_collection = self.agent_config.get('remove_collection', [])
+                if side_collection:
+                    updated_response = [
+                        DataTransformer.update_schema_objects(context_data, data, side_collection)
+                        for data in response
+                    ]
+                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+                elif remove_collection:
+                    updated_response = [
+                        DataTransformer.remove_schema_objects(data, remove_collection)
+                        for data in response
+                    ]
+                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
+                else:
+                    transformed_response = DataTransformer.transform_structure([{guid: response}])
 
-            if side_collection:
-                updated_response = [
-                    DataTransformer.update_schema_objects(context_data, data, side_collection)
-                    for data in response
-                ]
-                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
-            elif remove_collection:
-                updated_response = [
-                    DataTransformer.remove_schema_objects(data, remove_collection)
-                    for data in response
-                ]
-                transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
-            else:
-                transformed_response = DataTransformer.transform_structure([{guid: response}])
+                src_text = [{guid: context_data}]
 
-            src_text = [{guid: context_data}]
-
-        return transformed_response, src_text
+            return transformed_response, src_text
+        except Exception as e:
+            raise_dynamic_agent_error(self.agent_name, str(e))
 
     def _append_few_shot_samples(self, context_data):
         """Append few shot samples to the input documentation if configured."""
-        _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
-        sample_count = self.agent_config.get("use_few_shot_samples", 0)
         try:
-            sample_count = int(sample_count)
-        except ValueError:
-            self.logger.warning("use_few_shot_samples is not an integer. Defaulting to 0.")
-            sample_count = 0
+            _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
+            sample_count = self.agent_config.get("use_few_shot_samples", 0)
+            try:
+                sample_count = int(sample_count)
+            except ValueError:
+                sample_count = 0
 
-        if sample_count > 0:
-            self.logger.debug(f"Loading {sample_count} few shot samples.")
-            samples = AgentManager.load_few_shot_samples(
-                few_shot_samples_path,
-                agent_type=self.agent_config['agent_type'],
-                sample_count=sample_count
-            )
-            samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
+            if sample_count > 0:
+                samples = AgentManager.load_few_shot_samples(
+                    few_shot_samples_path,
+                    agent_type=self.agent_config['agent_type'],
+                    sample_count=sample_count
+                )
+                samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
 
-            if isinstance(context_data, dict):
-                context_data = json.dumps(context_data, indent=2)
-            context_data += "\n\nfew shot samples:\n" + samples_str
-        else:
-            self.logger.info("Not using few shot samples.")
+                if isinstance(context_data, dict):
+                    context_data = json.dumps(context_data, indent=2)
+                context_data += "\n\nfew shot samples:\n" + samples_str
 
-        return context_data
+            return context_data
+        except Exception as e:
+            raise_few_shot_sample_error(str(e))
 
     def _get_raw_prompt(self):
         """Retrieve and process the raw prompt from the agent configuration."""
-        raw_prompt = self.agent_config.get('prompt', '')
-        if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
-            raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
-        if not raw_prompt:
-            self.logger.warning("No prompt found in agent_config. Using default prompt.")
-            raw_prompt = "Process the following content: {content}"
-        return raw_prompt
+        try:
+            raw_prompt = self.agent_config.get('prompt', '')
+            if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
+                raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
+            if not raw_prompt:
+                raw_prompt = "Process the following content: {content}"
+            return raw_prompt
+        except Exception as e:
+            raise_prompt_processing_error(str(e))
 
     def _format_prompt(self, raw_prompt, source_content, context_data):
         """Replace placeholders in the raw prompt with source content and input documentation."""
-        source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
-        formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, context_data)
-        return formatted_prompt
+        try:
+            source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
+            formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, context_data)
+            return formatted_prompt
+        except Exception as e:
+            raise_prompt_processing_error(str(e))
 
     def _load_source_content(self, source_path, context_data):
         """Load source content based on the input documentation's GUID."""
@@ -149,9 +154,9 @@ class PromptProcessor:
                     for item in source_data:
                         if guid in item:
                             return item[guid]
+            return None
         except Exception as e:
-            self.logger.error(f"Error loading source content: {e}")
-        return None
+            raise_source_content_error(source_path, str(e))
 
 
 class StagingContentLoader:
@@ -269,4 +274,3 @@ class StagingContentLoader:
                 data_chunk.extend(chunk_output)
                 src_text.extend(src_collection)
         return data_chunk,src_text
-

@@ -3,6 +3,7 @@ Module for Loading and running user-defined functions from a specified module.
 """
 import importlib
 from agent_actions.logging_setup import setup_logging
+from agent_actions.exceptions import raise_udf_not_found, raise_udf_execution_error
 
 logger = setup_logging()
 
@@ -15,11 +16,9 @@ def load_user_defined_function(module_name, function_name):
         function = getattr(module, function_name)
         return function
     except ImportError as e:
-        logger.error(f"Module '{module_name}' could not be imported: {e}")
-        raise
+        raise_udf_not_found(function_name, module_name)
     except AttributeError as e:
-        logger.error(f"Function '{function_name}' not found in module '{module_name}': {e}")
-        raise
+        raise_udf_not_found(function_name, module_name)
 
 def execute_user_defined_function(udf_name, input_data):
     """
@@ -37,16 +36,11 @@ def execute_user_defined_function(udf_name, input_data):
     try:
         module = importlib.import_module(module_name)
         udf = getattr(module, func_name)
-    except ImportError as e:
-        logger.error(f"Failed to import module '{module_name}' for UDF '{udf_name}': {e}")
-        raise ValueError(f"UDF '{udf_name}' could not be found: {e}")
-    except AttributeError as e:
-        logger.error(f"Function '{func_name}' not found in module '{module_name}'")
-        raise ValueError(f"UDF '{udf_name}' could not be found: {e}")
+    except (ImportError, AttributeError) as e:
+        raise_udf_not_found(func_name, module_name)
 
     try:
         result = udf(input_data)
         return result
     except Exception as e:
-        logger.error(f"Error executing UDF '{udf_name}': {e}")
-        raise RuntimeError(f"Error executing UDF '{udf_name}': {e}")
+        raise_udf_execution_error(udf_name, str(e))
