@@ -1,10 +1,7 @@
 import os
-import sys
-
 import click
 import yaml
-
-from agent_actions.core.agent_runners import AgentWorkflow
+from agent_actions.workflow.agent_workflow import AgentWorkflow
 from agent_actions.core.init import init_project
 from agent_actions.docs.app import run_app
 from agent_actions.handlers.agent_handlers import AgentManager
