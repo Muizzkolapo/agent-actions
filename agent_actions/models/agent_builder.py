@@ -8,8 +8,6 @@ from agent_actions.vendors.tools_vendor import ToolHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.schema_handler import SchemaLoader 
 from agent_actions.handlers.prompt_handler import PromptLoader 
-from agent_actions.logging_setup import setup_logging
-logger = setup_logging()
 
 
 

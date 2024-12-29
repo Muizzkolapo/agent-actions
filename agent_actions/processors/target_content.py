@@ -20,7 +20,8 @@ from agent_actions.exceptions import (
     raise_item_processing_error,
     raise_content_processing_error,
     raise_side_output_processing_error,
-    raise_unexpected_format_error
+    raise_unexpected_format_error,
+    raise_agent_creation_error,
 )
 
 class ContentProcessor(ABC):
@@ -104,8 +105,7 @@ class DataGenerator:
                 formatted_prompt
             )
         except Exception as e:
-            logger.error(f"Error in create_agent_with_data: {e}")
-            raise
+            raise_agent_creation_error(str(e))
 
 class DataProcessor:
     def __init__(self, agent_config):

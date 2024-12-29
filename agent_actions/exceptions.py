@@ -325,6 +325,81 @@ class ConfigFileError(FileHandlerError):
         msg = f"Error with config file {filename}: {error_msg}"
         super().__init__(msg)
 
+# Config Handler Exceptions
+class ConfigHandlerError(AgentActionsError):
+    """Base class for configuration handler-related errors"""
+    pass
+
+class ConfigLoadError(ConfigHandlerError):
+    def __init__(self, config_path: str, error_msg: str):
+        msg = f"Error loading constructor config: {config_path}, Error: {error_msg}"
+        super().__init__(msg)
+
+class DefaultConfigLoadError(ConfigHandlerError):
+    def __init__(self, config_path: str, error_msg: str):
+        msg = f"Error loading default config: {config_path}, Error: {error_msg}"
+        super().__init__(msg)
+
+# CLI Exceptions
+class CLIError(AgentActionsError):
+    """Base class for CLI-related errors"""
+    pass
+
+class DirectoryError(CLIError):
+    def __init__(self, directory: str):
+        msg = f"Missing directory: {directory}"
+        super().__init__(msg)
+
+class DuplicateConfigError(CLIError):
+    def __init__(self, config_path: str):
+        msg = f"Duplicate configuration file: {config_path}"
+        super().__init__(msg)
+
+class MissingConfigError(CLIError):
+    def __init__(self, filename: str):
+        msg = f"Missing configuration file: {filename}"
+        super().__init__(msg)
+
+class MissingSchemaError(CLIError):
+    def __init__(self, agent_name: str):
+        msg = f"Missing schema for agent '{agent_name}'"
+        super().__init__(msg)
+
+class InvalidConfigFormatError(CLIError):
+    def __init__(self):
+        msg = "Invalid configuration format for the agent"
+        super().__init__(msg)
+
+class WorkflowNameMismatchError(CLIError):
+    def __init__(self, agent_name: str, available_names: list):
+        msg = f"The config file name '{agent_name}' does not match any workflow names {available_names}"
+        super().__init__(msg)
+
+class ProjectInitError(CLIError):
+    def __init__(self, project_name: str, error_msg: str):
+        msg = f"Failed to initialize project '{project_name}': {error_msg}"
+        super().__init__(msg)
+
+class DocsServerError(CLIError):
+    def __init__(self, error_msg: str):
+        msg = f"Failed to start documentation server: {error_msg}"
+        super().__init__(msg)
+
+class WorkflowError(CLIError):
+    def __init__(self, error_msg: str):
+        msg = f"Failed to run agent workflow: {error_msg}"
+        super().__init__(msg)
+
+class CleanupError(CLIError):
+    def __init__(self, agent_name: str, error_msg: str):
+        msg = f"Failed to clean agent directories for '{agent_name}': {error_msg}"
+        super().__init__(msg)
+
+class TemplateRenderError(CLIError):
+    def __init__(self, agent_name: str, error_msg: str):
+        msg = f"Failed to render template for agent '{agent_name}': {error_msg}"
+        super().__init__(msg)
+
 # Helper Functions
 def raise_config_error(msg: str, node: Optional[Any] = None) -> NoReturn:
     raise ConfigurationError(msg, node)
@@ -476,6 +551,45 @@ def raise_side_output_processing_error(error_msg: str) -> NoReturn:
 def raise_unexpected_format_error(item_format: str) -> NoReturn:
     raise UnexpectedFormatError(item_format)
 
+def raise_config_load_error(config_path: str, error_msg: str) -> NoReturn:
+    raise ConfigLoadError(config_path, error_msg)
+
+def raise_default_config_load_error(config_path: str, error_msg: str) -> NoReturn:
+    raise DefaultConfigLoadError(config_path, error_msg)
+
+def raise_directory_error(directory: str) -> NoReturn:
+    raise DirectoryError(directory)
+
+def raise_duplicate_config_error(config_path: str) -> NoReturn:
+    raise DuplicateConfigError(config_path)
+
+def raise_missing_config_error(filename: str) -> NoReturn:
+    raise MissingConfigError(filename)
+
+def raise_missing_schema_error(agent_name: str) -> NoReturn:
+    raise MissingSchemaError(agent_name)
+
+def raise_invalid_config_format_error() -> NoReturn:
+    raise InvalidConfigFormatError()
+
+def raise_workflow_name_mismatch_error(agent_name: str, available_names: list) -> NoReturn:
+    raise WorkflowNameMismatchError(agent_name, available_names)
+
+def raise_project_init_error(project_name: str, error_msg: str) -> NoReturn:
+    raise ProjectInitError(project_name, error_msg)
+
+def raise_docs_server_error(error_msg: str) -> NoReturn:
+    raise DocsServerError(error_msg)
+
+def raise_workflow_error(error_msg: str) -> NoReturn:
+    raise WorkflowError(error_msg)
+
+def raise_cleanup_error(agent_name: str, error_msg: str) -> NoReturn:
+    raise CleanupError(agent_name, error_msg)
+
+def raise_template_render_error(agent_name: str, error_msg: str) -> NoReturn:
+    raise TemplateRenderError(agent_name, error_msg)
+
 # Context wrapper
 def wrapper(agent_config):
     def wrap(func):
@@ -541,6 +655,19 @@ CONTEXT_EXPORTS = {
         raise_content_processing_error,
         raise_side_output_processing_error,
         raise_unexpected_format_error,
+        raise_config_load_error,
+        raise_default_config_load_error,
+        raise_directory_error,
+        raise_duplicate_config_error,
+        raise_missing_config_error,
+        raise_missing_schema_error,
+        raise_invalid_config_format_error,
+        raise_workflow_name_mismatch_error,
+        raise_project_init_error,
+        raise_docs_server_error,
+        raise_workflow_error,
+        raise_cleanup_error,
+        raise_template_render_error,
     ]
 }
 
@@ -558,3 +685,17 @@ STAGING_CONTEXT_EXPORTS = {
         raise_content_processing_error,
     ]
 }
+
+class AgentCreationError(AgentActionsError):
+    """Exception raised when there's an error creating an agent with data"""
+    def __init__(self, error_msg: str):
+        msg = f"Error in create_agent_with_data: {error_msg}"
+        super().__init__(msg)
+
+def raise_agent_creation_error(error_msg: str) -> NoReturn:
+    raise AgentCreationError(error_msg)
+
+# Update Context Exports
+CONTEXT_EXPORTS.update({
+    'raise_agent_creation_error': raise_agent_creation_error,
+})

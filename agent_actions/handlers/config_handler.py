@@ -3,10 +3,12 @@ import os
 import yaml
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.core.utils import Utils
-from agent_actions.logging_setup import setup_logging
 from agent_actions.processors.render_template import render_pipeline_with_templates  
 import glob
-logger = setup_logging()
+from agent_actions.exceptions import (
+    raise_config_load_error,
+    raise_default_config_load_error,
+)
 
 
 class ConfigValidator:
@@ -155,33 +157,26 @@ class ConfigManager:
         self.agent_configs = {}
         self.execution_order = []
         self.child_pipeline = None
-        self.logs = []
         self.template_dir = os.path.join(os.getcwd(), "templates")
-
-    def _log(self, message, level='info'):
-        self.logs.append((level, message))
 
     def load_configs(self):
         try:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
             self.user_config = yaml.safe_load(config_data)
         except Exception as e:
-            self._log(f"Error loading constructor config: {self.constructor_path}, Error: {e}", level='error')
-            raise
+            raise_config_load_error(self.constructor_path, str(e))
 
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
         except Exception as e:
-            self._log(f"Error loading default config: {self.default_path}, Error: {e}", level='error')
-            raise
+            raise_default_config_load_error(self.default_path, str(e))
 
     def validate_agent_name(self):
         self.agent_name = ConfigValidator.find_agent_name(self.user_config)
         config_filename = os.path.splitext(os.path.basename(self.constructor_path))[0]
         if self.agent_name != config_filename:
             error_msg = f"Top-level key '{self.agent_name}' does not match the filename '{config_filename}'"
-            self._log(error_msg, level='error')
             raise ValueError(error_msg)
 
     def check_child_pipeline(self):
