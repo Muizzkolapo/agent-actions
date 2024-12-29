@@ -12,10 +12,21 @@ from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.handlers.schema_handler import SchemaLoader
-from agent_actions.logging_setup import setup_logging
 from agent_actions.processors.render_template import render_pipeline_with_templates
+from agent_actions.exceptions import (
+    raise_directory_error,
+    raise_duplicate_config_error,
+    raise_missing_config_error,
+    raise_missing_schema_error,
+    raise_invalid_config_format_error,
+    raise_workflow_name_mismatch_error,
+    raise_project_init_error,
+    raise_docs_server_error,
+    raise_workflow_error,
+    raise_cleanup_error,
+    raise_template_render_error,
+)
 
-logger = setup_logging()
 
 # Helper functions
 def validate_prompts(prompt_dir):
@@ -33,18 +44,15 @@ def check_required_directories(required_dirs):
     """Check if required directories exist."""
     for required_dir in required_dirs:
         if not os.path.exists(required_dir):
-            logger.error(f"Missing directory: {required_dir}")
-            sys.exit(1)
+            raise_directory_error(required_dir)
 
 def validate_agent_config(agent_name, full_path, project_dir):
     """Validate the agent configuration file."""
     if not ConfigValidator.check_agent_file_unique(full_path, project_dir):
-        logger.error(f"Duplicate configuration file: {full_path}")
-        sys.exit(1)
+        raise_duplicate_config_error(full_path)
     is_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, project_dir)
     if not is_unique:
-        logger.error(error_msg)
-        sys.exit(1)
+        raise_invalid_config_format_error()
 
 def render_and_load_config(agent_name, full_path, template_dir, rendered_workflows_dir):
     """Render templates and load configuration data."""
@@ -57,19 +65,16 @@ def validate_schema(agent_name, schema_dir):
     """Validate that the required schemas exist."""
     schema_error = SchemaLoader.validate_schemas_exist(agent_name, schema_dir)
     if schema_error:
-        logger.error(f"Missing schema for agent '{agent_name}'")
-        sys.exit(1)
+        raise_missing_schema_error(agent_name)
 
 def validate_agent_entries(agent_config):
     """Validate the agent entries in the configuration."""
     if not isinstance(agent_config, list):
-        logger.error("Invalid configuration format for the agent.")
-        sys.exit(1)
+        raise_invalid_config_format_error()
     agent_entries = [entry for entry in agent_config if 'agent_type' in entry]
     is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
     if not is_valid:
-        logger.error(f"Validation error: {message}")
-        sys.exit(1)
+        raise_invalid_config_format_error()
 
 def get_parent_pipeline(agent_config):
     """Get the parent pipeline from the agent configuration."""
@@ -90,8 +95,7 @@ def init(project_name):
     try:
         init_project(project_name)
     except Exception as e:
-        logger.error(f"Failed to initialize project '{project_name}': {e}")
-        sys.exit(1)
+        raise_project_init_error(project_name, str(e))
 
 @main.command()
 @click.option('--host', default='0.0.0.0', help='Host for the Flask app.')
@@ -102,8 +106,7 @@ def docs(host, port, debug):
     try:
         run_app(host, port, debug)
     except Exception as e:
-        logger.error(f"Failed to start documentation server: {e}")
-        sys.exit(1)
+        raise_docs_server_error(str(e))
 
 @main.command()
 @click.option('-a', '--agent', required=True, help="Agent configuration file name without path or extension")
@@ -126,8 +129,7 @@ def run(agent, user_code):
         check_required_directories(required_dirs)
         full_path = FileHandler.find_config_file(agent_config_dir, filename)
         if full_path is None or not os.path.exists(default_config_path):
-            logger.error(f"Missing configuration file: {filename}")
-            sys.exit(1)
+            raise_missing_config_error(filename)
         project_dir = os.path.abspath(current_dir)
         validate_agent_config(agent_name, full_path, project_dir)
 
@@ -139,10 +141,7 @@ def run(agent, user_code):
         # Perform validations that depend on config_data
         validate_schema(agent_name, schema_dir)
         if agent_name not in config_data:
-            logger.error(
-                f"The config file name '{agent_name}' does not match any workflow names {list(config_data.keys())}."
-            )
-            sys.exit(1)
+            raise_workflow_name_mismatch_error(agent_name, list(config_data.keys()))
         agent_config = config_data[agent_name]
         validate_agent_entries(agent_config)
 
@@ -159,12 +158,8 @@ def run(agent, user_code):
         )
         workflow.run()
 
-    except (ValueError, FileNotFoundError, yaml.YAMLError) as e:
-        logger.error(f"Failed to run agent workflow: {e}")
-        sys.exit(1)
     except Exception as e:
-        logger.error(f"An unexpected error occurred: {e}")
-        sys.exit(1)
+        raise_workflow_error(str(e))
 
 @main.command()
 @click.option('-a', '--agent', required=True, help="Agent name")
@@ -173,8 +168,7 @@ def clean(agent):
     try:
         AgentManager.clean_agent_directories(agent)
     except Exception as e:
-        logger.error(f"Failed to clean agent directories for '{agent}': {e}")
-        sys.exit(1)
+        raise_cleanup_error(agent, str(e))
 
 @main.command()
 @click.argument('agent_name')
@@ -188,8 +182,7 @@ def render(agent_name):
         rendered_template = render_pipeline_with_templates(agent_config_file, template_dir)
         print(rendered_template)
     except Exception as e:
-        logger.error(f"Failed to render template for agent '{agent_name}': {e}")
-        sys.exit(1)
+        raise_template_render_error(agent_name, str(e))
 
 if __name__ == "__main__":
     main()

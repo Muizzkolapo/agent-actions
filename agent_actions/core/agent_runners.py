@@ -1,13 +1,11 @@
 import os
 import sys
 import json
-import shutil
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
-from time import sleep
 
 
 
@@ -35,8 +33,6 @@ class OutputProcessor:
         self.parent_output = parent_output
         self.constructor_path = constructor_path
         self.failed = False
-
-
 
     def combine_json_arrays(self,dir_1, dir_2, output_dir):
         os.makedirs(output_dir, exist_ok=True)
