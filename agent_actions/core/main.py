@@ -1,10 +1,7 @@
 import os
-import sys
-
 import click
 import yaml
-
-from agent_actions.core.agent_runners import AgentWorkflow
+from agent_actions.workflow.agent_workflow import AgentWorkflow
 from agent_actions.core.init import init_project
 from agent_actions.docs.app import run_app
 from agent_actions.handlers.agent_handlers import AgentManager
@@ -12,7 +9,7 @@ from agent_actions.handlers.config_handler import ConfigValidator
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.handlers.schema_handler import SchemaLoader
-from agent_actions.processors.render_template import render_pipeline_with_templates
+from agent_actions.workflow.render_workflow import render_pipeline_with_templates
 from agent_actions.exceptions import (
     raise_directory_error,
     raise_duplicate_config_error,
