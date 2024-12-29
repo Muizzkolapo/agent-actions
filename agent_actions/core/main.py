@@ -52,7 +52,7 @@ def validate_agent_config(agent_name, full_path, project_dir):
         raise_duplicate_config_error(full_path)
     is_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, project_dir)
     if not is_unique:
-        raise_duplicate_config_error(error_msg)
+        raise_invalid_config_format_error()
 
 def render_and_load_config(agent_name, full_path, template_dir, rendered_workflows_dir):
     """Render templates and load configuration data."""
