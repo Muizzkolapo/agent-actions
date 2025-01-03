@@ -76,8 +76,6 @@ class AgentWorkflow:
 
     def run(self):
         try:
-            total_agents = len(self.execution_order)
-
             with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
                 for idx, agent_type in enumerate(self.execution_order):
                     agent_config = self.agent_configs[agent_type]
@@ -89,7 +87,7 @@ class AgentWorkflow:
 
                     # Agent processing
                     output_folder = self.agent_runner.run_agent(
-                        agent_config, self.agent_name, self.previous_agent_type, idx, total_agents
+                        agent_config, self.agent_name, self.previous_agent_type, idx
                     )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
