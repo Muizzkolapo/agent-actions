@@ -32,11 +32,10 @@ class AgentManager:
             print(f"Agent folder not found for agent: {agent_name}")
             return
 
-        staging_dir = os.path.join(agent_folder, 'staging')
         source_dir = os.path.join(agent_folder, 'source')
         target_dir = os.path.join(agent_folder, 'target')
 
-        for directory in [staging_dir, source_dir, target_dir]:
+        for directory in [source_dir, target_dir]:
             if os.path.exists(directory):
                 shutil.rmtree(directory)
                 print(f"Deleted directory: {directory}")
