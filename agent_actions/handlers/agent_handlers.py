@@ -68,12 +68,17 @@ class AgentManager:
 
     @staticmethod
     def process_and_generate_for_agent(agent_config,
-                                       agent_name,
-                                       previous_agent_type,
-                                       loader,
-                                       function_name):
+                                     agent_name,
+                                     previous_agent_type,
+                                     strategy):
         """
-        Processes and generates data for an agent.
+        Processes and generates data for an agent using the provided strategy.
+        
+        Args:
+            agent_config: Configuration for the agent
+            agent_name: Name of the agent
+            previous_agent_type: Type of the previous agent in workflow
+            strategy: AgentStrategy instance to execute
         """
         try:
             current_dir = os.getcwd()
@@ -96,15 +101,6 @@ class AgentManager:
                 agent_config["agent_type"]
             )
 
-            try:
-                module = importlib.import_module(f"agent_actions.processors.{loader}")
-                function_call = getattr(module, function_name)
-            except (ImportError, AttributeError) as e:
-                raise_module_import_error(function_name, loader, str(e))
-
-            if not function_call or not callable(function_call):
-                raise_function_call_error(function_name, loader)
-
             files_processed = False
             for root, _, files in os.walk(input_directory):
                 if files:
@@ -112,7 +108,7 @@ class AgentManager:
                 for file in files:
                     file_path = os.path.join(root, file)
                     try:
-                        function_call(agent_config, agent_name, file_path, input_directory, output_directory)
+                        strategy.execute(agent_config, agent_name, file_path, input_directory, output_directory)
                     except Exception as e:
                         raise_file_processing_error(file, str(e))
 
