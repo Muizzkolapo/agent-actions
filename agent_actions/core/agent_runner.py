@@ -5,7 +5,7 @@ class AgentRunner:
         self.use_tools = use_tools
         self.failed = False
 
-    def run_agent(self, agent_config, agent_name, previous_agent_type, idx, total_agents):
+    def run_agent(self, agent_config, agent_name, previous_agent_type, idx):
         try:
             loader = 'staging_loader' if idx == 0 else 'target_loader'
             function_name = 'generate_staging' if idx == 0 else 'generate_target'
