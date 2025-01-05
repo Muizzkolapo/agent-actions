@@ -18,3 +18,4 @@ google.generativeai
 click
 pyyaml
 groq
+rich
