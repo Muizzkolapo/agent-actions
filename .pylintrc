@@ -411,6 +411,8 @@ logging-modules=logging
 
 [MESSAGES CONTROL]
 
+#disable=all
+
 # Only show warnings with the listed confidence levels. Leave empty to show
 # all. Valid levels: HIGH, CONTROL_FLOW, INFERENCE, INFERENCE_FAILURE,
 # UNDEFINED.
@@ -507,6 +509,8 @@ reports=no
 # Activate the evaluation score.
 score=yes
 
+# Optionally, you can adjust the report settings
+output-format=colorized
 
 [SIMILARITIES]
 
@@ -646,9 +650,4 @@ init-import=no
 # builtins.
 redefining-builtins-modules=six.moves,past.builtins,future.builtins,builtins,io
 
-[MESSAGES CONTROL]
-#disable=all
 
-[REPORTS]
-# Optionally, you can adjust the report settings
-output-format=colorized
