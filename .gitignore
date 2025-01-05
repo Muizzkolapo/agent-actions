@@ -1,0 +1,39 @@
+**/.DS_Store
+*.DS_Store
+**/*.DS_Store
+# Ignore logs directory
+logs/
+**/__pycache__
+__pycache__/
+*__pycache__
+**/*__pycache__
+**/logs
+*logs
+*agent_actions.log
+**/*agent_actions.log
+**/agent_actions.log
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore logs
+logs/
+*.log
+
+
+
+
+
+# Ignore local environment configurations
+.env
+.pytest_cache
+
+
+# Ignore egg-info directory
+agent_actions.egg-info/
+
+# Ignore build directory
+build/
+dist/

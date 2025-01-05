@@ -15,7 +15,13 @@ clean:
 build: 
 	python3 setup.py sdist bdist_wheel && pip3 install dist/agent_actions-0.1.0-py3-none-any.whl 
 
+# dev build
+dev: 
+	pip install -e ".[dev]"
+	
 # Restart by uninstalling, cleaning, and rebuilding
 restart: uninstall clean build
 
-.PHONY: all install uninstall clean build restart
+.PHONY: all install uninstall clean build restart dev
+
+

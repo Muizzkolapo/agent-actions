@@ -108,7 +108,7 @@ class PromptProcessor:
                 sample_count = 0
 
             if sample_count > 0:
-                samples = AgentManager.load_few_shot_samples(
+                samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
                     agent_type=self.agent_config['agent_type'],
                     sample_count=sample_count

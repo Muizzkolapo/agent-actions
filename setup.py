@@ -9,28 +9,22 @@ def read(fname):
         return file.read()
 
 
+with open('requirements.txt') as f:
+    requirements = f.read().splitlines()
+
 setup(
     name='agent_actions',
     version='0.1.0',
     packages=find_packages(),
     include_package_data=True,
-    install_requires=[
-        'click',
-        'pyyaml',
-        'openai==1.26.0',
-        'tiktoken==0.6.0',
-        'flask==3.0.3',
-        'flask-cors==4.0.1',
-        'networkx==3.3',
-        'pypdf2==3.0.1',
-        'python-docx==1.1.2',
-        'pandas==2.2.2',
-        'openpyxl==3.1.2',
-        'beautifulsoup4==4.12.3',
-        'google-api-python-client==2.130.0',
-        'groq',
-        'grpcio==1.66.0'
-    ],
+    install_requires=requirements,
+    extras_require={
+        'dev': [
+            'pytest',
+            'pylint',
+            'pytest-cov'
+        ],
+    },
     entry_points={
         'console_scripts': [
             'agent=agent_actions.core.main:main'

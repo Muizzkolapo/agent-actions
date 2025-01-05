@@ -60,7 +60,7 @@ class FewShotSampleManager:
         if sample_count > 0:
             try:
                 _, _, few_shot_samples_path = FileHandler.get_agent_paths(self.agent_name)
-                samples = AgentManager.load_few_shot_samples(
+                samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
                     self.agent_config['agent_type'],
                     sample_count

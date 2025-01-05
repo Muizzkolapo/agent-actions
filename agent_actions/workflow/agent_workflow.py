@@ -87,7 +87,10 @@ class AgentWorkflow:
 
                     # Agent processing
                     output_folder = self.agent_runner.run_agent(
-                        agent_config, self.agent_name, self.previous_agent_type, idx
+                        agent_config, 
+                        self.agent_name, 
+                        self.previous_agent_type, 
+                        -1 if idx == len(self.execution_order) - 1 else idx
                     )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
