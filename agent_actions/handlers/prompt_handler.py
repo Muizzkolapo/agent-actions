@@ -1,5 +1,7 @@
 import os
 import re
+import json 
+import random
 from collections import Counter
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.exceptions import (
@@ -107,3 +109,38 @@ class PromptLoader:
 
         except Exception as e:
             raise e
+
+    @staticmethod
+    def load_few_shot_samples(few_shot_samples_path, agent_type, sample_count=3):
+        """
+        Load random sample objects from the JSON files in the sample output directory for a specific agent type.
+
+        Parameters:
+            few_shot_samples_path (str): Base path to the sample output directory.
+            agent_type (str): The type of the agent to load samples for.
+            sample_count (int): Number of random sample objects to load.
+
+        Returns:
+            list: List of randomly selected sample objects.
+        """
+
+        agent_samples_path = os.path.join(few_shot_samples_path, agent_type)
+        if not os.path.exists(agent_samples_path):
+            return []
+
+        sample_files = [f for f in os.listdir(agent_samples_path) if f.endswith('.json')]
+        all_samples = []
+
+        for sample_file in sample_files:
+            with open(os.path.join(agent_samples_path, sample_file), 'r') as file:
+                data = json.load(file)
+                if isinstance(data, list):
+                    all_samples.extend(data)
+                elif isinstance(data, dict):
+                    all_samples.append(data)
+
+        if sample_count > 0 and all_samples:
+            selected_samples = random.sample(all_samples, min(sample_count, len(all_samples)))
+        else:
+            selected_samples = []
+        return selected_samples

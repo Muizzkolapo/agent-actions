@@ -90,8 +90,7 @@ class AgentWorkflow:
                         agent_config, 
                         self.agent_name, 
                         self.previous_agent_type, 
-                        -1 if idx == len(self.execution_order) - 1 else idx,
-                        len(self.execution_order)
+                        -1 if idx == len(self.execution_order) - 1 else idx
                     )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
