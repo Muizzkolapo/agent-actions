@@ -77,6 +77,9 @@ class AgentWorkflow:
     def run(self):
         try:
             with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
+                # Get total number of agents
+                total_agents = len(self.execution_order)
+
                 for idx, agent_type in enumerate(self.execution_order):
                     agent_config = self.agent_configs[agent_type]
                     self.agent_status[agent_type]["status"] = "⏳ Running"
@@ -85,12 +88,16 @@ class AgentWorkflow:
                     # Update live display
                     live.update(self.create_status_table())
 
-                    # Agent processing
+                    # Check if this is the last agent
+                    is_last_agent = idx == total_agents - 1
+
+                    # Agent processing with actual index and last agent flag
                     output_folder = self.agent_runner.run_agent(
                         agent_config, 
                         self.agent_name, 
-                        self.previous_agent_type, 
-                        -1 if idx == len(self.execution_order) - 1 else idx
+                        self.previous_agent_type,
+                        idx,  # Current index
+                        is_last_agent  # Flag indicating if this is the last agent
                     )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
@@ -108,7 +115,6 @@ class AgentWorkflow:
             # Move the completion message outside the 'with Live' block
             self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         except Exception as e:
-            pass
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
             self.failed = True
             raise
