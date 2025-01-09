@@ -35,11 +35,14 @@ class AgentRunner:
             'intermediate': IntermediateStrategy()
         }
 
+
+
     def process_and_generate_for_agent(self,
-                                       agent_config,
-                                       agent_name,
-                                       previous_agent_type,
-                                       strategy):
+                                    agent_config,
+                                    agent_name,
+                                    previous_agent_type,
+                                    strategy,
+                                    idx):
         """
         Processes and generates data for an agent using the provided strategy.
         
@@ -48,37 +51,41 @@ class AgentRunner:
             agent_name (str): Name of the agent.
             previous_agent_type (str): Type of the previous agent in workflow.
             strategy (AgentStrategy): AgentStrategy instance to execute.
+            idx (int): Numeric index to prefix folder names.
 
         Returns:
             str: Path to the output directory.
 
         Raises:
-            FileNotFoundError: If agent folder or input files are not found
-            ValueError: If file processing fails
-            OSError: If there are issues with file system operations
+            FileNotFoundError: If agent folder or input files are not found.
+            ValueError: If file processing fails.
+            OSError: If there are issues with file system operations.
         """
         current_dir = os.getcwd()
+        
         agent_folder = FileHandler.find_specific_folder(
             current_dir, agent_name, 'agent_io'
         )
-
         if agent_folder is None:
-            raise FileNotFoundError(
-                f"Agent folder not found for agent: {agent_name}"
-            )
+            raise FileNotFoundError(f"Agent folder not found for agent: {agent_name}")
 
-        # Determine input directory
+        indexed_agent_type = f"node_{idx}_{agent_config['agent_type']}"
+
         if previous_agent_type:
-            input_directory = os.path.join(agent_folder, 'target', previous_agent_type)
+            prev_idx = idx - 1
+            indexed_previous_agent_type = f"node_{prev_idx}_{previous_agent_type}"
+            input_directory = os.path.join(agent_folder, 'target', indexed_previous_agent_type)
         else:
             input_directory = os.path.join(agent_folder, 'staging')
 
-        # Determine output directory
         output_directory = os.path.join(
-            agent_folder, 'target', agent_config["agent_type"]
+            agent_folder, 'target', indexed_agent_type
         )
 
+        os.makedirs(output_directory, exist_ok=True)
+
         files_processed = False
+
         for root, _, files in os.walk(input_directory):
             if files:
                 files_processed = True
@@ -100,7 +107,8 @@ class AgentRunner:
 
         return output_directory
 
-    def run_agent(self, agent_config, agent_name, previous_agent_type, idx):
+
+    def run_agent(self, agent_config, agent_name, previous_agent_type, idx, is_last_agent=False):
         """
         Runs an agent with the appropriate strategy based on its position in the workflow.
 
@@ -109,17 +117,14 @@ class AgentRunner:
             agent_name (str): Name of the agent
             previous_agent_type (str): Type of the previous agent in workflow
             idx (int): Current agent's index in workflow
+            is_last_agent (bool): Flag indicating if this is the last agent
 
         Returns:
             str: Path to the output directory
-
-        Raises:
-            FileNotFoundError: If agent folder is not found
-            ValueError: If file processing fails
         """
         if idx == 0:
             strategy = self.strategies['initial']
-        elif idx == -1:
+        elif is_last_agent:
             strategy = self.strategies['terminal']
         else:
             strategy = self.strategies['intermediate']
@@ -138,6 +143,7 @@ class AgentRunner:
             agent_config,
             agent_name,
             previous_agent_type,
-            strategy
+            strategy,
+            idx
         )
         return output_folder
