@@ -3,6 +3,7 @@ from agent_actions.vendors.openai_vendor import OpenAIHandler
 from agent_actions.vendors.gemini_vendor import GeminiHandler
 from agent_actions.vendors.cohere_vendor import CohereHandler
 from agent_actions.vendors.mistral_vendor import MistralHandler
+from agent_actions.vendors.anthropic_vendor import ClaudeHandler
 from agent_actions.vendors.groq_llama import GroqLlama3Handler
 from agent_actions.vendors.tools_vendor import ToolHandler
 from agent_actions.transformers.string_transformer import StringProcessor
@@ -63,6 +64,9 @@ def create_dynamic_agent(agent_config, udf, context_data_str, formatted_prompt=N
     elif model_vendor.lower() == 'mistral':
         response_cohere = MistralHandler.invoke(agent_config, prompt_config, context_data, schema)
         response = [response_cohere]
+    elif model_vendor.lower() == 'anthropic':
+        response_ClaudeHandler = ClaudeHandler.invoke(agent_config, prompt_config, context_data, schema)
+        response = [response_ClaudeHandler]
     elif model_vendor.lower() == 'groq': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, context_data, schema)
         response = [response_groq_llama]
