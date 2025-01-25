@@ -26,9 +26,8 @@ class ClaudeHandler:
             messages=[{"role": "user", "content":prompt_dedent}]
         )
 
-        intermediate_json = response.content[1].input
-        final_data = [intermediate_json]     
-        return final_data  
+        response_content = response.content[1].input
+        return response_content  
    
 
 
