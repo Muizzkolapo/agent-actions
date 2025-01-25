@@ -6,6 +6,7 @@ from agent_actions.vendors.mistral_vendor import MistralHandler
 from agent_actions.vendors.anthropic_vendor import ClaudeHandler
 from agent_actions.vendors.groq_llama import GroqLlama3Handler
 from agent_actions.vendors.tools_vendor import ToolHandler
+from agent_actions.vendors.deepseek_vendor import DeepSeekHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.schema_handler import SchemaLoader 
 from agent_actions.handlers.prompt_handler import PromptLoader 
@@ -70,6 +71,9 @@ def create_dynamic_agent(agent_config, udf, context_data_str, formatted_prompt=N
     elif model_vendor.lower() == 'groq': 
         response_groq_llama = GroqLlama3Handler.invoke(agent_config, formatted_prompt, context_data, schema)
         response = [response_groq_llama]
+    elif model_vendor.lower() == 'deepseek':
+        response_DeepSeekHandler = DeepSeekHandler.invoke(agent_config, prompt_config, context_data, schema)
+        response = [response_DeepSeekHandler]
     elif model_vendor.lower() == 'tool': 
         response_ToolHandler = ToolHandler.invoke(agent_config, context_data)
         if granularity == 'file':
