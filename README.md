@@ -165,3 +165,201 @@ not this anything within key_ideas cant be side collected
 
 -- conditional clause can not be used at start of the agent workflow
 - sideoutout cannot be used too
+
+
+
+
+
+
+
+
+
+
+
+
+
+```markdown
+# Unified Schema Definition Guide
+
+Your unified schema file is the cornerstone for configuring how our dynamic agent validates and processes inputs. This file is written in YAML (or JSON) and is transformed by our tool into a JSON Schema for target systems like OpenAI or Anthropic.
+
+## Structure Overview
+A unified schema consists of two main parts:
+
+- **Name**: The identifier for the schema.
+- **Fields**: An array of field definitions that outline each property, including its type and any additional constraints.
+
+When compiled for a target system (for example, OpenAI), the unified schema is transformed into a JSON Schema similar to:
+
+```json
+{
+  "name": "YourSchemaName",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "field1": { "type": "string" },
+      "field2": { "type": "array", "items": { "type": "string" } }
+    },
+    "required": ["field1", "field2"],
+    "additionalProperties": false
+  }
+}
+```
+
+## Unified Schema Definition
+The unified schema uses familiar JSON Schema vocabulary. Below is an example that defines a simple schema:
+
+```yaml
+name: KeyIdeaMapper
+fields:
+  - id: Key_idea_explanation
+    type: string
+    required: true
+  - id: usage_scenarios
+    type: string
+    required: true
+```
+
+## Field Attributes
+Each field in the fields array supports both our unified schema definitions as well as standard JSON Schema terms. Here’s a breakdown of the expected attributes:
+
+### **id (string, required)**
+The unique identifier for the field. This will be the key in the generated JSON schema.
+- **JSON Schema equivalent**: Used as the property name in "properties".
+
+### **type (string, required)**
+Defines the data type of the field. Supported types include "string", "number", "integer", "boolean", "object", and "array".
+- **JSON Schema equivalent**: This directly corresponds to the "type" keyword.
+
+### **required (boolean, optional)**
+If set to true, the field’s id will be added to the "required" array in the final JSON Schema.
+
+### **items (object, optional)**
+If the field is an "array", the items attribute describes the schema for each item in the array.
+- **JSON Schema equivalent**: This is used within an array type definition to specify "items".
+
+### **enum (array, optional)**
+Specifies a fixed set of acceptable values for the field.
+- **JSON Schema equivalent**: This directly maps to the "enum" keyword in JSON Schema.
+
+### **validators (array, optional)**
+Allows you to define custom validation rules. For instance, you can specify rules using the "not" keyword to exclude values. Optionally, you can also provide an "errorMessage" for when validation fails.
+- **JSON Schema equivalent**: This can translate to constraints like "minimum", "maximum", "pattern", or even custom keywords defined by JSON Schema extensions.
+
+### **mappings (object, optional)**
+Provides target-system-specific field names. The keys are the lowercased names of the target systems (e.g., openai, anthropic), and the value is the identifier that should be used in the final schema.
+
+#### **Usage note:** If no mapping is provided for the target system, the original id is used.
+
+## Standard JSON Schema Terms and How to Define Them
+In addition to our unified schema attributes, users are encouraged to use standard JSON Schema terminology for constraints and validations:
+
+### **type:**
+Specifies the type of data (e.g., "string", "number", "object", "array").
+
+### **properties:**
+When the type is "object", define its properties using a mapping. Our tool builds this automatically from your fields array.
+
+### **required:**
+An array of property names that must be present. In our unified schema, marking a field as required (`required: true`) automatically includes its id in this list.
+
+### **additionalProperties:**
+Set to false to disallow any properties not defined in the schema. This is included by default in the compiled schema.
+
+### **items:**
+When defining an array, use "items" to specify the schema for each element. For example:
+
+```yaml
+- id: what_to_test_for
+  type: array
+  items:
+    type: string
+  required: true
+```
+
+### **enum:**
+Use "enum" to specify a list of valid values.
+
+### **Validation Keywords:**
+Beyond basic types, JSON Schema supports keywords such as:
+
+- `minimum` and `maximum` for numeric ranges.
+- `minLength` and `maxLength` for strings.
+- `pattern` for regex-based validation.
+
+You can include these constraints via our `validators` attribute in your unified schema. For example:
+
+```yaml
+- id: age
+  type: number
+  validators:
+    - not: { minimum: 0 }
+      errorMessage: "Age must be a positive number"
+```
+
+By combining these JSON Schema keywords with our unified schema format, you have a powerful way to specify exactly how your input data should be structured and validated.
+
+## Example: A More Complex Schema
+
+```yaml
+name: TestInsight_Builder
+fields:
+  - id: what_to_test_for
+    type: array
+    items:
+      type: string
+    required: true
+  - id: status
+    type: string
+    enum: [active, inactive, pending]
+    required: true
+  - id: age
+    type: number
+    validators:
+      - not: { minimum: 0 }
+        errorMessage: "Age must be a positive number"
+  - id: first_name
+    type: string
+    mappings:
+      openai: firstName
+      anthropic: first_name
+```
+
+### **Compiled JSON Schema Example**
+
+```json
+{
+  "name": "TestInsight_Builder",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "what_to_test_for": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "status": {
+        "type": "string",
+        "enum": ["active", "inactive", "pending"]
+      },
+      "age": {
+        "type": "number",
+        "not": { "minimum": 0 },
+        "errorMessage": "Age must be a positive number"
+      },
+      "firstName": { "type": "string" }
+    },
+    "required": ["what_to_test_for", "status", "age", "firstName"],
+    "additionalProperties": false
+  }
+}
+```
+
+## Summary
+- **Unified Schema Format:** Define your schema in YAML/JSON using `name` and `fields`.
+- **Field Attributes:** Use `id`, `type`, `required`, `items`, `enum`, `validators`, and `mappings` to specify field details.
+- **Standard JSON Schema Terms:** Leverage JSON Schema keywords such as `type`, `properties`, `required`, `additionalProperties`, `items`, and `enum` to create robust validation rules.
+- **Compilation Process:** Your unified schema is processed by our tool into a target-specific JSON Schema, ensuring compatibility with different model vendors like OpenAI or Anthropic.
+
+For additional details on JSON Schema, you may refer to the JSON Schema official documentation.
+```
+
