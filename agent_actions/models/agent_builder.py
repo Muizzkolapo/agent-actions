@@ -10,6 +10,7 @@ from agent_actions.vendors.deepseek_vendor import DeepSeekHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.schema_handler import SchemaLoader 
 from agent_actions.handlers.prompt_handler import PromptLoader 
+from agent_actions.models.schema_change import compile_unified_schema
 
 
 
@@ -53,7 +54,15 @@ def create_dynamic_agent(agent_config, udf, context_data_str, formatted_prompt=N
     granularity = agent_config.get('granularity', 'record').lower()
     
     schema_name = agent_config.get('schema_name') if model_vendor.lower() != 'tool' else None
-    schema = SchemaLoader.load_schema(schema_name) if schema_name else None
+    if schema_name:
+        base_schema = SchemaLoader.load_schema(schema_name)
+        # Compile the schema based on the model vendor
+        if model_vendor.lower() in ['openai', 'anthropic', 'gemini']:
+            schema = compile_unified_schema(base_schema, model_vendor)
+        else:
+            schema = base_schema
+    else:
+        schema = None
     
     if model_vendor.lower() == 'openai':
         response = OpenAIHandler.invoke(agent_config, prompt_config, context_data, schema)

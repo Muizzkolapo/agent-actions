@@ -27,8 +27,7 @@ class GeminiHandler:
             <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
             <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>
 
-            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
-            RULES: ALWAYS READ INPUT AS STRING
+            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST
         """
         prompt_dedent = dedent(prompt)
         response_temp = llm.generate_content(prompt_dedent)
