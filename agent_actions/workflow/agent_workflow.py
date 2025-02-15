@@ -57,7 +57,6 @@ class AgentWorkflow:
         table.add_column("#", justify="center", style="cyan")
         table.add_column("Agent Name", justify="left", style="green")
         table.add_column("Status", justify="center", style="yellow")
-        table.add_column("Prompt", justify="left", style="blue", max_width=60)
         table.add_column("Schema", justify="left", style="magenta", max_width=40)
 
         for idx, (agent_name, details) in enumerate(self.agent_status.items(), start=1):
@@ -68,7 +67,6 @@ class AgentWorkflow:
                 str(idx),
                 agent_name,
                 details["status"],
-                details["prompt"],
                 schema
             )
 

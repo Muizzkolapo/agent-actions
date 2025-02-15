@@ -12,6 +12,7 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.core.utils import Utils
 from agent_actions.exceptions import (
     raise_source_data_load_error,
     raise_few_shot_sample_parse_error,
@@ -98,6 +99,11 @@ class DataGenerator:
             )
             formatted_prompt = StringProcessor.replace_placeholders(formatted_prompt, contents)
 
+
+
+
+            #remove_collection = self.agent_config.get('remove_collection', '')
+            #contents = Utils.filter_dictionary(contents,remove_collection)
             return agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
