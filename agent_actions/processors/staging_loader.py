@@ -31,7 +31,20 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     content_processor = StagingContentLoader(agent_config, agent_name)
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
-        chunks = Tokenizer.split_text_content(content, agent_config["chunk_config"]["chunk_size"], agent_config["chunk_config"]["overlap"])
+        # Get chunk configuration with defaults if not specified
+        chunk_config = agent_config.get("chunk_config", {})
+        chunk_size = chunk_config.get("chunk_size", 1000)  # Default chunk size
+        chunk_overlap = chunk_config.get("overlap", 200)   # Default overlap
+        tokenizer_model = agent_config.get("tokenizer_model", "cl100k_base")
+        split_method = agent_config.get("split_method", "tiktoken")
+        
+        chunks = Tokenizer.split_text_content(
+            content, 
+            chunk_size, 
+            chunk_overlap,
+            tokenizer_model=tokenizer_model,
+            split_method=split_method
+        )
         data_chunk, src_text = content_processor._process_chunks(chunks)
 
     elif file_type == '.json':
