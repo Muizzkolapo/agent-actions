@@ -7,6 +7,8 @@ import sys
 import textwrap
 from typing import List
 import tiktoken
+import spacy
+from sentence_transformers import SentenceTransformer
 from agent_actions.exceptions import (
     raise_invalid_input_error,
     raise_function_call_error,
@@ -172,20 +174,124 @@ class Tokenizer:
         except Exception as e:
             raise_tokenization_error(string[:100] + "...", str(e))
 
+
     @staticmethod
-    def split_text_content(text: str, chunk_size: int, overlap: int, encoding_name: str = "cl100k_base") -> List[str]:
-        """Split text into chunks of a specified size with a specified overlap."""
+    def split_text_content(
+        text: str,
+        chunk_size: int,
+        overlap: int,
+        tokenizer_model: str = "cl100k_base",  # For tiktoken encoding
+        split_method: str = "tiktoken",
+    ) -> List[str]:
+        """
+        Split text into chunks of a specified size with a specified overlap.
+        
+        Parameters:
+            text (str): The text to split into chunks.
+            chunk_size (int): The size of each chunk in tokens or characters.
+            overlap (int): The number of tokens or characters to overlap between chunks.
+            tokenizer_model (str): The model name to use for tokenization and transformers.
+                                  For tiktoken: encoding name (e.g., "cl100k_base")
+                                  For transformers: model name (e.g., "all-MiniLM-L6-v2")
+            split_method (str): The method to use for splitting text. Options:
+                                "tiktoken" (default): Split by tokens using tiktoken
+                                "chars": Split by characters
+                                "spacy": Split using spaCy's sentence tokenization
+                                "transformers": Split using sentence-transformers
+                                Or a custom function name from the tools directory
+        
+        Returns:
+            List[str]: A list of text chunks.
+        """
+        if chunk_size <= 0:
+            raise ValueError("chunk_size must be a positive integer.")
+        if overlap < 0:
+            raise ValueError("overlap cannot be negative.")
+        if overlap >= chunk_size and split_method in ("tiktoken", "chars"):
+            raise ValueError("overlap must be smaller than chunk_size for token/character splits.")
+
         try:
-            encoding = tiktoken.get_encoding(encoding_name)
-            tokens = encoding.encode(text)
-            chunks = []
-            start_idx = 0
-            while start_idx < len(tokens):
-                end_idx = min(start_idx + chunk_size, len(tokens))
-                chunk = tokens[start_idx:end_idx]
-                decoded_chunk = encoding.decode(chunk)
-                chunks.append(decoded_chunk)
-                start_idx += chunk_size - overlap
-            return chunks
+            # ---------------------------------------------------------------------
+            # 1. Tiktoken-based splitting
+            # ---------------------------------------------------------------------
+            if split_method == "tiktoken":
+                encoding = tiktoken.get_encoding(tokenizer_model)
+                tokens = encoding.encode(text)
+
+                chunks = []
+                start_idx = 0
+                while start_idx < len(tokens):
+                    end_idx = min(start_idx + chunk_size, len(tokens))
+                    chunk = tokens[start_idx:end_idx]
+                    decoded_chunk = encoding.decode(chunk)
+                    chunks.append(decoded_chunk)
+                    start_idx += (chunk_size - overlap)
+
+                return chunks
+
+            # ---------------------------------------------------------------------
+            # 2. Character-based splitting
+            # ---------------------------------------------------------------------
+            elif split_method == "chars":
+                chunks = []
+                start_idx = 0
+                while start_idx < len(text):
+                    end_idx = min(start_idx + chunk_size, len(text))
+                    chunks.append(text[start_idx:end_idx])
+                    start_idx += (chunk_size - overlap)
+
+                return chunks
+
+            # ---------------------------------------------------------------------
+            # 3. spaCy-based splitting
+            # ---------------------------------------------------------------------
+            elif split_method == "spacy":
+                try:
+                    nlp = spacy.load("en_core_web_sm")
+                except OSError:
+                    raise ImportError(
+                        "spaCy model 'en_core_web_sm' is not installed. "
+                        "Install via: 'python -m spacy download en_core_web_sm'"
+                    )
+
+                encoding = tiktoken.get_encoding(tokenizer_model)
+                doc = nlp(text)
+                sentences = [sent.text for sent in doc.sents]
+
+                chunks = []
+                current_chunk = []
+                current_length = 0
+
+                for sentence in sentences:
+                    sentence_tokens = len(encoding.encode(sentence))
+                    if current_length + sentence_tokens > chunk_size and current_chunk:
+                        chunks.append(" ".join(current_chunk))
+                        overlap_sentences = current_chunk[-max(1, int(len(current_chunk) * overlap / chunk_size)):]
+                        current_chunk = overlap_sentences
+                        current_length = sum(len(encoding.encode(s)) for s in current_chunk)
+
+                    current_chunk.append(sentence)
+                    current_length += sentence_tokens
+
+                if current_chunk:
+                    chunks.append(" ".join(current_chunk))
+
+                return chunks
+
+            # ---------------------------------------------------------------------
+            # 5. Custom user-defined method
+            # ---------------------------------------------------------------------
+            else:
+                try:
+                    tools_path = os.environ.get("TOOLS_PATH", "tools")
+                    if tools_path and tools_path not in sys.path:
+                        sys.path.insert(0, os.path.abspath(tools_path))
+
+                    module = importlib.import_module(split_method)
+                    function = getattr(module, split_method)
+                    return function(text, chunk_size, overlap, tokenizer_model)
+                except Exception as e:
+                    raise_user_function_error(split_method, str(e))
+
         except Exception as e:
             raise_tokenization_error(text[:100] + "...", str(e))
