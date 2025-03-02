@@ -89,6 +89,11 @@ class DataGenerator:
             if not isinstance(contents, dict):
                 contents = {"data": contents}
 
+            # Apply remove_collection before creating the agent
+            remove_collection = self.agent_config.get('remove_collection', [])
+            if remove_collection:
+                contents = DataTransformer.remove_schema_objects(contents, remove_collection)
+
             raw_prompt = self.agent_config.get('prompt', '')
             if raw_prompt.startswith('$'):
                 raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
@@ -99,11 +104,6 @@ class DataGenerator:
             )
             formatted_prompt = StringProcessor.replace_placeholders(formatted_prompt, contents)
 
-
-
-
-            #remove_collection = self.agent_config.get('remove_collection', '')
-            #contents = Utils.filter_dictionary(contents,remove_collection)
             return agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
@@ -119,17 +119,11 @@ class DataProcessor:
 
     def process_item(self, contents, generated_data, guid):
         side_collection = self.agent_config.get('side_collection', [])
-        remove_collection = self.agent_config.get('remove_collection', [])
+        # Removed remove_collection since it's now applied before agent creation
         
         if side_collection:
             updated_data = [
                 DataTransformer.update_schema_objects(contents, data, side_collection)
-                for data in generated_data
-            ]
-            return DataTransformer.transform_structure([{guid: updated_data}])
-        elif remove_collection:
-            updated_data = [
-                DataTransformer.remove_schema_objects(data, remove_collection)
                 for data in generated_data
             ]
             return DataTransformer.transform_structure([{guid: updated_data}])

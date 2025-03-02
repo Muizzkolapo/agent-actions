@@ -36,10 +36,16 @@ class PromptProcessor:
             raw_prompt = self._get_raw_prompt()
             source_content = self._load_source_content(source_path, context_data) if source_path else None
             formatted_prompt = self._format_prompt(raw_prompt, source_content, context_data)
-
+            
             if source_path is not None and isinstance(context_data, dict) and "guid" in context_data and "content" in context_data:
                 guid = context_data["guid"]
                 context_data_enriched = context_data["content"]
+                
+                # Get remove_collection and apply it before create_dynamic_agent
+                remove_collection = self.agent_config.get('remove_collection', [])
+                if remove_collection:
+                    context_data_enriched = DataTransformer.remove_schema_objects(context_data_enriched, remove_collection)
+                
                 response = agent_builder.create_dynamic_agent(
                     self.agent_config,
                     self.agent_name,
@@ -47,17 +53,10 @@ class PromptProcessor:
                     formatted_prompt
                 )
                 side_collection = self.agent_config.get('side_collection', [])
-                remove_collection = self.agent_config.get('remove_collection', [])
 
                 if side_collection:
                     updated_response = [
                         DataTransformer.update_schema_objects(context_data_enriched, data, side_collection)
-                        for data in response
-                    ]
-                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
-                elif remove_collection:
-                    updated_response = [
-                        DataTransformer.remove_schema_objects(data, remove_collection)
                         for data in response
                     ]
                     transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
@@ -66,6 +65,11 @@ class PromptProcessor:
 
                 src_text = [{guid: formatted_prompt}]
             else:
+                # Get remove_collection and apply it before create_dynamic_agent
+                remove_collection = self.agent_config.get('remove_collection', [])
+                if remove_collection and isinstance(context_data, dict):
+                    context_data = DataTransformer.remove_schema_objects(context_data, remove_collection)
+                
                 response = agent_builder.create_dynamic_agent(
                     self.agent_config,
                     self.agent_name,
@@ -74,17 +78,10 @@ class PromptProcessor:
                 )
                 guid = Utils.generate_id() if not isinstance(context_data, dict) or "guid" not in context_data else context_data["guid"]
                 side_collection = self.agent_config.get('side_collection', [])
-                remove_collection = self.agent_config.get('remove_collection', [])
 
                 if side_collection:
                     updated_response = [
                         DataTransformer.update_schema_objects(context_data, data, side_collection)
-                        for data in response
-                    ]
-                    transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
-                elif remove_collection:
-                    updated_response = [
-                        DataTransformer.remove_schema_objects(data, remove_collection)
                         for data in response
                     ]
                     transformed_response = DataTransformer.transform_structure([{guid: updated_response}])
