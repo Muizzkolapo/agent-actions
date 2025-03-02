@@ -58,3 +58,19 @@ class Utils:
             raise ValueError("There is a cycle in the dependencies")
 
         return sorted_nodes[::-1]
+    
+
+
+    @staticmethod
+    def filter_dictionary(data, keys_to_remove):
+        """
+            Returns a new dictionary with the specified keys removed.
+
+            Parameters:
+                data (dict): The original dictionary.
+                keys_to_remove (list): A list of keys to remove from the dictionary.
+
+            Returns:
+                dict: A new dictionary without the specified keys.
+        """
+        return {key: value for key, value in data.items() if key not in keys_to_remove}
