@@ -1,44 +1,95 @@
 """
-Module for Loading and running user-defined functions from a specified module.
+Module for loading and running user-defined functions from a specified module.
 """
 import importlib
-from agent_actions.core.exceptions import raise_udf_not_found, raise_udf_execution_error
+from typing import Any, Callable, Dict
+
+from agent_actions.core.exceptions import UDFNotFoundError, UDFExecutionError
+from agent_actions.core.error_utils import try_operation
 
 
-def load_user_defined_function(module_name, function_name):
+def load_user_defined_function(module_name: str, function_name: str) -> Callable:
     """
     Load a user-defined function from a specified module.
+    
+    Args:
+        module_name: Name of the module containing the function
+        function_name: Name of the function to load
+        
+    Returns:
+        The loaded function
+        
+    Raises:
+        UDFNotFoundError: If the module or function cannot be found
     """
-    try:
-        module = importlib.import_module(module_name)
-        function = getattr(module, function_name)
-        return function
-    except ImportError as e:
-        raise_udf_not_found(function_name, module_name)
-    except AttributeError as e:
-        raise_udf_not_found(function_name, module_name)
+    def _load_function():
+        try:
+            module = importlib.import_module(module_name)
+            function = getattr(module, function_name)
+            return function
+        except ImportError:
+            raise UDFNotFoundError(
+                function_name=function_name,
+                module_name=module_name,
+                reason="Module not found"
+            )
+        except AttributeError:
+            raise UDFNotFoundError(
+                function_name=function_name,
+                module_name=module_name,
+                reason="Function not found in module"
+            )
+    
+    return try_operation(
+        _load_function,
+        f"Failed to load function '{function_name}' from module '{module_name}'",
+        UDFNotFoundError,
+        function_name=function_name,
+        module_name=module_name
+    )
 
-def execute_user_defined_function(udf_name, input_data):
+
+def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any]) -> Any:
     """
     Dynamically execute a user-defined function (UDF).
     
-    Parameters:
-        udf_name (str): The full path to the UDF (e.g., module_name.function_name).
-        input_data (dict): The input data to pass to the UDF.
+    Args:
+        udf_name: The full path to the UDF (e.g., module_name.function_name)
+        input_data: The input data to pass to the UDF
     
     Returns:
-        The result of the UDF execution.
+        The result of the UDF execution
+        
+    Raises:
+        UDFNotFoundError: If the module or function cannot be found
+        UDFExecutionError: If there's an error executing the function
     """
-    module_name, func_name = udf_name.rsplit('.', 1)
+    # Split the UDF name into module and function parts
+    try:
+        module_name, func_name = udf_name.rsplit('.', 1)
+    except ValueError:
+        raise UDFNotFoundError(
+            function_name=udf_name,
+            module_name="unknown",
+            reason="Invalid UDF format. Expected 'module.function'"
+        )
     
-    try:
-        module = importlib.import_module(module_name)
-        udf = getattr(module, func_name)
-    except (ImportError, AttributeError) as e:
-        raise_udf_not_found(func_name, module_name)
-
-    try:
-        result = udf(input_data)
-        return result
-    except Exception as e:
-        raise_udf_execution_error(udf_name, str(e))
+    # Load the function
+    udf = load_user_defined_function(module_name, func_name)
+    
+    # Execute the function
+    def _execute_function():
+        try:
+            return udf(input_data)
+        except Exception as e:
+            raise UDFExecutionError(
+                function_name=func_name,
+                reason=str(e)
+            )
+    
+    return try_operation(
+        _execute_function,
+        f"Failed to execute function '{func_name}'",
+        UDFExecutionError,
+        function_name=func_name
+    )
