@@ -7,7 +7,7 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.exceptions import (
+from agent_actions.processors.exceptions import (
     raise_prompt_processing_error,
     raise_few_shot_sample_error,
     raise_source_content_error,

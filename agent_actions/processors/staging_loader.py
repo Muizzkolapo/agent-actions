@@ -5,7 +5,7 @@ from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_content import StagingContentLoader
 from agent_actions.handlers.file_handler import FileReader, FileWriter
 import json
-from agent_actions.exceptions import (
+from agent_actions.processors.exceptions import (
     raise_file_type_error,
     raise_agent_builder_import_error
 )

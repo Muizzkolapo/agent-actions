@@ -9,7 +9,7 @@ from typing import List
 import tiktoken
 import spacy
 from sentence_transformers import SentenceTransformer
-from agent_actions.exceptions import (
+from agent_actions.transformers.exceptions import (
     raise_invalid_input_error,
     raise_function_call_error,
     raise_tokenization_error,

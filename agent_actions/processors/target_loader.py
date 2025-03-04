@@ -3,7 +3,7 @@ import json
 import os
 from agent_actions.handlers.file_handler import FileReader, FileWriter  
 from agent_actions.processors.target_content import TargetContentProcessor
-from agent_actions.exceptions import (
+from agent_actions.processors.exceptions import (
     raise_target_processing_error,
     raise_target_save_error,
     raise_side_output_error

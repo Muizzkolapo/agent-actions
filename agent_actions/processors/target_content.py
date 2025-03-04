@@ -13,7 +13,7 @@ from agent_actions.handlers.prompt_handler import PromptLoader
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.core.utils import Utils
-from agent_actions.exceptions import (
+from agent_actions.processors.exceptions import (
     raise_source_data_load_error,
     raise_few_shot_sample_parse_error,
     raise_few_shot_sample_path_error,

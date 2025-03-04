@@ -2,7 +2,7 @@
 Module for Loading and running user-defined functions from a specified module.
 """
 import importlib
-from agent_actions.exceptions import raise_udf_not_found, raise_udf_execution_error
+from agent_actions.core.exceptions import raise_udf_not_found, raise_udf_execution_error
 
 
 def load_user_defined_function(module_name, function_name):

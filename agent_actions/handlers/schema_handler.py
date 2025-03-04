@@ -3,7 +3,7 @@ from agent_actions.handlers.file_handler import FileHandler
 import yaml
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
 import sys
-from agent_actions.exceptions import (
+from agent_actions.handlers.exceptions import (
     raise_schema_not_found_error,
     raise_schema_render_error,
     raise_multiple_schema_missing_error,
