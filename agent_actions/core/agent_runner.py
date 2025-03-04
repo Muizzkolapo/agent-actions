@@ -2,7 +2,7 @@
 
 import os
 from agent_actions.handlers.file_handler import FileHandler
-from agent_actions.exceptions import (
+from agent_actions.core.exceptions import (
     raise_file_processing_error,
     raise_no_files_found_error
 )

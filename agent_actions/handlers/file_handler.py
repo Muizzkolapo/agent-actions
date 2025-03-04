@@ -7,7 +7,7 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
-from agent_actions.exceptions import (
+from agent_actions.handlers.exceptions import (
     raise_file_type_error,
     raise_file_read_error,
     raise_file_write_error,

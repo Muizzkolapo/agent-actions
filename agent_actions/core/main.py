@@ -10,7 +10,7 @@ from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.handlers.schema_handler import SchemaLoader
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
-from agent_actions.exceptions import (
+from agent_actions.core.exceptions import (
     raise_directory_error,
     raise_duplicate_config_error,
     raise_missing_config_error,

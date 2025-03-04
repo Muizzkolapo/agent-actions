@@ -4,7 +4,7 @@ import json
 import random
 from collections import Counter
 from agent_actions.handlers.file_handler import FileHandler
-from agent_actions.exceptions import (
+from agent_actions.handlers.exceptions import (
     raise_duplicate_prompt_error,
     raise_prompt_not_found_error,
     raise_prompt_directory_error,
