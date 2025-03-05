@@ -6,13 +6,6 @@ import uuid
 from collections import deque
 from typing import Dict, List, Any, Set, TypeVar, Callable
 import os
-from agent_actions.core.exceptions import (
-    WorkflowError, 
-    ValidationError,
-    ErrorCategory,
-    DirectoryError
-)
-from agent_actions.core.error_utils import handle_errors, try_operation
 
 # Type variables for generics
 T = TypeVar('T')
@@ -36,7 +29,6 @@ class Utils:
         return str(uuid.uuid4())
 
     @staticmethod
-    @handle_errors(error_category=ErrorCategory.WORKFLOW)
     def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
         """
         Perform a topological sort on the dependencies graph.
@@ -49,26 +41,18 @@ class Utils:
             A list of nodes in topologically sorted order.
 
         Raises:
-            WorkflowError: If there is a cycle in the dependencies.
+            ValueError: If there is a cycle in the dependencies or invalid input.
         """
         # Validate input
         if not isinstance(dependencies, dict):
-            raise ValidationError(
-                message="Dependencies must be a dictionary",
-                error_code="INVALID_DEPENDENCIES",
-                details={"actual_type": type(dependencies).__name__}
-            )
-            
+            raise ValueError("Dependencies must be a dictionary")
+
         # Calculate in-degrees
         in_degree = {node: 0 for node in dependencies}
         for node, dependent_nodes in dependencies.items():
             for dependent_node in dependent_nodes:
                 if dependent_node not in in_degree:
-                    raise WorkflowError(
-                        message=f"Dependent node {dependent_node} not found in dependency graph",
-                        error_code="UNKNOWN_DEPENDENCY",
-                        workflow_name="topological_sort"
-                    )
+                    raise ValueError(f"Dependent node {dependent_node} not found in dependency graph")
                 in_degree[dependent_node] += 1
 
         # Initialize queue with nodes having zero in-degree
@@ -88,12 +72,7 @@ class Utils:
         if len(sorted_nodes) != len(dependencies):
             # Find nodes involved in cycles for better error reporting
             cycle_nodes = set(dependencies.keys()) - set(sorted_nodes)
-            raise WorkflowError(
-                message="Cyclic dependency detected in the workflow",
-                error_code="CYCLIC_DEPENDENCY",
-                workflow_name="topological_sort",
-                details={"cycle_nodes": list(cycle_nodes)}
-            )
+            raise ValueError(f"Cyclic dependency detected in the workflow: {list(cycle_nodes)}")
 
         return sorted_nodes[::-1]  # Reverse for correct order
 
@@ -136,17 +115,6 @@ class Utils:
             
         Returns:
             The path to the directory
-            
-        Raises:
-            DirectoryError: If the directory cannot be created
         """
-        def _create_directory():
-            os.makedirs(path, exist_ok=True)
-            return path
-            
-        return try_operation(
-            _create_directory,
-            f"Failed to create directory: {path}",
-            DirectoryError,
-            directory=path
-        )
+        os.makedirs(path, exist_ok=True)
+        return path

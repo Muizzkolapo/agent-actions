@@ -4,12 +4,6 @@ import json
 import random
 from collections import Counter
 from agent_actions.handlers.file_handler import FileHandler
-from agent_actions.handlers.exceptions import (
-    raise_duplicate_prompt_error,
-    raise_prompt_not_found_error,
-    raise_prompt_directory_error,
-    raise_prompt_file_not_found_error
-)
 
 class PromptLoader:
     """
@@ -27,9 +21,6 @@ class PromptLoader:
 
         Returns:
             str: The extracted prompt.
-
-        Raises:
-            PromptNotFoundError: If the prompt is not found in the content.
         """
         pattern = re.compile(rf"\{{prompt {re.escape(prompt_name)}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
         match = pattern.search(content)
@@ -37,7 +28,7 @@ class PromptLoader:
         if match:
             return match.group(1).strip()
         else:
-            raise_prompt_not_found_error(prompt_name)
+            print(f"Prompt '{prompt_name}' not found in the content.")
 
     @staticmethod
     def get_all_prompt_names(content):
@@ -61,14 +52,11 @@ class PromptLoader:
         Parameters:
             content (str): The content containing the prompts.
             filename (str): The name of the file being validated.
-
-        Raises:
-            DuplicatePromptError: If duplicate prompt names are found.
         """
         prompt_names = PromptLoader.get_all_prompt_names(content)
         duplicates = [item for item, count in Counter(prompt_names).items() if count > 1]
         if duplicates:
-            raise_duplicate_prompt_error(filename, duplicates)
+            print(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
 
     @staticmethod
     def load_prompt(prompt_name):
@@ -80,24 +68,19 @@ class PromptLoader:
 
         Returns:
             str: The loaded prompt.
-
-        Raises:
-            PromptDirectoryError: If the prompt directory is not found.
-            PromptFileNotFoundError: If the prompt file is not found.
-            PromptNotFoundError: If the prompt is not found in the file.
         """
         try:
             current_dir = os.getcwd()
             prompt_dir = os.path.join(current_dir, "prompt_store")
 
             if not os.path.exists(prompt_dir):
-                raise_prompt_directory_error()
+                print("Prompt directory not found.")
 
             prompt_file_name, prompt_key = prompt_name.split('.', 1)
             prompt_file_path = FileHandler.find_file_in_directory(prompt_dir, f"{prompt_file_name}.md")
 
             if not prompt_file_path:
-                raise_prompt_file_not_found_error(f"{prompt_file_name}.md")
+                print(f"Prompt file '{prompt_file_name}.md' not found.")
 
             with open(prompt_file_path, 'r', encoding='utf-8') as file:
                 content = file.read()
@@ -108,7 +91,7 @@ class PromptLoader:
             return PromptLoader.extract_prompt(content, prompt_key)
 
         except Exception as e:
-            raise e
+            print(f"Error loading prompt: {str(e)}")
 
     @staticmethod
     def load_few_shot_samples(few_shot_samples_path, agent_type, sample_count=3):

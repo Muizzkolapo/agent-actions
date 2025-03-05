@@ -7,14 +7,7 @@ import sys
 import textwrap
 from typing import List
 import tiktoken
-import spacy
 from sentence_transformers import SentenceTransformer
-from agent_actions.transformers.exceptions import (
-    raise_invalid_input_error,
-    raise_function_call_error,
-    raise_tokenization_error,
-    raise_user_function_error
-)
 
 class StringProcessor:
     """
@@ -31,12 +24,10 @@ class StringProcessor:
 
         Returns:
             str: The processed string treated as plain text.
-
-        Raises:
-            InvalidInputError: If the input is not a string.
         """
         if not isinstance(input_text, str):
-            raise_invalid_input_error(type(input_text).__name__)
+            print(f"Invalid input type: {type(input_text).__name__}")
+            return input_text
             
         pattern = re.compile(r'({.*?})')
         escaped_text = pattern.sub(lambda x: x.group(0).replace("{", "{{").replace("}", "}}"), input_text)
@@ -120,7 +111,7 @@ class StringProcessor:
                         transformed_text = "Error: No valid return from function."
                     single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
                 except Exception as e:
-                    raise_function_call_error(function_name, str(e))
+                    print(f"Function call error for '{function_name}': {str(e)}")
 
             return single_text
 
@@ -129,7 +120,8 @@ class StringProcessor:
         elif isinstance(text, str):
             return process_single_text(text)
         else:
-            raise_invalid_input_error(type(text).__name__)
+            print(f"Invalid input type: {type(text).__name__}")
+            return text
 
     @staticmethod
     def call_user_function(function_name, tools_path=None, context_data_str=None):
@@ -144,9 +136,6 @@ class StringProcessor:
 
         Returns:
             Any: The result returned by the user function.
-
-        Raises:
-            UserFunctionError: If the function cannot be called or an error occurs.
         """
         try:
             if tools_path and tools_path not in sys.path:
@@ -156,7 +145,7 @@ class StringProcessor:
             result = function(context_data_str) if context_data_str else function()
             return result
         except Exception as e:
-            raise_user_function_error(function_name, str(e))
+            print(f"User function error for '{function_name}': {str(e)}")
 
 
 class Tokenizer:
@@ -172,8 +161,8 @@ class Tokenizer:
             num_tokens = len(encoding.encode(string))
             return num_tokens
         except Exception as e:
-            raise_tokenization_error(string[:100] + "...", str(e))
-
+            print(f"Tokenization error for string '{string[:100]}...': {str(e)}")
+            return 0
 
     @staticmethod
     def split_text_content(
@@ -204,11 +193,14 @@ class Tokenizer:
             List[str]: A list of text chunks.
         """
         if chunk_size <= 0:
-            raise ValueError("chunk_size must be a positive integer.")
+            print("Error: chunk_size must be a positive integer.")
+            return []
         if overlap < 0:
-            raise ValueError("overlap cannot be negative.")
+            print("Error: overlap cannot be negative.")
+            return []
         if overlap >= chunk_size and split_method in ("tiktoken", "chars"):
-            raise ValueError("overlap must be smaller than chunk_size for token/character splits.")
+            print("Error: overlap must be smaller than chunk_size for token/character splits.")
+            return []
 
         try:
             # ---------------------------------------------------------------------
@@ -247,12 +239,10 @@ class Tokenizer:
             # ---------------------------------------------------------------------
             elif split_method == "spacy":
                 try:
-                    nlp = spacy.load("en_core_web_sm")
+                    nlp = "None" #spacy.load("en_core_web_sm")
                 except OSError:
-                    raise ImportError(
-                        "spaCy model 'en_core_web_sm' is not installed. "
-                        "Install via: 'python -m spacy download en_core_web_sm'"
-                    )
+                    print("spaCy model 'en_core_web_sm' is not installed.")
+                    return []
 
                 encoding = tiktoken.get_encoding(tokenizer_model)
                 doc = nlp(text)
@@ -291,7 +281,9 @@ class Tokenizer:
                     function = getattr(module, split_method)
                     return function(text, chunk_size, overlap, tokenizer_model)
                 except Exception as e:
-                    raise_user_function_error(split_method, str(e))
+                    print(f"User function error for '{split_method}': {str(e)}")
+                    return []
 
         except Exception as e:
-            raise_tokenization_error(text[:100] + "...", str(e))
+            print(f"Tokenization error for text '{text[:100]}...': {str(e)}")
+            return []

@@ -3,12 +3,6 @@ from agent_actions.handlers.file_handler import FileHandler
 import yaml
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
 import sys
-from agent_actions.handlers.exceptions import (
-    raise_schema_not_found_error,
-    raise_schema_render_error,
-    raise_multiple_schema_missing_error,
-    raise_single_schema_missing_error
-)
 
 class SchemaLoader:
     """
@@ -34,7 +28,7 @@ class SchemaLoader:
             return dynamic_schema_names
 
         except Exception as e:
-            raise_schema_render_error(agent_name, str(e))
+            print(f"Error rendering schema for agent '{agent_name}': {str(e)}")
 
     @staticmethod
     def load_schema(schema_name):
@@ -58,7 +52,7 @@ class SchemaLoader:
                         schema_paths.append(os.path.join(root, file))
 
             if not schema_paths:
-                raise_schema_not_found_error(schema_name)
+                print(f"Schema '{schema_name}' not found.")
 
             selected_path = None
             shortest_path_length = float('inf')
@@ -74,7 +68,7 @@ class SchemaLoader:
                 selected_path = schema_paths[0]
 
             if not selected_path:
-                raise_schema_not_found_error(schema_name)
+                print(f"Schema '{schema_name}' not found.")
 
             with open(selected_path, 'r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
@@ -82,7 +76,7 @@ class SchemaLoader:
             return documents
 
         except Exception as e:
-            raise_schema_render_error(schema_name, str(e))
+            print(f"Error loading schema '{schema_name}': {str(e)}")
 
     @staticmethod  
     def validate_schemas_exist(agent_name, directory):
@@ -109,6 +103,6 @@ class SchemaLoader:
         
         if missing_files:
             if len(missing_files) == 1:
-                raise_single_schema_missing_error(missing_files[0])
+                print(f"Schema file missing: {missing_files[0]}")
             else:
-                raise_multiple_schema_missing_error(missing_files)
+                print(f"Multiple schema files missing: {', '.join(missing_files)}")

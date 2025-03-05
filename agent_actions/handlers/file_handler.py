@@ -7,13 +7,6 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
-from agent_actions.handlers.exceptions import (
-    raise_file_type_error,
-    raise_file_read_error,
-    raise_file_write_error,
-    raise_agent_folder_error,
-    raise_config_file_error
-)
 
 class FileReader:
     def __init__(self, file_path):
@@ -37,9 +30,9 @@ class FileReader:
             try:
                 return file_type_handlers[self.file_type]()
             except Exception as e:
-                raise_file_read_error(self.file_path, str(e))
+                print(f"Error reading file {self.file_path}: {str(e)}")
         else:
-            raise_file_type_error(self.file_type)
+            print(f"Unsupported file type: {self.file_type}")
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
@@ -99,9 +92,9 @@ class FileWriter:
                     writer = csv.writer(file)
                     writer.writerows(data)
                 else:
-                    raise_file_type_error(self.file_type)
+                    print(f"Unsupported file type: {self.file_type}")
         except Exception as e:
-            raise_file_write_error(self.file_path, str(e))
+            print(f"Error writing file {self.file_path}: {str(e)}")
 
     def write_target(self, data):
         try:
@@ -109,14 +102,14 @@ class FileWriter:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except Exception as e:
-            raise_file_write_error(self.file_path, str(e))
+            print(f"Error writing file {self.file_path}: {str(e)}")
 
     def write_source(self, data):
         try:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except Exception as e:
-            raise_file_write_error(self.file_path, str(e))
+            print(f"Error writing file {self.file_path}: {str(e)}")
 
 class FileHandler:
     """
@@ -195,9 +188,9 @@ class FileHandler:
         io_dir = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
 
         if agent_config_dir is None:
-            raise_agent_folder_error(f"Configuration directory for agent '{agent_name}'")
+            print(f"Configuration directory for agent '{agent_name}' not found.")
         if io_dir is None:
-            raise_agent_folder_error(f"IO directory for agent '{agent_name}'")
+            print(f"IO directory for agent '{agent_name}' not found.")
 
         few_shot_samples_path = os.path.join(io_dir, 'few_shot_samples')
         if not os.path.exists(few_shot_samples_path):
@@ -225,7 +218,7 @@ class FileHandler:
         if parent_dir != base_dir:  # Ensure we're not at the root
             return FileHandler.find_config_file(parent_dir, filename)
 
-        raise_config_file_error(filename, f"Config file not found in {base_dir} or its parent directories")
+        print(f"Config file '{filename}' not found in {base_dir} or its parent directories.")
 
     @staticmethod
     def get_folder_after_agent_config(path):

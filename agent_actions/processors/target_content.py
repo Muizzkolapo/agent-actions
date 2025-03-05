@@ -12,18 +12,6 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
 from abc import ABC, abstractmethod
 from agent_actions.core.tooling import execute_user_defined_function
-from agent_actions.core.utils import Utils
-from agent_actions.processors.exceptions import (
-    raise_source_data_load_error,
-    raise_few_shot_sample_parse_error,
-    raise_few_shot_sample_path_error,
-    raise_content_type_error,
-    raise_item_processing_error,
-    raise_content_processing_error,
-    raise_side_output_processing_error,
-    raise_unexpected_format_error,
-    raise_agent_creation_error,
-)
 
 class ContentProcessor(ABC):
     def __init__(self, agent_config, agent_name):
@@ -48,7 +36,7 @@ class SourceDataLoader:
             with open(source_path, 'r') as file:
                 return json.load(file)
         except Exception as e:
-            raise_source_data_load_error(file_path, str(e))
+            print(f"Error loading source data from {file_path}: {str(e)}")
 
 # Few-Shot Sample Manager
 class FewShotSampleManager:
@@ -69,15 +57,15 @@ class FewShotSampleManager:
                 if isinstance(contents, dict):
                     contents['samples'] = samples
                 else:
-                    raise_content_type_error()
+                    print("Error: Content type is not a dictionary.")
             except FileNotFoundError as e:
-                raise_few_shot_sample_path_error(str(e))
+                print(f"Few-shot sample path error: {str(e)}")
 
     def _parse_sample_count(self):
         try:
             return int(self.agent_config.get("use_few_shot_samples", 0))
         except ValueError as e:
-            raise_few_shot_sample_parse_error(self.agent_config.get("use_few_shot_samples"))
+            print(f"Few-shot sample parse error: {str(e)}")
 
 class DataGenerator:
     def __init__(self, agent_config, agent_name):
@@ -111,7 +99,7 @@ class DataGenerator:
                 formatted_prompt
             )
         except Exception as e:
-            raise_agent_creation_error(str(e))
+            print(f"Agent creation error: {str(e)}")
 
 class DataProcessor:
     def __init__(self, agent_config):
@@ -148,11 +136,11 @@ class TargetContentProcessor(ContentProcessor):
                     processed_item = self._process_single_item(items, source_data)
                     processed_data.extend(processed_item)
                 except Exception as e:
-                    raise_item_processing_error(items.get('guid', 'unknown'), str(e))
+                    print(f"Item processing error for GUID {items.get('guid', 'unknown')}: {str(e)}")
 
             return processed_data
         except Exception as e:
-            raise_content_processing_error(str(e))
+            print(f"Content processing error: {str(e)}")
 
     def process_for_side_output(self, data, file_path):
         try:
@@ -170,13 +158,13 @@ class TargetContentProcessor(ContentProcessor):
                             else:
                                 main_output.append(sub_item)
                     else:
-                        raise_unexpected_format_error(str(processed_item))
+                        print(f"Unexpected format error: {str(processed_item)}")
                 except Exception as e:
-                    raise_item_processing_error(item.get('guid', 'unknown'), str(e))
+                    print(f"Item processing error for GUID {item.get('guid', 'unknown')}: {str(e)}")
 
             return main_output, side_output
         except Exception as e:
-            raise_side_output_processing_error(str(e))
+            print(f"Side output processing error: {str(e)}")
 
     def _process_single_item(self, item, source_data):
         try:
@@ -195,7 +183,7 @@ class TargetContentProcessor(ContentProcessor):
                 generated_data = self.data_generator.create_agent_with_data(contents, source_content)
                 return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
-            raise_item_processing_error(guid, str(e))
+            print(f"Item processing error for GUID {guid}: {str(e)}")
 
     def process_file_level(self, data):
         try:
@@ -203,4 +191,4 @@ class TargetContentProcessor(ContentProcessor):
             generated_data = self.data_generator.create_agent_with_data(data)
             return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
-            raise_content_processing_error(str(e))
+            print(f"Content processing error: {str(e)}")

@@ -10,11 +10,6 @@ from typing import Dict, Any, Optional
 
 from agent_actions.processors.staging_loader import generate_staging
 from agent_actions.processors.target_loader import generate_target
-from agent_actions.core.exceptions import (
-    WorkflowError,
-    FileProcessingError
-)
-from agent_actions.core.error_utils import handle_errors, try_operation
 
 
 class AgentStrategy(ABC):
@@ -43,10 +38,6 @@ class AgentStrategy(ABC):
             
         Returns:
             Path to the generated output file
-            
-        Raises:
-            FileProcessingError: If there's an error processing the file
-            WorkflowError: If there's an error with the workflow execution
         """
         pass
 
@@ -58,7 +49,6 @@ class InitialStrategy(AgentStrategy):
     This strategy typically handles the initial loading and processing of data.
     """
     
-    @handle_errors()
     def execute(self, 
                agent_config: Dict[str, Any], 
                agent_name: str, 
@@ -79,16 +69,8 @@ class InitialStrategy(AgentStrategy):
             
         Returns:
             Path to the generated output file
-            
-        Raises:
-            FileProcessingError: If there's an error processing the file
         """
-        return try_operation(
-            lambda: generate_staging(agent_config, agent_name, file_path, base_directory, output_directory),
-            f"Failed to generate staging data for file: {file_path}",
-            FileProcessingError,
-            file_path=file_path
-        )
+        return generate_staging(agent_config, agent_name, file_path, base_directory, output_directory)
 
 
 class TerminalStrategy(AgentStrategy):
@@ -98,7 +80,6 @@ class TerminalStrategy(AgentStrategy):
     This strategy typically handles the final processing and output generation.
     """
     
-    @handle_errors()
     def execute(self, 
                agent_config: Dict[str, Any], 
                agent_name: str, 
@@ -119,16 +100,8 @@ class TerminalStrategy(AgentStrategy):
             
         Returns:
             Path to the generated output file
-            
-        Raises:
-            FileProcessingError: If there's an error processing the file
         """
-        return try_operation(
-            lambda: generate_target(agent_config, agent_name, file_path, base_directory, output_directory),
-            f"Failed to generate target data for file: {file_path}",
-            FileProcessingError,
-            file_path=file_path
-        )
+        return generate_target(agent_config, agent_name, file_path, base_directory, output_directory)
 
 
 class IntermediateStrategy(AgentStrategy):
@@ -138,7 +111,6 @@ class IntermediateStrategy(AgentStrategy):
     This strategy handles the processing of data between initial and terminal agents.
     """
     
-    @handle_errors()
     def execute(self, 
                agent_config: Dict[str, Any], 
                agent_name: str, 
@@ -159,13 +131,5 @@ class IntermediateStrategy(AgentStrategy):
             
         Returns:
             Path to the generated output file
-            
-        Raises:
-            FileProcessingError: If there's an error processing the file
         """
-        return try_operation(
-            lambda: generate_target(agent_config, agent_name, file_path, base_directory, output_directory),
-            f"Failed to generate intermediate data for file: {file_path}",
-            FileProcessingError,
-            file_path=file_path
-        )
+        return generate_target(agent_config, agent_name, file_path, base_directory, output_directory)

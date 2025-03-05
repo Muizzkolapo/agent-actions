@@ -1,7 +1,6 @@
 import os
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from agent_actions.workflow.exceptions import raise_template_load_error, raise_yaml_render_error
 from agent_actions.handlers.prompt_handler import PromptLoader
 
 def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
@@ -25,7 +24,7 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
             module = template.module
             env.globals.update(vars(module))
         except Exception as e:
-            raise_template_load_error(template_file, str(e))
+            print(f"Error loading template '{template_file}': {str(e)}")
     
     try:
         with open(yaml_path, 'r', encoding='utf-8') as yaml_file:
@@ -77,4 +76,4 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         
         return rendered_yaml_content
     except Exception as e:
-        raise_yaml_render_error(yaml_path, str(e))
+        print(f"Error rendering YAML from '{yaml_path}': {str(e)}")

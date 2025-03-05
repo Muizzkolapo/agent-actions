@@ -5,10 +5,6 @@ from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates  
 import glob
-from agent_actions.handlers.exceptions import (
-    raise_config_load_error,
-    raise_default_config_load_error,
-)
 
 
 class ConfigValidator:
@@ -164,13 +160,13 @@ class ConfigManager:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
             self.user_config = yaml.safe_load(config_data)
         except Exception as e:
-            raise_config_load_error(self.constructor_path, str(e))
+            raise ValueError(f"Error loading config from {self.constructor_path}: {str(e)}")
 
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
         except Exception as e:
-            raise_default_config_load_error(self.default_path, str(e))
+            raise ValueError(f"Error loading default config from {self.default_path}: {str(e)}")
 
     def validate_agent_name(self):
         self.agent_name = ConfigValidator.find_agent_name(self.user_config)
