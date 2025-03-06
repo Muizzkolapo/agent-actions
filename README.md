@@ -163,7 +163,7 @@ not this anything within key_ideas cant be side collected
 
 -- when using tool json loads for input and json dumps for output
 
--- conditional clause can not be used at start of the agent workflow
+-- conditional clause can not be used at start of the agent workflow for reprocess to work on an object condition needs to return -> True
 - sideoutout cannot be used too
 
 
