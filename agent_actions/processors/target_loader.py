@@ -1,7 +1,8 @@
 """Module for target loader."""
 import json
 import os
-from agent_actions.handlers.file_handler import FileReader, FileWriter  
+from agent_actions.handlers.file_reader import FileReader
+from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.processors.target_content import TargetContentProcessor
 
 TOOL_VENDOR = 'tool'

@@ -3,7 +3,8 @@ import os
 from agent_actions.models import agent_builder
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_content import StagingContentLoader
-from agent_actions.handlers.file_handler import FileReader, FileWriter
+from agent_actions.handlers.file_reader import FileReader
+from agent_actions.handlers.file_writer import FileWriter
 import json
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):

@@ -1,9 +1,12 @@
 import os
 import re
-import json 
+import json
 import random
 from collections import Counter
+from pathlib import Path
+from typing import Any, List, Optional
 from agent_actions.handlers.file_handler import FileHandler
+
 
 class PromptLoader:
     """
@@ -11,7 +14,7 @@ class PromptLoader:
     """
 
     @staticmethod
-    def extract_prompt(content, prompt_name):
+    def extract_prompt(content: str, prompt_name: str) -> str:
         """
         Extracts a prompt from the content using the prompt_name.
 
@@ -21,17 +24,19 @@ class PromptLoader:
 
         Returns:
             str: The extracted prompt.
+
+        Raises:
+            ValueError: If the prompt is not found.
         """
         pattern = re.compile(rf"\{{prompt {re.escape(prompt_name)}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
         match = pattern.search(content)
-
         if match:
             return match.group(1).strip()
         else:
-            print(f"Prompt '{prompt_name}' not found in the content.")
+            raise ValueError(f"Prompt '{prompt_name}' not found in the content.")
 
     @staticmethod
-    def get_all_prompt_names(content):
+    def get_all_prompt_names(content: str) -> List[str]:
         """
         Extracts all prompt names from the content.
 
@@ -39,27 +44,30 @@ class PromptLoader:
             content (str): The content containing the prompts.
 
         Returns:
-            list: A list of prompt names found in the content.
+            List[str]: A list of prompt names found in the content.
         """
         pattern = re.compile(r"\{prompt\s+(\w+)\}")
         return pattern.findall(content)
 
     @staticmethod
-    def validate_unique_prompts(filename, content):
+    def validate_unique_prompts(filename: str, content: str) -> None:
         """
         Validates that all prompt names in the content are unique.
 
         Parameters:
-            content (str): The content containing the prompts.
             filename (str): The name of the file being validated.
+            content (str): The content containing the prompts.
+
+        Raises:
+            ValueError: If duplicate prompt names are found.
         """
         prompt_names = PromptLoader.get_all_prompt_names(content)
         duplicates = [item for item, count in Counter(prompt_names).items() if count > 1]
         if duplicates:
-            print(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
+            raise ValueError(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
 
     @staticmethod
-    def load_prompt(prompt_name):
+    def load_prompt(prompt_name: str) -> str:
         """
         Retrieve and generate a prompt based on the prompt name provided.
 
@@ -68,33 +76,31 @@ class PromptLoader:
 
         Returns:
             str: The loaded prompt.
+
+        Raises:
+            ValueError: If the prompt directory, file, or prompt format is invalid.
         """
-        try:
-            current_dir = os.getcwd()
-            prompt_dir = os.path.join(current_dir, "prompt_store")
+        current_dir = Path.cwd()
+        prompt_dir = current_dir / "prompt_store"
 
-            if not os.path.exists(prompt_dir):
-                print("Prompt directory not found.")
+        if not prompt_dir.exists():
+            raise ValueError("Prompt directory not found.")
 
-            prompt_file_name, prompt_key = prompt_name.split('.', 1)
-            prompt_file_path = FileHandler.find_file_in_directory(prompt_dir, f"{prompt_file_name}.md")
+        if '.' not in prompt_name:
+            raise ValueError("Invalid prompt format. Expected 'filename.prompt_key'.")
 
-            if not prompt_file_path:
-                print(f"Prompt file '{prompt_file_name}.md' not found.")
+        prompt_file_name, prompt_key = prompt_name.split('.', 1)
+        prompt_file_str = FileHandler.find_file_in_directory(str(prompt_dir), f"{prompt_file_name}.md")
+        if not prompt_file_str:
+            raise ValueError(f"Prompt file '{prompt_file_name}.md' not found.")
 
-            with open(prompt_file_path, 'r', encoding='utf-8') as file:
-                content = file.read()
-
-            filename = os.path.basename(prompt_file_path)
-            PromptLoader.validate_unique_prompts(filename, content)
-
-            return PromptLoader.extract_prompt(content, prompt_key)
-
-        except Exception as e:
-            print(f"Error loading prompt: {str(e)}")
+        prompt_file_path = Path(prompt_file_str)
+        content = prompt_file_path.read_text(encoding='utf-8')
+        PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
+        return PromptLoader.extract_prompt(content, prompt_key)
 
     @staticmethod
-    def load_few_shot_samples(few_shot_samples_path, agent_type, sample_count=3):
+    def load_few_shot_samples(few_shot_samples_path: str, agent_type: str, sample_count: int = 3) -> List[Any]:
         """
         Load random sample objects from the JSON files in the sample output directory for a specific agent type.
 
@@ -104,26 +110,25 @@ class PromptLoader:
             sample_count (int): Number of random sample objects to load.
 
         Returns:
-            list: List of randomly selected sample objects.
+            List[Any]: List of randomly selected sample objects.
         """
-
-        agent_samples_path = os.path.join(few_shot_samples_path, agent_type)
-        if not os.path.exists(agent_samples_path):
+        agent_samples_path = Path(few_shot_samples_path) / agent_type
+        if not agent_samples_path.exists():
             return []
 
-        sample_files = [f for f in os.listdir(agent_samples_path) if f.endswith('.json')]
-        all_samples = []
+        sample_files = list(agent_samples_path.glob("*.json"))
+        all_samples: List[Any] = []
 
         for sample_file in sample_files:
-            with open(os.path.join(agent_samples_path, sample_file), 'r') as file:
-                data = json.load(file)
+            try:
+                data = json.loads(sample_file.read_text(encoding='utf-8'))
                 if isinstance(data, list):
                     all_samples.extend(data)
                 elif isinstance(data, dict):
                     all_samples.append(data)
+            except Exception as e:
+                raise ValueError(f"Error reading sample file '{sample_file}': {e}")
 
         if sample_count > 0 and all_samples:
-            selected_samples = random.sample(all_samples, min(sample_count, len(all_samples)))
-        else:
-            selected_samples = []
-        return selected_samples
+            return random.sample(all_samples, min(sample_count, len(all_samples)))
+        return []
