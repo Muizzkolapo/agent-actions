@@ -27,7 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'agent=agent_actions.core.main:main'
+            'agent=agent_actions.cli.main:main'
         ],
     },
     package_data={
