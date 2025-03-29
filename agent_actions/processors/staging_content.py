@@ -7,12 +7,6 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.processors.exceptions import (
-    raise_prompt_processing_error,
-    raise_few_shot_sample_error,
-    raise_source_content_error,
-    raise_dynamic_agent_error
-    )
 
 class PromptProcessor:
     def __init__(self, agent_config, agent_name):
@@ -92,7 +86,7 @@ class PromptProcessor:
 
             return transformed_response, src_text
         except Exception as e:
-            raise_dynamic_agent_error(self.agent_name, str(e))
+            print(f"Error in staging_dynamic_creator: {str(e)}")
 
     def _append_few_shot_samples(self, context_data):
         """Append few shot samples to the input documentation if configured."""
@@ -118,7 +112,7 @@ class PromptProcessor:
 
             return context_data
         except Exception as e:
-            raise_few_shot_sample_error(str(e))
+            print(f"Error in _append_few_shot_samples: {str(e)}")
 
     def _get_raw_prompt(self):
         """Retrieve and process the raw prompt from the agent configuration."""
@@ -130,7 +124,7 @@ class PromptProcessor:
                 raw_prompt = "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
-            raise_prompt_processing_error(str(e))
+            print(f"Error in _get_raw_prompt: {str(e)}")
 
     def _format_prompt(self, raw_prompt, source_content, context_data):
         """Replace placeholders in the raw prompt with source content and input documentation."""
@@ -139,7 +133,7 @@ class PromptProcessor:
             formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, context_data)
             return formatted_prompt
         except Exception as e:
-            raise_prompt_processing_error(str(e))
+            print(f"Error in _format_prompt: {str(e)}")
 
     def _load_source_content(self, source_path, context_data):
         """Load source content based on the input documentation's GUID."""
@@ -153,7 +147,7 @@ class PromptProcessor:
                             return item[guid]
             return None
         except Exception as e:
-            raise_source_content_error(source_path, str(e))
+            print(f"Error in _load_source_content: {str(e)}")
 
 
 class StagingContentLoader:

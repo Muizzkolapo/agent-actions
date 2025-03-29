@@ -1,44 +1,80 @@
 """
-Module for Loading and running user-defined functions from a specified module.
+Module for loading and running user-defined functions from a specified module.
 """
+
 import importlib
-from agent_actions.core.exceptions import raise_udf_not_found, raise_udf_execution_error
+from typing import Any, Callable, Dict, Tuple
 
 
-def load_user_defined_function(module_name, function_name):
+def _split_udf_name(udf_name: str) -> Tuple[str, str]:
+    """
+    Split a fully qualified UDF name into its module and function parts.
+
+    Args:
+        udf_name: The full UDF path in the format 'module_name.function_name'.
+
+    Returns:
+        A tuple (module_name, function_name).
+
+    Raises:
+        ValueError: If the udf_name format is invalid.
+    """
+    try:
+        module_name, func_name = udf_name.rsplit('.', 1)
+        return module_name, func_name
+    except ValueError:
+        raise ValueError("Invalid UDF format. Expected 'module.function'")
+
+
+def load_user_defined_function(module_name: str, function_name: str) -> Callable:
     """
     Load a user-defined function from a specified module.
+
+    Args:
+        module_name: Name of the module containing the function.
+        function_name: Name of the function to load.
+
+    Returns:
+        The loaded function.
+
+    Raises:
+        ImportError: If the module cannot be found.
+        AttributeError: If the function cannot be found in the module.
     """
     try:
         module = importlib.import_module(module_name)
+    except ImportError:
+        raise ImportError(f"Module '{module_name}' not found.")
+    
+    try:
         function = getattr(module, function_name)
-        return function
-    except ImportError as e:
-        raise_udf_not_found(function_name, module_name)
-    except AttributeError as e:
-        raise_udf_not_found(function_name, module_name)
+    except AttributeError:
+        raise AttributeError(f"Function '{function_name}' not found in module '{module_name}'.")
+    
+    return function
 
-def execute_user_defined_function(udf_name, input_data):
+
+def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any]) -> Any:
     """
     Dynamically execute a user-defined function (UDF).
-    
-    Parameters:
-        udf_name (str): The full path to the UDF (e.g., module_name.function_name).
-        input_data (dict): The input data to pass to the UDF.
-    
+
+    Args:
+        udf_name: The full path to the UDF (e.g., 'module_name.function_name').
+        input_data: The input data to pass to the UDF.
+
     Returns:
         The result of the UDF execution.
-    """
-    module_name, func_name = udf_name.rsplit('.', 1)
-    
-    try:
-        module = importlib.import_module(module_name)
-        udf = getattr(module, func_name)
-    except (ImportError, AttributeError) as e:
-        raise_udf_not_found(func_name, module_name)
 
+    Raises:
+        ImportError: If the module cannot be found.
+        AttributeError: If the function cannot be found in the module.
+        Exception: If there's an error executing the function.
+    """
+    module_name, func_name = _split_udf_name(udf_name)
+    udf = load_user_defined_function(module_name, func_name)
+    
     try:
         result = udf(input_data)
         return result
     except Exception as e:
-        raise_udf_execution_error(udf_name, str(e))
+        raise Exception(f"Error executing function '{func_name}': {str(e)}")

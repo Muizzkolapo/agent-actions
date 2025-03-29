@@ -3,12 +3,9 @@ import os
 from agent_actions.models import agent_builder
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_content import StagingContentLoader
-from agent_actions.handlers.file_handler import FileReader, FileWriter
+from agent_actions.handlers.file_reader import FileReader
+from agent_actions.handlers.file_writer import FileWriter
 import json
-from agent_actions.processors.exceptions import (
-    raise_file_type_error,
-    raise_agent_builder_import_error
-)
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
     """
@@ -23,7 +20,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         output_directory (str): Directory where the output file will be saved.
     """
     if agent_builder is None:
-        raise_agent_builder_import_error()
+        print("Agent builder import error.")
 
     file_reader = FileReader(file_path)
     content = file_reader.read()
@@ -57,7 +54,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
 
     else:
-        raise_file_type_error(file_type)
+        print(f"Unsupported file type: {file_type}")
 
     relative_path = os.path.relpath(file_path, base_directory)
     output_file_path = os.path.join(output_directory, relative_path.replace(file_type, '.json'))

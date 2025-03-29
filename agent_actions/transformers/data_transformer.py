@@ -1,11 +1,5 @@
 """Module for Data Manipulation Functions."""
 import copy
-from agent_actions.transformers.exceptions import (
-    raise_data_extraction_error,
-    raise_schema_update_error,
-    raise_guid_not_found_error,
-    raise_data_type_error
-)
 
 class DataTransformer:
     """
@@ -45,7 +39,7 @@ class DataTransformer:
 
             return updated_data
         except Exception as e:
-            raise_schema_update_error(key, str(e))
+            print(f"Error updating schema objects: {str(e)}")
 
     @staticmethod
     def remove_schema_objects(data, keys_to_update):
@@ -66,7 +60,7 @@ class DataTransformer:
                     del updated_data[key]
             return updated_data
         except Exception as e:
-            raise_schema_update_error(key, str(e))
+            print(f"Error removing schema objects: {str(e)}")
 
     @staticmethod
     def extract_objects(input_data):
@@ -81,7 +75,7 @@ class DataTransformer:
         """
         try:
             if not isinstance(input_data, (dict, list)):
-                raise_data_type_error("dict or list", type(input_data).__name__)
+                print(f"Data type error: Expected dict or list, got {type(input_data).__name__}")
 
             if isinstance(input_data, list):
                 if input_data and isinstance(input_data[0], dict):
@@ -95,7 +89,7 @@ class DataTransformer:
                         return field_value
             return []
         except Exception as e:
-            raise_data_extraction_error(str(e))
+            print(f"Error extracting objects: {str(e)}")
 
     @staticmethod
     def flatten_to_list_of_dicts(nested_lists):
@@ -166,5 +160,5 @@ class DataTransformer:
         for item in data:
             if guid in item:
                 return item[guid]
-        raise_guid_not_found_error(guid)
+        print(f"GUID not found: {guid}")
 

@@ -1,48 +1,59 @@
-import os
+"""
+Module for initializing new Agent Actions projects.
+"""
+
+from pathlib import Path
 import yaml
-from agent_actions.logging_setup import setup_logging
+import logging
 
-logger = setup_logging()
+logger = logging.getLogger(__name__)
 
-def create_directory(path):
-    """
-    Create a directory if it doesn't exist.
-    """
-    try:
-        if not os.path.exists(path):
-            os.makedirs(path)
-    except Exception as e:
-        logger.error(f"Failed to create directory '{path}': {e}")
+class ProjectInitializer:
+    def __init__(self, project_name: str, base_path: Path = Path.cwd()) -> None:
+        """
+        Initialize a new ProjectInitializer instance.
 
-def create_file(path, content=""):
-    """
-    Create a file if it doesn't exist.
-    """
-    try:
-        if not os.path.exists(path):
-            with open(path, 'w', encoding='utf-8') as f:
-                f.write(content)
-    except Exception as e:
-        logger.error(f"Failed to create file '{path}': {e}")
+        Args:
+            project_name (str): Name of the project to create.
+            base_path (Path, optional): Base directory path. Defaults to current working directory.
+        """
+        self.project_name = project_name
+        self.project_dir: Path = base_path / project_name
+        self.config_dir: Path = self.project_dir / 'agent_config'
+        self.schema_dir: Path = self.project_dir / 'schema'
+        self.io_dir: Path = self.project_dir / 'agent_io'
+        self.config_file: Path = self.project_dir / 'agent_actions.yml'
 
-def init_project(project_name):
-    """
-    Initialize a new Agent Actions project.
-    """
-    try:
-        project_dir = os.path.join(os.getcwd(), project_name)
-        config_dir = os.path.join(project_dir, 'agent_config')
-        schema_dir = os.path.join(project_dir, 'schema')
-        io_dir = os.path.join(project_dir, 'agent_io')
-        config_file = os.path.join(project_dir, 'agent_actions.yml')
+    def create_directory(self, path: Path) -> None:
+        """
+        Create a directory if it doesn't exist.
 
-        # Creating directories
-        create_directory(project_dir)
-        create_directory(config_dir)
-        create_directory(schema_dir)
-        create_directory(io_dir)
+        Args:
+            path (Path): Path to the directory to create.
+        """
+        path.mkdir(parents=True, exist_ok=True)
 
-        # Creating Agent Actions configuration file
+    def create_file(self, path: Path, content: str = "") -> None:
+        """
+        Create a file if it doesn't exist.
+
+        Args:
+            path (Path): Path to the file to create.
+            content (str): Content to write to the file.
+        """
+        if not path.exists():
+            path.write_text(content, encoding='utf-8')
+
+    def init_project(self) -> None:
+        """
+        Initialize the new Agent Actions project by creating directories
+        and writing the default configuration file.
+        """
+        # Create necessary directories
+        for directory in [self.project_dir, self.config_dir, self.schema_dir, self.io_dir]:
+            self.create_directory(directory)
+
+        # Define default configuration
         config_data = {
             "default_agent_config": {
                 "api_key": "OPENAI_API_KEY",
@@ -53,7 +64,7 @@ def init_project(project_name):
                 }
             }
         }
-        create_file(config_file, yaml.dump(config_data))
+        self.create_file(self.config_file, yaml.dump(config_data))
 
-    except Exception as e:
-        logger.error(f"Failed to initialize project '{project_name}': {e}")
+        logger.info(f"Successfully initialized project: {self.project_name}")
+

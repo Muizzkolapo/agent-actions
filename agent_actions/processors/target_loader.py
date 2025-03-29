@@ -1,13 +1,9 @@
 """Module for target loader."""
 import json
 import os
-from agent_actions.handlers.file_handler import FileReader, FileWriter  
+from agent_actions.handlers.file_reader import FileReader
+from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.processors.target_content import TargetContentProcessor
-from agent_actions.processors.exceptions import (
-    raise_target_processing_error,
-    raise_target_save_error,
-    raise_side_output_error
-)
 
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
@@ -23,43 +19,30 @@ def generate_target(agent_config, agent_name, file_path, base_directory, output_
     :param base_directory: Base directory for calculating relative paths
     :param output_directory: Directory where the output file will be saved
     """
-    try:
-        file_reader = FileReader(file_path)
-        data = file_reader.read()
+    file_reader = FileReader(file_path)
+    data = file_reader.read()
 
-        model_vendor = agent_config.get('model_vendor', '').lower()
-        granularity = agent_config.get('granularity', '').lower()
-        side_output = agent_config.get('side_output', False)
+    model_vendor = agent_config.get('model_vendor', '').lower()
+    granularity = agent_config.get('granularity', '').lower()
+    side_output = agent_config.get('side_output', False)
 
-        content_processor = TargetContentProcessor(agent_config, agent_name)
+    content_processor = TargetContentProcessor(agent_config, agent_name)
 
-        if model_vendor == 'tool' and granularity == 'record' and side_output:
-            try:
-                main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
-                save_output(main_output, file_path, base_directory, output_directory)
+    if model_vendor == 'tool' and granularity == 'record' and side_output:
+        main_output, side_output_data = content_processor.process_for_side_output(data, file_path)
+        save_output(main_output, file_path, base_directory, output_directory)
 
-                if side_output_data:
-                    side_output_directory = output_directory
-                    save_side_output(side_output_data, file_path, base_directory, side_output_directory)
-            except Exception as e:
-                raise_side_output_error(file_path, str(e))
+        if side_output_data:
+            side_output_directory = output_directory
+            save_side_output(side_output_data, file_path, base_directory, side_output_directory)
 
-        elif model_vendor == 'tool' and granularity=='file':
-            try:
-                main_output = content_processor.process_file_level(data)
-                save_output(main_output, file_path, base_directory, output_directory)
-            except Exception as e:
-                raise_target_processing_error(file_path, str(e))
+    elif model_vendor == 'tool' and granularity == 'file':
+        main_output = content_processor.process_file_level(data)
+        save_output(main_output, file_path, base_directory, output_directory)
 
-        elif granularity == 'record':
-            try:
-                new_data = content_processor.process(data, file_path)
-                save_output(new_data, file_path, base_directory, output_directory)
-            except Exception as e:
-                raise_target_processing_error(file_path, str(e))
-
-    except Exception as e:
-        raise_target_processing_error(file_path, str(e))
+    elif granularity == 'record':
+        new_data = content_processor.process(data, file_path)
+        save_output(new_data, file_path, base_directory, output_directory)
 
 def save_output(new_data, file_path, base_directory, output_directory):
     """
@@ -76,7 +59,7 @@ def save_output(new_data, file_path, base_directory, output_directory):
         file_writer = FileWriter(output_file_path)
         file_writer.write_target(new_data)
     except Exception as e:
-        raise_target_save_error(output_file_path, str(e))
+        print(f"Error saving output to {output_file_path}: {str(e)}")
 
 def save_side_output(side_output_data, file_path, base_directory, output_directory):
     """
@@ -110,4 +93,4 @@ def save_side_output(side_output_data, file_path, base_directory, output_directo
         with open(side_output_file_path, 'w', encoding='utf-8') as file:
             json.dump(existing_content, file, indent=4)
     except Exception as e:
-        raise_side_output_error(side_output_file_path, str(e))
+        print(f"Error saving side output to {side_output_file_path}: {str(e)}")
