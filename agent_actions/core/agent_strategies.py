@@ -8,9 +8,8 @@ and generating outputs based on the agent's position in a workflow.
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 
-from agent_actions.processors.staging_loader import generate_staging
-from agent_actions.processors.target_loader import generate_target
-
+from agent_actions.processors.staging_processor.staging_loader import generate_staging
+from agent_actions.processors.target_processor.target_generator import TargetGenerator
 
 class AgentStrategy(ABC):
     """
@@ -60,7 +59,7 @@ class AgentStrategy(ABC):
         Returns:
             Path to the generated output file.
         """
-        return generate_target(agent_config, agent_name, file_path, base_directory, output_directory)
+        return TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory)
 
 
 class InitialStrategy(AgentStrategy):

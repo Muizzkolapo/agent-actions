@@ -1,7 +1,8 @@
 import sys
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
-from agent_actions.processors.output_processor import OutputProcessor
+from agent_actions.processors.output_processor.output_processor import OutputProcessor
+
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
