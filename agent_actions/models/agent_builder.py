@@ -13,6 +13,7 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.handlers.schema_handler import SchemaLoader
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.models.schema_change import compile_unified_schema
+from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 
 
 # Map vendor names to their handler classes for easier extensibility
@@ -67,7 +68,7 @@ def create_dynamic_agent(
     context_data = json.dumps(context_data_str) if not isinstance(context_data_str, str) else context_data_str
 
     # Transform the prompt using custom functions if needed
-    transformed_prompt_config = StringProcessor.process_text_with_function_calls(
+    transformed_prompt_config = PromptUtils.inject_function_outputs_into_prompt(
         prompt_config, tools_path, context_data
     )
     

@@ -1,0 +1,106 @@
+"""Module for String Processing Functions"""
+
+import importlib
+import os
+import re
+import sys
+import textwrap
+from typing import List
+import tiktoken
+from sentence_transformers import SentenceTransformer
+
+class PromptUtils:
+    """
+    A class for processing strings, including placeholder replacement and function call processing.
+    """
+
+
+    @staticmethod
+    def replace_placeholders(prompt, content_dict):
+        """
+        Replace placeholders in the prompt string with values from content_dict.
+
+        Parameters:
+            prompt (str): The prompt string containing placeholders.
+            content_dict (dict): A dictionary containing the values to replace placeholders.
+
+        Returns:
+            str: The prompt with placeholders replaced by actual values.
+        """
+        def convert_to_string(value):
+            if isinstance(value, list):
+                return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
+            return str(value)
+
+        if not isinstance(content_dict, dict) or not content_dict:
+            return prompt
+
+        placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
+        for placeholder in placeholders:
+            placeholder_keys = [key.strip() for key in placeholder.split(',')]
+            replacements = [f"{key}: {convert_to_string(content_dict[key])}" for key in placeholder_keys if key in content_dict]
+            replacement_text = ', '.join(replacements)
+            prompt = prompt.replace(f'return_collection[{placeholder}]', replacement_text)
+
+        return prompt
+
+    @staticmethod
+    def replace_guid_placeholder(data, guid):
+        """
+        Replace the placeholder 'return_collection{{source_context}}' with the specified GUID in a string.
+
+        Parameters:
+            data (str): The string to process.
+            guid (str): The GUID to replace the placeholder with.
+
+        Returns:
+            str: The updated string with the placeholder replaced.
+        """
+        if not isinstance(data, str):
+            return data
+
+        replaced_data = data.replace('return_collection{{source_context}}', guid)
+        cleaned_content = textwrap.dedent(replaced_data).strip()
+        return cleaned_content
+
+    @staticmethod
+    def inject_function_outputs_into_prompt(text, tools_path=None, context_data_str=None):
+        """
+        Replace multiple dispatch_task() calls in text with the result of their corresponding function.
+        Always passes `context_data_str` to the function.
+
+        Parameters:
+            text (str or list): The text containing dispatch_task() calls.
+            tools_path (str): The path to the tools directory.
+            context_data_str (str): Documentation string to pass to the functions.
+
+        Returns:
+            str or list: The text with dispatch_task() calls replaced by function outputs.
+        """
+        def process_single_text(single_text):
+            if not isinstance(single_text, str):
+                single_text = str(single_text)
+            function_call_pattern = r"dispatch_task\('(\w+)'\)"
+            function_calls = re.findall(function_call_pattern, single_text)
+
+            if not function_calls:
+                return single_text
+
+            for function_name in function_calls:
+                try:
+                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                    if transformed_text is None:
+                        transformed_text = "Error: No valid return from function."
+                    single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
+                except Exception as e:
+                    print(f"Function call error for '{function_name}': {str(e)}")
+
+            return single_text
+
+        if isinstance(text, list):
+            return [process_single_text(str(item)) for item in text]
+        elif isinstance(text, str):
+            return process_single_text(text)
+        else:
+            print(f"Invalid input type: {type(text).__name__}")
+            return text

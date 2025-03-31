@@ -1,7 +1,7 @@
 """Module for prompt formatting and loading."""
 import json
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 
 
 class PromptFormatter:
@@ -48,8 +48,8 @@ class PromptFormatter:
             ValueError: If prompt formatting fails
         """
         try:
-            source_loaded_prompt = StringProcessor.replace_guid_placeholder(raw_prompt, str(source_content))
-            formatted_prompt = StringProcessor.replace_placeholders(source_loaded_prompt, context_data)
+            source_loaded_prompt = PromptUtils.replace_guid_placeholder(raw_prompt, str(source_content))
+            formatted_prompt = PromptUtils.replace_placeholders(source_loaded_prompt, context_data)
             return formatted_prompt
         except Exception as e:
             raise ValueError(f"Failed to format prompt: {str(e)}")

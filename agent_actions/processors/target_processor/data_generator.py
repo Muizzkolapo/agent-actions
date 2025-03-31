@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional
 
 from agent_actions.models import agent_builder
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IDataGenerator
@@ -96,8 +96,8 @@ class DataGenerator(IDataGenerator):
             raw_prompt = "Process the following content: {content}"
         
         # Format prompt
-        source_loaded_prompt = StringProcessor.replace_guid_placeholder(
+        source_loaded_prompt = PromptUtils.replace_guid_placeholder(
             raw_prompt, 
             str(source_content)
         )
-        return StringProcessor.replace_placeholders(source_loaded_prompt, contents)
+        return PromptUtils.replace_placeholders(source_loaded_prompt, contents)

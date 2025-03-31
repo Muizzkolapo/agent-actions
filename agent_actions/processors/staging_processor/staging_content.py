@@ -9,7 +9,7 @@ from agent_actions.processors.staging_processor.loaders.xml_loader import XmlLoa
 
 # Configure logger
 logger = logging.getLogger(__name__)
-from agent_actions.processors.staging_processor.prompt.prompt_processor import PromptProcessor  
+from agent_actions.processors.prompt_processor.prompt_processor import PromptProcessor  
 
 # Create a compatible StagingContentLoader that uses our modular components
 class StagingContentLoader:
