@@ -80,3 +80,59 @@ class AgentManager:
                             print(f"Error processing file {file_path}: {str(e)}")
         
         return processed_count
+    
+    @staticmethod
+    def _add_agent_existence_check():
+        """
+        This is a documentation for a method that should be added to AgentManager.
+        
+        Example implementation:
+        
+        @staticmethod
+        def agent_exists(agent_name: str) -> bool:
+            '''
+            Check if an agent exists.
+            
+            Args:
+                agent_name: Name of the agent to check.
+                
+            Returns:
+                True if the agent exists, False otherwise.
+            '''
+            try:
+                agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
+                return Path(agent_config_dir).exists()
+            except Exception:
+                return False
+        """
+        pass
+
+    @staticmethod
+    def _add_get_agent_directories():
+        """
+        This is a documentation for a method that should be added to AgentManager.
+        
+        Example implementation:
+        
+        @staticmethod
+        def get_agent_directories(agent_name: str) -> List[Path]:
+            '''
+            Get the list of directories associated with an agent.
+            
+            Args:
+                agent_name: Name of the agent.
+                
+            Returns:
+                List of directories.
+            '''
+            agent_config_dir, io_dir, _ = AgentManager.get_agent_paths(agent_name)
+            
+            directories = []
+            if Path(agent_config_dir).exists():
+                directories.append(Path(agent_config_dir))
+            if Path(io_dir).exists():
+                directories.append(Path(io_dir))
+                
+            return directories
+        """
+        pass
