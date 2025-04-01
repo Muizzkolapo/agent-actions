@@ -20,6 +20,7 @@ from agent_actions.cli.exceptions import (
     AgentExecutionError,
     ValidationError
 )
+from agent_actions.cli.utils.path_validator import PathValidator
 
 logger = logging.getLogger(__name__)
 
@@ -91,22 +92,7 @@ class AgentRunnerService:
         Raises:
             ValidationError: If the user code path is invalid.
         """
-        if not user_code:
-            return None
-            
-        user_code_path = Path(user_code)
-        
-        if not user_code_path.exists():
-            raise ValidationError(f"User code directory does not exist: {user_code_path}")
-            
-        if not user_code_path.is_dir():
-            raise ValidationError(f"User code path is not a directory: {user_code_path}")
-            
-        if not os.access(user_code_path, os.R_OK):
-            raise ValidationError(f"User code directory is not readable: {user_code_path}")
-            
-        logger.debug(f"Validated user code path: {user_code_path}")
-        return user_code
+        return PathValidator.validate_user_code_path(user_code)
     
     @contextmanager
     def _execution_context(agent_name: str):
