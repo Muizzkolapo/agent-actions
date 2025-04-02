@@ -12,10 +12,7 @@ from typing import Optional, Tuple
 import webbrowser
 
 from agent_actions.docs.app import run_app
-from agent_actions.cli.exceptions import (
-    AgentActionsError,
-    PermissionError
-)
+from agent_actions.cli.exceptions import PermissionError
 
 logger = logging.getLogger(__name__)
 

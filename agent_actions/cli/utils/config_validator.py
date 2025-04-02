@@ -1,14 +1,18 @@
 """
 Configuration validation utilities.
 
-This module provides common utilities for validating configuration data.
+This module provides utilities for validating configuration data.
 """
 
+import os
+import glob
 import logging
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Dict, Any, List, Tuple, Optional, Set
+from pathlib import Path
 
 from agent_actions.cli.exceptions import ConfigurationError
 from agent_actions.cli.utils.service_logger import ServiceLogger
+from agent_actions.handlers.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 
@@ -17,214 +21,245 @@ class ConfigValidator:
     """Utility class for validating configuration data."""
     
     @staticmethod
-    def validate_list_config(config: Any, config_name: str = "configuration") -> List[Dict[str, Any]]:
+    def validate_list_config(config: Any, config_name: str = "configuration") -> None:
         """
-        Validate that configuration is a list of dictionaries.
+        Validate that a configuration is a list.
         
         Args:
-            config: Configuration data to validate.
-            config_name: Name of the configuration (for error messages).
-            
-        Returns:
-            Validated configuration as a list of dictionaries.
+            config: Configuration to validate.
+            config_name: Name of the configuration for error messages.
             
         Raises:
-            ConfigurationError: If the configuration format is invalid.
-        """
-        ServiceLogger.log_validation_start(logger, config_name)
-        
-        if not isinstance(config, list):
-            error_msg = f"{config_name} must be a list, got {type(config)}"
-            logger.error(error_msg)
-            raise ConfigurationError(error_msg)
-        
-        if not config:
-            logger.warning(f"{config_name} is empty")
-            ServiceLogger.log_validation_success(logger, config_name)
-            return []
-        
-        validated_config = []
-        for i, item in enumerate(config):
-            if not isinstance(item, dict):
-                logger.warning(f"Item at index {i} in {config_name} is not a dictionary: {type(item)}")
-                continue
-            validated_config.append(item)
-        
-        ServiceLogger.log_validation_success(logger, config_name)
-        return validated_config
-    
-    @staticmethod
-    def validate_agent_config(config_data: List[Dict[str, Any]]) -> None:
-        """
-        Validate the format of an agent configuration.
-        
-        Args:
-            config_data: List of configuration dictionaries.
-            
-        Raises:
-            ConfigurationError: If the configuration format is invalid.
+            ConfigurationError: If validation fails.
         """
         try:
-            ServiceLogger.log_validation_start(logger, "agent configuration")
+            ServiceLogger.log_operation_start(logger, "validate list config", 
+                                           config_name=config_name)
             
-            # Validate basic list format
-            ConfigValidator.validate_list_config(config_data, "agent configuration")
-            
-            # Additional agent-specific validation can be added here
-            # For example, checking for required fields, valid values, etc.
-            
-            ServiceLogger.log_validation_success(logger, "agent configuration")
+            if not isinstance(config, list):
+                error_msg = f"{config_name} must be a list, got {type(config)}"
+                logger.error(error_msg)
+                raise ConfigurationError(error_msg)
+                
+            ServiceLogger.log_operation_success(logger, "validate list config", 
+                                             config_name=config_name)
             
         except Exception as e:
-            ServiceLogger.log_validation_error(logger, "agent configuration", e)
+            ServiceLogger.log_operation_error(logger, "validate list config", e)
             raise
-    
+            
     @staticmethod
-    def get_optional_string_field(
-        config: List[Dict[str, Any]],
-        field_name: str,
-        config_name: str = "configuration"
-    ) -> Optional[str]:
+    def validate_agent_config(agent_config: List[Dict[str, Any]]) -> Tuple[bool, str]:
         """
-        Get an optional string field from configuration.
+        Validate the agent configuration to ensure all required fields are present and correctly formatted.
         
         Args:
-            config: Configuration data.
-            field_name: Name of the field to get.
-            config_name: Name of the configuration (for error messages).
+            agent_config: List of agent configurations to validate.
             
         Returns:
-            Field value if found and valid, None otherwise.
+            Tuple of (bool, str): (is_valid, error_message if any)
+        """
+        try:
+            ServiceLogger.log_operation_start(logger, "validate agent config")
             
-        Raises:
-            ConfigurationError: If there's a severe format issue.
-        """
-        logger.debug(f"Extracting {field_name} from {config_name}")
-        
-        validated_config = ConfigValidator.validate_list_config(config, config_name)
-        
-        for item in validated_config:
-            if field_name in item:
-                field_value = item.get(field_name)
-                
-                if not isinstance(field_value, str):
-                    logger.warning(f"{field_name} is not a string: {type(field_value)}")
-                    continue
-                    
-                logger.debug(f"Found {field_name}: {field_value}")
-                return field_value
-                
-        logger.debug(f"No {field_name} found in configuration")
-        return None
-    
+            base_required_keys = {'agent_type', 'model_name'}
+            tool_required_keys = {'description'}
+            additional_required_keys = {'api_key', 'schema_name', 'prompt'}
+
+            for idx, agent in enumerate(agent_config):
+                # Determine the required keys based on the model_vendor
+                if agent.get('model_vendor') == 'tool':
+                    required_keys = base_required_keys.union(tool_required_keys)
+                else:
+                    required_keys = base_required_keys.union(additional_required_keys)
+
+                missing_keys = required_keys - agent.keys()
+                if missing_keys:
+                    error_msg = f"Agent {idx + 1} is missing required keys: {', '.join(missing_keys)}"
+                    ServiceLogger.log_operation_error(logger, "validate agent config", 
+                                                   error_msg=error_msg)
+                    return False, error_msg
+
+                # Ensure dependencies is a list if it exists, otherwise set it to an empty list
+                if 'dependencies' in agent and not isinstance(agent['dependencies'], list):
+                    error_msg = f"Agent {idx + 1}: 'dependencies' should be a list."
+                    ServiceLogger.log_operation_error(logger, "validate agent config", 
+                                                   error_msg=error_msg)
+                    return False, error_msg
+                agent.setdefault('dependencies', [])
+
+            ServiceLogger.log_operation_success(logger, "validate agent config")
+            return True, "Agent configuration is valid."
+            
+        except Exception as e:
+            ServiceLogger.log_operation_error(logger, "validate agent config", e)
+            raise
+            
     @staticmethod
-    def get_optional_list_field(
-        config: List[Dict[str, Any]],
-        field_name: str,
-        config_name: str = "configuration"
-    ) -> List[str]:
+    def validate_dependencies(agent_configs: Dict[str, Dict[str, Any]]) -> None:
         """
-        Get an optional list field from configuration.
+        Validates that no active agent depends on an inactive agent.
         
         Args:
-            config: Configuration data.
-            field_name: Name of the field to get.
-            config_name: Name of the configuration (for error messages).
-            
-        Returns:
-            List of string values if found and valid, empty list otherwise.
+            agent_configs: Dictionary of agent configurations
             
         Raises:
-            ConfigurationError: If there's a severe format issue.
+            ConfigurationError: If an active agent depends on an inactive agent
         """
-        logger.debug(f"Extracting {field_name} from {config_name}")
+        try:
+            ServiceLogger.log_operation_start(logger, "validate dependencies")
+            
+            active_agents = {
+                agent_type for agent_type, config in agent_configs.items() 
+                if config.get('is_operational', True)
+            }
+            inactive_agents = {
+                agent_type for agent_type, config in agent_configs.items() 
+                if not config.get('is_operational', True)
+            }
+
+            for agent_type, config in agent_configs.items():
+                if agent_type in active_agents:
+                    dependencies = config.get('dependencies', [])
+                    for dep in dependencies:
+                        if dep in inactive_agents:
+                            error_msg = (
+                                f"Agent '{agent_type}' depends on inactive agent '{dep}'. "
+                                f"Please either activate '{dep}' or remove it from the dependencies."
+                            )
+                            ServiceLogger.log_operation_error(logger, "validate dependencies", 
+                                                           error_msg=error_msg)
+                            raise ConfigurationError(error_msg)
+                        elif dep not in agent_configs:
+                            error_msg = (
+                                f"Agent '{agent_type}' depends on non-existent agent '{dep}'. "
+                                f"Please check your configuration."
+                            )
+                            ServiceLogger.log_operation_error(logger, "validate dependencies", 
+                                                           error_msg=error_msg)
+                            raise ConfigurationError(error_msg)
+                            
+            ServiceLogger.log_operation_success(logger, "validate dependencies")
+            
+        except Exception as e:
+            ServiceLogger.log_operation_error(logger, "validate dependencies", e)
+            raise
+            
+    @staticmethod
+    def should_update_schema(agent_config: Dict[str, Any], keys_list: List[str], 
+                           side_collection: Any) -> bool:
+        """
+        Determines whether the schema should be updated based on the agent configuration.
         
-        validated_config = ConfigValidator.validate_list_config(config, config_name)
-        result = []
-        
-        for item in validated_config:
-            if field_name in item:
-                field_value = item.get(field_name)
+        Args:
+            agent_config: Agent configuration dictionary
+            keys_list: List of keys to check
+            side_collection: Side collection to check
+            
+        Returns:
+            bool: Whether the schema should be updated
+        """
+        return (agent_config['agent_type'] == keys_list[0] and 
+                bool(agent_config.get('side_collection')))
                 
-                if not isinstance(field_value, list):
-                    logger.warning(f"{field_name} is not a list: {type(field_value)}")
-                    continue
+    @staticmethod
+    def check_agent_name_unique(agent_name: str, base_dir: str) -> Tuple[bool, str]:
+        """
+        Check if the agent name is unique across all agent_config folders in the project.
+        
+        Args:
+            agent_name: Name of the agent to check
+            base_dir: Base directory to start searching from
+            
+        Returns:
+            Tuple of (bool, str): (is_unique, error_message if any)
+        """
+        try:
+            ServiceLogger.log_operation_start(logger, "check agent name unique", 
+                                           agent_name=agent_name)
+            
+            def find_agent_config_dirs(start_path: str) -> List[str]:
+                agent_config_dirs = []
+                for root, dirs, _ in os.walk(start_path):
+                    if "agent_config" in dirs:
+                        agent_config_dirs.append(os.path.join(root, "agent_config"))
+                return agent_config_dirs
+
+            name_locations = {}
+            duplicates = {}
+            
+            for config_dir in find_agent_config_dirs(base_dir):
+                yaml_files = glob.glob(os.path.join(config_dir, "*.yaml"))
+                yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
+                all_files = yaml_files + yml_files
+                
+                for file_path in all_files:
+                    name = os.path.splitext(os.path.basename(file_path))[0]
                     
-                for value in field_value:
-                    if isinstance(value, str):
-                        result.append(value)
+                    if name in name_locations:
+                        if name not in duplicates:
+                            duplicates[name] = [name_locations[name]]
+                        duplicates[name].append(file_path)
                     else:
-                        logger.warning(f"Item in {field_name} is not a string: {type(value)}")
-                        
-        logger.debug(f"Found {field_name}: {result}")
-        return result
-    
+                        name_locations[name] = file_path
+
+            if duplicates:
+                error_msg = "ERROR: Duplicate agent configurations detected!\n"
+                error_msg += "=" * 50 + "\n"
+                for name, paths in duplicates.items():
+                    error_msg += f"\nAgent '{name}' is defined in multiple locations:\n"
+                    for i, path in enumerate(paths, 1):
+                        rel_path = os.path.relpath(path, base_dir)
+                        error_msg += f"{i}. {rel_path}\n"
+                    error_msg += "\nPlease remove duplicate configurations before proceeding."
+                ServiceLogger.log_operation_error(logger, "check agent name unique", 
+                                               error_msg=error_msg)
+                return False, error_msg
+
+            ServiceLogger.log_operation_success(logger, "check agent name unique", 
+                                             agent_name=agent_name)
+            return True, ""
+            
+        except Exception as e:
+            ServiceLogger.log_operation_error(logger, "check agent name unique", e)
+            raise
+            
     @staticmethod
-    def get_optional_dict_field(
-        config: List[Dict[str, Any]],
-        field_name: str,
-        config_name: str = "configuration"
-    ) -> List[Dict[str, Any]]:
+    def check_agent_file_unique(full_path: str, base_dir: str) -> bool:
         """
-        Get an optional dictionary field from configuration.
+        Check if the agent configuration file path is unique across the entire project.
         
         Args:
-            config: Configuration data.
-            field_name: Name of the field to get.
-            config_name: Name of the configuration (for error messages).
+            full_path: Full path to the agent configuration file
+            base_dir: Base directory to start searching from
             
         Returns:
-            List of dictionary values if found and valid, empty list otherwise.
+            bool: Whether the file path is unique
+        """
+        try:
+            ServiceLogger.log_operation_start(logger, "check agent file unique", 
+                                           full_path=full_path)
             
-        Raises:
-            ConfigurationError: If there's a severe format issue.
-        """
-        logger.debug(f"Extracting {field_name} from {config_name}")
-        
-        validated_config = ConfigValidator.validate_list_config(config, config_name)
-        result = []
-        
-        for item in validated_config:
-            if field_name in item:
-                field_value = item.get(field_name)
-                
-                if not isinstance(field_value, list):
-                    logger.warning(f"{field_name} is not a list: {type(field_value)}")
-                    continue
-                    
-                for value in field_value:
-                    if isinstance(value, dict):
-                        result.append(value)
-                    else:
-                        logger.warning(f"Item in {field_name} is not a dictionary: {type(value)}")
-                        
-        logger.debug(f"Found {field_name}: {result}")
-        return result
-    
+            all_agent_paths = FileHandler.get_all_agent_paths(base_dir)
+            is_unique = all_agent_paths.count(full_path) == 1
+            
+            ServiceLogger.log_operation_success(logger, "check agent file unique", 
+                                             is_unique=is_unique)
+            return is_unique
+            
+        except Exception as e:
+            ServiceLogger.log_operation_error(logger, "check agent file unique", e)
+            raise
+            
     @staticmethod
-    def validate_required_fields(
-        config: Dict[str, Any],
-        required_fields: List[str],
-        config_name: str = "configuration"
-    ) -> None:
+    def find_agent_name(config: Dict[str, Any]) -> str:
         """
-        Validate that all required fields are present in a configuration dictionary.
+        Find the name of the agent from the configuration.
         
         Args:
-            config: Configuration dictionary to validate.
-            required_fields: List of required field names.
-            config_name: Name of the configuration (for error messages).
+            config: Agent configuration dictionary
             
-        Raises:
-            ConfigurationError: If any required field is missing.
+        Returns:
+            str: Name of the agent
         """
-        ServiceLogger.log_validation_start(logger, f"required fields in {config_name}")
-        
-        missing_fields = [field for field in required_fields if field not in config]
-        
-        if missing_fields:
-            error_msg = f"Missing required fields in {config_name}: {', '.join(missing_fields)}"
-            logger.error(error_msg)
-            raise ConfigurationError(error_msg)
-            
-        ServiceLogger.log_validation_success(logger, f"required fields in {config_name}") 
+        return next(iter(config)) 

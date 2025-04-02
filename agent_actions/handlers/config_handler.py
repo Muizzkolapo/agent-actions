@@ -3,7 +3,7 @@ import os
 import yaml
 from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates  
-from agent_actions.handlers.config_validator import ConfigValidator  
+from agent_actions.cli.utils.config_validator import ConfigValidator  
 import glob
 
 

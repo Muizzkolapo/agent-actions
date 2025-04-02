@@ -14,7 +14,6 @@ from typing import Optional, Dict, Any, List
 
 from agent_actions.core.init import ProjectInitializer
 from agent_actions.cli.exceptions import (
-    AgentActionsError,
     ValidationError,
     PermissionError,
     ConfigurationError

@@ -11,11 +11,7 @@ from pathlib import Path
 from typing import Dict, Any, Union, List, Tuple, Optional, Set
 
 from agent_actions.handlers.config_handler import ConfigValidator as BaseConfigValidator
-from agent_actions.cli.exceptions import (
-    ConfigValidationError,
-    ValidationError
-)
-
+from agent_actions.cli.exceptions import ConfigValidationError
 logger = logging.getLogger(__name__)
 
 

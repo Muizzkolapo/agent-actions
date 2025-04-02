@@ -12,7 +12,6 @@ from typing import List, Optional
 
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.cli.exceptions import (
-    AgentActionsError,
     AgentNotFoundError,
     PermissionError
 )

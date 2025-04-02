@@ -15,10 +15,8 @@ from contextlib import contextmanager
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.workflow.agent_workflow import AgentWorkflow
 from agent_actions.cli.exceptions import (
-    AgentActionsError,
     FileNotFoundError,
-    AgentExecutionError,
-    ValidationError
+    AgentExecutionError
 )
 from agent_actions.cli.utils.path_validator import PathValidator
 
