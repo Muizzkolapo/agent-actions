@@ -5,7 +5,7 @@ from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IContentProcessor
-from .source_data_loader import SourceDataLoader
+from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
 from .few_shot_sample_manager import FewShotSampleManager
 from .data_generator import DataGenerator
 from .data_processor import DataProcessor

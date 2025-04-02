@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Optional
 
-from .interfaces import ISourceDataLoader
+from ..interfaces import ISourceDataLoader
 
 
 class SourceDataLoader(ISourceDataLoader):

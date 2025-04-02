@@ -2,13 +2,13 @@
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
 
-from .sample_enricher import SampleEnricher
-from .prompt_formatter import PromptFormatter
-from .response_transformer import ResponseTransformer
-from .context_preprocessor import ContextPreprocessor
+from ..prompt_processor.sample_enricher import SampleEnricher
+from ..prompt_processor.prompt_formatter import PromptFormatter
+from ..prompt_processor.response_transformer import ResponseTransformer
+from ..prompt_processor.context_preprocessor import ContextPreprocessor
+from agent_actions.processors.source_processor.source_path_manager import SourcePathManager
 
-
-class PromptProcessor:
+class StagingProcessor:
     """Orchestrates the prompt processing workflow (Open/Closed principle)."""
     
     def __init__(self, agent_config, agent_name):
@@ -35,7 +35,7 @@ class PromptProcessor:
             
             # Step 2: Get raw prompt and load source content
             raw_prompt = PromptFormatter.get_raw_prompt(self.agent_config)
-            source_content = PromptFormatter.load_source_content(source_path, context_data) if source_path else None
+            source_content = SourcePathManager.load_source_content(source_path, context_data) if source_path else None
             
             # Step 3: Format prompt if not provided
             if not formatted_prompt:
