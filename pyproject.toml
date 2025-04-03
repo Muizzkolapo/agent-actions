@@ -22,7 +22,7 @@ google-api-python-client = "^2.130.0"
 google-generativeai   = "^0.7.2"
 sentence-transformers = "^2.2.2"
 numpy= "^1.26.4" 
-
+jsonschema= "^4.23.0"  
 
 [build-system]
 requires = ["poetry-core"]

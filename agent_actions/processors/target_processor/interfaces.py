@@ -17,15 +17,6 @@ class IContentProcessor(ABC):
         pass
 
 
-class ISourceDataLoader(ABC):
-    """Interface for source data loading."""
-
-    @abstractmethod
-    def load_source_data(self, file_path: str) -> List[Dict]:
-        """Load source data from a file path."""
-        pass
-
-
 class IFewShotSampleManager(ABC):
     """Interface for few-shot sample management."""
 

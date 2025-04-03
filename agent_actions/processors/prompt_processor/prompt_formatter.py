@@ -1,5 +1,6 @@
 """Module for prompt formatting and loading."""
 import json
+import os
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 
@@ -54,32 +55,3 @@ class PromptFormatter:
         except Exception as e:
             raise ValueError(f"Failed to format prompt: {str(e)}")
     
-    @staticmethod
-    def load_source_content(source_path, context_data):
-        """
-        Load source content based on the input documentation's GUID.
-        
-        Parameters:
-            source_path: Path to the source file
-            context_data: Context data containing GUID
-            
-        Returns:
-            Loaded source content or None if not found
-            
-        Raises:
-            IOError: If source content loading fails
-        """
-        try:
-            if not source_path:
-                return None
-                
-            with open(source_path, 'r') as file:
-                source_data = json.load(file)
-                if isinstance(context_data, dict) and "guid" in context_data:
-                    guid = context_data["guid"]
-                    for item in source_data:
-                        if guid in item:
-                            return item[guid]
-            return None
-        except Exception as e:
-            raise IOError(f"Failed to load source content: {str(e)}")

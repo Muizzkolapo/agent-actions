@@ -1,27 +1,197 @@
 """
-Main CLI entry point for the Agent Actions framework.
+Main entry point for the Agent Actions CLI.
+
+This module provides the primary entry point for the CLI application,
+handling command registration, initialization, and execution.
 """
 
-import click
+import sys
+import logging
+import argparse
+import signal
+import os
+from typing import Optional, Sequence, List, Callable, Dict, Any
+from pathlib import Path
 
-from agent_actions.cli.commands.init_command import init
-from agent_actions.cli.commands.docs_command import docs
-from agent_actions.cli.commands.run_command import run
+import click
+from click import Context, Command
+
+# Import commands
 from agent_actions.cli.commands.clean_command import clean
+from agent_actions.cli.commands.docs_command import docs
+from agent_actions.cli.commands.init_command import init
 from agent_actions.cli.commands.render_command import render
+from agent_actions.cli.commands.run_command import run
+
+# Import logging configuration
+from agent_actions.cli.utils.logging_config import setup_logging
+
+# Version information
+__version__ = '1.0.0'
+
+
+class CLI:
+    """Agent Actions CLI application."""
+    
+    def __init__(self) -> None:
+        """Initialize the CLI application."""
+        self.logger = logging.getLogger(__name__)
+        self.click_group = click.Group(name='agent-actions')
+        self._register_commands()
+        self._register_signal_handlers()
+    
+    def _register_commands(self) -> None:
+        """Register all available commands with the CLI."""
+        self.logger.debug("Registering CLI commands")
+        self.click_group.add_command(clean)
+        self.click_group.add_command(docs)
+        self.click_group.add_command(init)
+        self.click_group.add_command(render)
+        self.click_group.add_command(run)
+    
+    def _register_signal_handlers(self) -> None:
+        """Register signal handlers for graceful shutdown."""
+        try:
+            signal.signal(signal.SIGINT, self._handle_termination)
+            signal.signal(signal.SIGTERM, self._handle_termination)
+            # SIGBREAK is Windows-specific (Ctrl+Break)
+            if hasattr(signal, 'SIGBREAK'):
+                signal.signal(signal.SIGBREAK, self._handle_termination)
+            self.logger.debug("Signal handlers registered successfully")
+        except (AttributeError, ValueError) as e:
+            # This might happen in environments where signals aren't available
+            self.logger.warning(f"Failed to register signal handlers: {str(e)}")
+    
+    def _handle_termination(self, signum: int, frame: Any) -> None:
+        """
+        Handle termination signals gracefully.
+        
+        Args:
+            signum: Signal number
+            frame: Current stack frame
+        """
+        signal_name = signal.Signals(signum).name
+        self.logger.info(f"Received termination signal: {signal_name}")
+        print(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
+        sys.exit(130)  # Standard exit code for termination by Ctrl+C
+    
+    def _configure_logging(self, argv: List[str]) -> None:
+        """
+        Configure logging based on command-line arguments.
+        
+        Args:
+            argv: Command-line arguments
+        """
+        # Extract log level from arguments
+        debug_mode = '--debug' in argv
+        verbose_mode = '--verbose' in argv or '-v' in argv
+        
+        if debug_mode:
+            log_level = "DEBUG"
+        elif verbose_mode:
+            log_level = "INFO"
+        else:
+            log_level = "WARNING"
+        
+        # Configure structured JSON logging for log files
+        setup_logging(
+            log_level=log_level,
+            use_json=True,
+            console_level=log_level
+        )
+    
+    def _show_version_and_exit(self) -> None:
+        """Display version information and exit."""
+        print(f"Agent Actions CLI v{__version__}")
+        sys.exit(0)
+    
+    def execute(self, argv: Optional[Sequence[str]] = None) -> int:
+        """
+        Execute the CLI application with the provided arguments.
+        
+        Args:
+            argv: Command-line arguments (uses sys.argv if None)
+            
+        Returns:
+            Exit code (0 for success, non-zero for failure)
+        """
+        try:
+            if argv is None:
+                argv = sys.argv[1:]
+            
+            # Handle version flag
+            if '--version' in argv or '-V' in argv:
+                self._show_version_and_exit()
+            
+            # Set up logging before any other operations
+            self._configure_logging(argv)
+            
+            # Log startup information
+            self.logger.info("Starting agent-actions CLI", extra={
+                'version': __version__,
+                'args': argv
+            })
+            
+            # Execute command
+            self.click_group(argv)
+            
+            self.logger.info("CLI execution completed successfully")
+            return 0
+            
+        except click.Abort:
+            # User initiated abort (e.g., via Ctrl+C in an interactive prompt)
+            self.logger.info("Operation aborted by user")
+            return 130
+            
+        except click.UsageError as e:
+            # Command-line usage error
+            self.logger.error(f"Usage error: {str(e)}")
+            print(f"Error: {str(e)}", file=sys.stderr)
+            return 2
+            
+        except Exception as e:
+            # Unexpected error
+            self.logger.error("CLI execution failed", extra={'error': str(e)}, exc_info=True)
+            print(f"Error: {str(e)}", file=sys.stderr)
+            if '--debug' in argv:
+                import traceback
+                traceback.print_exc()
+            return 1
 
 
 @click.group()
-def main() -> None:
-    """Agent Actions CLI Tool - Framework for constructing and running agent workflows."""
+@click.version_option(version=__version__)
+@click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging')
+@click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
+def cli(debug: bool, verbose: bool) -> None:
+    """
+    Agent Actions CLI tool for managing and running agent workflows.
+    
+    Use --help with any command for more information.
+    """
     pass
 
 
-main.add_command(init)
-main.add_command(docs)
-main.add_command(run)
-main.add_command(clean)
-main.add_command(render)
+def main_entrypoint(argv: Optional[Sequence[str]] = None) -> int:
+    """
+    Main entry point for the CLI application.
+    
+    Args:
+        argv: Command-line arguments (uses sys.argv if None)
+        
+    Returns:
+        Exit code (0 for success, non-zero for failure)
+    """
+    app = CLI()
+    return app.execute(argv)
+
+
+def main() -> None:
+    """
+    Entry point for the CLI tool when run from the command line.
+    Exits with appropriate status code.
+    """
+    sys.exit(main_entrypoint())
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
 """Prompt module initialization."""
-from agent_actions.processors.prompt_processor.prompt_processor import PromptProcessor
+from agent_actions.processors.staging_processor.staging_processor import StagingProcessor
 
-__all__ = ['PromptProcessor']
+__all__ = ['StagingProcessor']
