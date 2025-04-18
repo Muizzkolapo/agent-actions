@@ -74,7 +74,7 @@ def create_dynamic_agent(
     
     prompt_config = transformed_prompt_config
 
-    _debug_print_prompt(agent_config, prompt_config)
+    _debug_print_prompt(agent_config, prompt_config, context_data)
 
     model_vendor = agent_config['model_vendor'].lower()
     granularity = agent_config.get('granularity', 'record').lower()
@@ -100,14 +100,20 @@ def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str
     return prompt_config
 
 
-def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str) -> None:
-    """Print the prompt for debugging if enabled in config."""
+
+def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str, context_data: str = "") -> None:
+    """Print the prompt for debugging if 'prompt_debug' is enabled in config."""
     if agent_config.get('prompt_debug', False):
-        print("\n" + "="*40)
-        print("DEBUG: Prompt going into the agent:")
-        print("="*40)
+        divider = "=" * 50
+        print(f"\n{divider}")
+        print("DEBUG MODE: Prompt being sent to the agent")
+        print(divider)
         print(prompt_config)
-        print("="*40 + "\n")
+        if context_data:
+            print("\n[Context Data Preview]")
+            print("-" * 50)
+            print(context_data)
+        print(f"{divider}\n")
 
 
 def _prepare_schema(agent_config: Dict[str, Any], model_vendor: str) -> Optional[Dict[str, Any]]:
