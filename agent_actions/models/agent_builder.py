@@ -64,21 +64,26 @@ def create_dynamic_agent(
     if not tools_path:
         tools_path = agent_config.get('tools', {}).get('path')
 
-    # Convert context data to JSON string if it's not already a string
-    context_data = json.dumps(context_data_str) if not isinstance(context_data_str, str) else context_data_str
+    model_vendor = agent_config.get("model_vendor", "").lower()
+    is_tool = model_vendor == "tool"
+
+    # Only convert context_data_str to a JSON string if the model vendor is not 'tool'
+    context_data = (
+        context_data_str if is_tool else
+        (json.dumps(context_data_str) if not isinstance(context_data_str, str) else context_data_str)
+    )
 
     # Transform the prompt using custom functions if needed
     transformed_prompt_config = PromptUtils.inject_function_outputs_into_prompt(
-        prompt_config, tools_path, context_data
+        prompt_config, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data)
     )
     
     prompt_config = transformed_prompt_config
 
-    _debug_print_prompt(agent_config, prompt_config, context_data)
+    _debug_print_prompt(agent_config, prompt_config, json.dumps(context_data) if not isinstance(context_data, str) else context_data)
 
-    model_vendor = agent_config['model_vendor'].lower()
     granularity = agent_config.get('granularity', 'record').lower()
-    
+
     # Prepare schema if needed
     schema = _prepare_schema(agent_config, model_vendor)
     
@@ -86,7 +91,6 @@ def create_dynamic_agent(
     return _invoke_vendor_handler(
         model_vendor, agent_config, prompt_config, context_data, schema, granularity, formatted_prompt
     )
-
 
 def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str]) -> str:
     """Prepare the prompt from config or use the preformatted one."""
