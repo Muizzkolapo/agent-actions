@@ -12,30 +12,25 @@ logger = logging.getLogger(__name__)
 class XmlLoader(BaseLoader):
     """Loader for XML content."""
     
-    def __init__(self, agent_config: Dict[str, Any], agent_name: str, prompt_processor):
-        """Initialize with agent configuration, name, and prompt processor.
+    def __init__(self, agent_config: Dict[str, Any], agent_name: str):
+        """Initialize with agent configuration and name.
         
         Args:
             agent_config: Agent configuration
             agent_name: Name of the agent
-            prompt_processor: Processor for handling prompts
         """
         super().__init__(agent_config, agent_name)
-        self.prompt_processor = prompt_processor
-        
-    def process(self, content: Any, file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Load and process XML content from a file or in-memory content.
+    
+    def process(self, content: Any, file_path: Optional[str] = None) -> Any:
+        """Load and return XML root element from a file or in-memory content.
 
         Args:
             content: Content to process if file_path is not provided.
             file_path: Path to the XML file.
 
         Returns:
-            Tuple containing transformed response and source text.
+            Parsed XML ElementTree root element.
         """
-        data_chunk = []
-        src_text = []
-
         try:
             if file_path:
                 content_str = self.load_file(file_path)
@@ -45,17 +40,10 @@ class XmlLoader(BaseLoader):
                 raise ValueError("Either file_path or content must be provided for XML processing.")
 
             root = ET.fromstring(content_str)
-
-            for element in root.findall('.//*'):
-                if list(element):  # Only process elements that have children
-                    element_dict = self.process_xml_element(element)
-                    chunk_output, src_collection = self.prompt_processor.staging_dynamic_creator(element_dict)
-                    data_chunk.extend(chunk_output)
-                    src_text.extend(src_collection)
+            return root
         except Exception as e:
             self.handle_processing_error(e, "processing XML input")
-
-        return data_chunk, src_text
+            return None
         
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
         """Process an XML element into a dictionary.

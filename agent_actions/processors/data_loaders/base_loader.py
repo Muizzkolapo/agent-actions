@@ -35,15 +35,15 @@ class BaseLoader(ABC):
     @abstractmethod
     def process(self, 
                 content: Any,
-                file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Process content or file-specific to the loader implementation.
+                file_path: Optional[str] = None) -> Any:
+        """Load and parse content from a file or in-memory input.
 
         Args:
-            content: Content to process (may be ignored if file_path is used).
-            file_path: Path to the file, used to load the content.
+            content: Raw content provided directly (optional if file_path is provided).
+            file_path: Path to the file to load content from.
 
         Returns:
-            Tuple containing transformed response and source text.
+            Parsed content such as a string, dictionary, or list depending on loader type.
         """
         pass
 
