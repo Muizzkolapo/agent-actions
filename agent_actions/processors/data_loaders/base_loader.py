@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+__version__ = "0.1.0"
+
 # Configure logger
 logger = logging.getLogger(__name__)
 
@@ -19,20 +21,35 @@ class BaseLoader(ABC):
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+        self.logger = logging.getLogger(__name__)
+
+    def load_file(self, file_path: str) -> str:
+        """Safely load a file's content."""
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return f.read()
+        except Exception as e:
+            self.handle_processing_error(e, f"Loading file: {file_path}")
+            raise
         
     @abstractmethod
     def process(self, 
-               content: Any,
-               file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Process content specific to the loader implementation.
-        
+                content: Any,
+                file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Process content or file-specific to the loader implementation.
+
         Args:
-            content: Content to process
-            file_path: Path to the file
-            
+            content: Content to process (may be ignored if file_path is used).
+            file_path: Path to the file, used to load the content.
+
         Returns:
-            Tuple containing transformed response and source text
+            Tuple containing transformed response and source text.
         """
+        pass
+
+    @abstractmethod
+    def supports_filetype(self, file_extension: str) -> bool:
+        """Return True if this loader can handle the given file extension."""
         pass
         
     def handle_processing_error(self, 

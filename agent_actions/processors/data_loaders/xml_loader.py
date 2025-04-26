@@ -1,8 +1,9 @@
 """XML content loader implementation."""
 import logging
 from typing import Any, Dict, List, Optional, Tuple
+import xml.etree.ElementTree as ET
 
-from agent_actions.processors.staging_processor.loaders.base_loader import BaseLoader
+from agent_actions.processors.data_loaders.base_loader import BaseLoader
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -22,23 +23,29 @@ class XmlLoader(BaseLoader):
         super().__init__(agent_config, agent_name)
         self.prompt_processor = prompt_processor
         
-    def process(self, 
-               content: Tuple[Any, Any],
-               file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Process XML content.
-        
+    def process(self, content: Any, file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Load and process XML content from a file or in-memory content.
+
         Args:
-            content: XML content tuple (typically document and root element)
-            file_path: Not used for XML processing, included for API consistency
-            
+            content: Content to process if file_path is not provided.
+            file_path: Path to the XML file.
+
         Returns:
-            Tuple containing transformed response and source text
+            Tuple containing transformed response and source text.
         """
         data_chunk = []
         src_text = []
-        
+
         try:
-            _, root = content
+            if file_path:
+                content_str = self.load_file(file_path)
+            elif content:
+                content_str = content
+            else:
+                raise ValueError("Either file_path or content must be provided for XML processing.")
+
+            root = ET.fromstring(content_str)
+
             for element in root.findall('.//*'):
                 if list(element):  # Only process elements that have children
                     element_dict = self.process_xml_element(element)
@@ -46,8 +53,8 @@ class XmlLoader(BaseLoader):
                     data_chunk.extend(chunk_output)
                     src_text.extend(src_collection)
         except Exception as e:
-            self.handle_processing_error(e, "processing XML content")
-            
+            self.handle_processing_error(e, "processing XML input")
+
         return data_chunk, src_text
         
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
@@ -74,3 +81,7 @@ class XmlLoader(BaseLoader):
         except Exception as e:
             self.handle_processing_error(e, f"processing XML element: {element.tag}")
             raise
+
+    def supports_filetype(self, file_extension: str) -> bool:
+        """Return True if the file extension is supported."""
+        return file_extension.lower() in [".xml"]

@@ -2,10 +2,10 @@
 import logging
 
 # Import from our new modular structure
-from agent_actions.processors.staging_processor.loaders.text_loader import TextLoader
-from agent_actions.processors.staging_processor.loaders.json_loader import JsonLoader
-from agent_actions.processors.staging_processor.loaders.tabular_loader import TabularLoader
-from agent_actions.processors.staging_processor.loaders.xml_loader import XmlLoader
+from agent_actions.processors.data_loaders.text_loader import TextLoader
+from agent_actions.processors.data_loaders.json_loader import JsonLoader
+from agent_actions.processors.data_loaders.tabular_loader import TabularLoader
+from agent_actions.processors.data_loaders.xml_loader import XmlLoader
 
 # Configure logger
 logger = logging.getLogger(__name__)
