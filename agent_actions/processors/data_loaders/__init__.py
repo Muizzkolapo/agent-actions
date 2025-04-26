@@ -1,4 +1,4 @@
-"""Staging package initialization."""
+"""Loaders module initialization."""
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
 from agent_actions.processors.data_loaders.text_loader import TextLoader
 from agent_actions.processors.data_loaders.json_loader import JsonLoader

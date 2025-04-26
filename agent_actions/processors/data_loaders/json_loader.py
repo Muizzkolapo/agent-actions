@@ -4,7 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from agent_actions.handlers.file_handler import FileHandler
 
-from agent_actions.processors.staging_processor.loaders.base_loader import BaseLoader
+from agent_actions.processors.data_loaders.base_loader import BaseLoader
+import json
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -24,31 +25,40 @@ class JsonLoader(BaseLoader):
         super().__init__(agent_config, agent_name)
         self.prompt_processor = prompt_processor
         
-    def process(self, 
-               content: Union[List[Dict[str, Any]], Dict[str, Any]], 
-               file_path: Optional[str] = None) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Process JSON content.
-        
+
+
+    def process(self, content: Any, file_path: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Load and process JSON content from a file.
+
         Args:
-            content: JSON content
-            file_path: Path to the file
-            
+            content: (Ignored)
+            file_path: Path to the JSON file.
+
         Returns:
-            Tuple containing transformed response and source text
+            Tuple containing transformed response and source text.
         """
         data_chunk = []
         src_text = []
-        src_legacy_path = FileHandler.get_file_info(file_path) if file_path else None
-        
+
         try:
-            if isinstance(content, list):
-                self._process_json_list(content, src_legacy_path, data_chunk, src_text)
-            elif isinstance(content, dict):
-                self._process_json_dict(content, src_legacy_path, data_chunk, src_text)
+            content_str = self.load_file(file_path)
+            content_json = json.loads(content_str)
+            src_legacy_path = FileHandler.get_file_info(file_path)
+
+            if isinstance(content_json, list):
+                self._process_json_list(content_json, src_legacy_path, data_chunk, src_text)
+            elif isinstance(content_json, dict):
+                self._process_json_dict(content_json, src_legacy_path, data_chunk, src_text)
+            else:
+                raise ValueError("Unsupported JSON structure.")
         except Exception as e:
-            self.handle_processing_error(e, "processing JSON content")
-            
+            self.handle_processing_error(e, "processing JSON file")
+
         return data_chunk, src_text
+
+    def supports_filetype(self, file_extension: str) -> bool:
+        """Return True if the file extension is supported."""
+        return file_extension.lower() in [".json"]
         
     def _process_json_list(self, 
                           content: List[Dict[str, Any]], 
