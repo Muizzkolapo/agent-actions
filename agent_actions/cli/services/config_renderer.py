@@ -7,6 +7,7 @@ and processing the resulting configuration data.
 
 import os
 import yaml
+from ruamel.yaml import YAML, YAMLError 
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Protocol, Union
@@ -16,9 +17,10 @@ from agent_actions.workflow.render_workflow import render_pipeline_with_template
 from agent_actions.cli.utils.path_validator import PathValidator
 from agent_actions.cli.utils.service_logger import ServiceLogger
 from agent_actions.cli.utils.error_handler import ErrorHandler
-from agent_actions.cli.utils.config_validator import ConfigValidator
+from agent_actions.cli.validators.config_validator import ConfigValidator
 from agent_actions.cli.exceptions import ConfigurationError
-
+from agent_actions.cli.exceptions import ConfigValidationError
+from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
 logger = logging.getLogger(__name__)
 
 
@@ -186,7 +188,7 @@ class YAMLConfigParser(ConfigParser):
             ServiceLogger.log_operation_success(logger, "parse YAML configuration")
             return config
             
-        except yaml.YAMLError as e:
+        except YAMLError as e:
             ErrorHandler.handle_config_error(
                 e,
                 "parse",
@@ -264,7 +266,26 @@ class ConfigRenderingService:
         self.template_renderer = template_renderer or JinjaTemplateRenderer()
         self.config_parser = config_parser or YAMLConfigParser()
         self.output_writer = output_writer or FileOutputWriter()
-        
+
+
+    def _safe_load_yaml(self, raw: str, src: Path) -> Dict[str, Any]:
+        """Parse YAML and fail instantly on syntax OR empty content."""
+        if not raw.strip():
+            raise ConfigurationError(f"Configuration file is empty: {src}")
+        try:
+            data = YAML(typ="safe").load(raw)
+        except YAMLError as exc:
+            mark = getattr(exc, "problem_mark", None)
+            where = f"(line {mark.line+1}, col {mark.column+1})" if mark else ""
+            problem = getattr(exc, "problem", "syntax error")
+            raise ConfigurationError(
+                f"YAML syntax error in {src} {where}: {problem}"
+            )
+        if not data:
+            raise ConfigurationError(f"Configuration results in empty data: {src}")
+        return data
+       
+    @as_validation_error(ConfigurationError)
     def render_and_load_config(
         self,
         agent_name: str,
@@ -289,61 +310,61 @@ class ConfigRenderingService:
             TemplateRenderingError: If template rendering fails.
             ConfigurationError: If configuration parsing fails.
         """
-        try:
-            ServiceLogger.log_operation_start(logger, "render and load config",
-                                           agent_name=agent_name,
-                                           config_path=str(config_path),
-                                           template_dir=str(template_dir),
-                                           output_dir=str(output_dir))
+        ServiceLogger.log_operation_start(logger, "render and load config",
+                                        agent_name=agent_name,
+                                        config_path=str(config_path),
+                                        template_dir=str(template_dir),
+                                        output_dir=str(output_dir))
+        
+        # Convert paths to strings
+        config_path_str = str(config_path)
+        template_dir_str = str(template_dir)
+        output_dir_str = str(output_dir)
+        
+        # Validate output directory
+        """PathValidator.validate_directory(
+            Path(output_dir_str),
+            "Output directory",
+            required=True,
+            must_be_writable=True
+        )"""
+        cfg_path = Path(config_path)
+        if not cfg_path.exists():
+           raise ConfigurationError(f"Configuration file not found: {cfg_path}")
+        if cfg_path.is_dir():
+            raise ConfigurationError(f"Expected a YAML/JSON file, got a directory: {cfg_path}")       
+        # Render the template
+        rendered_template = self.template_renderer.render(
+            config_path_str,
+            template_dir_str,
+            output_dir_str
+        )
+        config = self._safe_load_yaml(rendered_template, cfg_path)
+        ConfigValidator.validate_list_config([config], "Agent configuration")
             
-            # Convert paths to strings
-            config_path_str = str(config_path)
-            template_dir_str = str(template_dir)
-            output_dir_str = str(output_dir)
-            
-            # Validate output directory
-            PathValidator.validate_directory(
-                Path(output_dir_str),
-                "Output directory",
-                required=True,
-                must_be_writable=True
-            )
-            
-            # Render the template
-            rendered_template = self.template_renderer.render(
-                config_path_str,
-                template_dir_str,
-                output_dir_str
-            )
-            
-            # Parse the configuration
-            config = self.config_parser.parse(rendered_template)
-            
-            # Validate the configuration format
-            ConfigValidator.validate_list_config([config], "Agent configuration")
-            
-            ServiceLogger.log_operation_success(logger, "render and load config",
-                                             agent_name=agent_name)
-            return config
-            
-        except Exception as e:
-            ErrorHandler.handle_error(
-                e,
-                f"Failed to render and load configuration for agent {agent_name}",
-                context={
-                    'agent_name': agent_name,
-                    'config_path': str(config_path),
-                    'template_dir': str(template_dir),
-                    'output_dir': str(output_dir)
-                }
-            )
+        ServiceLogger.log_operation_success(logger, "render and load config",
+                                           agent_name=agent_name)
+    
+        return config
 
 
 # Maintain backwards compatibility with the original API
 class ConfigRenderer:
     """Static facade for backwards compatibility with old code."""
-    
-    @staticmethod
+    @as_validation_error(ConfigValidationError)
+    def _safe_load_yaml(self, raw: str, src: Path):
+        """Parse YAML, turning low-level YAMLError into our own exception."""
+        try:
+            return yaml.safe_load(raw) or {}
+        except yaml.MarkedYAMLError as exc:
+            # Build a human sentence: file, 1-based line/col, parser complaint
+            mark = exc.problem_mark            # has .line & .column (0-based)
+            msg  = exc.problem or "syntax error"
+            raise ConfigValidationError(
+                f"YAML syntax error in {src.name} "
+                f"(line {mark.line+1}, col {mark.column+1}): {msg}"
+            ) from None    
+    @as_validation_error(ConfigValidationError)
     def render_and_load_config(
         agent_name: str,
         config_path: Path,

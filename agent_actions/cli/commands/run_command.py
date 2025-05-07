@@ -130,37 +130,34 @@ class RunCommand:
         Raises:
             ConfigurationError: If the configuration is invalid
         """
-        try:
-            # Render and load configuration
-            logger.info("Rendering and loading configuration...",
-                       extra={'agent_name': self.agent_name})
+
+        logger.info("Rendering and loading configuration...",
+                    extra={'agent_name': self.agent_name})
+        
+        config_data = ConfigRenderer.render_and_load_config(
+            self.agent_name, 
+            full_path, 
+            paths.template_dir, 
+            paths.rendered_workflows_dir
+        )
+        
+        # Validate agent entries
+        if self.agent_name not in config_data:
+            available = list(config_data.keys())
+            error_msg = f"Workflow '{self.agent_name}' not found in configuration. Available: {available}"
+            logger.error(error_msg, extra={'agent_name': self.agent_name})
+            raise ConfigurationError(error_msg)
+        
+        agent_config = config_data[self.agent_name]
+        logger.info("Validating agent entries...", extra={'agent_name': self.agent_name})
+        ConfigurationValidator.validate_agent_entries(agent_config, self.agent_name)
+        
+        # Get parent pipeline
+        parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
+        
+        return agent_config, parent_pipeline
             
-            config_data = ConfigRenderer.render_and_load_config(
-                self.agent_name, 
-                full_path, 
-                paths.template_dir, 
-                paths.rendered_workflows_dir
-            )
-            
-            # Validate agent entries
-            if self.agent_name not in config_data:
-                available = list(config_data.keys())
-                error_msg = f"Workflow '{self.agent_name}' not found in configuration. Available: {available}"
-                logger.error(error_msg, extra={'agent_name': self.agent_name})
-                raise ConfigurationError(error_msg)
-            
-            agent_config = config_data[self.agent_name]
-            logger.info("Validating agent entries...", extra={'agent_name': self.agent_name})
-            ConfigurationValidator.validate_agent_entries(agent_config, self.agent_name)
-            
-            # Get parent pipeline
-            parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
-            
-            return agent_config, parent_pipeline
-            
-        except Exception as e:
-            raise ConfigurationError(f"Configuration error: {str(e)}") from e
-    
+
     def execute(self) -> None:
         """
         Execute the run command.
