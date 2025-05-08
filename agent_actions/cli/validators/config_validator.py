@@ -22,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigurationValidator:
+    @classmethod
+    def validate_full_agent_config(cls, config: Dict[str, Any], agent_name: str) -> None:
+        if agent_name not in config:
+            raise ConfigValidationError(f"Agent '{agent_name}' not found in configuration.")
+        agent_config = config[agent_name]
+        cls.validate_agent_entries(agent_config, agent_name)
     """Handles configuration validation operations."""
     
     # List of required agent entry keys

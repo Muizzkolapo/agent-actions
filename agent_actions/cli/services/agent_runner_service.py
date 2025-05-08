@@ -18,7 +18,7 @@ from agent_actions.cli.exceptions import (
     FileNotFoundError,
     AgentExecutionError
 )
-from agent_actions.cli.utils.path_validator import PathValidator
+from agent_actions.cli.validators.path_validator import PathValidator
 
 logger = logging.getLogger(__name__)
 
@@ -178,13 +178,18 @@ class AgentRunnerService:
                 return result or {}
                 
         except Exception as e:
+            if "Prompt file" in str(e) and "not found" in str(e):
+                error_msg = str(e).split(":", 1)[-1].strip()
+                logger.error(f"Prompt file error in workflow: {error_msg}", extra={'agent_name': agent_name})
+                raise AgentExecutionError(f"Prompt loading failed: {error_msg}") from None
+
             error_details = {
                 'agent_name': agent_name,
                 'error': str(e),
                 'traceback': traceback.format_exc()
             }
-            
-            logger.error(f"Failed to run agent workflow for {agent_name}: {str(e)}", 
+
+            logger.error(f"Failed to run agent workflow for {agent_name}: {str(e)}",
                          extra=error_details, exc_info=True)
-                         
+
             raise AgentExecutionError(f"Failed to run agent workflow for {agent_name}: {str(e)}") from e

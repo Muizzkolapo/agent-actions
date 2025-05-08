@@ -23,9 +23,6 @@ from agent_actions.cli.commands.init_command import init
 from agent_actions.cli.commands.render_command import render
 from agent_actions.cli.commands.run_command import run
 
-# Import logging configuration
-from agent_actions.cli.utils.logging_config import setup_logging
-
 # Version information
 __version__ = '1.0.0'
 
@@ -93,12 +90,7 @@ class CLI:
         else:
             log_level = "WARNING"
         
-        # Configure structured JSON logging for log files
-        setup_logging(
-            log_level=log_level,
-            use_json=True,
-            console_level=log_level
-        )
+
     
     def _show_version_and_exit(self) -> None:
         """Display version information and exit."""

@@ -43,8 +43,8 @@ class PromptValidator:
             prompt_dir: Path to the prompt_store directory.
             
         Raises:
-            FileNotFoundError: If the prompt directory does not exist.
-            PromptValidationError: If prompt validation fails.
+            PromptValidationError: If the prompt directory does not exist or if prompt validation fails.
+            ValidationError: If the prompt path is not a directory.
         """
         logger.info("Starting prompt validation", extra={
             'prompt_dir': str(prompt_dir)
@@ -52,10 +52,9 @@ class PromptValidator:
         
         # Check if directory exists
         if not prompt_dir.exists():
-            logger.warning("Prompt directory not found", extra={
-                'prompt_dir': str(prompt_dir)
-            })
-            return
+            error_msg = f"Prompt directory not found: {prompt_dir}"
+            logger.error(error_msg)
+            raise PromptValidationError(error_msg)
         
         if not prompt_dir.is_dir():
             raise ValidationError(f"Prompt path is not a directory: {prompt_dir}")

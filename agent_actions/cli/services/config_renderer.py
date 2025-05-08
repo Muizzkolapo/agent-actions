@@ -14,13 +14,14 @@ from typing import Dict, Any, Optional, Protocol, Union
 from abc import ABC, abstractmethod
 
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
-from agent_actions.cli.utils.path_validator import PathValidator
+from agent_actions.cli.validators.path_validator import PathValidator
 from agent_actions.cli.utils.service_logger import ServiceLogger
 from agent_actions.cli.utils.error_handler import ErrorHandler
 from agent_actions.cli.validators.config_validator import ConfigValidator
 from agent_actions.cli.exceptions import ConfigurationError
 from agent_actions.cli.exceptions import ConfigValidationError
 from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
+from agent_actions.cli.validators.schema_validator import SchemaValidator
 logger = logging.getLogger(__name__)
 
 
@@ -284,6 +285,13 @@ class ConfigRenderingService:
         if not data:
             raise ConfigurationError(f"Configuration results in empty data: {src}")
         return data
+
+    def _validate_agent_config_block(self, config: Dict[str, Any], agent_name: str) -> None:
+        """
+        Validate the full agent config using ConfigurationValidator.
+        """
+        from agent_actions.cli.validators.config_validator import ConfigurationValidator
+        ConfigurationValidator.validate_full_agent_config(config, agent_name)
        
     @as_validation_error(ConfigurationError)
     def render_and_load_config(
@@ -340,7 +348,11 @@ class ConfigRenderingService:
             output_dir_str
         )
         config = self._safe_load_yaml(rendered_template, cfg_path)
-        ConfigValidator.validate_list_config([config], "Agent configuration")
+        try:
+            SchemaValidator.validate_schema(agent_name, Path(template_dir))
+        except Exception as e:
+            raise ConfigurationError(f"Schema validation failed: {e}") from None
+        self._validate_agent_config_block(config, agent_name)
             
         ServiceLogger.log_operation_success(logger, "render and load config",
                                            agent_name=agent_name)
