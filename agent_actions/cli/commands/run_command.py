@@ -24,7 +24,8 @@ from agent_actions.cli.services.agent_runner_service import AgentRunnerService
 from agent_actions.cli.exceptions import (
     ConfigurationError, 
     ValidationError,
-    FileNotFoundError
+    FileNotFoundError,
+    AgentExecutionError
 )
 
 logger = logging.getLogger(__name__)
@@ -77,16 +78,7 @@ class RunCommand:
             logger.info("Checking required directories...", extra={'agent_name': self.agent_name})
             required_dirs = [paths.agent_config_dir, paths.schema_dir, paths.io_dir]
             DirectoryValidator.check_required_directories(required_dirs)
-            
-            # Validate agent configuration
-            logger.info("Validating agent configuration...", extra={'agent_name': self.agent_name})
-            full_path = self._find_config_file(paths)
-            ConfigurationValidator.validate_agent_config(self.agent_name, full_path, paths.current_dir)
-            
-            # Validate schema
-            logger.info("Validating schema...", extra={'agent_name': self.agent_name})
-            SchemaValidator.validate_schema(self.agent_name, paths.schema_dir)
-            
+            # Agent config and schema validation removed
         except Exception as e:
             raise ValidationError(f"Validation failed: {str(e)}") from e
     
@@ -130,37 +122,22 @@ class RunCommand:
         Raises:
             ConfigurationError: If the configuration is invalid
         """
-        try:
-            # Render and load configuration
-            logger.info("Rendering and loading configuration...",
-                       extra={'agent_name': self.agent_name})
+
+        logger.info("Rendering and loading configuration...",
+                    extra={'agent_name': self.agent_name})
+        
+        config_data = ConfigRenderer.render_and_load_config(
+            self.agent_name, 
+            full_path, 
+            paths.template_dir, 
+            paths.rendered_workflows_dir
+        )
+        
+        agent_config = config_data[self.agent_name]
+        parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
+        return agent_config, parent_pipeline
             
-            config_data = ConfigRenderer.render_and_load_config(
-                self.agent_name, 
-                full_path, 
-                paths.template_dir, 
-                paths.rendered_workflows_dir
-            )
-            
-            # Validate agent entries
-            if self.agent_name not in config_data:
-                available = list(config_data.keys())
-                error_msg = f"Workflow '{self.agent_name}' not found in configuration. Available: {available}"
-                logger.error(error_msg, extra={'agent_name': self.agent_name})
-                raise ConfigurationError(error_msg)
-            
-            agent_config = config_data[self.agent_name]
-            logger.info("Validating agent entries...", extra={'agent_name': self.agent_name})
-            ConfigurationValidator.validate_agent_entries(agent_config, self.agent_name)
-            
-            # Get parent pipeline
-            parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
-            
-            return agent_config, parent_pipeline
-            
-        except Exception as e:
-            raise ConfigurationError(f"Configuration error: {str(e)}") from e
-    
+
     def execute(self) -> None:
         """
         Execute the run command.
@@ -209,6 +186,10 @@ class RunCommand:
         except ConfigurationError as e:
             logger.error(f"Configuration error for agent {self.agent}: {str(e)}")
             raise click.ClickException(f"Configuration error: {str(e)}")
+
+        except AgentExecutionError as e:
+            logger.error(f"Agent execution failed for {self.agent}: {str(e)}", exc_info=False)
+            raise click.ClickException(str(e))
             
         except Exception as e:
             logger.error(f"Failed to run agent {self.agent}: {str(e)}", exc_info=True)
