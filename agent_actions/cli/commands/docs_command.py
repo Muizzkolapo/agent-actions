@@ -6,15 +6,12 @@ which handles running the documentation server.
 """
 
 import click
-import logging
 import socket
-from typing import Optional, Tuple
+from typing import Optional
 import webbrowser
 
 from agent_actions.docs.app import run_app
 from agent_actions.cli.exceptions import PermissionError
-
-logger = logging.getLogger(__name__)
 
 
 class DocsCommand:
@@ -77,11 +74,9 @@ class DocsCommand:
             url: URL to open.
         """
         try:
-            logger.info(f"Opening browser at {url}")
             webbrowser.open_new_tab(url)
         except Exception as e:
-            logger.warning(f"Failed to open browser: {str(e)}")
-            # Don't raise an exception, just log a warning
+            click.echo(f"Warning: Failed to open browser: {str(e)}")
     
     def execute(self) -> None:
         """
@@ -90,22 +85,16 @@ class DocsCommand:
         Raises:
             Various exceptions depending on what fails.
         """
-        logger.info(f"Starting documentation server on {self.host}:{self.port}")
-        
         try:
             # Check if port is available
             if not self._validate_port_available():
                 alternative_port = self._find_available_port(self.port + 1)
                 if alternative_port:
-                    logger.warning(
-                        f"Port {self.port} is not available, using port {alternative_port} instead"
-                    )
                     click.echo(
                         f"Port {self.port} is not available, using port {alternative_port} instead"
                     )
                     self.port = alternative_port
                 else:
-                    logger.error(f"Port {self.port} is not available and no alternative port was found")
                     raise click.ClickException(
                         f"Port {self.port} is not available. Please specify a different port."
                     )
@@ -124,14 +113,10 @@ class DocsCommand:
             # Run the documentation server
             run_app(self.host, self.port, self.debug)
             
-            logger.info("Documentation server started successfully")
-            
         except PermissionError as e:
-            logger.error(f"Permission denied: {str(e)}")
             raise click.ClickException(f"Permission denied: {str(e)}")
             
         except Exception as e:
-            logger.error(f"Failed to run documentation server: {str(e)}", exc_info=True)
             raise click.ClickException(f"Failed to run documentation server: {str(e)}")
 
 
