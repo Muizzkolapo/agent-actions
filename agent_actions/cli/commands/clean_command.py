@@ -2,7 +2,6 @@ import logging
 import click
 from agent_actions.handlers.cleaner import Cleaner
 
-logger = logging.getLogger(__name__)
 
 @click.command(
     name="clean",

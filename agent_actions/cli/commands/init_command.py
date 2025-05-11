@@ -7,7 +7,6 @@ which handles creating new Agent Actions projects.
 
 import os
 import click
-import logging
 from pathlib import Path
 from typing import Optional, List
 
@@ -18,8 +17,6 @@ from agent_actions.cli.exceptions import (
     PermissionError,
     ConfigurationError
 )
-
-logger = logging.getLogger(__name__)
 
 
 class InitCommand:
@@ -60,8 +57,6 @@ class InitCommand:
         Raises:
             PermissionError: If there's a permission issue.
         """
-        logger.debug(f"Creating project directory: {self.project_dir}")
-        
         try:
             # Remove existing directory if force is True
             if self.project_dir.exists() and self.force:
@@ -83,8 +78,6 @@ class InitCommand:
         Raises:
             ConfigurationError: If project initialization fails.
         """
-        logger.debug("Initializing project")
-        
         try:
             initializer = ProjectInitializer(
                 project_name=self.project_name,
@@ -103,8 +96,6 @@ class InitCommand:
         Raises:
             Various exceptions depending on what fails.
         """
-        logger.info(f"Starting project initialization for: {self.project_name}")
-        
         try:
             # Validate inputs using ProjectValidator
             ProjectValidator.validate_project_name(self.project_name)
@@ -118,7 +109,6 @@ class InitCommand:
             self._initialize_project()
             
             # Success message
-            logger.info(f"Successfully initialized project: {self.project_name}")
             click.echo(f"Successfully initialized project: {self.project_name}")
             click.echo(f"Project created at: {self.project_dir}")
             click.echo("\nNext steps:")
@@ -126,12 +116,9 @@ class InitCommand:
             click.echo("  agent-actions run -a sample_agent")
             
         except (ValidationError, PermissionError, ConfigurationError) as e:
-            logger.error(f"{e.__class__.__name__}: {str(e)}")
             raise click.ClickException(str(e))
             
         except Exception as e:
-            logger.error(f"Failed to initialize project {self.project_name}: {str(e)}", 
-                         exc_info=True)
             raise click.ClickException(f"Failed to initialize project {self.project_name}: {str(e)}")
 
 

@@ -8,7 +8,6 @@ which executes agent workflows based on configuration files.
 import os
 import yaml
 import click
-import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Union, Tuple
 from dataclasses import dataclass
@@ -27,8 +26,6 @@ from agent_actions.cli.exceptions import (
     FileNotFoundError,
     AgentExecutionError
 )
-
-logger = logging.getLogger(__name__)
 
 
 class RunCommand:
@@ -56,7 +53,6 @@ class RunCommand:
         Returns:
             Agent name without extension
         """
-        # Handle both "name" and "name.yml" formats
         return Path(agent).stem
     
     def _validate_prerequisites(self, paths) -> None:
@@ -70,15 +66,13 @@ class RunCommand:
             ValidationError: If any validation fails
         """
         try:
-            # Validate prompts
-            logger.info("Validating prompts...", extra={'agent_name': self.agent_name})
+            click.echo(f"Validating prompts for agent: {self.agent_name}")
             PromptValidator.validate_prompts(paths.prompt_dir)
             
-            # Check required directories
-            logger.info("Checking required directories...", extra={'agent_name': self.agent_name})
+            click.echo("Checking required directories...")
             required_dirs = [paths.agent_config_dir, paths.schema_dir, paths.io_dir]
             DirectoryValidator.check_required_directories(required_dirs)
-            # Agent config and schema validation removed
+            
         except Exception as e:
             raise ValidationError(f"Validation failed: {str(e)}") from e
     
@@ -96,15 +90,12 @@ class RunCommand:
             FileNotFoundError: If the configuration file cannot be found
         """
         filename = f"{self.agent}.yml" if not self.agent.endswith(".yml") else self.agent
-        logger.info("Locating configuration file...", 
-                   extra={'agent_name': self.agent_name, 'filename': filename})
+        click.echo(f"Locating configuration file: {filename}")
         
         full_path = AgentRunnerService.find_config_file(paths.agent_config_dir, filename)
         
         if full_path is None or not paths.default_config_path.exists():
-            error_msg = f"Missing configuration file: {filename}"
-            logger.error(error_msg, extra={'agent_name': self.agent_name})
-            raise FileNotFoundError(error_msg)
+            raise FileNotFoundError(f"Missing configuration file: {filename}")
         
         return full_path
     
@@ -118,13 +109,8 @@ class RunCommand:
             
         Returns:
             Tuple of (agent_config, parent_pipeline)
-            
-        Raises:
-            ConfigurationError: If the configuration is invalid
         """
-
-        logger.info("Rendering and loading configuration...",
-                    extra={'agent_name': self.agent_name})
+        click.echo("Rendering and loading configuration...")
         
         config_data = ConfigRenderer.render_and_load_config(
             self.agent_name, 
@@ -136,7 +122,6 @@ class RunCommand:
         agent_config = config_data[self.agent_name]
         parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
         return agent_config, parent_pipeline
-            
 
     def execute(self) -> None:
         """
@@ -145,25 +130,15 @@ class RunCommand:
         Raises:
             Various exceptions depending on the stage that fails
         """
-        logger.info(f"Starting agent run for: {self.agent}")
+        click.echo(f"Starting agent run for: {self.agent}")
         
         try:
-            # Create project paths
-            logger.info("Setting up project paths...", extra={'agent_name': self.agent_name})
-            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)
-            
-            # Validate prerequisites
-            self._validate_prerequisites(paths)
-            
-            # Find configuration file
+            click.echo("Setting up project paths...")
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)            
+            self._validate_prerequisites(paths)            
             full_path = self._find_config_file(paths)
-            
-            # Load and validate configuration
             agent_config, parent_pipeline = self._load_and_validate_config(full_path, paths)
-            
-            # Run the workflow
-            logger.info("Starting agent workflow execution...", 
-                       extra={'agent_name': self.agent_name, 'parent_pipeline': parent_pipeline})
+            click.echo(f"Starting workflow execution for pipeline: {parent_pipeline}")
             
             AgentRunnerService.run_agent_workflow(
                 self.agent_name,
@@ -173,26 +148,12 @@ class RunCommand:
                 parent_pipeline
             )
             
-            logger.info(f"Successfully completed agent run for: {self.agent}")
+            click.echo(f"Successfully completed agent run for: {self.agent}")
             
-        except ValidationError as e:
-            logger.error(f"Validation failed for agent {self.agent}: {str(e)}")
-            raise click.ClickException(f"Validation failed: {str(e)}")
-            
-        except FileNotFoundError as e:
-            logger.error(f"File not found for agent {self.agent}: {str(e)}")
-            raise click.ClickException(f"File not found: {str(e)}")
-            
-        except ConfigurationError as e:
-            logger.error(f"Configuration error for agent {self.agent}: {str(e)}")
-            raise click.ClickException(f"Configuration error: {str(e)}")
-
-        except AgentExecutionError as e:
-            logger.error(f"Agent execution failed for {self.agent}: {str(e)}", exc_info=False)
+        except (ValidationError, FileNotFoundError, ConfigurationError, AgentExecutionError) as e:
             raise click.ClickException(str(e))
             
         except Exception as e:
-            logger.error(f"Failed to run agent {self.agent}: {str(e)}", exc_info=True)
             raise click.ClickException(f"Failed to run agent {self.agent}: {str(e)}")
 
 
