@@ -43,6 +43,7 @@ class OpenAIHandler:
         response_message = response.choices[0].message
         response_content = response_message.content
         response_data = json.loads(response_content)
+        print(response_data)
 
         response_list = response_data if isinstance(response_data, list) else [response_data]
         return response_list
@@ -75,7 +76,7 @@ class OpenAIHandler:
         )
 
         response_message = response.choices[0].message
-        response_content = response_message.content
+        response_content = {"raw_response": response_message.content}
 
         return [response_content]
 

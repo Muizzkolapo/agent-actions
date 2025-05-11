@@ -1,62 +1,71 @@
-import yaml
-import json
-import sys
+# agent_actions/models/schema_change.py  (or wherever this helper lives)
 
-def compile_field(field, target_system):
+import json
+import yaml
+import sys
+from typing import Tuple, Dict, Any
+
+
+# --------------------------------------------------------------------------- #
+# Helpers                                                                     #
+# --------------------------------------------------------------------------- #
+def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]:
     """
-    Dynamically compile a single field definition.
-    If the field contains a mapping for the target system,
-    use it; otherwise, use the original field id.
+    Convert a single unified field into the shape required by the target system.
+    If custom name-mappings exist for that system, apply them.
     """
-    # Check for target-specific mapping if provided.
     target_field = field.get("mappings", {}).get(target_system.lower(), field["id"])
-    
-    # Start with the basic type.
-    prop = {"type": field["type"]}
-    
-    # Include additional JSON Schema keywords if provided.
-    for keyword in ["title", "description", "pattern", "minItems", "maxItems"]:
-        if keyword in field:
-            prop[keyword] = field[keyword]
-    
-    # For array type fields, include the items schema if provided.
+
+    # base JSON-Schema skeleton
+    prop: Dict[str, Any] = {"type": field["type"]}
+
+    # simple passthrough keywords
+    for k in ("title", "description", "pattern", "minItems", "maxItems"):
+        if k in field:
+            prop[k] = field[k]
+
+    # array item schema support
     if field["type"] == "array" and "items" in field:
         prop["items"] = field["items"]
-    
-    # Add enum if provided.
+
+    # enumerations
     if "enum" in field:
         prop["enum"] = field["enum"]
-    
-    # Add validators if provided.
+
+    # validators (currently only “not” supported)
     if "validators" in field:
-        for validator in field["validators"]:
-            if "not" in validator:
-                prop["not"] = validator["not"]
-                # Optionally, include the error message.
-                if "errorMessage" in validator:
-                    prop["errorMessage"] = validator["errorMessage"]
-    
+        for v in field["validators"]:
+            if "not" in v:
+                prop["not"] = v["not"]
+                if "errorMessage" in v:
+                    prop["errorMessage"] = v["errorMessage"]
+
     return target_field, prop
 
-def compile_unified_schema(unified, target_system):
+
+# --------------------------------------------------------------------------- #
+# Main compiler                                                               #
+# --------------------------------------------------------------------------- #
+def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[str, Any]:
     """
-    Dynamically compile the unified schema into the target system schema.
-    The function uses the user's file definitions (including any custom mappings)
-    to build the appropriate JSON schema.
+    Convert a unified YAML/JSON definition into the schema dialect required by
+    OpenAI, Anthropic, Gemini, **or Ollama** (new).
     """
-    properties = {}
-    required = []
+    properties: Dict[str, Any] = {}
+    required:   list[str]      = []
 
     for field in unified.get("fields", []):
-        target_field, prop = compile_field(field, target_system)
-        properties[target_field] = prop
+        key, schema_prop = compile_field(field, target_system)
+        properties[key] = schema_prop
         if field.get("required", False):
-            required.append(target_field)
+            required.append(key)
 
-    # Build the final schema differently based on target.
+    # ------------------------------------------------------------------ #
+    # Dialect-specific wrappers                                           #
+    # ------------------------------------------------------------------ #
     target = target_system.lower()
+
     if target == "openai":
-        # For OpenAI, we assume the schema is embedded in a "schema" key.
         compiled = {
             "name": unified.get("name", ""),
             "schema": {
@@ -66,10 +75,10 @@ def compile_unified_schema(unified, target_system):
                 "additionalProperties": False
             }
         }
+
     elif target == "anthropic":
-        # For Anthropic, assume the schema is under "input_schema" and returned in a list.
         compiled = [{
-            "name": unified.get("name", ""),
+            "name":        unified.get("name", ""),
             "description": unified.get("description", ""),
             "input_schema": {
                 "type": "object",
@@ -78,14 +87,27 @@ def compile_unified_schema(unified, target_system):
                 "additionalProperties": False
             }
         }]
+
     elif target == "gemini":
-        # For Gemini, we assume that the schema is a direct mapping of the properties.
-        # This allows Gemini to receive fields with extra keywords (like title, description, etc.)
         compiled = {
-            "name": unified.get("name", ""),
-            "schema": properties
+            "name":   unified.get("name", ""),
+            "schema": properties           # Gemini takes a flat properties map
         }
+
+    elif target == "ollama":
+        # Ollama expects the *pure* JSON-Schema object you pass directly to
+        # the `format=` parameter—no extra wrapper keys.
+        compiled = {
+            "title": unified.get("name", ""),
+            "type": "object",
+            "properties": properties,
+            "required": required,
+            "additionalProperties": False
+        }
+
     else:
-        raise ValueError("Unknown target system. Choose either 'openai', 'anthropic', or 'gemini'.")
-    
+        raise ValueError(
+            "Unknown target system. Choose 'openai', 'anthropic', 'gemini', or 'ollama'."
+        )
+
     return compiled

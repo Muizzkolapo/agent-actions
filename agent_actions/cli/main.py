@@ -17,7 +17,7 @@ import click
 from click import Context, Command
 
 # Import commands
-from agent_actions.cli.commands.clean_command import clean
+from agent_actions.cli.commands.clean_command import clean_cli as clean
 from agent_actions.cli.commands.docs_command import docs
 from agent_actions.cli.commands.init_command import init
 from agent_actions.cli.commands.render_command import render

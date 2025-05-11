@@ -3,13 +3,36 @@ import os
 import shutil
 from typing import Callable, Optional, Dict, Any
 from agent_actions.handlers.file_handler import FileHandler
+from pathlib import Path
+from agent_actions.cli.exceptions import AgentNotFoundError
+import logging
+from pathlib import Path
 
+logger = logging.getLogger(__name__)
 
 class AgentManager:
     """
     A class for managing agent directories and configurations.
     """
-    
+    @staticmethod
+    def find_project_root(start_path: Path, marker_file: str = 'agent_actions.yml') -> Optional[Path]:
+        """
+        Find the project root directory by searching for a marker file.
+        
+        Args:
+            start_path: Path to start searching from
+            marker_file: Name of the file that marks the project root (default: 'agent_actions.yml')
+            
+        Returns:
+            Path to project root if found, None otherwise
+        """
+        current = Path(start_path).resolve()
+        while current != current.parent:
+            if (current / marker_file).exists():
+                return current
+            current = current.parent
+        return None
+        
     @staticmethod
     def clean_agent_directories(agent_name: str) -> bool:
         """
@@ -82,57 +105,64 @@ class AgentManager:
         return processed_count
     
     @staticmethod
-    def _add_agent_existence_check():
+    def agent_exists(agent_name: str) -> bool:
         """
-        This is a documentation for a method that should be added to AgentManager.
+        Check if an agent exists.
         
-        Example implementation:
-        
-        @staticmethod
-        def agent_exists(agent_name: str) -> bool:
-            '''
-            Check if an agent exists.
+        Args:
+            agent_name: Name of the agent to check.
             
-            Args:
-                agent_name: Name of the agent to check.
-                
-            Returns:
-                True if the agent exists, False otherwise.
-            '''
-            try:
-                agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
-                return Path(agent_config_dir).exists()
-            except Exception:
-                return False
+        Returns:
+            True if the agent exists, False otherwise.
         """
-        pass
+        try:
+            agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
+            return Path(agent_config_dir).exists()
+        except Exception:
+            return False
+
 
     @staticmethod
-    def _add_get_agent_directories():
+    def get_agent_paths(agent_name: str) -> tuple[str, str, str]:
         """
-        This is a documentation for a method that should be added to AgentManager.
-        
-        Example implementation:
-        
-        @staticmethod
-        def get_agent_directories(agent_name: str) -> List[Path]:
-            '''
-            Get the list of directories associated with an agent.
-            
-            Args:
-                agent_name: Name of the agent.
-                
-            Returns:
-                List of directories.
-            '''
-            agent_config_dir, io_dir, _ = AgentManager.get_agent_paths(agent_name)
-            
-            directories = []
-            if Path(agent_config_dir).exists():
-                directories.append(Path(agent_config_dir))
-            if Path(io_dir).exists():
-                directories.append(Path(io_dir))
-                
-            return directories
+        Construct and return key paths related to the agent.
+        Searches for agent_actions.yml file to determine the project root,
+        then looks for {agent_name}.yml to locate the agent directory.
+
+        Args:
+            agent_name: Name of the agent to find paths for
+
+        Returns:
+            Tuple of (agent_config_dir, io_dir, logs_dir)
+
+        Raises:
+            AgentNotFoundError: If agent_actions.yml or agent configuration cannot be found
         """
-        pass
+        # Find project root
+        project_root = AgentManager.find_project_root(os.getcwd())
+        if not project_root:
+            raise AgentNotFoundError("Could not find agent_actions.yml in current or parent directories")
+
+        # Search for agent configuration file
+        agent_yml = f"{agent_name}.yml"
+        for root, dirs, files in os.walk(project_root):
+            # Ignore any folder under rendered_workflow
+            dirs[:] = [d for d in dirs if 'rendered_workflow' not in d]
+            if agent_yml in files:
+                base_dir = Path(root).parent
+                agent_config_dir = base_dir / "agent_config"
+                io_dir = base_dir / "agent_io"
+                logs_dir = base_dir / "logs"
+                return str(agent_config_dir), str(io_dir), str(logs_dir)
+
+        raise AgentNotFoundError(f"Could not find configuration for agent: {agent_name}")
+
+
+    @classmethod
+    def clean_directory(cls, agent: str, directory: Path) -> None:
+        """Clean a specific directory for an agent."""
+        if directory.exists():
+            shutil.rmtree(directory)
+            logger.info(f"Cleaned directory {directory} for agent {agent}")
+
+
