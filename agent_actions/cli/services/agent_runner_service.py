@@ -14,9 +14,11 @@ from contextlib import contextmanager
 
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.workflow.agent_workflow import AgentWorkflow
+
 from agent_actions.cli.exceptions import (
     FileNotFoundError,
-    AgentExecutionError
+    AgentExecutionError,
+    ConfigurationError
 )
 from agent_actions.cli.validators.path_validator import PathValidator
 
@@ -193,3 +195,62 @@ class AgentRunnerService:
                          extra=error_details, exc_info=True)
 
             raise AgentExecutionError(f"Failed to run agent workflow for {agent_name}: {str(e)}") from e
+        
+
+  
+    @staticmethod
+    def get_parent_pipeline(agent_config: List[Dict[str, Any]]) -> Optional[str]:
+        """
+        Get the parent pipeline from the agent configuration.
+
+        Args:
+            agent_config: Agent configuration data.
+
+        Returns:
+            Parent pipeline name if found, None otherwise.
+            
+        Raises:
+            ConfigurationError: If the configuration format is invalid or cannot be parsed.
+        """
+        logger.debug("Starting parent pipeline extraction from agent config")
+        
+        # Basic validation
+        if not isinstance(agent_config, list):
+            raise ConfigurationError("Agent configuration must be a list")
+        
+        try:
+            for item in agent_config:
+                if not isinstance(item, dict):
+                    logger.warning("Non-dictionary item found in agent configuration")
+                    continue
+                    
+                if 'parent' in item:
+                    parent_list = item.get('parent')
+                    
+                    if parent_list is None:
+                        logger.warning("Empty parent field found in configuration")
+                        continue
+                        
+                    if not isinstance(parent_list, list):
+                        logger.warning(f"Parent field is not a list: {type(parent_list)}")
+                        continue
+                        
+                    if not parent_list:
+                        logger.warning("Parent list is empty")
+                        continue
+                        
+                    parent = parent_list[0]
+                    if not isinstance(parent, str):
+                        logger.warning(f"Parent is not a string: {type(parent)}")
+                        continue
+                        
+                    logger.debug(f"Found parent pipeline: {parent}")
+                    return parent
+                    
+            logger.debug("No parent pipeline found in configuration")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error parsing parent pipeline from config: {str(e)}")
+            raise ConfigurationError(f"Failed to parse parent pipeline: {str(e)}") from e
+    
