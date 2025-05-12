@@ -13,9 +13,6 @@ from typing import Optional, List, Dict, Any, Union, Tuple
 from dataclasses import dataclass
 
 from agent_actions.cli.validators.prompt_validator import PromptValidator
-from agent_actions.cli.validators.directory_validator import DirectoryValidator
-from agent_actions.cli.validators.config_validator import ConfigurationValidator
-from agent_actions.cli.validators.schema_validator import SchemaValidator
 from agent_actions.cli.services.config_renderer import ConfigRenderer
 from agent_actions.cli.services.agent_config_parser import AgentConfigParser
 from agent_actions.cli.services.project_paths_factory import ProjectPathsFactory
@@ -41,63 +38,8 @@ class RunCommand:
         """
         self.agent = agent
         self.user_code = user_code
-        self.agent_name = self._get_agent_name(agent)
-        
-    def _get_agent_name(self, agent: str) -> str:
-        """
-        Extract agent name from agent configuration parameter.
-        
-        Args:
-            agent: Agent configuration parameter (with or without extension)
-            
-        Returns:
-            Agent name without extension
-        """
-        return Path(agent).stem
-    
-    def _validate_prerequisites(self, paths) -> None:
-        """
-        Validate all prerequisites before running the agent.
-        
-        Args:
-            paths: Project paths container
-            
-        Raises:
-            ValidationError: If any validation fails
-        """
-        try:
-            click.echo(f"Validating prompts for agent: {self.agent_name}")
-            PromptValidator.validate_prompts(paths.prompt_dir)
-            
-            click.echo("Checking required directories...")
-            required_dirs = [paths.agent_config_dir, paths.schema_dir, paths.io_dir]
-            DirectoryValidator.check_required_directories(required_dirs)
-            
-        except Exception as e:
-            raise ValidationError(f"Validation failed: {str(e)}") from e
-    
-    def _find_config_file(self, paths) -> Path:
-        """
-        Locate the configuration file.
-        
-        Args:
-            paths: Project paths container
-            
-        Returns:
-            Path to the configuration file
-            
-        Raises:
-            FileNotFoundError: If the configuration file cannot be found
-        """
-        filename = f"{self.agent}.yml" if not self.agent.endswith(".yml") else self.agent
-        click.echo(f"Locating configuration file: {filename}")
-        
-        full_path = AgentRunnerService.find_config_file(paths.agent_config_dir, filename)
-        
-        if full_path is None or not paths.default_config_path.exists():
-            raise FileNotFoundError(f"Missing configuration file: {filename}")
-        
-        return full_path
+        self.agent_name = Path(agent).stem
+          
     
     def _load_and_validate_config(self, full_path: Path, paths) -> Tuple[Dict[str, Any], str]:
         """
@@ -121,7 +63,7 @@ class RunCommand:
         
         agent_config = config_data[self.agent_name]
         parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
-        return agent_config, parent_pipeline
+        return parent_pipeline
 
     def execute(self) -> None:
         """
@@ -135,9 +77,10 @@ class RunCommand:
         try:
             click.echo("Setting up project paths...")
             paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)            
-            self._validate_prerequisites(paths)            
-            full_path = self._find_config_file(paths)
-            agent_config, parent_pipeline = self._load_and_validate_config(full_path, paths)
+            PromptValidator.validate_prompts(paths.prompt_dir)    
+            filename = f"{self.agent}.yml" if not self.agent.endswith(".yml") else self.agent
+            full_path = AgentRunnerService.find_config_file(paths.agent_config_dir, filename)      
+            parent_pipeline = self._load_and_validate_config(full_path, paths)
             click.echo(f"Starting workflow execution for pipeline: {parent_pipeline}")
             
             AgentRunnerService.run_agent_workflow(
