@@ -11,7 +11,6 @@ from typing import Optional, List, Dict, Any, Union, Tuple
 
 from agent_actions.cli.validators.prompt_validator import PromptValidator
 from agent_actions.cli.services.config_renderer import ConfigRenderer
-from agent_actions.cli.services.agent_config_parser import AgentConfigParser
 from agent_actions.cli.services.project_paths_factory import ProjectPathsFactory
 from agent_actions.cli.services.agent_runner_service import AgentRunnerService
 from agent_actions.cli.exceptions import (
@@ -59,7 +58,7 @@ class RunCommand:
         )
         
         agent_config = config_data[self.agent_name]
-        parent_pipeline = AgentConfigParser.get_parent_pipeline(agent_config)
+        parent_pipeline = AgentRunnerService.get_parent_pipeline(agent_config)
         return parent_pipeline
 
     def execute(self) -> None:
