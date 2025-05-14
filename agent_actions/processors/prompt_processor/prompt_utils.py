@@ -8,24 +8,20 @@ import textwrap
 from typing import List
 import tiktoken
 from sentence_transformers import SentenceTransformer
+from agent_actions.transformers.string_transformer import StringProcessor
 
 class PromptUtils:
     """
     A class for processing strings, including placeholder replacement and function call processing.
     """
-
-
     @staticmethod
     def replace_placeholders(prompt, content_dict):
         """
-        Replace placeholders in the prompt string with values from content_dict.
-
-        Parameters:
-            prompt (str): The prompt string containing placeholders.
-            content_dict (dict): A dictionary containing the values to replace placeholders.
+        Replace placeholders in the prompt with values from content_dict,
+        and remove used keys from the dict.
 
         Returns:
-            str: The prompt with placeholders replaced by actual values.
+            tuple: (modified_prompt, cleaned_dict)
         """
         def convert_to_string(value):
             if isinstance(value, list):
@@ -33,16 +29,24 @@ class PromptUtils:
             return str(value)
 
         if not isinstance(content_dict, dict) or not content_dict:
-            return prompt
+            return prompt, content_dict
 
+        used_keys = set()
         placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
         for placeholder in placeholders:
             placeholder_keys = [key.strip() for key in placeholder.split(',')]
-            replacements = [f"{key}: {convert_to_string(content_dict[key])}" for key in placeholder_keys if key in content_dict]
+            replacements = []
+            for key in placeholder_keys:
+                if key in content_dict:
+                    replacements.append(f"{key}: {convert_to_string(content_dict[key])}")
+                    used_keys.add(key)
             replacement_text = ', '.join(replacements)
             prompt = prompt.replace(f'return_collection[{placeholder}]', replacement_text)
 
-        return prompt
+        cleaned_dict = {k: v for k, v in content_dict.items() if k not in used_keys}
+        return prompt, cleaned_dict
+
+
 
     @staticmethod
     def replace_guid_placeholder(data, guid):
@@ -64,19 +68,20 @@ class PromptUtils:
         return cleaned_content
 
     @staticmethod
-    def inject_function_outputs_into_prompt(text, tools_path=None, context_data_str=None):
+    def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None):
         """
-        Replace multiple dispatch_task() calls in text with the result of their corresponding function.
+        Replace multiple dispatch_task() calls in prompt_config with the result of their corresponding function.
         Always passes `context_data_str` to the function.
 
         Parameters:
-            text (str or list): The text containing dispatch_task() calls.
+            prompt_config (str or list): The prompt_config containing dispatch_task() calls.
             tools_path (str): The path to the tools directory.
             context_data_str (str): Documentation string to pass to the functions.
 
         Returns:
-            str or list: The text with dispatch_task() calls replaced by function outputs.
+            str or list: The prompt_config with dispatch_task() calls replaced by function outputs.
         """
+
         def process_single_text(single_text):
             if not isinstance(single_text, str):
                 single_text = str(single_text)
@@ -97,10 +102,9 @@ class PromptUtils:
 
             return single_text
 
-        if isinstance(text, list):
-            return [process_single_text(str(item)) for item in text]
-        elif isinstance(text, str):
-            return process_single_text(text)
+        if isinstance(prompt_config, list):
+            return [process_single_text(str(item)) for item in prompt_config]
+        elif isinstance(prompt_config, str):
+            return process_single_text(prompt_config)
         else:
-            print(f"Invalid input type: {type(text).__name__}")
-            return text
+            print(f"Invalid input type: {type(prompt_config).__name__}")

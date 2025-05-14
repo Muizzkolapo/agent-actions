@@ -47,7 +47,7 @@ class StagingProcessor:
             # Step 5: Apply remove_collection transformations
             prepared_context = ContextPreprocessor.prepare_context(enriched_data, self.agent_config)
             
-            # Step 6: Create dynamic agent
+            # Step 6: Create dynamic agent This is where tuple issue is Invalid input type:
             response = agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
