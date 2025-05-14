@@ -49,35 +49,6 @@ class PromptUtils:
 
 
     @staticmethod
-    def replace_placeholders_old(prompt, content_dict):
-        """
-        Replace placeholders in the prompt string with values from content_dict.
-
-        Parameters:
-            prompt (str): The prompt string containing placeholders.
-            content_dict (dict): A dictionary containing the values to replace placeholders.
-
-        Returns:
-            str: The prompt with placeholders replaced by actual values.
-        """
-        def convert_to_string(value):
-            if isinstance(value, list):
-                return ", ".join([str(v) if isinstance(v, dict) else str(v) for v in value])
-            return str(value)
-
-        if not isinstance(content_dict, dict) or not content_dict:
-            return prompt
-
-        placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
-        for placeholder in placeholders:
-            placeholder_keys = [key.strip() for key in placeholder.split(',')]
-            replacements = [f"{key}: {convert_to_string(content_dict[key])}" for key in placeholder_keys if key in content_dict]
-            replacement_text = ', '.join(replacements)
-            prompt = prompt.replace(f'return_collection[{placeholder}]', replacement_text)
-
-        return prompt
-
-    @staticmethod
     def replace_guid_placeholder(data, guid):
         """
         Replace the placeholder 'return_collection{{source_context}}' with the specified GUID in a string.

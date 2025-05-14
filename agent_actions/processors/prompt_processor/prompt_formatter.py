@@ -50,7 +50,7 @@ class PromptFormatter:
         """
         try:
             source_loaded_prompt = PromptUtils.replace_guid_placeholder(raw_prompt, str(source_content))
-            formatted_prompt = PromptUtils.replace_placeholders(source_loaded_prompt, context_data)
+            formatted_prompt, _ = PromptUtils.replace_placeholders(source_loaded_prompt, context_data)
             return formatted_prompt
         except Exception as e:
             raise ValueError(f"Failed to format prompt: {str(e)}")
