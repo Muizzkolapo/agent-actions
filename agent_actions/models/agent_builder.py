@@ -62,8 +62,7 @@ def create_dynamic_agent(
     the model’s response(s) as a list.
     """
     # ----- prompt selection / templating ----------------------------------
-    prompt_config = _prepare_prompt(agent_config, formatted_prompt)
-
+    prompt_config_base = _prepare_prompt(agent_config, formatted_prompt)
     if not tools_path:
         tools_path = agent_config.get('tools', {}).get('path')
 
@@ -77,12 +76,13 @@ def create_dynamic_agent(
               if not isinstance(context_data_str, str) else context_data_str)
     )
 
-    # Inject user-defined function outputs into the prompt, if any
+    # Inject user-defined function outputs into the prompt, if any 
     prompt_config = PromptUtils.inject_function_outputs_into_prompt(
-        prompt_config,
+        prompt_config_base,
         tools_path,
         context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False)
     )
+    
 
     _debug_print_prompt(
         agent_config,
@@ -114,6 +114,8 @@ def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str
     prompt_cfg = agent_config.get('prompt', '')
     if isinstance(prompt_cfg, str) and prompt_cfg.startswith('$'):
         return PromptLoader.load_prompt(prompt_cfg[1:])
+    
+
 
     return prompt_cfg
 

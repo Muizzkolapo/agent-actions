@@ -50,14 +50,16 @@ class DataGenerator(IDataGenerator):
             contents = self._apply_remove_collection(contents)
             
             # Format prompt with content
-            formatted_prompt = self._format_prompt(contents, source_content)
+            #formatted_prompt = self._format_prompt(contents, source_content)
+            formatted_prompt, contents = self._format_prompt(contents, source_content)
             
+
             # Create and run the agent
             return agent_builder.create_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
                 contents,
-                formatted_prompt
+                formatted_prompt=formatted_prompt
             )
         except Exception as e:
             raise RuntimeError(f"Failed to create agent with data: {str(e)}")
@@ -94,10 +96,10 @@ class DataGenerator(IDataGenerator):
             raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
-        
-        # Format prompt
+
         source_loaded_prompt = PromptUtils.replace_guid_placeholder(
-            raw_prompt, 
+            raw_prompt,
             str(source_content)
         )
-        return PromptUtils.replace_placeholders(source_loaded_prompt, contents)
+        prompt, cleaned_contents = PromptUtils.replace_placeholders(source_loaded_prompt, contents)
+        return prompt, cleaned_contents
