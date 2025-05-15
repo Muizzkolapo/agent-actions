@@ -25,7 +25,7 @@ class PathValidator:
     
     @staticmethod
     def validate_directory(
-        path: Union[str, Path],
+        path: Path,
         directory_name: str,
         required: bool = True,
         must_be_readable: bool = True,
@@ -93,7 +93,7 @@ class PathValidator:
     
     @staticmethod
     def validate_file(
-        path: Union[str, Path],
+        path: Path,
         file_name: str,
         required: bool = True,
         must_be_readable: bool = True,
@@ -161,7 +161,7 @@ class PathValidator:
     
     @staticmethod
     def create_directory_if_needed(
-        path: Union[str, Path],
+        path: Path,
         directory_name: str,
         must_be_writable: bool = True
     ) -> Path:
@@ -246,4 +246,4 @@ class PathValidator:
             
         except Exception as e:
             ServiceLogger.log_operation_error(logger, "validate user code path", e)
-            raise 
+            raise
