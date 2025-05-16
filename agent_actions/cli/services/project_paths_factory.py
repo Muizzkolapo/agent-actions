@@ -132,15 +132,16 @@ class ProjectPathsFactory:
             )
             
             # Validate required directories
+            path_validator = PathValidator()
             for dir_name in cls.REQUIRED_DIRECTORIES:
-                PathValidator.validate_directory(getattr(paths, dir_name), dir_name)
+                path_validator.validate(getattr(paths, dir_name), dir_name)
             
             # Create auto-create directories if they don't exist
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
-                PathValidator.create_directory_if_needed(getattr(paths, dir_name), dir_name)
+                path_validator.validate(getattr(paths, dir_name), dir_name)
             
             # Validate default config file
-            PathValidator.validate_file(paths.default_config_path, "Default config")
+            path_validator.validate(paths.default_config_path, "Default config")
             
             logger.debug("All project paths created successfully")
             return paths

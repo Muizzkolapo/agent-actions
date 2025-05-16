@@ -17,11 +17,12 @@ from agent_actions.workflow.render_workflow import render_pipeline_with_template
 from agent_actions.cli.validators.path_validator import PathValidator
 from agent_actions.cli.utils.service_logger import ServiceLogger
 from agent_actions.cli.utils.error_handler import ErrorHandler
-from agent_actions.cli.validators.config_validator import ConfigValidator
 from agent_actions.cli.exceptions import ConfigurationError
 from agent_actions.cli.exceptions import ConfigValidationError
 from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
 from agent_actions.cli.validators.schema_validator import SchemaValidator
+from agent_actions.cli.validators.config_validator import ConfigValidator
+
 logger = logging.getLogger(__name__)
 
 
@@ -87,74 +88,126 @@ class OutputWriter(ABC):
 
 class JinjaTemplateRenderer(TemplateRenderer):
     """Template renderer implementation using Jinja."""
-    
+
     def render(self, config_path: str, template_dir: str, output_path: Optional[str] = None) -> str:
         """
         Render a template with the given configuration using Jinja.
-        
+
         Args:
-            config_path: Path to the configuration file.
-            template_dir: Path to the template directory.
-            output_path: Optional path to save the rendered output.
-            
+            config_path: Path to the configuration file (as string).
+            template_dir: Path to the template directory (as string).
+            output_path: Optional path to save the rendered output (as string, can be a directory path).
+
         Returns:
             Rendered template as a string.
-            
+
         Raises:
-            TemplateRenderingError: If rendering fails.
+            ValueError: If input validation fails (caught by the generic handler).
+            Any exception from render_pipeline_with_templates or ErrorHandler.
         """
+        # Argument names from the original user-provided function are config_path, template_dir, output_path
+        # These are used directly as strings. Path conversion happens when creating the 'data' dicts.
         try:
-            ServiceLogger.log_operation_start(logger, "render template", 
+            ServiceLogger.log_operation_start(logger, "render template",
                                            config_path=config_path,
                                            template_dir=template_dir,
                                            output_path=output_path)
-            
-            # Validate inputs
-            PathValidator.validate_file(
-                Path(config_path),
-                "Configuration file",
-                required=True,
-                must_be_readable=True
-            )
-            
-            PathValidator.validate_directory(
-                Path(template_dir),
-                "Template directory",
-                required=True,
-                must_be_readable=True
-            )
-            
-            # Construct output file path if output directory is provided
-            output_file_path = None
-            if output_path:
-                output_dir = Path(output_path)
-                # Create output directory if it doesn't exist
-                PathValidator.create_directory_if_needed(
-                    output_dir,
-                    "Output directory"
-                )
-                # Use the config file name for the output file
-                config_name = Path(config_path).stem
-                output_file_path = str(output_dir / f"{config_name}.yml")
-            
-            # Render the template
+
+            path_validator = PathValidator() # Instantiate the validator
+            all_validations_passed = True
+            error_messages: list[str] = []
+
+            # 1. Validate Configuration File
+            data_config_file = {
+                "operation": "validate_file",
+                "path": Path(config_path), # Convert string path to Path object
+                "path_name": "Configuration file",
+                "required": True,
+                "must_be_readable": True
+            }
+            if not path_validator.validate(data_config_file):
+                all_validations_passed = False
+                error_messages.extend(path_validator.get_errors())
+
+            # 2. Validate Template Directory
+            #    Proceed even if config file validation failed, to collect all path errors,
+            #    or use 'if all_validations_passed:' to fail fast.
+            #    For this example, we'll collect all path errors.
+            data_template_dir = {
+                "operation": "validate_directory",
+                "path": Path(template_dir), # Convert string path to Path object
+                "path_name": "Template directory",
+                "required": True,
+                "must_be_readable": True
+            }
+            if not path_validator.validate(data_template_dir):
+                all_validations_passed = False
+                error_messages.extend(path_validator.get_errors())
+
+            # 3. Validate and potentially create Output Directory
+            output_file_to_write: Optional[str] = None # Full path to the output file
+            if output_path: # output_path is the directory where the file will be saved
+                output_dir_as_path = Path(output_path)
+                data_output_dir = {
+                    "operation": "ensure_directory_exists",
+                    "path": output_dir_as_path,
+                    "path_name": "Output directory",
+                    "create_if_missing": True,
+                    "must_be_writable_after_creation": True
+                }
+                if not path_validator.validate(data_output_dir):
+                    all_validations_passed = False
+                    error_messages.extend(path_validator.get_errors())
+                else:
+                    # If output directory is valid/created, construct the output file path
+                    config_name_stem = Path(config_path).stem
+                    output_file_to_write = str(output_dir_as_path / f"{config_name_stem}.yml")
+            else:
+                logger.info("No output path provided; template will be rendered to memory/stdout.")
+
+
+            # 4. If any validation failed, raise an error
+            if not all_validations_passed:
+                final_error_message = "Input validation failed for template rendering: \n" + "\n".join(f"- {msg}" for msg in error_messages)
+                raise ValueError(final_error_message) # This will be caught by the except block
+
+            # If all validations passed, proceed to render the template
+            logger.info("All path validations passed. Proceeding to render template.")
             rendered_template = render_pipeline_with_templates(
-                config_path, 
-                template_dir,
-                output_file_path
+                config_path,    # Pass original string path
+                template_dir,   # Pass original string path
+                output_file_to_write # This is the full file path string, or None
             )
-            
-            ServiceLogger.log_operation_success(logger, "render template", 
+
+            ServiceLogger.log_operation_success(logger, "render template",
                                              config_path=config_path)
             return rendered_template
-            
-        except Exception as e:
+        except Exception as e: # This will catch the ValueError from validation, or any other exception
             ErrorHandler.handle_template_error(
                 e,
                 "render",
-                config_path,
+                config_path, # Original string path
                 context={'template_dir': template_dir, 'output_path': output_path}
             )
+            # The original ErrorHandler.handle_template_error in the placeholder re-raises 'e'.
+            # If your actual ErrorHandler does not re-raise, and this render method
+            # must always return a string or raise a specific TemplateRenderingError,
+            # you might need to add 'raise TemplateRenderingError(str(e)) from e' here,
+            # or ensure the return "" is appropriate for your contract on failure.
+            # Given the placeholder re-raises, this is fine.
+            # If ErrorHandler consumes the exception and doesn't re-raise,
+            # and the function must return a string, returning an empty string
+            # or a specific error string might be necessary.
+            # The original code implicitly returned None if ErrorHandler didn't re-raise.
+            # Let's match that by allowing the re-raise from ErrorHandler.
+            # If ErrorHandler *doesn't* re-raise, then an empty string or specific error return is needed.
+            # For now, assuming ErrorHandler re-raises as per the placeholder.
+            # If it doesn't, the 'return ""' from the previous version might be what was intended
+            # if the original function signature implies a string is always returned.
+            # Let's assume the original intent was for ErrorHandler to manage the exception flow (e.g. re-raise or exit)
+            # If not, and a string must be returned:
+            # return f"Error during rendering: {type(e).__name__}" # Or simply ""
+            raise # Re-raise the exception if ErrorHandler didn't (our placeholder does)
 
 
 class YAMLConfigParser(ConfigParser):
@@ -288,11 +341,11 @@ class ConfigRenderingService:
 
     def _validate_agent_config_block(self, config: Dict[str, Any], agent_name: str) -> None:
         """
-        Validate the full agent config using ConfigurationValidator.
+        Validate the full agent config using ConfigValidator.
         """
-        from agent_actions.cli.validators.config_validator import ConfigurationValidator
-        ConfigurationValidator.validate_full_agent_config(config, agent_name)
-       
+        config_validator_instance = ConfigValidator()
+        config_validator_instance.validate(config, agent_name)
+
     @as_validation_error(ConfigurationError)
     def render_and_load_config(
         self,
@@ -329,13 +382,6 @@ class ConfigRenderingService:
         template_dir_str = str(template_dir)
         output_dir_str = str(output_dir)
         
-        # Validate output directory
-        """PathValidator.validate_directory(
-            Path(output_dir_str),
-            "Output directory",
-            required=True,
-            must_be_writable=True
-        )"""
         cfg_path = Path(config_path)
         if not cfg_path.exists():
            raise ConfigurationError(f"Configuration file not found: {cfg_path}")
@@ -349,7 +395,8 @@ class ConfigRenderingService:
         )
         config = self._safe_load_yaml(rendered_template, cfg_path)
         try:
-            SchemaValidator.validate_schema(agent_name, Path(template_dir))
+            schema_validate_instance = SchemaValidator()
+            schema_validate_instance.validate(agent_name, Path(template_dir))
         except Exception as e:
             raise ConfigurationError(f"Schema validation failed: {e}") from None
         self._validate_agent_config_block(config, agent_name)

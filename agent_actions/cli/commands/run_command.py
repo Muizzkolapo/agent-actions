@@ -72,8 +72,9 @@ class RunCommand:
         
         try:
             click.echo("Setting up project paths...")
-            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)            
-            PromptValidator.validate_prompts(paths.prompt_dir)    
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)   
+            instance = PromptValidator()
+            instance.validate(paths.prompt_dir)    
             filename = f"{self.agent}.yml" if not self.agent.endswith(".yml") else self.agent
             full_path = AgentRunnerService.find_config_file(paths.agent_config_dir, filename)      
             parent_pipeline = self._load_and_validate_config(full_path, paths)

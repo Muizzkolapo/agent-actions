@@ -92,7 +92,8 @@ class AgentRunnerService:
         Raises:
             ValidationError: If the user code path is invalid.
         """
-        return PathValidator.validate_user_code_path(user_code)
+        instance = PathValidator()
+        return instance.validate(user_code)
     
     @contextmanager
     def _execution_context(agent_name: str):
