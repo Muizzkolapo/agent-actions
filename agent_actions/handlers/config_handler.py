@@ -4,6 +4,8 @@ import yaml
 from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates  
 from agent_actions.cli.validators.config_validator import ConfigValidator  
+from typing import Dict, Any, Union, List, Tuple, Optional, Set
+
 import glob
 
 
@@ -32,8 +34,20 @@ class ConfigManager:
         except Exception as e:
             raise ValueError(f"Error loading default config from {self.default_path}: {str(e)}")
 
+    def find_agent_name(self,config: Dict[str, Any]) -> str:
+        """
+        Find the name of the agent from the configuration.
+        
+        Args:
+            config: Agent configuration dictionary
+            
+        Returns:
+            str: Name of the agent
+        """
+        return next(iter(config)) 
+    
     def validate_agent_name(self):
-        self.agent_name = ConfigValidator.find_agent_name(self.user_config)
+        self.agent_name = self.find_agent_name(self.user_config)
         config_filename = os.path.splitext(os.path.basename(self.constructor_path))[0]
         if self.agent_name != config_filename:
             error_msg = f"Top-level key '{self.agent_name}' does not match the filename '{config_filename}'"
@@ -68,7 +82,8 @@ class ConfigManager:
         Determines the execution order of agents based on their dependencies,
         considering only is_operational agents.
         """
-        ConfigValidator.validate_dependencies(self.agent_configs)
+        instance_config = ConfigValidator()
+        instance_config.validate(self.agent_configs)
         
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():

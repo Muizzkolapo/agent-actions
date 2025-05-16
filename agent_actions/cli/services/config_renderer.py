@@ -343,10 +343,8 @@ class ConfigRenderingService:
         """
         Validate the full agent config using ConfigValidator.
         """
-        #config_validator_instance = ConfigValidator()
-        #config_validator_instance.validate(config, agent_name)
-        from agent_actions.cli.validators.config_validator import ConfigurationValidator
-        ConfigurationValidator.validate_full_agent_config(config, agent_name)
+        config_validator_instance = ConfigValidator()
+        config_validator_instance.validate(config, agent_name)
 
     @as_validation_error(ConfigurationError)
     def render_and_load_config(

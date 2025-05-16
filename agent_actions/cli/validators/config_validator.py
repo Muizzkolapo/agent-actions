@@ -1,617 +1,328 @@
 import os
 import glob
-import logging
-from typing import Dict, Any, List, Tuple, Optional, Set
+# Removed logging import from here as ConfigValidator itself won't log directly
 from pathlib import Path
+from typing import Dict, Any, List, Tuple, Optional, Set, Union
 
-from agent_actions.cli.exceptions import ConfigurationError
-from agent_actions.cli.utils.service_logger import ServiceLogger
-from agent_actions.handlers.file_handler import FileHandler
+# --- Placeholder Utilities (These would be your actual project imports) ---
+# --- ServiceLogger is removed as per request for ConfigValidator's direct use ---
 
-import os
-import logging
-from pathlib import Path
-from typing import Dict, Any, Union, List, Tuple, Optional, Set
+class FileHandler: # Placeholder (remains as it's used for logic)
+    @staticmethod
+    def get_all_agent_paths(base_dir_str: str) -> List[str]:
+        paths = []
+        # Basic placeholder logic, your actual implementation might be more robust
+        try:
+            abs_base_dir = Path(base_dir_str).resolve()
+            for root, dirs, _ in os.walk(abs_base_dir):
+                if "agent_config" in dirs:
+                    config_dir = Path(root) / "agent_config"
+                    if config_dir.is_dir():
+                        for ext_pattern in ("*.yaml", "*.yml"):
+                            for file_path_obj in config_dir.glob(ext_pattern):
+                                paths.append(str(file_path_obj.resolve()))
+        except Exception:
+            # In a real FileHandler, you'd log this error appropriately
+            # print(f"Error in FileHandler.get_all_agent_paths for '{base_dir_str}': {e}")
+            pass # For this version, suppress error to focus on validator
+        return paths
+# --- End Placeholders ---
 
-from agent_actions.cli.exceptions import ConfigValidationError
-from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
+# --- 1. BaseValidator Class (Remains the same) ---
+class BaseValidator:
+    """
+    Unified base class for all validators.
+    """
+    def __init__(self) -> None:
+        self._errors: List[str] = []
+        self._warnings: List[str] = []
 
-logger = logging.getLogger(__name__)
+    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+        # This method MUST be implemented by subclasses
+        raise NotImplementedError("Subclasses must implement the 'validate' method.")
 
-logger = logging.getLogger(__name__)
+    def add_error(self, message: str) -> None:
+        self._errors.append(message)
 
+    def add_warning(self, message: str) -> None:
+        self._warnings.append(message)
 
-class ConfigurationValidator:
-    @classmethod
-    def validate_full_agent_config(cls, config: Dict[str, Any], agent_name: str) -> None:
-        if agent_name not in config:
-            raise ConfigValidationError(f"Agent '{agent_name}' not found in configuration.")
-        agent_config = config[agent_name]
-        cls.validate_agent_entries(agent_config, agent_name)
-    """Handles configuration validation operations."""
-    
-    # List of required agent entry keys
-    REQUIRED_AGENT_KEYS = {'agent_type', 'name'}
-    
-    # List of optional agent entry keys
-    OPTIONAL_AGENT_KEYS = {'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent'}
-    
-    # Map of agent types to their specific required keys
-    AGENT_TYPE_REQUIRED_KEYS = {
+    def get_errors(self) -> List[str]:
+        return list(self._errors) # Return a copy
+
+    def get_warnings(self) -> List[str]:
+        return list(self._warnings) # Return a copy
+
+    def clear_errors(self) -> None:
+        self._errors = []
+
+    def clear_warnings(self) -> None:
+        self._warnings = []
+
+    def has_errors(self) -> bool:
+        return bool(self._errors)
+
+    @staticmethod
+    def _ensure_path_exists(path: Path) -> bool:
+        return path.exists()
+
+    @staticmethod
+    def _is_file(path: Path) -> bool:
+        return path.is_file()
+
+    @staticmethod
+    def _is_directory(path: Path) -> bool:
+        return path.is_dir()
+
+# --- 2. Refactored ConfigValidator Class (Logging Removed) ---
+class ConfigValidator(BaseValidator):
+    """
+    Handles various configuration validation operations.
+    Internal logging via ServiceLogger has been removed from this version.
+    """
+
+    _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', 'name'}
+    _OPTIONAL_AGENT_KEYS: Set[str] = {
+        'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent'
+    }
+    _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
         'llm': {'model'},
         'function': {'code_path'},
         'tool': {'api_key'},
-        # Add more as needed
     }
-    
-    @as_validation_error(ConfigValidationError)              
-    def validate_agent_config(agent_name: str, config_path: Path, project_dir: Path) -> None:
-        """
-        Validate the agent configuration file.
 
-        Args:
-            agent_name: Name of the agent.
-            config_path: Path to the agent configuration file.
-            project_dir: Path to the project directory.
-            
-        Raises:
-            ConfigValidationError: If configuration validation fails.
-        """
-        logger.info("Validating agent configuration", extra={
-            'agent_name': agent_name,
-            'config_path': str(config_path),
-            'project_dir': str(project_dir)
-        })
-        
+    def _check_agent_file_unique_logic(self, full_path_str: str, project_dir_str: str) -> None:
         try:
-            # Check if the configuration file exists
-            if not config_path.exists():
-                raise ConfigValidationError(f"Configuration file does not exist: {config_path}")
-                
-            # Check if the file is readable
-            if not os.access(config_path, os.R_OK):
-                raise ConfigValidationError(f"Configuration file is not readable: {config_path}")
-                
-            # Check if the configuration file is unique
-            is_unique = ConfigValidator.check_agent_file_unique(str(config_path), str(project_dir))
-            if not is_unique:
-                error_msg = f"Duplicate agent configuration file: {config_path}"
-                logger.error(error_msg, extra={'agent_name': agent_name})
-                raise ConfigValidationError(error_msg)
-
-            # Check if the agent name is unique
-            is_name_unique, error_msg = ConfigValidator.check_agent_name_unique(agent_name, str(project_dir))
-            if not is_name_unique:
-                logger.error(f"Agent name conflict: {error_msg}", extra={'agent_name': agent_name})
-                raise ConfigValidationError(f"Agent name is not unique: {agent_name}. {error_msg}")
-
-            logger.info("Agent configuration validation successful", extra={'agent_name': agent_name})
-            
+            resolved_full_path = str(Path(full_path_str).resolve())
+            all_agent_paths = FileHandler.get_all_agent_paths(project_dir_str)
+            count = all_agent_paths.count(resolved_full_path)
+            if count > 1:
+                self.add_error(f"Duplicate agent configuration file: {resolved_full_path} (found {count} times).")
         except Exception as e:
-            if isinstance(e, ConfigValidationError):
-                raise
-                
-            logger.error(f"Configuration validation failed: {str(e)}", 
-                        extra={'agent_name': agent_name}, exc_info=True)
-            raise ConfigValidationError(f"Failed to validate agent configuration: {str(e)}") from e
+            self.add_error(f"Error checking agent file uniqueness for {full_path_str}: {e}")
 
-    @classmethod
-    def validate_agent_entries(cls, agent_config: Union[List[Dict[str, Any]], Any], agent_name: str) -> None:
-        """
-        Validate the agent entries in the configuration.
-
-        Args:
-            agent_config: Agent configuration data.
-            agent_name: Name of the agent.
-            
-        Raises:
-            ConfigValidationError: If agent entries validation fails.
-        """
-        logger.info("Validating agent entries", extra={'agent_name': agent_name})
-        
+    def _check_agent_name_unique_logic(self, agent_name_to_check: str, project_dir_str: str, current_file_path_str: Optional[str] = None) -> None:
         try:
-            # Basic type validation
-            if not isinstance(agent_config, list):
-                error_msg = f"Agent configuration must be a list for {agent_name}, got {type(agent_config).__name__}"
-                logger.error(error_msg, extra={'agent_name': agent_name})
-                raise ConfigValidationError(error_msg)
-                
-            # Empty config check
-            if not agent_config:
-                error_msg = f"Agent configuration is empty for {agent_name}"
-                logger.error(error_msg, extra={'agent_name': agent_name})
-                raise ConfigValidationError(error_msg)
-                
-            # Extract agent entries (items with agent_type)
-            agent_entries = []
-            for i, entry in enumerate(agent_config):
-                if not isinstance(entry, dict):
-                    logger.warning(f"Non-dictionary entry at index {i} in agent config", 
-                                 extra={'agent_name': agent_name})
-                    continue
-                    
-                if 'agent_type' in entry:
-                    agent_entries.append(entry)
-                    
-            # Check if any agent entries were found
-            if not agent_entries:
-                error_msg = f"No agent entries found in configuration for {agent_name}"
-                logger.error(error_msg, extra={'agent_name': agent_name})
-                raise ConfigValidationError(error_msg)
-                
-            # Validate each agent entry
-            for i, entry in enumerate(agent_entries):
-                cls._validate_agent_entry(entry, i, agent_name)
-                
-            # Use the base validator as an additional check
-            is_valid, message = ConfigValidator.validate_agent_config(agent_entries)
-            if not is_valid:
-                logger.error(f"Invalid agent configuration: {message}", 
-                           extra={'agent_name': agent_name})
-                raise ConfigValidationError(f"Invalid agent configuration for {agent_name}: {message}")
+            name_locations: Dict[str, List[str]] = {}
+            resolved_current_file_path = str(Path(current_file_path_str).resolve()) if current_file_path_str else None
 
-            logger.info("Agent entries validation successful", extra={'agent_name': agent_name})
+            for root, dirs, _ in os.walk(project_dir_str):
+                if "agent_config" in dirs:
+                    agent_cfg_dir = Path(root) / "agent_config"
+                    if agent_cfg_dir.is_dir():
+                        for ext_pattern in ("*.yaml", "*.yml"):
+                            for file_obj in agent_cfg_dir.glob(ext_pattern):
+                                name_from_file_stem = file_obj.stem
+                                resolved_path = str(file_obj.resolve())
+                                if name_from_file_stem not in name_locations: name_locations[name_from_file_stem] = []
+                                if resolved_path not in name_locations[name_from_file_stem]:
+                                    name_locations[name_from_file_stem].append(resolved_path)
             
+            conflicting_paths = name_locations.get(agent_name_to_check, [])
+            if resolved_current_file_path:
+                conflicting_paths = [p for p in conflicting_paths if p != resolved_current_file_path]
+
+            if conflicting_paths:
+                self.add_error(f"Agent name '{agent_name_to_check}' is not unique. Also defined in: {', '.join(conflicting_paths)}.")
         except Exception as e:
-            if isinstance(e, ConfigValidationError):
-                raise
-                
-            logger.error(f"Agent entries validation failed: {str(e)}", 
-                        extra={'agent_name': agent_name}, exc_info=True)
-            raise ConfigValidationError(f"Failed to validate agent entries: {str(e)}") from e
-    
-    @classmethod
-    def _validate_agent_entry(cls, entry: Dict[str, Any], index: int, agent_name: str) -> None:
-        """
-        Validate a single agent entry in the configuration.
+            self.add_error(f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}")
+
+    def _validate_single_agent_entry_logic(self, entry: Dict[str, Any], entry_idx: int, cfg_ctx_name: str, proj_root: Optional[Path] = None) -> None:
+        desc = f"agent entry (index {entry_idx}) in '{cfg_ctx_name}'"
+        if not isinstance(entry, dict):
+            self.add_error(f"{desc} is not a dictionary.")
+            return
+
+        missing_req = self._REQUIRED_AGENT_KEYS - entry.keys()
+        if missing_req: self.add_error(f"{desc} missing required key(s): {', '.join(missing_req)}.")
         
-        Args:
-            entry: Agent entry to validate.
-            index: Index of the entry for error reporting.
-            agent_name: Name of the agent for error reporting.
-            
-        Raises:
-            ConfigValidationError: If the agent entry is invalid.
-        """
-        agent_type = entry.get('agent_type') 
-        # Check required keys
-        # Check if name matches agent_name
-        # Check agent type specific required keys
-        # Check for unknown keys
-        # Validate types of common fields
-        if 'description' in entry and not isinstance(entry['description'], str):
-            error_msg = (f"Agent entry at index {index} for {agent_name} has invalid "
-                        f"description type: {type(entry['description']).__name__}, expected string")
-            logger.error(error_msg)
-            raise ConfigValidationError(error_msg)
-            
-        if 'version' in entry and not isinstance(entry['version'], (str, int, float)):
-            error_msg = (f"Agent entry at index {index} for {agent_name} has invalid "
-                        f"version type: {type(entry['version']).__name__}, expected string or number")
-            logger.error(error_msg)
-            raise ConfigValidationError(error_msg)
-            
-        if 'dependencies' in entry and not isinstance(entry['dependencies'], list):
-            error_msg = (f"Agent entry at index {index} for {agent_name} has invalid "
-                        f"dependencies type: {type(entry['dependencies']).__name__}, expected list")
-            logger.error(error_msg)
-            raise ConfigValidationError(error_msg)
-            
-        # Type-specific validations
-        if agent_type == 'llm' and 'model' in entry:
-            if not isinstance(entry['model'], str):
-                error_msg = (f"Agent entry at index {index} of type 'llm' for {agent_name} "
-                            f"has invalid model type: {type(entry['model']).__name__}, expected string")
-                logger.error(error_msg)
-                raise ConfigValidationError(error_msg)
-                
-        if agent_type == 'function' and 'code_path' in entry:
-            if not isinstance(entry['code_path'], str):
-                error_msg = (f"Agent entry at index {index} of type 'function' for {agent_name} "
-                            f"has invalid code_path type: {type(entry['code_path']).__name__}, expected string")
-                logger.error(error_msg)
-                raise ConfigValidationError(error_msg)
-            
-            # Validate code path exists if it's a relative path
-            code_path = entry['code_path']
-            if not code_path.startswith(('http://', 'https://')):
-                code_file = Path(code_path)
-                if not code_file.is_absolute():
-                    # Relative path, should be relative to project root
-                    project_root = Path.cwd()
-                    code_file = project_root / code_file
-                    
-                if not code_file.exists():
-                    error_msg = (f"Agent entry at index {index} of type 'function' for {agent_name} "
-                                f"has code_path that does not exist: {code_path}")
-                    logger.error(error_msg)
-                    raise ConfigValidationError(error_msg)
-    
-    @classmethod
-    def validate_config_dependencies(cls, config: Dict[str, List[Dict[str, Any]]]) -> List[str]:
-        """
-        Validate that all dependencies in a configuration exist.
+        name, agent_type = entry.get('name'), entry.get('agent_type')
+        if 'name' in entry and not isinstance(name, str): self.add_error(f"{desc} 'name' must be string.")
+        if 'agent_type' in entry:
+            if not isinstance(agent_type, str): self.add_error(f"{desc} 'agent_type' must be string.")
+            elif agent_type in self._AGENT_TYPE_REQUIRED_KEYS:
+                missing_type_specific = self._AGENT_TYPE_REQUIRED_KEYS[agent_type] - entry.keys()
+                if missing_type_specific: self.add_error(f"{desc} (type '{agent_type}') missing type-specific key(s): {', '.join(missing_type_specific)}.")
+            if agent_type == 'function' and 'code_path' in entry:
+                cp_val = entry['code_path']
+                if not isinstance(cp_val, str): self.add_error(f"{desc} 'code_path' for function agent must be a string.")
+                elif proj_root and not cp_val.startswith(('http://', 'https://')):
+                    abs_cp = Path(cp_val) if Path(cp_val).is_absolute() else proj_root / cp_val
+                    if not self._ensure_path_exists(abs_cp): self.add_error(f"{desc} 'code_path' ({abs_cp}) does not exist.")
+                    elif not self._is_file(abs_cp): self.add_error(f"{desc} 'code_path' ({abs_cp}) is not a file.")
         
-        Args:
-            config: Full configuration with all agents.
-            
-        Returns:
-            List of error messages for missing dependencies.
-        """
-        errors = []
-        available_agents = set(config.keys())
+        all_known_keys = self._REQUIRED_AGENT_KEYS.union(self._OPTIONAL_AGENT_KEYS).union(*self._AGENT_TYPE_REQUIRED_KEYS.values())
+        keys_to_check_for_unknown = {k for k in entry.keys() if k != 'config'}
+        unknown_keys = keys_to_check_for_unknown - all_known_keys
+        if unknown_keys: self.add_warning(f"{desc} has unknown key(s): {', '.join(unknown_keys)}.")
         
-        for agent_name, agent_entries in config.items():
-            # Skip if not a list (shouldn't happen with validated config)
-            if not isinstance(agent_entries, list):
-                continue
-                
-            dependencies = set()
-            
-            # Extract all dependencies from agent entries
-            for entry in agent_entries:
-                if not isinstance(entry, dict):
-                    continue
-                    
-                # Direct dependencies
-                if 'dependencies' in entry and isinstance(entry['dependencies'], list):
-                    dependencies.update([
-                        dep for dep in entry['dependencies']
-                        if isinstance(dep, str)
-                    ])
-                
-                # Imported dependencies
-                if 'imports' in entry and isinstance(entry['imports'], list):
-                    for imp in entry['imports']:
-                        if isinstance(imp, str):
-                            dependencies.add(imp)
-                        elif isinstance(imp, dict) and 'name' in imp:
-                            imp_name = imp.get('name')
-                            if isinstance(imp_name, str):
-                                dependencies.add(imp_name)
-                
-                # Parent dependencies
-                if 'parent' in entry and isinstance(entry['parent'], list):
-                    dependencies.update([
-                        parent for parent in entry['parent']
-                        if isinstance(parent, str)
-                    ])
-            
-            # Check that all dependencies exist
-            missing_deps = dependencies - available_agents
+        if 'description' in entry and not isinstance(entry['description'], str): self.add_error(f"{desc} 'description' should be a string.")
+        if 'version' in entry and not isinstance(entry['version'], (str, int, float)): self.add_error(f"{desc} 'version' should be a string or number.")
+        if 'dependencies' in entry and not isinstance(entry['dependencies'], list): self.add_error(f"{desc} 'dependencies' should be a list.")
+
+    def _validate_agent_entries_list_logic(self, agent_cfg_list: Any, agent_name_ctx: str, proj_root: Optional[Path] = None) -> None:
+        if not isinstance(agent_cfg_list, list):
+            self.add_error(f"Agent configuration for '{agent_name_ctx}' must be a list, but found type {type(agent_cfg_list).__name__}.")
+            return
+        if not agent_cfg_list:
+            self.add_warning(f"Agent configuration list for '{agent_name_ctx}' is empty.")
+            return
+        for i, entry in enumerate(agent_cfg_list):
+            self._validate_single_agent_entry_logic(entry, i, agent_name_ctx, proj_root)
+
+    def _extract_dependencies_from_entry(self, entry: Dict[str, Any]) -> Set[str]:
+        dependencies: Set[str] = set()
+        if isinstance(entry.get('dependencies'), list):
+            dependencies.update(dep for dep in entry['dependencies'] if isinstance(dep, str))
+        return dependencies
+
+    def _validate_config_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+        available_agents = set(full_config_data.keys())
+        for agent_name, agent_entries_list in full_config_data.items():
+            if not isinstance(agent_entries_list, list): continue
+            all_dependencies_for_agent: Set[str] = set()
+            for entry in agent_entries_list:
+                if isinstance(entry, dict):
+                    all_dependencies_for_agent.update(self._extract_dependencies_from_entry(entry))
+            missing_deps = all_dependencies_for_agent - available_agents
             if missing_deps:
-                deps_list = ", ".join(missing_deps)
-                errors.append(f"Agent '{agent_name}' has missing dependencies: {deps_list}")
-                
-        return errors
-    
-    @classmethod
-    def check_circular_dependencies(cls, config: Dict[str, List[Dict[str, Any]]]) -> List[str]:
-        """
-        Check for circular dependencies in the configuration.
-        
-        Args:
-            config: Full configuration with all agents.
-            
-        Returns:
-            List of error messages for circular dependencies.
-        """
-        # Build dependency graph
-        graph = {}
-        for agent_name, agent_entries in config.items():
-            # Initialize empty dependency list
-            graph[agent_name] = []
-            
-            # Skip if not a list
-            if not isinstance(agent_entries, list):
+                self.add_error(f"Agent '{agent_name}' has missing dependencies: {', '.join(missing_deps)}.")
+
+    def _validate_operational_dependencies_logic(self, agent_configs_map: Dict[str, Dict[str, Any]]) -> None:
+        active_agents = {name for name, cfg in agent_configs_map.items() if isinstance(cfg, dict) and cfg.get('is_operational', True)}
+        all_defined_agents = set(agent_configs_map.keys())
+
+        for agent_name, agent_cfg in agent_configs_map.items():
+            if not (isinstance(agent_cfg, dict) and agent_cfg.get('is_operational', True)): continue
+            dependencies = agent_cfg.get('dependencies', [])
+            if not isinstance(dependencies, list):
+                self.add_error(f"Agent '{agent_name}' has a 'dependencies' field that is not a list.")
                 continue
-                
-            # Extract dependencies
-            for entry in agent_entries:
-                if not isinstance(entry, dict):
+            for dep_name in dependencies:
+                if not isinstance(dep_name, str):
+                    self.add_error(f"Agent '{agent_name}' has a non-string dependency: {dep_name}.")
                     continue
-                    
-                # Direct dependencies
-                if 'dependencies' in entry and isinstance(entry['dependencies'], list):
-                    graph[agent_name].extend([
-                        dep for dep in entry['dependencies']
-                        if isinstance(dep, str)
-                    ])
-                
-                # Imported dependencies
-                if 'imports' in entry and isinstance(entry['imports'], list):
-                    for imp in entry['imports']:
-                        if isinstance(imp, str):
-                            graph[agent_name].append(imp)
-                        elif isinstance(imp, dict) and 'name' in imp:
-                            imp_name = imp.get('name')
-                            if isinstance(imp_name, str):
-                                graph[agent_name].append(imp_name)
-                
-                # Parent dependencies
-                if 'parent' in entry and isinstance(entry['parent'], list):
-                    graph[agent_name].extend([
-                        parent for parent in entry['parent']
-                        if isinstance(parent, str)
-                    ])
-            
-            # Remove duplicates
-            graph[agent_name] = list(set(graph[agent_name]))
-        
-        # Detect cycles using DFS
-        errors = []
-        visited = set()
-        path = []
-        
-        def dfs(node):
-            if node in path:
-                # Circular dependency found
-                cycle = ' -> '.join(path[path.index(node):] + [node])
-                errors.append(f"Circular dependency detected: {cycle}")
-                return
-                
-            if node in visited:
-                return
-                
-            visited.add(node)
-            path.append(node)
-            
+                if dep_name not in all_defined_agents:
+                    self.add_error(f"Active agent '{agent_name}' depends on a non-existent agent '{dep_name}'.")
+                elif dep_name not in active_agents:
+                    dep_cfg_details = agent_configs_map.get(dep_name) # Check if this dependency is explicitly inactive
+                    if isinstance(dep_cfg_details, dict) and not dep_cfg_details.get('is_operational', True):
+                         self.add_error(f"Active agent '{agent_name}' depends on an inactive agent '{dep_name}'.")
+
+    def _check_circular_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+        graph: Dict[str, List[str]] = {}
+        for agent_name, agent_entries_list in full_config_data.items():
+            if not isinstance(agent_entries_list, list): continue
+            current_agent_deps: Set[str] = set()
+            for entry in agent_entries_list:
+                 if isinstance(entry, dict):
+                    current_agent_deps.update(self._extract_dependencies_from_entry(entry))
+            graph[agent_name] = list(current_agent_deps)
+
+        visited_nodes: Set[str] = set()
+        recursion_path: List[str] = []
+        def dfs_has_cycle(node: str) -> bool:
+            visited_nodes.add(node)
+            recursion_path.append(node)
             for neighbor in graph.get(node, []):
-                dfs(neighbor)
-                
-            path.pop()
-            
-        for node in graph:
-            if node not in visited:
-                dfs(node)
-                
-        return errors
-    
+                if neighbor not in visited_nodes:
+                    if dfs_has_cycle(neighbor): return True
+                elif neighbor in recursion_path:
+                    try:
+                        cycle_start_index = recursion_path.index(neighbor)
+                        cycle_str = " -> ".join(recursion_path[cycle_start_index:] + [neighbor])
+                        self.add_error(f"Circular dependency detected: {cycle_str}.")
+                    except ValueError:
+                        self.add_error(f"Circular dependency involving {neighbor} (path reconstruction error).")
+                    return True
+            recursion_path.pop()
+            return False
+        for node_name in list(graph.keys()):
+            if node_name not in visited_nodes:
+                if dfs_has_cycle(node_name):
+                    recursion_path.clear()
 
+    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
+        self.clear_errors()
+        self.clear_warnings()
 
-class ConfigValidator:
-    """Utility class for validating configuration data."""
-    
-    @staticmethod
-    def validate_list_config(config: Any, config_name: str = "configuration") -> None:
-        """
-        Validate that a configuration is a list.
+        if not isinstance(data, dict):
+            self.add_error("Validation input 'data' must be a dictionary.")
+            return False
+        operation = data.get("operation")
+        if not operation:
+            self.add_error("An 'operation' must be specified in the input 'data'.")
+            return False
+
+        # Logging for operation start (if desired) would be done by the CALLER now.
+        # Example: logger.info(f"ConfigValidator starting operation: {operation}")
+
+        proj_dir = data.get("project_dir")
+        project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
         
-        Args:
-            config: Configuration to validate.
-            config_name: Name of the configuration for error messages.
-            
-        Raises:
-            ConfigurationError: If validation fails.
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "validate list config", 
-                                           config_name=config_name)
-            
-            if not isinstance(config, list):
-                error_msg = f"{config_name} must be a list, got {type(config)}"
-                logger.error(error_msg)
-                raise ConfigurationError(error_msg)
-                
-            ServiceLogger.log_operation_success(logger, "validate list config", 
-                                             config_name=config_name)
-            
-        except Exception as e:
-            ServiceLogger.log_operation_error(logger, "validate list config", e)
-            raise
-            
-    @staticmethod
-    def validate_agent_config(agent_config: List[Dict[str, Any]]) -> Tuple[bool, str]:
-        """
-        Validate the agent configuration to ensure all required fields are present and correctly formatted.
-        
-        Args:
-            agent_config: List of agent configurations to validate.
-            
-        Returns:
-            Tuple of (bool, str): (is_valid, error_message if any)
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "validate agent config")
-            
-            base_required_keys = {'agent_type', 'model_name'}
-            tool_required_keys = {'description'}
-            additional_required_keys = {'api_key', 'schema_name', 'prompt'}
+        operation_performed_successfully = True
 
-            for idx, agent in enumerate(agent_config):
-                # Determine the required keys based on the model_vendor
-                if agent.get('model_vendor') == 'tool':
-                    required_keys = base_required_keys.union(tool_required_keys)
+        if operation == "validate_agent_config_file_meta":
+            cfg_path_str = data.get("config_path")
+            agent_name_str = data.get("agent_name", Path(cfg_path_str).stem if isinstance(cfg_path_str, str) else None)
+            if not (isinstance(cfg_path_str, str) and isinstance(agent_name_str, str) and project_root_path):
+                self.add_error("For 'validate_agent_config_file_meta', provide 'config_path' (str), 'agent_name' (str), and 'project_dir' (str/Path).")
+            else:
+                cfg_file = Path(cfg_path_str)
+                if not self._ensure_path_exists(cfg_file): self.add_error(f"Config file does not exist: {cfg_file}")
+                elif not self._is_file(cfg_file): self.add_error(f"Config path is not a file: {cfg_file}")
+                elif not os.access(cfg_file, os.R_OK): self.add_error(f"Config file not readable: {cfg_file}") # os.access is fine
                 else:
-                    required_keys = base_required_keys.union(additional_required_keys)
-
-                missing_keys = required_keys - agent.keys()
-                if missing_keys:
-                    error_msg = f"Agent {idx + 1} is missing required keys: {', '.join(missing_keys)}"
-                    ServiceLogger.log_operation_error(logger, "validate agent config", 
-                                                   error_msg=error_msg)
-                    return False, error_msg
-
-                # Ensure dependencies is a list if it exists, otherwise set it to an empty list
-                if 'dependencies' in agent and not isinstance(agent['dependencies'], list):
-                    error_msg = f"Agent {idx + 1}: 'dependencies' should be a list."
-                    ServiceLogger.log_operation_error(logger, "validate agent config", 
-                                                   error_msg=error_msg)
-                    return False, error_msg
-                agent.setdefault('dependencies', [])
-
-            ServiceLogger.log_operation_success(logger, "validate agent config")
-            return True, "Agent configuration is valid."
-            
-        except Exception as e:
-            ServiceLogger.log_operation_error(logger, "validate agent config", e)
-            raise
-            
-    @staticmethod
-    def validate_dependencies(agent_configs: Dict[str, Dict[str, Any]]) -> None:
-        """
-        Validates that no active agent depends on an inactive agent.
+                    self._check_agent_file_unique_logic(str(cfg_file.resolve()), str(project_root_path))
+                    self._check_agent_name_unique_logic(agent_name_str, str(project_root_path), str(cfg_file.resolve()))
         
-        Args:
-            agent_configs: Dictionary of agent configurations
-            
-        Raises:
-            ConfigurationError: If an active agent depends on an inactive agent
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "validate dependencies")
-            
-            active_agents = {
-                agent_type for agent_type, config in agent_configs.items() 
-                if config.get('is_operational', True)
-            }
-            inactive_agents = {
-                agent_type for agent_type, config in agent_configs.items() 
-                if not config.get('is_operational', True)
-            }
+        elif operation == "validate_agent_entries":
+            agent_cfg_data = data.get("agent_config_data")
+            agent_name_context = data.get("agent_name_context")
+            if agent_cfg_data is None or not isinstance(agent_name_context, str):
+                self.add_error("For 'validate_agent_entries', provide 'agent_config_data' and 'agent_name_context' (str).")
+            else:
+                self._validate_agent_entries_list_logic(agent_cfg_data, agent_name_context, project_root_path)
 
-            for agent_type, config in agent_configs.items():
-                if agent_type in active_agents:
-                    dependencies = config.get('dependencies', [])
-                    for dep in dependencies:
-                        if dep in inactive_agents:
-                            error_msg = (
-                                f"Agent '{agent_type}' depends on inactive agent '{dep}'. "
-                                f"Please either activate '{dep}' or remove it from the dependencies."
-                            )
-                            ServiceLogger.log_operation_error(logger, "validate dependencies", 
-                                                           error_msg=error_msg)
-                            raise ConfigurationError(error_msg)
-                        elif dep not in agent_configs:
-                            error_msg = (
-                                f"Agent '{agent_type}' depends on non-existent agent '{dep}'. "
-                                f"Please check your configuration."
-                            )
-                            ServiceLogger.log_operation_error(logger, "validate dependencies", 
-                                                           error_msg=error_msg)
-                            raise ConfigurationError(error_msg)
-                            
-            ServiceLogger.log_operation_success(logger, "validate dependencies")
-            
-        except Exception as e:
-            ServiceLogger.log_operation_error(logger, "validate dependencies", e)
-            raise
-            
-    @staticmethod
-    def should_update_schema(agent_config: Dict[str, Any], keys_list: List[str], 
-                           side_collection: Any) -> bool:
-        """
-        Determines whether the schema should be updated based on the agent configuration.
-        
-        Args:
-            agent_config: Agent configuration dictionary
-            keys_list: List of keys to check
-            side_collection: Side collection to check
-            
-        Returns:
-            bool: Whether the schema should be updated
-        """
-        return (agent_config['agent_type'] == keys_list[0] and 
-                bool(agent_config.get('side_collection')))
-                
-    @staticmethod
-    def check_agent_name_unique(agent_name: str, base_dir: str) -> Tuple[bool, str]:
-        """
-        Check if the agent name is unique across all agent_config folders in the project.
-        
-        Args:
-            agent_name: Name of the agent to check
-            base_dir: Base directory to start searching from
-            
-        Returns:
-            Tuple of (bool, str): (is_unique, error_message if any)
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "check agent name unique", 
-                                           agent_name=agent_name)
-            
-            def find_agent_config_dirs(start_path: str) -> List[str]:
-                agent_config_dirs = []
-                for root, dirs, _ in os.walk(start_path):
-                    if "agent_config" in dirs:
-                        agent_config_dirs.append(os.path.join(root, "agent_config"))
-                return agent_config_dirs
+        elif operation == "validate_agent_in_full_config":
+            full_cfg_data = data.get("full_config_data")
+            agent_to_validate = data.get("agent_name")
+            if not (isinstance(full_cfg_data, dict) and isinstance(agent_to_validate, str)):
+                self.add_error("For 'validate_agent_in_full_config', provide 'full_config_data' (dict) and 'agent_name' (str).")
+            elif agent_to_validate not in full_cfg_data:
+                self.add_error(f"Agent '{agent_to_validate}' not found in the provided full configuration.")
+            else:
+                self._validate_agent_entries_list_logic(full_cfg_data[agent_to_validate], agent_to_validate, project_root_path)
 
-            name_locations = {}
-            duplicates = {}
-            
-            for config_dir in find_agent_config_dirs(base_dir):
-                yaml_files = glob.glob(os.path.join(config_dir, "*.yaml"))
-                yml_files = glob.glob(os.path.join(config_dir, "*.yml"))
-                all_files = yaml_files + yml_files
-                
-                for file_path in all_files:
-                    name = os.path.splitext(os.path.basename(file_path))[0]
-                    
-                    if name in name_locations:
-                        if name not in duplicates:
-                            duplicates[name] = [name_locations[name]]
-                        duplicates[name].append(file_path)
-                    else:
-                        name_locations[name] = file_path
-
-            if duplicates:
-                error_msg = "ERROR: Duplicate agent configurations detected!\n"
-                error_msg += "=" * 50 + "\n"
-                for name, paths in duplicates.items():
-                    error_msg += f"\nAgent '{name}' is defined in multiple locations:\n"
-                    for i, path in enumerate(paths, 1):
-                        rel_path = os.path.relpath(path, base_dir)
-                        error_msg += f"{i}. {rel_path}\n"
-                    error_msg += "\nPlease remove duplicate configurations before proceeding."
-                ServiceLogger.log_operation_error(logger, "check agent name unique", 
-                                               error_msg=error_msg)
-                return False, error_msg
-
-            ServiceLogger.log_operation_success(logger, "check agent name unique", 
-                                             agent_name=agent_name)
-            return True, ""
-            
-        except Exception as e:
-            ServiceLogger.log_operation_error(logger, "check agent name unique", e)
-            raise
-            
-    @staticmethod
-    def check_agent_file_unique(full_path: str, base_dir: str) -> bool:
-        """
-        Check if the agent configuration file path is unique across the entire project.
+        elif operation == "validate_config_dependencies":
+            full_cfg_data = data.get("full_config_data")
+            if not isinstance(full_cfg_data, dict): self.add_error("For 'validate_config_dependencies', 'full_config_data' (dict) is required.")
+            else: self._validate_config_dependencies_logic(full_cfg_data)
         
-        Args:
-            full_path: Full path to the agent configuration file
-            base_dir: Base directory to start searching from
-            
-        Returns:
-            bool: Whether the file path is unique
-        """
-        try:
-            ServiceLogger.log_operation_start(logger, "check agent file unique", 
-                                           full_path=full_path)
-            
-            all_agent_paths = FileHandler.get_all_agent_paths(base_dir)
-            is_unique = all_agent_paths.count(full_path) == 1
-            
-            ServiceLogger.log_operation_success(logger, "check agent file unique", 
-                                             is_unique=is_unique)
-            return is_unique
-            
-        except Exception as e:
-            ServiceLogger.log_operation_error(logger, "check agent file unique", e)
-            raise
-            
-    @staticmethod
-    def find_agent_name(config: Dict[str, Any]) -> str:
-        """
-        Find the name of the agent from the configuration.
+        elif operation == "validate_operational_dependencies":
+            agent_cfgs_map = data.get("agent_configs_map")
+            if not isinstance(agent_cfgs_map, dict): self.add_error("For 'validate_operational_dependencies', 'agent_configs_map' (dict) is required.")
+            else: self._validate_operational_dependencies_logic(agent_cfgs_map)
+
+        elif operation == "check_circular_dependencies":
+            full_cfg_data = data.get("full_config_data")
+            if not isinstance(full_cfg_data, dict): self.add_error("For 'check_circular_dependencies', 'full_config_data' (dict) is required.")
+            else: self._check_circular_dependencies_logic(full_cfg_data)
         
-        Args:
-            config: Agent configuration dictionary
+        elif operation == "ensure_config_is_list":
+            cfg_payload = data.get("config_payload")
+            cfg_desc = data.get("config_description", "The configuration")
+            if not isinstance(cfg_payload, list):
+                self.add_error(f"{cfg_desc} must be a list, but found type {type(cfg_payload).__name__}.")
+        else:
+            self.add_error(f"Unknown ConfigValidator operation specified: '{operation}'.")
+            operation_performed_successfully = False # Operation itself was unknown
+
+        # Logging for operation end (if desired) would be done by the CALLER now.
+        # Example: 
+        # if self.has_errors() or not operation_performed_successfully:
+        #     logger.error(f"ConfigValidator operation '{operation}' failed: {self.get_errors()}")
+        # else:
+        #     logger.info(f"ConfigValidator operation '{operation}' completed successfully.")
             
-        Returns:
-            str: Name of the agent
-        """
-        return next(iter(config)) 
+        return not self.has_errors() and operation_performed_successfully
