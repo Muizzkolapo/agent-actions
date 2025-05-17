@@ -166,7 +166,7 @@ class AgentRunnerService:
             with AgentRunnerService._execution_context(agent_name):
                 workflow = AgentWorkflow(
                     constructor_path=str(full_path),
-                    user_code_path=validated_user_code,
+                    user_code_path=user_code,
                     default_path=str(default_config_path),
                     use_tools=use_tools,
                     parent_pipeline=parent_pipeline
