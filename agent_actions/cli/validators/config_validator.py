@@ -121,7 +121,7 @@ class ConfigValidator(BaseValidator):
         cfg_ctx_name: str,
         proj_root: Optional[Path] = None,
     ) -> None:
-        desc = f"agent entry (index {entry_idx}) in '{cfg_ctx_name}'"
+        desc = f"agent entry {entry["agent_type"]} in '{cfg_ctx_name}'"
         if not isinstance(entry, dict):
             self.add_error(f"{desc} is not a dictionary.")
             return
