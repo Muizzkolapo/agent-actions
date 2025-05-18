@@ -22,6 +22,7 @@ from agent_actions.cli.exceptions import ConfigValidationError
 from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
 from agent_actions.cli.validators.schema_validator import SchemaValidator
 from agent_actions.cli.validators.config_validator import ConfigValidator
+from agent_actions.handlers.agent_handlers import AgentManager
 
 logger = logging.getLogger(__name__)
 
@@ -343,9 +344,20 @@ class ConfigRenderingService:
         """
         Validate the full agent config using ConfigValidator.
         """
+        current_directory = Path.cwd() 
+        project_root_path = AgentManager.find_project_root(start_path=current_directory)
+        agent_entries_list = config.get(agent_name)
         config_validator_instance = ConfigValidator()
-        config_validator_instance.validate(config, agent_name)
-
+        validation_payload = {
+            "operation": "validate_agent_entries",
+            "agent_config_data": agent_entries_list, 
+            "agent_name_context": agent_name,
+            "project_dir": str(project_root_path) 
+        }
+        if not config_validator_instance.validate(validation_payload):
+            errors = config_validator_instance.get_errors()
+            raise ConfigValidationError(f"Agent configuration validation failed for '{agent_name}': {errors}")
+        
     @as_validation_error(ConfigurationError)
     def render_and_load_config(
         self,

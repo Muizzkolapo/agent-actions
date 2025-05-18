@@ -15,13 +15,13 @@ class ConfigValidator(BaseValidator):
     Internal logging via ServiceLogger has been removed from this version.
     """
 
-    _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', 'name'}
+    _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', 'model_name'}
     # Added 'granularity', 'side_collection', 'remove_collection' to optional keys
     # Also added 'model_vendor', 'model_name', 'json_mode', 'prompt_debug', 'api_key', 'prompt', 'schema_name', 'tools'
     # based on their usage in agent_config throughout the codebase.
     _OPTIONAL_AGENT_KEYS: Set[str] = {
         'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent',
-        'granularity', 'side_collection', 'remove_collection', 'model_vendor', 'model_name',
+        'granularity', 'side_collection', 'remove_collection', 'model_vendor',
         'json_mode', 'prompt_debug', 'api_key', 'prompt', 'schema_name', 'tools',
         'chunk_config', 'use_few_shot_samples', 'conditional_clause', 'is_operational', # Added more common optional keys
         'ephemeral' # from agent_workflow.py
