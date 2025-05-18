@@ -42,9 +42,6 @@ class DataGenerator(IDataGenerator):
             RuntimeError: If agent creation or data generation fails
         """
         try:
-            # Ensure contents is a dictionary
-            if not isinstance(contents, dict):
-                contents = {"data": contents}
 
             # Apply remove_collection before creating the agent
             contents = self._apply_remove_collection(contents)

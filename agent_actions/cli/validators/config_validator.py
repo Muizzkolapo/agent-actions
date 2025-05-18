@@ -1,78 +1,12 @@
+# agent_actions/cli/validators/config_validator.py
 import os
 import glob
 # Removed logging import from here as ConfigValidator itself won't log directly
 from pathlib import Path
 from typing import Dict, Any, List, Tuple, Optional, Set, Union
 
-# --- Placeholder Utilities (These would be your actual project imports) ---
-# --- ServiceLogger is removed as per request for ConfigValidator's direct use ---
-
-class FileHandler: # Placeholder (remains as it's used for logic)
-    @staticmethod
-    def get_all_agent_paths(base_dir_str: str) -> List[str]:
-        paths = []
-        # Basic placeholder logic, your actual implementation might be more robust
-        try:
-            abs_base_dir = Path(base_dir_str).resolve()
-            for root, dirs, _ in os.walk(abs_base_dir):
-                if "agent_config" in dirs:
-                    config_dir = Path(root) / "agent_config"
-                    if config_dir.is_dir():
-                        for ext_pattern in ("*.yaml", "*.yml"):
-                            for file_path_obj in config_dir.glob(ext_pattern):
-                                paths.append(str(file_path_obj.resolve()))
-        except Exception:
-            # In a real FileHandler, you'd log this error appropriately
-            # print(f"Error in FileHandler.get_all_agent_paths for '{base_dir_str}': {e}")
-            pass # For this version, suppress error to focus on validator
-        return paths
-# --- End Placeholders ---
-
-# --- 1. BaseValidator Class (Remains the same) ---
-class BaseValidator:
-    """
-    Unified base class for all validators.
-    """
-    def __init__(self) -> None:
-        self._errors: List[str] = []
-        self._warnings: List[str] = []
-
-    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
-        # This method MUST be implemented by subclasses
-        raise NotImplementedError("Subclasses must implement the 'validate' method.")
-
-    def add_error(self, message: str) -> None:
-        self._errors.append(message)
-
-    def add_warning(self, message: str) -> None:
-        self._warnings.append(message)
-
-    def get_errors(self) -> List[str]:
-        return list(self._errors) # Return a copy
-
-    def get_warnings(self) -> List[str]:
-        return list(self._warnings) # Return a copy
-
-    def clear_errors(self) -> None:
-        self._errors = []
-
-    def clear_warnings(self) -> None:
-        self._warnings = []
-
-    def has_errors(self) -> bool:
-        return bool(self._errors)
-
-    @staticmethod
-    def _ensure_path_exists(path: Path) -> bool:
-        return path.exists()
-
-    @staticmethod
-    def _is_file(path: Path) -> bool:
-        return path.is_file()
-
-    @staticmethod
-    def _is_directory(path: Path) -> bool:
-        return path.is_dir()
+from agent_actions.handlers.file_handler import FileHandler
+from .base_validator import BaseValidator
 
 # --- 2. Refactored ConfigValidator Class (Logging Removed) ---
 class ConfigValidator(BaseValidator):
@@ -82,13 +16,22 @@ class ConfigValidator(BaseValidator):
     """
 
     _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', 'name'}
+    # Added 'granularity', 'side_collection', 'remove_collection' to optional keys
+    # Also added 'model_vendor', 'model_name', 'json_mode', 'prompt_debug', 'api_key', 'prompt', 'schema_name', 'tools'
+    # based on their usage in agent_config throughout the codebase.
     _OPTIONAL_AGENT_KEYS: Set[str] = {
-        'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent'
+        'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent',
+        'granularity', 'side_collection', 'remove_collection', 'model_vendor', 'model_name',
+        'json_mode', 'prompt_debug', 'api_key', 'prompt', 'schema_name', 'tools',
+        'chunk_config', 'use_few_shot_samples', 'conditional_clause', 'is_operational', # Added more common optional keys
+        'ephemeral' # from agent_workflow.py
     }
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
-        'llm': {'model'},
+        'llm': {'model_name'}, # Changed 'model' to 'model_name' for consistency with how it's often used
         'function': {'code_path'},
-        'tool': {'api_key'},
+        # For 'tool', 'model_name' is used as the UDF identifier by ToolHandler.
+        # 'api_key' might not always be required for a local tool/UDF.
+        'tool': {'model_name'},
     }
 
     def _check_agent_file_unique_logic(self, full_path_str: str, project_dir_str: str) -> None:
@@ -136,29 +79,61 @@ class ConfigValidator(BaseValidator):
         missing_req = self._REQUIRED_AGENT_KEYS - entry.keys()
         if missing_req: self.add_error(f"{desc} missing required key(s): {', '.join(missing_req)}.")
         
-        name, agent_type = entry.get('name'), entry.get('agent_type')
+        name = entry.get('name')
+        agent_type = entry.get('agent_type', '').lower() # Ensure agent_type is lower for comparisons
+        model_vendor = entry.get('model_vendor', '').lower() # Get model_vendor, default to empty string and lower
+        granularity = entry.get('granularity', 'record').lower() # Default to 'record' if not present
+
         if 'name' in entry and not isinstance(name, str): self.add_error(f"{desc} 'name' must be string.")
+        
         if 'agent_type' in entry:
-            if not isinstance(agent_type, str): self.add_error(f"{desc} 'agent_type' must be string.")
+            if not isinstance(entry.get('agent_type'), str): self.add_error(f"{desc} 'agent_type' must be string.")
             elif agent_type in self._AGENT_TYPE_REQUIRED_KEYS:
                 missing_type_specific = self._AGENT_TYPE_REQUIRED_KEYS[agent_type] - entry.keys()
                 if missing_type_specific: self.add_error(f"{desc} (type '{agent_type}') missing type-specific key(s): {', '.join(missing_type_specific)}.")
+            
             if agent_type == 'function' and 'code_path' in entry:
                 cp_val = entry['code_path']
                 if not isinstance(cp_val, str): self.add_error(f"{desc} 'code_path' for function agent must be a string.")
-                elif proj_root and not cp_val.startswith(('http://', 'https://')):
+                elif proj_root and not cp_val.startswith(('http://', 'https://')): # Check if it's not a URL
                     abs_cp = Path(cp_val) if Path(cp_val).is_absolute() else proj_root / cp_val
                     if not self._ensure_path_exists(abs_cp): self.add_error(f"{desc} 'code_path' ({abs_cp}) does not exist.")
                     elif not self._is_file(abs_cp): self.add_error(f"{desc} 'code_path' ({abs_cp}) is not a file.")
         
-        all_known_keys = self._REQUIRED_AGENT_KEYS.union(self._OPTIONAL_AGENT_KEYS).union(*self._AGENT_TYPE_REQUIRED_KEYS.values())
-        keys_to_check_for_unknown = {k for k in entry.keys() if k != 'config'}
+        # New validation for tool vendor with file granularity
+        if model_vendor == 'tool' and granularity == 'file':
+            if 'side_collection' in entry: # Check for the key's presence
+                self.add_error(
+                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'side_collection' defined. "
+                    "This key should be removed for this agent configuration as file-level tools process content wholesale, "
+                    "and side_collection is for record-level context enrichment."
+                )
+            if 'remove_collection' in entry: # Check for the key's presence
+                self.add_error(
+                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'remove_collection' defined. "
+                    "This key should be removed for this agent configuration as file-level tools process content wholesale, "
+                    "and remove_collection is for modifying record-level context."
+                )
+
+        # Consolidate all known keys for the "unknown keys" check
+        all_known_keys = self._REQUIRED_AGENT_KEYS.union(self._OPTIONAL_AGENT_KEYS)
+        if agent_type in self._AGENT_TYPE_REQUIRED_KEYS:
+            all_known_keys = all_known_keys.union(self._AGENT_TYPE_REQUIRED_KEYS[agent_type])
+        
+        # Special handling for 'config' key which can have arbitrary sub-keys
+        keys_to_check_for_unknown = {k for k in entry.keys() if k != 'config'} 
         unknown_keys = keys_to_check_for_unknown - all_known_keys
-        if unknown_keys: self.add_warning(f"{desc} has unknown key(s): {', '.join(unknown_keys)}.")
+        
+        if unknown_keys: self.add_warning(f"{desc} has unknown key(s): {', '.join(unknown_keys)}. Ensure these are intended or correct typos.")
         
         if 'description' in entry and not isinstance(entry['description'], str): self.add_error(f"{desc} 'description' should be a string.")
         if 'version' in entry and not isinstance(entry['version'], (str, int, float)): self.add_error(f"{desc} 'version' should be a string or number.")
         if 'dependencies' in entry and not isinstance(entry['dependencies'], list): self.add_error(f"{desc} 'dependencies' should be a list.")
+        if 'is_operational' in entry and not isinstance(entry['is_operational'], bool): self.add_error(f"{desc} 'is_operational' should be a boolean.")
+        if 'json_mode' in entry and not isinstance(entry['json_mode'], bool): self.add_error(f"{desc} 'json_mode' should be a boolean.")
+        if 'prompt_debug' in entry and not isinstance(entry['prompt_debug'], bool): self.add_error(f"{desc} 'prompt_debug' should be a boolean.")
+        if 'granularity' in entry and entry['granularity'] not in ['record', 'file']: self.add_error(f"{desc} 'granularity' must be 'record' or 'file'.")
+
 
     def _validate_agent_entries_list_logic(self, agent_cfg_list: Any, agent_name_ctx: str, proj_root: Optional[Path] = None) -> None:
         if not isinstance(agent_cfg_list, list):
@@ -237,10 +212,11 @@ class ConfigValidator(BaseValidator):
                     return True
             recursion_path.pop()
             return False
-        for node_name in list(graph.keys()):
+        for node_name in list(graph.keys()): # Use list(graph.keys()) if graph might be modified during iteration (not here, but good practice)
             if node_name not in visited_nodes:
                 if dfs_has_cycle(node_name):
-                    recursion_path.clear()
+                    # Cycle found and error added, clear path for next DFS if needed
+                    recursion_path.clear() # Important if DFS is re-entrant for multiple components
 
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         self.clear_errors()
@@ -260,7 +236,7 @@ class ConfigValidator(BaseValidator):
         proj_dir = data.get("project_dir")
         project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
         
-        operation_performed_successfully = True
+        operation_performed_successfully = True # Assume success unless an unknown operation is hit
 
         if operation == "validate_agent_config_file_meta":
             cfg_path_str = data.get("config_path")
@@ -278,8 +254,8 @@ class ConfigValidator(BaseValidator):
         
         elif operation == "validate_agent_entries":
             agent_cfg_data = data.get("agent_config_data")
-            agent_name_context = data.get("agent_name_context")
-            if agent_cfg_data is None or not isinstance(agent_name_context, str):
+            agent_name_context = data.get("agent_name_context") # Renamed for clarity from agent_name
+            if agent_cfg_data is None or not isinstance(agent_name_context, str): # Check agent_cfg_data is not None
                 self.add_error("For 'validate_agent_entries', provide 'agent_config_data' and 'agent_name_context' (str).")
             else:
                 self._validate_agent_entries_list_logic(agent_cfg_data, agent_name_context, project_root_path)
@@ -311,7 +287,7 @@ class ConfigValidator(BaseValidator):
         
         elif operation == "ensure_config_is_list":
             cfg_payload = data.get("config_payload")
-            cfg_desc = data.get("config_description", "The configuration")
+            cfg_desc = data.get("config_description", "The configuration") # Default description
             if not isinstance(cfg_payload, list):
                 self.add_error(f"{cfg_desc} must be a list, but found type {type(cfg_payload).__name__}.")
         else:
