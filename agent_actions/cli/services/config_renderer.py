@@ -339,7 +339,7 @@ class ConfigRenderingService:
         if not data:
             raise ConfigurationError(f"Configuration results in empty data: {src}")
         return data
-
+    
     def _validate_agent_config_block(self, config: Dict[str, Any], agent_name: str) -> None:
         """
         Validate the full agent config using ConfigValidator.
@@ -354,10 +354,16 @@ class ConfigRenderingService:
             "agent_name_context": agent_name,
             "project_dir": str(project_root_path) 
         }
+        """if not config_validator_instance.validate(validation_payload):
+            errors = config_validator_instance.get_errors()
+            raise ConfigValidationError(f"Agent configuration validation failed for '{agent_name}': {errors}")"""
         if not config_validator_instance.validate(validation_payload):
             errors = config_validator_instance.get_errors()
-            raise ConfigValidationError(f"Agent configuration validation failed for '{agent_name}': {errors}")
-        
+            if errors:  # Only raise if actual errors exist
+                raise ConfigValidationError(
+                    f"Agent configuration validation failed for '{agent_name}': {errors}"
+                )
+
     @as_validation_error(ConfigurationError)
     def render_and_load_config(
         self,
