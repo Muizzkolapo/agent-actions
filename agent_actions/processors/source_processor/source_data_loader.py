@@ -6,7 +6,6 @@ from typing import List, Dict, Optional
 
 from ..interfaces import ISourceDataLoader
 
-
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
@@ -32,9 +31,16 @@ class SourceDataLoader(ISourceDataLoader):
         Raises:
             IOError: If source data cannot be loaded
         """
-        try:
-            source_path = Path(file_path).parents[2] / "source" / os.path.basename(file_path)
-            with open(source_path, 'r') as file:
+        try:     
+            current_input_file_obj = Path(file_path)
+            
+            pipeline_io_root = current_input_file_obj.parents[3]
+        
+            producer_agent_output_dir_root = current_input_file_obj.parents[1]
+            relative_path_within_producer_output = current_input_file_obj.relative_to(producer_agent_output_dir_root)
+            
+            source_file_to_load = pipeline_io_root / "source" / relative_path_within_producer_output
+            with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)
         except Exception as e:
-            raise IOError(f"Failed to load source data from {file_path}: {str(e)}")
+            raise IOError(f"Failed to load source data from {str(source_file_to_load)} (derived from input {file_path}): {str(e)}")

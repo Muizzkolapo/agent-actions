@@ -106,10 +106,19 @@ class AgentRunner:
         Raises:
             ValueError: If no files are found in the input directory.
         """
-        files_processed: bool = False
+        files_processed_count: int = 0
+
+        for current_input_root, dir_names, _ in os.walk(input_directory):
+            relative_dir_path = os.path.relpath(current_input_root, input_directory)
+            current_output_root = os.path.join(output_directory, relative_dir_path)
+    
+            os.makedirs(current_output_root, exist_ok=True)
+            
+            for dir_name in dir_names:
+                output_subdir_path = os.path.join(current_output_root, dir_name)
+                os.makedirs(output_subdir_path, exist_ok=True)
+
         for root, _, files in os.walk(input_directory):
-            if files:
-                files_processed = True
             for file in files:
                 file_path: str = os.path.join(root, file)
                 strategy.execute(
@@ -119,9 +128,13 @@ class AgentRunner:
                     input_directory,
                     output_directory
                 )
+                files_processed_count += 1
 
-        if not files_processed:
-            raise ValueError(f"No files found in directory: {input_directory}")
+        if files_processed_count == 0:
+            if not os.listdir(input_directory): # True if directory is empty (no files, no subdirs)
+                print(f"Warning: No files found in directory: {input_directory}, and the directory itself is empty. Processing continues.")
+            else: # Directory had subdirectories, which were mirrored.
+                print(f"Info: No files found to process in {input_directory}, but directory structure was mirrored. Processing continues.")
 
     def process_and_generate_for_agent(
         self,
@@ -170,7 +183,6 @@ class AgentRunner:
         Returns:
             str: Path to the output directory.
         """
-        # Select strategy based on position in the workflow
         if idx == 0:
             strategy: AgentStrategy = self.strategies['initial']
         elif is_last_agent:
@@ -178,7 +190,6 @@ class AgentRunner:
         else:
             strategy = self.strategies['intermediate']
 
-        # Process agent data and generate output
         output_folder: str = self.process_and_generate_for_agent(
             agent_config,
             agent_name,
