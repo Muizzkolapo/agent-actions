@@ -36,10 +36,8 @@ class SourceDataLoader(ISourceDataLoader):
             
             pipeline_io_root = current_input_file_obj.parents[3]
         
-            producer_agent_output_dir_root = current_input_file_obj.parents[1]
-            relative_path_within_producer_output = current_input_file_obj.relative_to(producer_agent_output_dir_root)
-            
-            source_file_to_load = pipeline_io_root / "source" / relative_path_within_producer_output
+            original_filename = current_input_file_obj.name
+            source_file_to_load = pipeline_io_root / "agent_io" / "source" / original_filename
             with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)
         except Exception as e:
