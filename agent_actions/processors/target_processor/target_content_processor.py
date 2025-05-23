@@ -146,14 +146,9 @@ class TargetContentProcessor(IContentProcessor):
             # Check conditional clause
             conditional_clause = self.agent_config.get('conditional_clause', '').lower()
             if conditional_clause:
-                # Pass additional context to the UDF
-                udf_kwargs = {
-                    "item": item,
-                    "source_content": source_content,
-                    "agent_config": self.agent_config,
-                    "agent_name": self.agent_name
-                }
-                if execute_user_defined_function(conditional_clause, contents, **udf_kwargs):
+                # For conditional_clause UDFs, only pass the primary 'contents' data.
+                # This prevents TypeErrors for UDFs not defined to accept extra context kwargs.
+                if execute_user_defined_function(conditional_clause, contents):
                     # Generate data with agent
                     generated_data = self.data_generator.create_agent_with_data(
                         contents, source_content
