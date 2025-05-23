@@ -55,7 +55,9 @@ def create_dynamic_agent(
     udf: Any,
     context_data_str: Union[str, Dict],
     formatted_prompt: Optional[str] = None,
-    tools_path: Optional[str] = None
+    tools_path: Optional[str] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
+    source_content: Optional[Any] = None # Add source_content parameter
 ) -> List[Any]:
     """
     Build and execute a prompt against the selected vendor, returning
@@ -97,8 +99,8 @@ def create_dynamic_agent(
     # ----- dispatch to vendor handler ------------------------------------
     return _invoke_vendor_handler(
         model_vendor, agent_config, prompt_config,
-        context_data, schema, granularity,
-        formatted_prompt
+        context_data, schema, granularity, formatted_prompt,
+        tool_args, source_content # Pass tool_args and source_content
     )
 
 # ---------------------------------------------------------------------------
@@ -148,7 +150,9 @@ def _invoke_vendor_handler(
     context_data: Union[str, Dict],
     schema: Optional[Dict[str, Any]],
     granularity: str,
-    formatted_prompt: Optional[str] = None
+    formatted_prompt: Optional[str] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
+    source_content: Optional[Any] = None # Add source_content parameter
 ) -> List[Any]:
     """Delegates to the specific vendor handler and normalises the response."""
     if model_vendor not in VENDOR_HANDLERS:
@@ -162,7 +166,12 @@ def _invoke_vendor_handler(
 
     # ToolHandler ignores prompt_config entirely
     elif model_vendor == 'tool':
-        response_data = handler.invoke(agent_config, context_data)
+        response_data = handler.invoke(
+            agent_config,
+            context_data,
+            tool_args=tool_args,
+            source_content=source_content # Pass source_content to ToolHandler
+        )
         if granularity == 'file':      # file-level content goes straight out
             return response_data
 
