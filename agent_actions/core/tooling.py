@@ -54,13 +54,14 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     return function
 
 
-def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any]) -> Any:
+def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **kwargs: Any) -> Any:
     """
     Dynamically execute a user-defined function (UDF).
 
     Args:
         udf_name: The full path to the UDF (e.g., 'module_name.function_name').
         input_data: The input data to pass to the UDF.
+        **kwargs: Additional keyword arguments to pass to the UDF.
 
     Returns:
         The result of the UDF execution.
@@ -74,7 +75,7 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any]) -> 
     udf = load_user_defined_function(module_name, func_name)
     
     try:
-        result = udf(input_data)
+        result = udf(input_data, **kwargs)
         return result
     except Exception as e:
         raise Exception(f"Error executing function '{func_name}': {str(e)}")

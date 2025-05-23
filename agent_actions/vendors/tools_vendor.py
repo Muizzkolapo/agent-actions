@@ -1,26 +1,31 @@
 import json
 from agent_actions.core.tooling import execute_user_defined_function
 
-
+from typing import Dict, Any, Optional, Union
+from agent_actions.processors.target_processor.data_generator import DataGenerator
+from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
 class ToolHandler:
     @staticmethod
-    def invoke(agent_config, context_data):
+    def invoke(
+        agent_config: Dict[str, Any],
+        context_data: Union[str, Dict],
+        tool_args: Optional[Dict[str, Any]] = None,
+        source_content: Optional[Any] = None 
+        # ... potentially other args received from _invoke_vendor_handler ...
+    ) -> Any:
         """
         Invoke a user-defined function (UDF) specified in the configuration.
-
-        Parameters:
-            agent_config (dict): The agent configuration containing the UDF name.
-            udf_name (str): The name of the UDF to invoke.
-            context_data (dict): The input data to process.
-
-        Returns:
-            The result of the UDF execution.
         """
-        model_name = agent_config['model_name']
+        model_name = agent_config.get('model_name')
+        if not model_name:
+            raise ValueError("Tool vendor requires 'model_name' (UDF path) in agent config.")
+
         side_output = agent_config.get('side_output', False)
-        
-        response = execute_user_defined_function(model_name, context_data)
-        
+
+        udf_kwargs = tool_args if tool_args is not None else {}
+
+
+        response = execute_user_defined_function(model_name, context_data, **udf_kwargs) 
         if side_output:
             condition, result = response
             if condition:
@@ -28,4 +33,7 @@ class ToolHandler:
             else:
                 return json.loads(result)
         else:
-            return json.loads(response)
+            if isinstance(response, str):
+                return json.loads(response)
+            else:
+                return response
