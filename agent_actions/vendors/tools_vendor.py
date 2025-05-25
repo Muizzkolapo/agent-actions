@@ -3,7 +3,6 @@ from agent_actions.core.tooling import execute_user_defined_function
 
 from typing import Dict, Any, Optional, Union
 from agent_actions.processors.target_processor.data_generator import DataGenerator
-from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
 class ToolHandler:
     @staticmethod
     def invoke(
