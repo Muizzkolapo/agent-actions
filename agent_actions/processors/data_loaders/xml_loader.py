@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import xml.etree.ElementTree as ET
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -41,9 +42,15 @@ class XmlLoader(BaseLoader):
 
             root = ET.fromstring(content_str)
             return root
+        except ET.ParseError as e:
+            self.handle_processing_error(e, f"parsing XML from {file_path or 'content string'}")
+            raise AgentActionsError(f"Invalid XML data in {file_path or 'content string'}: {e}") from e
+        except IOError as e: # From self.load_file
+            self.handle_processing_error(e, f"reading XML file {file_path}")
+            raise AgentActionsError(f"Could not read XML file {file_path}: {e}") from e
         except Exception as e:
             self.handle_processing_error(e, "processing XML input")
-            return None
+            raise AgentActionsError(f"Failed to process XML input from {file_path or 'content string'}: {e}") from e
         
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
         """Process an XML element into a dictionary.

@@ -3,6 +3,7 @@ import json
 from groq import Groq  # Assuming this is the official Groq API Python package
 from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
+from agent_actions.cli.exceptions import VendorAPIError
 from agent_actions.transformers.data_transformer import DataTransformer
 
 
@@ -38,9 +39,9 @@ class GroqLlama3Handler:
             response = json.loads(response_temp)
             response_list = DataTransformer.ensure_list(response)
             return response_list
-
         except Exception as e:
-            raise Exception(f"Failed to create chat completion with Groq Llama 3: {str(e)}")
+            # Catch specific Groq API errors if available, e.g., groq.APIError
+            raise VendorAPIError(f"Failed to create chat completion with Groq Llama 3: {str(e)}") from e
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, context_data):
@@ -71,9 +72,13 @@ class GroqLlama3Handler:
             "max_tokens": 1000,   
         }
         response = groq.chat.completions.create(**completion_kwargs)
-        response_content = response.choices[0].message.content
-        
-        return [response_content]
+        try:
+            response_content = response.choices[0].message.content
+            return [response_content]
+        except (AttributeError, IndexError, TypeError) as e:
+            raise VendorAPIError(f"Error parsing non-JSON response from Groq Llama 3: {str(e)}. Response: {response}") from e
+        except Exception as e: # Catch other Groq API errors
+            raise VendorAPIError(f"Failed to get non-JSON chat completion from Groq Llama 3: {str(e)}") from e
 
     @staticmethod
     def invoke(agent_config, prompt_config, context_data, schema):
@@ -87,4 +92,3 @@ class GroqLlama3Handler:
             return GroqLlama3Handler.call_json(agent_config, prompt_config, context_data, schema)
         else:
             return GroqLlama3Handler.call_non_json(agent_config, prompt_config, context_data)
-

@@ -181,10 +181,13 @@ class AgentRunnerService:
                 return result or {}
                 
         except Exception as e:
-            if "Prompt file" in str(e) and "not found" in str(e):
-                error_msg = str(e).split(":", 1)[-1].strip()
-                logger.error(f"Prompt file error in workflow: {error_msg}", extra={'agent_name': agent_name})
-                raise AgentExecutionError(f"Prompt loading failed: {error_msg}") from None
+            # PromptLoader.load_prompt raises ValueError for file not found or format issues.
+            # StagingProcessor wraps this in RuntimeError.
+            # If the error message from PromptLoader is specific enough, we can catch ValueError here
+            # or rely on the RuntimeError from StagingProcessor.
+            if isinstance(e, ValueError) and ("Prompt file" in str(e) and "not found" in str(e) or "Prompt directory not found" in str(e) or "Invalid prompt format" in str(e)):
+                logger.error(f"Prompt loading error in workflow: {str(e)}", extra={'agent_name': agent_name})
+                raise AgentExecutionError(f"Prompt loading failed: {str(e)}") from e # Chain original ValueError
 
             error_details = {
                 'agent_name': agent_name,

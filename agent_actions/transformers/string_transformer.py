@@ -8,6 +8,7 @@ import textwrap
 from typing import List
 import tiktoken
 from sentence_transformers import SentenceTransformer
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 class StringProcessor:
     """
@@ -26,7 +27,7 @@ class StringProcessor:
             str: The processed string treated as plain text.
         """
         if not isinstance(input_text, str):
-            print(f"Invalid input type: {type(input_text).__name__}")
+            # Or raise TypeError("Input must be a string")
             return input_text
             
         pattern = re.compile(r'({.*?})')
@@ -55,8 +56,13 @@ class StringProcessor:
             function = getattr(module, function_name)
             result = function(context_data_str) if context_data_str else function()
             return result
-        except Exception as e:
-            print(f"User function error for '{function_name}': {str(e)}")
+        except ImportError as e:
+            raise ConfigurationError(f"Could not import module for UDF '{function_name}': {e}. Ensure '{tools_path}' is correct and module exists.") from e
+        except AttributeError as e:
+            raise ConfigurationError(f"Could not find function '{function_name}' in its module: {e}") from e
+        except Exception as e: # Catch other errors during UDF execution
+            # Consider a more specific UDFExecutionError
+            raise AgentActionsError(f"Error executing user function '{function_name}': {str(e)}") from e
 
 
 class Tokenizer:
@@ -71,9 +77,11 @@ class Tokenizer:
             encoding = tiktoken.get_encoding(encoding_name)
             num_tokens = len(encoding.encode(string))
             return num_tokens
-        except Exception as e:
-            print(f"Tokenization error for string '{string[:100]}...': {str(e)}")
-            return 0
+        except ValueError as e: # tiktoken.get_encoding can raise ValueError for unknown encoding
+            raise ConfigurationError(f"Invalid tiktoken encoding name '{encoding_name}': {e}") from e
+        except Exception as e: # Other unexpected tokenization errors
+            # Log the error, but re-raise as it's a critical failure for this method's purpose
+            raise AgentActionsError(f"Tokenization error for string '{string[:100]}...': {str(e)}") from e
 
     @staticmethod
     def split_text_content(
@@ -104,14 +112,11 @@ class Tokenizer:
             List[str]: A list of text chunks.
         """
         if chunk_size <= 0:
-            print("Error: chunk_size must be a positive integer.")
-            return []
+            raise ValueError("chunk_size must be a positive integer.")
         if overlap < 0:
-            print("Error: overlap cannot be negative.")
-            return []
+            raise ValueError("overlap cannot be negative.")
         if overlap >= chunk_size and split_method in ("tiktoken", "chars"):
-            print("Error: overlap must be smaller than chunk_size for token/character splits.")
-            return []
+            raise ValueError("overlap must be smaller than chunk_size for token/character splits.")
 
         try:
             # ---------------------------------------------------------------------
@@ -119,7 +124,10 @@ class Tokenizer:
             # ---------------------------------------------------------------------
             if split_method == "tiktoken":
                 encoding = tiktoken.get_encoding(tokenizer_model)
-                tokens = encoding.encode(text)
+                try:
+                    tokens = encoding.encode(text)
+                except Exception as e: # Catch potential errors during encoding itself
+                    raise AgentActionsError(f"Error encoding text with tiktoken model '{tokenizer_model}': {e}") from e
 
                 chunks = []
                 start_idx = 0
@@ -152,8 +160,7 @@ class Tokenizer:
                 try:
                     nlp = "None" #spacy.load("en_core_web_sm")
                 except OSError:
-                    print("spaCy model 'en_core_web_sm' is not installed.")
-                    return []
+                    raise ConfigurationError("spaCy model 'en_core_web_sm' is not installed. Please install it to use 'spacy' split_method.")
 
                 encoding = tiktoken.get_encoding(tokenizer_model)
                 doc = nlp(text)
@@ -191,10 +198,13 @@ class Tokenizer:
                     module = importlib.import_module(split_method)
                     function = getattr(module, split_method)
                     return function(text, chunk_size, overlap, tokenizer_model)
-                except Exception as e:
-                    print(f"User function error for '{split_method}': {str(e)}")
-                    return []
-
-        except Exception as e:
-            print(f"Tokenization error for text '{text[:100]}...': {str(e)}")
-            return []
+                except ImportError as e:
+                    raise ConfigurationError(f"Could not import custom split_method module '{split_method}': {e}") from e
+                except AttributeError as e:
+                    raise ConfigurationError(f"Could not find custom split_method function '{split_method}' in its module: {e}") from e
+                except Exception as e: # Errors from the custom UDF
+                    raise AgentActionsError(f"Error executing custom split_method '{split_method}': {str(e)}") from e
+        except ValueError as e: # Catch ValueErrors from parameter checks or tiktoken
+            raise
+        except Exception as e: # General catch-all for unexpected issues
+            raise AgentActionsError(f"Text splitting error for text '{text[:100]}...': {str(e)}") from e

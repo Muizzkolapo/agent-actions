@@ -2,6 +2,7 @@
 import json
 import os
 from agent_actions.handlers.file_writer import FileWriter
+from agent_actions.cli.exceptions import AgentActionsError
 
 
 class OutputHandler:
@@ -24,8 +25,10 @@ class OutputHandler:
             
             file_writer = FileWriter(output_file_path)
             file_writer.write_target(data)
+        except IOError as e:
+            raise AgentActionsError(f"IOError saving main output to {output_file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error saving output to {output_file_path}: {str(e)}")
+            raise AgentActionsError(f"Error saving main output to {output_file_path}: {str(e)}") from e
     
     def save_side_output(self, data, file_path, base_directory, output_directory):
         """
@@ -50,8 +53,10 @@ class OutputHandler:
             existing_content.extend(data)
             with open(side_output_file_path, 'w', encoding='utf-8') as file:
                 json.dump(existing_content, file, indent=4)
+        except IOError as e:
+            raise AgentActionsError(f"IOError saving side output to {side_output_file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error saving side output to {side_output_file_path}: {str(e)}")
+            raise AgentActionsError(f"Error saving side output to {side_output_file_path}: {str(e)}") from e
     
     def _ensure_directory_exists(self, file_path):
         """Ensure the directory for the file path exists."""

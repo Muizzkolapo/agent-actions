@@ -1,5 +1,6 @@
 """Module for Data Manipulation Functions."""
 import copy
+from agent_actions.cli.exceptions import AgentActionsError
 
 class DataTransformer:
     """
@@ -38,8 +39,10 @@ class DataTransformer:
                         updated_data[key] = old_value
 
             return updated_data
+        except TypeError as e:
+            raise AgentActionsError(f"Type error updating schema objects: {str(e)}") from e
         except Exception as e:
-            print(f"Error updating schema objects: {str(e)}")
+            raise AgentActionsError(f"Unexpected error updating schema objects: {str(e)}") from e
 
     @staticmethod
     def remove_schema_objects(data, keys_to_update):
@@ -59,8 +62,10 @@ class DataTransformer:
                 if key in updated_data:
                     del updated_data[key]
             return updated_data
+        except KeyError as e:
+            raise AgentActionsError(f"Key error removing schema objects: {str(e)}") from e
         except Exception as e:
-            print(f"Error removing schema objects: {str(e)}")
+            raise AgentActionsError(f"Unexpected error removing schema objects: {str(e)}") from e
 
     @staticmethod
     def extract_objects(input_data):
@@ -75,7 +80,7 @@ class DataTransformer:
         """
         try:
             if not isinstance(input_data, (dict, list)):
-                print(f"Data type error: Expected dict or list, got {type(input_data).__name__}")
+                raise TypeError(f"Data type error: Expected dict or list, got {type(input_data).__name__}")
 
             if isinstance(input_data, list):
                 if input_data and isinstance(input_data[0], dict):
@@ -88,8 +93,10 @@ class DataTransformer:
                     if isinstance(field_value, list):
                         return field_value
             return []
+        except TypeError as e: # Catch specific type errors if operations assume types
+            raise AgentActionsError(f"Type error during object extraction: {str(e)}") from e
         except Exception as e:
-            print(f"Error extracting objects: {str(e)}")
+            raise AgentActionsError(f"Error extracting objects: {str(e)}") from e
 
     @staticmethod
     def flatten_to_list_of_dicts(nested_lists):
@@ -160,5 +167,4 @@ class DataTransformer:
         for item in data:
             if guid in item:
                 return item[guid]
-        print(f"GUID not found: {guid}")
-
+        raise KeyError(f"GUID not found: {guid}")

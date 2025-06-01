@@ -8,6 +8,7 @@ from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
 
+from agent_actions.cli.exceptions import FileNotFoundError as AgentFileNotFoundError, AgentActionsError
 class FileReader:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -29,10 +30,15 @@ class FileReader:
         if self.file_type in file_type_handlers:
             try:
                 return file_type_handlers[self.file_type]()
+            except FileNotFoundError:
+                raise AgentFileNotFoundError(f"File not found: {self.file_path}")
+            except IOError as e:
+                raise AgentActionsError(f"IOError reading file {self.file_path}: {str(e)}") from e
             except Exception as e:
-                print(f"Error reading file {self.file_path}: {str(e)}")
+                # Catch other specific parsing errors if possible, e.g., PyPDF2.errors.PdfReadError
+                raise AgentActionsError(f"Error reading file {self.file_path} (type: {self.file_type}): {str(e)}") from e
         else:
-            print(f"Unsupported file type: {self.file_type}")
+            raise AgentActionsError(f"Unsupported file type: {self.file_type} for file {self.file_path}")
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:

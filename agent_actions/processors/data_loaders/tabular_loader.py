@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import csv
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -41,9 +42,15 @@ class TabularLoader(BaseLoader):
 
             rows = list(csv.DictReader(content_str.splitlines()))
             return rows
+        except csv.Error as e:
+            self.handle_processing_error(e, f"parsing CSV from {file_path or 'content string'}")
+            raise AgentActionsError(f"Invalid CSV data in {file_path or 'content string'}: {e}") from e
+        except IOError as e: # From self.load_file
+            self.handle_processing_error(e, f"reading tabular file {file_path}")
+            raise AgentActionsError(f"Could not read tabular file {file_path}: {e}") from e
         except Exception as e:
             self.handle_processing_error(e, "processing tabular file")
-            return []
+            raise AgentActionsError(f"Failed to process tabular data from {file_path or 'content string'}: {e}") from e
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""
