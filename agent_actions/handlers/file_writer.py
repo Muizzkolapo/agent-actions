@@ -2,6 +2,7 @@
 import os
 import json
 import csv
+from agent_actions.cli.exceptions import AgentActionsError
 
 class FileWriter:
     def __init__(self, file_path):
@@ -22,21 +23,27 @@ class FileWriter:
                     writer = csv.writer(file)
                     writer.writerows(data)
                 else:
-                    print(f"Unsupported file type: {self.file_type}")
+                    raise AgentActionsError(f"Unsupported file type for staging: {self.file_type} for file {self.file_path}")
+        except IOError as e:
+            raise AgentActionsError(f"IOError writing staging file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error writing file {self.file_path}: {str(e)}")
+            raise AgentActionsError(f"Error writing staging file {self.file_path}: {str(e)}") from e
 
     def write_target(self, data):
         try:
             os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
+        except IOError as e:
+            raise AgentActionsError(f"IOError writing target file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error writing file {self.file_path}: {str(e)}")
+            raise AgentActionsError(f"Error writing target file {self.file_path}: {str(e)}") from e
 
     def write_source(self, data):
         try:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
+        except IOError as e:
+            raise AgentActionsError(f"IOError writing source file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error writing file {self.file_path}: {str(e)}")
+            raise AgentActionsError(f"Error writing source file {self.file_path}: {str(e)}") from e

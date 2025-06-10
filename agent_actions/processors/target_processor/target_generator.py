@@ -2,6 +2,7 @@
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -68,9 +69,11 @@ class TargetGenerator:
             import os
             relative_path = os.path.relpath(file_path, base_directory)
             return os.path.join(output_directory, relative_path)
+        except (AgentActionsError, ConfigurationError, ValueError) as e: # Catch known specific errors
+            # Log e if necessary, or let it propagate if it's already informative
+            raise AgentActionsError(f"Error generating target for {file_path}: {str(e)}") from e
         except Exception as e:
-            print(f"Error generating target: {str(e)}")
-            return None
+            raise AgentActionsError(f"Unexpected error generating target for {file_path}: {str(e)}") from e
     
     def _read_input_data(self, file_path):
         """Read data from input file."""

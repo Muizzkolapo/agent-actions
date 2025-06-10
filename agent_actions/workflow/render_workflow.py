@@ -2,6 +2,8 @@ import os
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.handlers.prompt_handler import PromptLoader
+from agent_actions.cli.exceptions import TemplateRenderingError, ConfigurationError
+import jinja2 # For specific Jinja2 exceptions
 
 def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
     """
@@ -23,8 +25,13 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
             template = env.get_template(template_file)
             module = template.module
             env.globals.update(vars(module))
-        except Exception as e:
-            print(f"Error loading template '{template_file}': {str(e)}")
+        except jinja2.TemplateNotFound:
+            # This might be acceptable if some templates are optional, log and continue
+            print(f"Warning: Template file '{template_file}' not found in {templates_folder}.")
+        except jinja2.TemplateSyntaxError as e:
+            raise TemplateRenderingError(f"Syntax error in template '{template_file}': {e.message} (line {e.lineno})") from e
+        except Exception as e: # Catch other unexpected errors during template loading
+            raise TemplateRenderingError(f"Unexpected error loading template '{template_file}': {str(e)}") from e
     
     try:
         with open(yaml_path, 'r', encoding='utf-8') as yaml_file:
@@ -33,7 +40,10 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         # If the entire YAML file is just a prompt reference (i.e. starts with '$')
         if yaml_content.strip().startswith('$'):
             prompt_key = yaml_content.strip()[1:]
-            yaml_content = PromptLoader.load_prompt(prompt_key)
+            try:
+                yaml_content = PromptLoader.load_prompt(prompt_key)
+            except ValueError as e: # PromptLoader.load_prompt raises ValueError
+                raise ConfigurationError(f"Failed to load prompt '{prompt_key}' referenced in '{yaml_path}': {e}") from e
         
         template = env.from_string(yaml_content)
         rendered_yaml_content = template.render()
@@ -73,7 +83,18 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         if output_file:
             with open(output_file, 'w', encoding='utf-8') as out_file:
                 out_file.write(rendered_yaml_content)
-        
         return rendered_yaml_content
+    except FileNotFoundError as e:
+        raise ConfigurationError(f"YAML configuration file not found: {yaml_path}") from e
+    except IOError as e:
+        raise ConfigurationError(f"IO error reading or writing YAML file '{yaml_path}' or output '{output_file}': {e}") from e
+    except yaml.YAMLError as e:
+        problem = getattr(e, 'problem', '')
+        mark = getattr(e, 'problem_mark', None)
+        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise ConfigurationError(f"Error parsing YAML from '{yaml_path}'{location}: {problem}") from e
+    except jinja2.TemplateError as e: # Catches TemplateSyntaxError, UndefinedError, etc.
+        raise TemplateRenderingError(f"Error rendering YAML template from '{yaml_path}': {str(e)}") from e
     except Exception as e:
-        print(f"Error rendering YAML from '{yaml_path}': {str(e)}")
+        # General catch-all for unexpected issues during rendering or file operations
+        raise TemplateRenderingError(f"Unexpected error rendering YAML from '{yaml_path}': {str(e)}") from e

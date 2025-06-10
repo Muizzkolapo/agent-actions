@@ -116,9 +116,9 @@ class AgentManager:
             True if the agent exists, False otherwise.
         """
         try:
-            agent_config_dir, _, _ = AgentManager.get_agent_paths(agent_name)
+            agent_config_dir, _, _ = self.get_agent_paths(agent_name) # Assuming self or make it static and call AgentManager
             return Path(agent_config_dir).exists()
-        except Exception:
+        except AgentNotFoundError: # get_agent_paths raises AgentNotFoundError
             return False
 
 
@@ -164,5 +164,3 @@ class AgentManager:
         if directory.exists():
             shutil.rmtree(directory)
             logger.info(f"Cleaned directory {directory} for agent {agent}")
-
-

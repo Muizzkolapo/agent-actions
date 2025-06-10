@@ -3,6 +3,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -37,9 +38,12 @@ class TextLoader(BaseLoader):
                 return content
             else:
                 raise ValueError("Either file_path or content must be provided for text processing.")
+        except IOError as e: # From self.load_file
+            self.handle_processing_error(e, f"reading text file {file_path}")
+            raise AgentActionsError(f"Could not read text file {file_path}: {e}") from e
         except Exception as e:
             self.handle_processing_error(e, "processing text input")
-            return ""
+            raise AgentActionsError(f"Failed to process text input from {file_path or 'content string'}: {e}") from e
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

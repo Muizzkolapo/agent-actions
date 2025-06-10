@@ -5,6 +5,7 @@ from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates  
 from agent_actions.cli.validators.config_validator import ConfigValidator  
 from typing import Dict, Any, Union, List, Tuple, Optional, Set
+from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingError
 
 import glob
 
@@ -25,14 +26,22 @@ class ConfigManager:
         try:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
             self.user_config = yaml.safe_load(config_data)
-        except Exception as e:
-            raise ValueError(f"Error loading config from {self.constructor_path}: {str(e)}")
+        except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
+            raise ConfigurationError(f"Error rendering or loading user config from {self.constructor_path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise ConfigurationError(f"Error parsing YAML for user config from {self.constructor_path}: {e}") from e
+        except Exception as e: # Catch other unexpected errors
+            raise ConfigurationError(f"Unexpected error loading user config from {self.constructor_path}: {str(e)}") from e
 
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
-        except Exception as e:
-            raise ValueError(f"Error loading default config from {self.default_path}: {str(e)}")
+        except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
+            raise ConfigurationError(f"Error rendering or loading default config from {self.default_path}: {e}") from e
+        except yaml.YAMLError as e:
+            raise ConfigurationError(f"Error parsing YAML for default config from {self.default_path}: {e}") from e
+        except Exception as e: # Catch other unexpected errors
+            raise ConfigurationError(f"Unexpected error loading default config from {self.default_path}: {str(e)}") from e
 
     def find_agent_name(self,config: Dict[str, Any]) -> str:
         """

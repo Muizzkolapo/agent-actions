@@ -68,3 +68,8 @@ class PermissionError(AgentActionsError):
 class TemplateRenderingError(AgentActionsError):
     """Raised when an error occurs during template rendering."""
     pass
+
+
+class VendorAPIError(AgentActionsError):
+    """Raised when an error occurs during a call to a vendor's API."""
+    pass

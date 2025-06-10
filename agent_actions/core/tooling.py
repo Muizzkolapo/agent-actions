@@ -1,9 +1,9 @@
 """
 Module for loading and running user-defined functions from a specified module.
 """
-
 import importlib
 from typing import Any, Callable, Dict, Tuple
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:
@@ -22,8 +22,8 @@ def _split_udf_name(udf_name: str) -> Tuple[str, str]:
     try:
         module_name, func_name = udf_name.rsplit('.', 1)
         return module_name, func_name
-    except ValueError:
-        raise ValueError("Invalid UDF format. Expected 'module.function'")
+    except ValueError as e:
+        raise ValueError("Invalid UDF format. Expected 'module.function'") from e
 
 
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
@@ -43,13 +43,13 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     """
     try:
         module = importlib.import_module(module_name)
-    except ImportError:
-        raise ImportError(f"Module '{module_name}' not found.")
+    except ImportError as e:
+        raise ConfigurationError(f"Module '{module_name}' for UDF not found.") from e
     
     try:
         function = getattr(module, function_name)
-    except AttributeError:
-        raise AttributeError(f"Function '{function_name}' not found in module '{module_name}'.")
+    except AttributeError as e:
+        raise ConfigurationError(f"Function '{function_name}' not found in module '{module_name}'.") from e
     
     return function
 
@@ -77,5 +77,7 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
     try:
         result = udf(input_data, **kwargs)
         return result
+    except ConfigurationError: # Re-raise if load_user_defined_function failed
+        raise
     except Exception as e:
-        raise Exception(f"Error executing function '{func_name}': {str(e)}")
+        raise AgentActionsError(f"Error executing user defined function '{func_name}': {str(e)}") from e
