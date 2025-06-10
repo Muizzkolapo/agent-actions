@@ -7,14 +7,10 @@ handling command registration, initialization, and execution.
 
 import sys
 import logging
-import argparse
 import signal
-import os
-from typing import Optional, Sequence, List, Callable, Dict, Any
-from pathlib import Path
+from typing import Optional, Sequence, List, Any
 
 import click
-from click import Context, Command
 
 # Import commands
 from agent_actions.cli.commands.clean_command import clean_cli as clean
@@ -82,13 +78,16 @@ class CLI:
         # Extract log level from arguments
         debug_mode = '--debug' in argv
         verbose_mode = '--verbose' in argv or '-v' in argv
-        
+
         if debug_mode:
-            log_level = "DEBUG"
+            level = logging.DEBUG
         elif verbose_mode:
-            log_level = "INFO"
+            level = logging.INFO
         else:
-            log_level = "WARNING"
+            level = logging.WARNING
+
+        logging.basicConfig(level=level)
+        self.logger.setLevel(level)
         
 
     

@@ -12,10 +12,8 @@ A mirror of OpenAIHandler that supports:
 
 import json
 import os
-from textwrap import dedent
 
 from ollama import Client                         # <— changed
-from agent_actions.transformers.string_transformer import StringProcessor
 
 
 class OllamaHandler:

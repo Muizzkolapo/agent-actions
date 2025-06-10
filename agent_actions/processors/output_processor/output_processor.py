@@ -1,7 +1,6 @@
 """Module for processing and combining output files."""
 import os
-import json
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Optional
 from agent_actions.processors.output_processor.directory_handler import DirectoryCombiner
 from agent_actions.processors.output_processor.file_handler import FileHandler
 

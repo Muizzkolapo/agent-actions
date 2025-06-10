@@ -31,11 +31,9 @@ if 'agent_actions.handlers.file_handler' not in sys.modules:
     # Mock the module if it's not available for the example
     from unittest.mock import MagicMock
     sys.modules['agent_actions.handlers.file_handler'] = MagicMock(FileHandler=MockFileHandler)
-    from agent_actions.handlers.file_handler import FileHandler # Re-import to get the mocked version
 else: # If it is available, ensure our mock can be used if desired for this specific test
     original_file_handler = sys.modules['agent_actions.handlers.file_handler'].FileHandler
     sys.modules['agent_actions.handlers.file_handler'].FileHandler = MockFileHandler # Override for this example
-    from agent_actions.handlers.file_handler import FileHandler # Re-import to get the mocked version
 
 
 validator = RenderValidator()

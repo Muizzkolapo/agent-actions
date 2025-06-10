@@ -1,6 +1,6 @@
 """Interfaces for target content processing."""
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class IContentProcessor(ABC):

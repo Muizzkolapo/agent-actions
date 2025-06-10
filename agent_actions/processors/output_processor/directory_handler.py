@@ -1,6 +1,5 @@
 import os
-import json
-from typing import List, Dict, Set, Optional
+from typing import Set
 from agent_actions.processors.output_processor.file_handler import FileHandler
 
 class DirectoryCombiner:

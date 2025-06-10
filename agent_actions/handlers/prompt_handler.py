@@ -1,10 +1,9 @@
-import os
 import re
 import json
 import random
 from collections import Counter
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List
 from agent_actions.handlers.file_handler import FileHandler
 
 

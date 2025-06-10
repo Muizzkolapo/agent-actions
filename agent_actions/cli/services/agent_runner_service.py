@@ -9,7 +9,7 @@ import os
 import logging
 import traceback
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List
 from contextlib import contextmanager
 
 from agent_actions.handlers.file_handler import FileHandler

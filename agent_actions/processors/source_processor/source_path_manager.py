@@ -3,7 +3,7 @@ import os
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Union
+from typing import Any, Union
 from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)

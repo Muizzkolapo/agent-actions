@@ -3,7 +3,6 @@ from pathlib import Path
 from agent_actions.handlers.file_handler import FileHandler
 import yaml
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
-import sys
 
 
 class SchemaLoader:

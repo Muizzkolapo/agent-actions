@@ -6,7 +6,7 @@ and generating outputs based on the agent's position in a workflow.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from agent_actions.processors.staging_processor.staging_loader import generate_staging
 from agent_actions.processors.target_processor.target_generator import TargetGenerator

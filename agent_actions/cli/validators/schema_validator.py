@@ -110,7 +110,6 @@ class SchemaValidator(BaseValidator):
         """Validates a schema against the JSON Schema meta-schema. Raises error on failure."""
         # jsonschema.validate(instance=schema_data, schema=jsonschema.Draft7Validator.META_SCHEMA)
         # More robust: check schema version and validate accordingly
-        schema_version_url = schema_data.get('$schema')
         validator_cls = jsonschema.validators.validator_for(schema_data) # Uses $schema, or defaults
         validator_cls.check_schema(schema_data) # This raises ValidationError if invalid
 
@@ -263,7 +262,6 @@ class SchemaValidator(BaseValidator):
         if s1_type == 'object' and s2_type == 'object':
             props1 = schema1_data.get('properties', {})
             props2 = schema2_data.get('properties', {})
-            req1 = set(schema1_data.get('required', []))
             req2 = set(schema2_data.get('required', []))
 
             # Example check: Schema 2 should not require properties missing in Schema 1

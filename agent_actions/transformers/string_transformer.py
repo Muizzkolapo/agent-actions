@@ -4,10 +4,8 @@ import importlib
 import os
 import re
 import sys
-import textwrap
 from typing import List
 import tiktoken
-from sentence_transformers import SentenceTransformer
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 class StringProcessor:
@@ -204,7 +202,7 @@ class Tokenizer:
                     raise ConfigurationError(f"Could not find custom split_method function '{split_method}' in its module: {e}") from e
                 except Exception as e: # Errors from the custom UDF
                     raise AgentActionsError(f"Error executing custom split_method '{split_method}': {str(e)}") from e
-        except ValueError as e: # Catch ValueErrors from parameter checks or tiktoken
+        except ValueError: # Catch ValueErrors from parameter checks or tiktoken
             raise
         except Exception as e: # General catch-all for unexpected issues
             raise AgentActionsError(f"Text splitting error for text '{text[:100]}...': {str(e)}") from e

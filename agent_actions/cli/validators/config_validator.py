@@ -337,8 +337,6 @@ class ConfigValidator(BaseValidator):
         proj_dir = data.get("project_dir")
         project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
 
-        op_ok = True
-
         if operation == "validate_agent_config_file_meta":
             cfg_path = data.get("config_path")
             agent_name = data.get("agent_name", Path(cfg_path).stem if isinstance(cfg_path, str) else None)

@@ -8,7 +8,7 @@ now conforming to the BaseValidator interface.
 import os
 import logging
 from pathlib import Path
-from typing import Optional, Any, Dict, Union
+from typing import Optional, Any, Dict
 
 # Assuming BaseValidator is in validators.base_validator
 from .base_validator import BaseValidator

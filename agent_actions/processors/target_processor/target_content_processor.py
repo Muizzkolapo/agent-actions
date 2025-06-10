@@ -1,5 +1,5 @@
 """Module for processing target content with specialized components."""
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, List, Tuple
 
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.transformers.data_transformer import DataTransformer
