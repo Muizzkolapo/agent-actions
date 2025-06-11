@@ -1,11 +1,13 @@
 """Module for Configuration Validation Functions."""
 import os
 import yaml
+from pydantic import ValidationError
 from agent_actions.core.utils import Utils
-from agent_actions.workflow.render_workflow import render_pipeline_with_templates  
-from agent_actions.cli.validators.config_validator import ConfigValidator  
+from agent_actions.workflow.render_workflow import render_pipeline_with_templates
+from agent_actions.cli.validators.config_validator import ConfigValidator
 from typing import Dict, Any
 from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingError
+from agent_actions.models.config_schema import AgentConfig, DefaultAgentConfig
 
 
 
@@ -77,13 +79,20 @@ class ConfigManager:
         return user_agents
 
     def merge_agent_configs(self, user_agents):
-        default_agent_config = self.default_config['default_agent_config']
+        default_model = DefaultAgentConfig.model_validate(
+            self.default_config.get('default_agent_config', {})
+        )
+        default_agent_config = default_model.model_dump()
+
         for agent in user_agents:
-            agent_type = agent.get('agent_type')
-            if agent_type:
-                merged_agent_config = default_agent_config.copy()
-                merged_agent_config.update(agent)
-                self.agent_configs[agent_type] = merged_agent_config
+            try:
+                agent_model = AgentConfig.model_validate(agent)
+            except ValidationError as e:
+                raise ConfigurationError(f"Invalid agent configuration: {e}") from e
+
+            agent_type = agent_model.agent_type
+            merged_agent_config = {**default_agent_config, **agent_model.model_dump(exclude_unset=True)}
+            self.agent_configs[agent_type] = merged_agent_config
 
     def determine_execution_order(self, user_agents):
         """
