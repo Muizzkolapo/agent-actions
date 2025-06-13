@@ -3,13 +3,13 @@ client = anthropic.Anthropic()
 import os
 from textwrap import dedent
 from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 
-class ClaudeHandler:
+class ClaudeHandler(BaseVendorHandler):
     @staticmethod
     def call_json(agent_config, prompt_config, context_data, schema):
-        api_key_config = agent_config['api_key']
-        api_key = os.environ[api_key_config]
+        api_key = BaseVendorHandler.get_api_key(agent_config)
         model_name = agent_config['model_name']
         client = anthropic.Anthropic(api_key=api_key)
         context_data_str = StringProcessor.process_as_string(context_data)
@@ -26,23 +26,16 @@ class ClaudeHandler:
         )
 
         response_content = response.content[1].input
-        return response_content  
+        return response_content
+
+    @staticmethod
+    def call_non_json(agent_config, prompt_config, context_data):
+        """Non-JSON mode is not implemented for Claude."""
+        raise NotImplementedError("Non-JSON mode not implemented for Claude")
    
 
 
 
-    @staticmethod
-    def invoke(agent_config, prompt_config, context_data, schema):
-        """
-        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
-        """
-        json_mode = agent_config.get('json_mode', True)
-
-
-        if json_mode:
-            return ClaudeHandler.call_json(agent_config, prompt_config, context_data, schema)
-        else:
-            return ClaudeHandler.call_non_json(agent_config, prompt_config, context_data)
 
 
 

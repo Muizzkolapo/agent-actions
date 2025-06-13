@@ -5,14 +5,15 @@ from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
 from agent_actions.cli.exceptions import VendorAPIError
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 
 
-class GroqLlama3Handler:
+class GroqLlama3Handler(BaseVendorHandler):
     @staticmethod
     def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = agent_config['api_key']
-        groq = Groq(api_key=os.environ[api_key])
+        api_key = BaseVendorHandler.get_api_key(agent_config)
+        groq = Groq(api_key=api_key)
         model_name = agent_config['model_name']
 
         context_data_str = StringProcessor.process_as_string(context_data)
@@ -45,8 +46,8 @@ class GroqLlama3Handler:
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, context_data):
-        api_key = agent_config['api_key']
-        groq = Groq(api_key=os.environ[api_key])
+        api_key = BaseVendorHandler.get_api_key(agent_config)
+        groq = Groq(api_key=api_key)
         model_name = agent_config['model_name']
         context_data_str = StringProcessor.process_as_string(context_data)
 
@@ -80,15 +81,3 @@ class GroqLlama3Handler:
         except Exception as e: # Catch other Groq API errors
             raise VendorAPIError(f"Failed to get non-JSON chat completion from Groq Llama 3: {str(e)}") from e
 
-    @staticmethod
-    def invoke(agent_config, prompt_config, context_data, schema):
-        """
-        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
-        """
-        json_mode = agent_config.get('json_mode', True)
-
-
-        if json_mode:
-            return GroqLlama3Handler.call_json(agent_config, prompt_config, context_data, schema)
-        else:
-            return GroqLlama3Handler.call_non_json(agent_config, prompt_config, context_data)
