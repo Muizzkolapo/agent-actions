@@ -5,7 +5,6 @@ This module provides utilities for validating prompt files and
 ensuring they meet the required format and constraints.
 """
 
-import os
 import re
 import logging
 from pathlib import Path
@@ -15,7 +14,6 @@ from typing import Dict, List, Set, Any, Optional
 from .base_validator import BaseValidator
 # Assuming PromptLoader and custom exceptions exist.
 # PromptValidationError will no longer be raised by validate(), but its message format can inspire error strings.
-from agent_actions.handlers.prompt_handler import PromptLoader
 # from agent_actions.cli.exceptions import (
 #     PromptValidationError,
 #     FileNotFoundError,
@@ -169,18 +167,6 @@ class PromptValidator(BaseValidator):
             return f"File '{file_name}' does not start with a markdown heading but contains prompt sections."
 
         # Check for balanced code blocks for prompts
-        # This regex is more specific than just counting ```
-        prompt_block_starts = len(self._PROMPT_ID_PATTERN.findall(content))
-        # Count all ``` occurrences
-        total_backticks = content.count('```')
-        
-        # Each prompt:id block needs one opening ``` and one closing ```
-        # So, total_backticks should be at least 2 * prompt_block_starts
-        # This logic is a bit tricky because other ``` might exist for other code blocks.
-        # The original logic was:
-        # code_block_starts = content.count('```prompt:')
-        # code_block_ends = content.count('```', code_block_starts) # This count is problematic
-        # if code_block_starts != code_block_ends / 2:
         # A more robust check focuses on each prompt block:
         for match in self._PROMPT_ID_PATTERN.finditer(content):
             prompt_id = match.group(1)

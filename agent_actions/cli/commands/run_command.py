@@ -7,7 +7,7 @@ which executes agent workflows based on configuration files.
 
 import click
 from pathlib import Path
-from typing import Optional, List, Dict, Any, Union, Tuple
+from typing import Optional, Dict, Any, Tuple
 
 from agent_actions.cli.validators.prompt_validator import PromptValidator
 from agent_actions.cli.services.config_renderer import ConfigRenderer

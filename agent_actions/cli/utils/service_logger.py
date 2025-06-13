@@ -5,7 +5,7 @@ This module provides common utilities for logging in services.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from pathlib import Path
 
 

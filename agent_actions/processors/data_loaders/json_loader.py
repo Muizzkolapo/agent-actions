@@ -1,8 +1,7 @@
 """JSON content loader implementation."""
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
-from agent_actions.handlers.file_handler import FileHandler
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
 from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError

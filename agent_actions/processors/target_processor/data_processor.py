@@ -1,5 +1,5 @@
 """Module for processing generated data."""
-from typing import Dict, Any, List
+from typing import Dict, List
 
 from agent_actions.transformers.data_transformer import DataTransformer
 

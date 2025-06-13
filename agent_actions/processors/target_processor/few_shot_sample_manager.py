@@ -1,5 +1,5 @@
 """Module for managing few-shot samples."""
-from typing import Dict, Any
+from typing import Dict
 
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.prompt_handler import PromptLoader

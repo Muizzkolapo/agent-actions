@@ -1,6 +1,6 @@
 """XML content loader implementation."""
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Optional
 import xml.etree.ElementTree as ET
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader

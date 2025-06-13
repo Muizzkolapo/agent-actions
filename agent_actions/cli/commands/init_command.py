@@ -5,7 +5,6 @@ This module provides the implementation of the 'init' command,
 which handles creating new Agent Actions projects.
 """
 
-import os
 import click
 from pathlib import Path
 from typing import Optional, List

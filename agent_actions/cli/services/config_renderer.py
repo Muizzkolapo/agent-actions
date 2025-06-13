@@ -10,7 +10,7 @@ import yaml
 from ruamel.yaml import YAML, YAMLError 
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Protocol, Union
+from typing import Dict, Any, Optional, Union
 from abc import ABC, abstractmethod
 
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates

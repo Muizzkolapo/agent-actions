@@ -1,5 +1,4 @@
 """Module for loading source data."""
-import os
 from pathlib import Path
 import json
 from typing import List, Dict

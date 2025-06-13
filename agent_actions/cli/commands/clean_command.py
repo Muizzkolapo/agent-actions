@@ -1,4 +1,3 @@
-import logging
 import click
 from agent_actions.handlers.cleaner import Cleaner
 

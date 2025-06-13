@@ -5,7 +5,7 @@ Module containing utility classes and functions for data processing and workflow
 import os
 import uuid
 from collections import deque
-from typing import Dict, List, Any, Set, TypeVar, Callable
+from typing import Dict, List, Any, Set, TypeVar
 
 # Type variables for generics
 T = TypeVar('T')

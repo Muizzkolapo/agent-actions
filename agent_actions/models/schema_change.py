@@ -1,8 +1,5 @@
 # agent_actions/models/schema_change.py  (or wherever this helper lives)
 
-import json
-import yaml
-import sys
 from typing import Tuple, Dict, Any
 
 

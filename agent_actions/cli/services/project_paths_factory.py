@@ -4,11 +4,10 @@ Project paths factory service.
 This module provides services for creating and validating project directory paths.
 """
 
-import os
 import logging
 from pathlib import Path
 from dataclasses import dataclass
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Dict, Tuple
 
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.cli.exceptions import (
