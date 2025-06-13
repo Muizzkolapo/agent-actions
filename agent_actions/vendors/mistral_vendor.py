@@ -3,12 +3,12 @@ import json
 from mistralai import Mistral
 from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
+from agent_actions.vendors.base_vendor import BaseVendorHandler
 
-class MistralHandler:
+class MistralHandler(BaseVendorHandler):
     @staticmethod
     def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = os.getenv(agent_config['api_key'])
-        api_key = os.environ["MISTRAL_API_KEY"]
+        api_key = BaseVendorHandler.get_api_key(agent_config)
         model_name = agent_config['model_name']
 
         client = Mistral(api_key=api_key)
@@ -39,8 +39,7 @@ class MistralHandler:
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, context_data):
-        api_key = os.getenv(agent_config['api_key'])
-        api_key = os.environ["MISTRAL_API_KEY"]
+        api_key = BaseVendorHandler.get_api_key(agent_config)
         model_name = agent_config['model_name']
 
         client = Mistral(api_key=api_key)
@@ -64,16 +63,4 @@ class MistralHandler:
         response_output = chat_response.choices[0].message.content
         return [response_output]
 
-    @staticmethod
-    def invoke(agent_config, prompt_config, context_data, schema):
-        """
-        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
-        """
-        json_mode = agent_config.get('json_mode', True)
-
-
-        if json_mode:
-            return MistralHandler.call_json(agent_config, prompt_config, context_data, schema)
-        else:
-            return MistralHandler.call_non_json(agent_config, prompt_config, context_data)
 

@@ -3,14 +3,15 @@ import json
 import google.generativeai as genai
 from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
+from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 
 
-class GeminiHandler:
+class GeminiHandler(BaseVendorHandler):
     @staticmethod
     def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = agent_config['api_key']
-        genai.configure(api_key=os.environ[api_key])
+        api_key = BaseVendorHandler.get_api_key(agent_config)
+        genai.configure(api_key=api_key)
         model_name = agent_config['model_name']
 
         llm = genai.GenerativeModel(
@@ -35,8 +36,8 @@ class GeminiHandler:
 
     @staticmethod
     def call_non_json(agent_config, prompt_config, context_data):
-        api_key = agent_config['api_key']
-        genai.configure(api_key=os.environ[api_key])
+        api_key = BaseVendorHandler.get_api_key(agent_config)
+        genai.configure(api_key=api_key)
         model_name = agent_config['model_name']
 
         llm = genai.GenerativeModel(
@@ -54,16 +55,4 @@ class GeminiHandler:
         response_list = response_temp.text
         return [response_list]
 
-    @staticmethod
-    def invoke(agent_config, prompt_config, context_data, schema):
-        """
-        Determine which function to call (JSON or non-JSON) based on the 'json_mode' parameter in agent_config.
-        """
-        json_mode = agent_config.get('json_mode', True)
-
-
-        if json_mode:
-            return GeminiHandler.call_json(agent_config, prompt_config, context_data, schema)
-        else:
-            return GeminiHandler.call_non_json(agent_config, prompt_config, context_data)
 

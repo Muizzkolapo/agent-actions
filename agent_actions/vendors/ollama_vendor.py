@@ -14,9 +14,10 @@ import json
 import os
 
 from ollama import Client                         # <— changed
+from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 
-class OllamaHandler:
+class OllamaHandler(BaseVendorHandler):
     # ---------- helpers -------------------------------------------------- #
     @staticmethod
     def _prep_messages(prompt_config: str, context_data: str):
@@ -80,10 +81,3 @@ class OllamaHandler:
         return [response_content]
 
 
-    @staticmethod
-    def invoke(agent_config, prompt_config, context_data, schema):
-        """
-        Dispatch to JSON or non-JSON modes based on agent_config['json_mode'].
-        """
-        fn = OllamaHandler.call_json if agent_config.get("json_mode", True) else OllamaHandler.call_non_json
-        return fn(agent_config, prompt_config, context_data, schema)
