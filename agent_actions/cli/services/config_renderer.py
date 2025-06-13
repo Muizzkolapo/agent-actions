@@ -22,6 +22,8 @@ from agent_actions.cli.exceptions import ConfigValidationError
 from agent_actions.cli.validators.error_wrap import as_validation_error     # 🆕
 from agent_actions.cli.validators.schema_validator import SchemaValidator
 from agent_actions.cli.validators.config_validator import ConfigValidator
+from pydantic import ValidationError
+from agent_actions.models.config_schema import AgentConfig
 from agent_actions.handlers.agent_handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -347,19 +349,27 @@ class ConfigRenderingService:
         current_directory = Path.cwd() 
         project_root_path = AgentManager.find_project_root(start_path=current_directory)
         agent_entries_list = config.get(agent_name)
+        validated_entries = []
+        for entry in agent_entries_list:
+            try:
+                entry_model = AgentConfig.model_validate(entry)
+                validated_entries.append(entry_model.model_dump(exclude_unset=True))
+            except ValidationError as e:
+                raise ConfigValidationError(f"Invalid agent configuration: {e}") from e
+
+        config[agent_name] = validated_entries
+
         config_validator_instance = ConfigValidator()
         validation_payload = {
             "operation": "validate_agent_entries",
-            "agent_config_data": agent_entries_list, 
+            "agent_config_data": validated_entries,
             "agent_name_context": agent_name,
-            "project_dir": str(project_root_path) 
+            "project_dir": str(project_root_path)
         }
-        """if not config_validator_instance.validate(validation_payload):
-            errors = config_validator_instance.get_errors()
-            raise ConfigValidationError(f"Agent configuration validation failed for '{agent_name}': {errors}")"""
+
         if not config_validator_instance.validate(validation_payload):
             errors = config_validator_instance.get_errors()
-            if errors:  # Only raise if actual errors exist
+            if errors:
                 raise ConfigValidationError(
                     f"Agent configuration validation failed for '{agent_name}': {errors}"
                 )
