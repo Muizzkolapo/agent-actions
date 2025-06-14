@@ -1,6 +1,5 @@
 import anthropic
 client = anthropic.Anthropic()
-import os
 from textwrap import dedent
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler

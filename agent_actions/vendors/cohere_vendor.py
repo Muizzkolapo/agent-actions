@@ -1,5 +1,4 @@
 import cohere
-import os
 import json
 from textwrap import dedent
 from agent_actions.transformers.string_transformer import StringProcessor
