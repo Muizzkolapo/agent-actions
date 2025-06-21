@@ -32,12 +32,19 @@ class SampleEnricher:
                 sample_count = 0
 
             if sample_count > 0:
+                if not few_shot_samples_path:
+                    raise ValueError(
+                        f"Few shot samples path not found for agent '{agent_name}'"
+                    )
+
                 samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
                     agent_type=agent_config['agent_type'],
                     sample_count=sample_count
                 )
-                samples_str = "\n\n".join(json.dumps(sample, indent=2) for sample in samples)
+                samples_str = "\n\n".join(
+                    json.dumps(sample, indent=2) for sample in samples
+                )
 
                 if isinstance(context_data, dict):
                     context_data = json.dumps(context_data, indent=2)
