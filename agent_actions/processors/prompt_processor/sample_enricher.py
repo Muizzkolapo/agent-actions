@@ -1,7 +1,10 @@
 """Module for enriching context with few-shot samples."""
 import json
+import logging
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.handlers.prompt_handler import PromptLoader
+
+logger = logging.getLogger(__name__)
 
 
 class SampleEnricher:
@@ -33,9 +36,11 @@ class SampleEnricher:
 
             if sample_count > 0:
                 if not few_shot_samples_path:
-                    raise ValueError(
-                        f"Few shot samples path not found for agent '{agent_name}'"
+                    logger.warning(
+                        "Few shot samples directory not found for agent '%s'. Skipping enrichment.",
+                        agent_name,
                     )
+                    return context_data
 
                 samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
