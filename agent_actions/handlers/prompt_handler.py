@@ -1,9 +1,12 @@
 import re
 import json
 import random
+import logging
 from collections import Counter
 from pathlib import Path
 from typing import Any, List
+
+logger = logging.getLogger(__name__)
 from agent_actions.handlers.file_handler import FileHandler
 
 
@@ -111,6 +114,10 @@ class PromptLoader:
         Returns:
             List[Any]: List of randomly selected sample objects.
         """
+        if not few_shot_samples_path:
+            logger.warning("Few shot samples path is not set; returning no samples.")
+            return []
+
         agent_samples_path = Path(few_shot_samples_path) / agent_type
         if not agent_samples_path.exists():
             return []

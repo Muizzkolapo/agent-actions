@@ -1,5 +1,8 @@
 """Module for staging data loading and processing."""
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 class FileHandler:
     """
@@ -82,9 +85,15 @@ class FileHandler:
         if io_dir is None:
             print(f"IO directory for agent '{agent_name}' not found.")
 
-        few_shot_samples_path = os.path.join(io_dir, 'few_shot_samples')
-        if not os.path.exists(few_shot_samples_path):
-            few_shot_samples_path = None
+        few_shot_samples_path = None
+        if io_dir:
+            potential_path = os.path.join(io_dir, 'few_shot_samples')
+            if os.path.exists(potential_path):
+                few_shot_samples_path = potential_path
+            else:
+                logger.warning(
+                    "Few shot samples folder not found at %s", potential_path
+                )
 
         return agent_config_dir, io_dir, few_shot_samples_path
 
