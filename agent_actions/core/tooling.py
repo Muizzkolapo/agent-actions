@@ -1,8 +1,9 @@
-"""
-Module for loading and running user-defined functions from a specified module.
-"""
+"""Module for loading and running user-defined functions from a specified module."""
+
 import importlib
+import sys
 from typing import Any, Callable, Dict, Tuple
+
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 
@@ -44,12 +45,18 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
-        raise ConfigurationError(f"Module '{module_name}' for UDF not found.") from e
+        search_paths = ", ".join(sys.path)
+        raise ConfigurationError(
+            f"Module '{module_name}' for UDF not found. Searched paths: {search_paths}"
+        ) from e
     
     try:
         function = getattr(module, function_name)
     except AttributeError as e:
-        raise ConfigurationError(f"Function '{function_name}' not found in module '{module_name}'.") from e
+        search_paths = ", ".join(sys.path)
+        raise ConfigurationError(
+            f"Function '{function_name}' not found in module '{module_name}'. Searched paths: {search_paths}"
+        ) from e
     
     return function
 
