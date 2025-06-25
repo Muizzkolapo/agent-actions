@@ -7,7 +7,7 @@ and processing the resulting configuration data.
 
 import os
 import yaml
-from ruamel.yaml import YAML, YAMLError 
+from yaml import YAMLError
 import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
@@ -330,7 +330,7 @@ class ConfigRenderingService:
         if not raw.strip():
             raise ConfigurationError(f"Configuration file is empty: {src}")
         try:
-            data = YAML(typ="safe").load(raw)
+            data = yaml.safe_load(raw)
         except YAMLError as exc:
             mark = getattr(exc, "problem_mark", None)
             where = f"(line {mark.line+1}, col {mark.column+1})" if mark else ""
