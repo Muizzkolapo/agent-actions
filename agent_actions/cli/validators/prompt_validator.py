@@ -8,7 +8,7 @@ ensuring they meet the required format and constraints.
 import re
 import logging
 from pathlib import Path
-from typing import Dict, List, Set, Any, Optional
+from typing import Dict, List, Set, Any, Optional, Tuple
 
 # Assuming your BaseValidator is now in validators.base_validator
 from .base_validator import BaseValidator
@@ -61,6 +61,52 @@ class PromptValidator(BaseValidator):
                 seen.add(item_id)
         return duplicates
 
+    def _check_prompt_file_size(self, prompt_file: Path) -> bool:
+        file_size = prompt_file.stat().st_size
+        if file_size > self._MAX_PROMPT_SIZE:
+            self.add_error(
+                f"Prompt file '{prompt_file.name}' exceeds maximum size "
+                f"({file_size} bytes > {self._MAX_PROMPT_SIZE} bytes)."
+            )
+            return False
+        return True
+
+    def _read_prompt_file(self, prompt_file: Path) -> Optional[str]:
+        try:
+            return prompt_file.read_text(encoding="utf-8")
+        except Exception as e:
+            self.add_error(f"Failed to read prompt file '{prompt_file.name}': {e}.")
+            return None
+
+    def _check_prompt_id_duplicates(
+        self,
+        file_name: str,
+        prompt_ids_in_file: List[str],
+        all_prompt_ids_seen: Set[str],
+    ) -> Tuple[Set[str], List[str]]:
+        duplicate_ids_within_file = self._find_duplicate_ids_in_list(prompt_ids_in_file)
+        if duplicate_ids_within_file:
+            id_list = ", ".join(duplicate_ids_within_file)
+            self.add_error(f"Duplicate prompt IDs found in file '{file_name}': {id_list}.")
+
+        cross_file_duplicates = [
+            pid for pid in prompt_ids_in_file if pid in all_prompt_ids_seen and pid not in duplicate_ids_within_file
+        ]
+        if cross_file_duplicates:
+            id_list = ", ".join(cross_file_duplicates)
+            self.add_error(
+                f"Prompt IDs in file '{file_name}' duplicate IDs from other files: {id_list}."
+            )
+        return duplicate_ids_within_file, cross_file_duplicates
+
+    def _run_prompt_format_check(self, content: str, file_name: str) -> None:
+        try:
+            format_error = self._validate_prompt_format_logic(content, file_name)
+            if format_error:
+                self.add_error(format_error)
+        except Exception as e:
+            self.add_error(f"PromptLoader validation or internal format check failed for '{file_name}': {e}.")
+
     def _validate_single_prompt_file(self, prompt_file: Path, all_prompt_ids_seen: Set[str]) -> int: # Returns num_prompts_in_file
         """
         Validates a single prompt file and adds errors/warnings to the instance.
@@ -69,79 +115,39 @@ class PromptValidator(BaseValidator):
         """
         file_prompts_count = 0
         try:
-            # Check file size
-            file_size = prompt_file.stat().st_size
-            if file_size > self._MAX_PROMPT_SIZE:
-                self.add_error(
-                    f"Prompt file '{prompt_file.name}' exceeds maximum size "
-                    f"({file_size} bytes > {self._MAX_PROMPT_SIZE} bytes)."
-                )
-                return 0 # Cannot process further
+            if not self._check_prompt_file_size(prompt_file):
+                return 0
 
-            # Read file content
-            try:
-                content = prompt_file.read_text(encoding='utf-8')
-            except Exception as e:
-                self.add_error(f"Failed to read prompt file '{prompt_file.name}': {e}.")
-                return 0 # Cannot process further
+            content = self._read_prompt_file(prompt_file)
+            if content is None:
+                return 0
 
-            # Check for valid prompt sections and IDs
             sections = self._find_prompt_sections_in_content(content)
             prompt_ids_in_file = self._find_prompt_ids_in_content(content)
 
             if not sections:
                 self.add_warning(f"No prompt sections found in file '{prompt_file.name}'.")
 
-            # Validate prompt IDs
-            duplicate_ids_within_file = self._find_duplicate_ids_in_list(prompt_ids_in_file)
-            if duplicate_ids_within_file:
-                id_list = ", ".join(duplicate_ids_within_file)
-                self.add_error(f"Duplicate prompt IDs found in file '{prompt_file.name}': {id_list}.")
-                # Continue to check for cross-file duplicates but don't add these IDs
+            duplicate_ids_within_file, cross_file_duplicates = self._check_prompt_id_duplicates(
+                prompt_file.name, prompt_ids_in_file, all_prompt_ids_seen
+            )
 
-            cross_file_duplicates = [pid for pid in prompt_ids_in_file if pid in all_prompt_ids_seen and pid not in duplicate_ids_within_file]
-            if cross_file_duplicates:
-                id_list = ", ".join(cross_file_duplicates)
-                self.add_error(
-                    f"Prompt IDs in file '{prompt_file.name}' duplicate IDs "
-                    f"from other files: {id_list}."
-                )
-
-            # If there are critical errors like duplicates within the file,
-            # we might not want to add its IDs to the global set or count its prompts.
-            if duplicate_ids_within_file or cross_file_duplicates:
-                 # Errors already added
-                 pass
-            else:
+            if not duplicate_ids_within_file and not cross_file_duplicates:
                 all_prompt_ids_seen.update(prompt_ids_in_file)
                 file_prompts_count = len(prompt_ids_in_file)
 
-
-            # Use the existing PromptLoader validator as a final check for content structure
-            # This part needs careful integration. PromptLoader.validate_unique_prompts might raise its own exceptions.
-            try:
-                # This original method might not fit the new error collection model perfectly.
-                # It was for checking uniqueness, which we now do above.
-                # If it does more, we need to adapt its error reporting.
-                # For now, we assume our checks above cover uniqueness.
-                # If PromptLoader.validate_unique_prompts did more general format validation for a file,
-                # it would be: PromptLoader.validate_prompt_file_format(content) or similar
-                # Let's assume PromptLoader.validate_unique_prompts was primarily for ID uniqueness within its own scope.
-                # We can use the original `validate_prompt_format` logic here
-                format_error = self._validate_prompt_format_logic(content, prompt_file.name)
-                if format_error:
-                    self.add_error(format_error)
-
-            except Exception as e: # Catching potential exceptions from PromptLoader or other logic
-                self.add_error(f"PromptLoader validation or internal format check failed for '{prompt_file.name}': {e}.")
+            self._run_prompt_format_check(content, prompt_file.name)
 
             logger.debug("Prompt file validation processed for: %s", prompt_file.name)
 
         except Exception as e:
             self.add_error(f"Unexpected error validating prompt file '{prompt_file.name}': {e}.")
-            logger.error(f"Unexpected error validating prompt file '{prompt_file.name}': {e}", exc_info=True)
+            logger.error(
+                f"Unexpected error validating prompt file '{prompt_file.name}': {e}",
+                exc_info=True,
+            )
             return 0
-        
+
         return file_prompts_count if not (duplicate_ids_within_file or cross_file_duplicates) else 0
 
 

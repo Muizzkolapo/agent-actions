@@ -121,7 +121,7 @@ class ConfigValidator(BaseValidator):
         cfg_ctx_name: str,
         proj_root: Optional[Path] = None,
     ) -> None:
-        desc = f"agent entry {entry["agent_type"]} in '{cfg_ctx_name}'"
+        desc = f"agent entry {entry['agent_type']} in '{cfg_ctx_name}'"
         if not isinstance(entry, dict):
             self.add_error(f"{desc} is not a dictionary.")
             return
@@ -337,29 +337,48 @@ class ConfigValidator(BaseValidator):
         proj_dir = data.get("project_dir")
         project_root_path = Path(proj_dir).resolve() if isinstance(proj_dir, (str, Path)) else None
 
-        if operation == "validate_agent_config_file_meta":
-            cfg_path = data.get("config_path")
-            agent_name = data.get("agent_name", Path(cfg_path).stem if isinstance(cfg_path, str) else None)
-            if not (isinstance(cfg_path, str) and isinstance(agent_name, str) and project_root_path):
-                self.add_error(
-                    "For 'validate_agent_config_file_meta', provide 'config_path' (str), 'agent_name' (str), and 'project_dir'."
-                )
-            else:
-                cfg_file = Path(cfg_path)
-                if not self._ensure_path_exists(cfg_file):
-                    self.add_error(f"Config file does not exist: {cfg_file}")
-                elif not self._is_file(cfg_file):
-                    self.add_error(f"Config path is not a file: {cfg_file}")
-                elif not os.access(cfg_file, os.R_OK):
-                    self.add_error(f"Config file not readable: {cfg_file}")
-                else:
-                    self._check_agent_file_unique_logic(str(cfg_file.resolve()), str(project_root_path))
-                    self._check_agent_name_unique_logic(agent_name, str(project_root_path), str(cfg_file.resolve()))
+        operation_map = {
+            "validate_agent_config_file_meta": self._validate_agent_config_file_meta_operation,
+            "validate_agent_entries": self._validate_agent_entries_operation,
+        }
 
-        elif operation == "validate_agent_entries":
-            cfg_list = data.get("agent_config_data")
-            ctx_name = data.get("agent_name_context")
-            if cfg_list is None or not isinstance(ctx_name, str):
-                self.add_error("For 'validate_agent_entries', provide 'agent_config_data' and 'agent_name_context'.")
-            else:
-                self._validate_agent_entries_list_logic(cfg_list, ctx_name, project_root_path)
+        handler = operation_map.get(operation)
+        if handler is None:
+            self.add_error(f"Unknown operation: {operation}")
+        else:
+            handler(data, project_root_path)
+
+        return not self.has_errors()
+
+    def _validate_agent_config_file_meta_operation(
+        self, data: Dict[str, Any], project_root_path: Optional[Path]
+    ) -> None:
+        cfg_path = data.get("config_path")
+        agent_name = data.get("agent_name", Path(cfg_path).stem if isinstance(cfg_path, str) else None)
+        if not (isinstance(cfg_path, str) and isinstance(agent_name, str) and project_root_path):
+            self.add_error(
+                "For 'validate_agent_config_file_meta', provide 'config_path' (str), 'agent_name' (str), and 'project_dir'."
+            )
+            return
+
+        cfg_file = Path(cfg_path)
+        if not self._ensure_path_exists(cfg_file):
+            self.add_error(f"Config file does not exist: {cfg_file}")
+        elif not self._is_file(cfg_file):
+            self.add_error(f"Config path is not a file: {cfg_file}")
+        elif not os.access(cfg_file, os.R_OK):
+            self.add_error(f"Config file not readable: {cfg_file}")
+        else:
+            self._check_agent_file_unique_logic(str(cfg_file.resolve()), str(project_root_path))
+            self._check_agent_name_unique_logic(agent_name, str(project_root_path), str(cfg_file.resolve()))
+
+    def _validate_agent_entries_operation(
+        self, data: Dict[str, Any], project_root_path: Optional[Path]
+    ) -> None:
+        cfg_list = data.get("agent_config_data")
+        ctx_name = data.get("agent_name_context")
+        if cfg_list is None or not isinstance(ctx_name, str):
+            self.add_error("For 'validate_agent_entries', provide 'agent_config_data' and 'agent_name_context'.")
+            return
+
+        self._validate_agent_entries_list_logic(cfg_list, ctx_name, project_root_path)
