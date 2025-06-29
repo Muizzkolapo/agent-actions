@@ -24,7 +24,13 @@ class ClaudeHandler(BaseVendorHandler):
             messages=[{"role": "user", "content":prompt_dedent}]
         )
 
-        response_content = response.content[1].input
+        response_content = next(
+            (block.input for block in response.content if hasattr(block, 'input')),
+            None
+        )
+        if response_content is None:
+            # Handle cases where no suitable content block is found
+            raise ValueError("No valid content with 'input' found in response")
         return response_content
 
     @staticmethod

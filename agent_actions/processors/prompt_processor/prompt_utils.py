@@ -62,7 +62,7 @@ class PromptUtils:
         return cleaned_content
 
     @staticmethod
-    def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None):
+    def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None, agent_config=None):
         """
         Replace multiple dispatch_task() calls in prompt_config with the result of their corresponding function.
         Always passes `context_data_str` to the function.
@@ -71,12 +71,15 @@ class PromptUtils:
             prompt_config (str or list): The prompt_config containing dispatch_task() calls.
             tools_path (str): The path to the tools directory.
             context_data_str (str): Documentation string to pass to the functions.
+            agent_config (dict): Agent configuration to check for 'add_dispatch' flag.
 
         Returns:
-            str or list: The prompt_config with dispatch_task() calls replaced by function outputs.
+            tuple: (The prompt_config with dispatch_task() calls replaced by function outputs, captured_results)
         """
+        captured_results = {}
 
         def process_single_text(single_text):
+            nonlocal captured_results
             if not isinstance(single_text, str):
                 single_text = str(single_text)
             function_call_pattern = r"dispatch_task\('(\w+)'\)"
@@ -88,6 +91,8 @@ class PromptUtils:
             for function_name in function_calls:
                 try:
                     transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                    if agent_config and agent_config.get('add_dispatch'):
+                        captured_results[function_name] = transformed_text
                     if transformed_text is None:
                         transformed_text = "Error: No valid return from function."
                     single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
@@ -97,8 +102,11 @@ class PromptUtils:
             return single_text
 
         if isinstance(prompt_config, list):
-            return [process_single_text(str(item)) for item in prompt_config]
+            processed_prompt = [process_single_text(str(item)) for item in prompt_config]
         elif isinstance(prompt_config, str):
-            return process_single_text(prompt_config)
+            processed_prompt = process_single_text(prompt_config)
         else:
             print(f"Invalid input type: {type(prompt_config).__name__}")
+            processed_prompt = prompt_config
+
+        return processed_prompt, captured_results
