@@ -52,26 +52,26 @@ class PathValidator(BaseValidator):
         if required and not path_exists:
             msg = f"{entity_name} ({entity_type}) does not exist: {path_obj}"
             self.add_error(msg)
-            ServiceLogger.log_operation_error(logger, operation_desc, error_msg=msg)
-            return # Cannot perform further checks
+            ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
+            return  # Cannot perform further checks
 
         if path_exists: # Only check type and permissions if it exists
             if entity_type == "directory":
                 if not self._is_directory(path_obj):
                     msg = f"{entity_name} path is not a directory: {path_obj}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, error_msg=msg)
+                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
                     return
             elif entity_type == "file":
                 if not self._is_file(path_obj):
                     msg = f"{entity_name} path is not a file: {path_obj}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, error_msg=msg)
+                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
                     return
             else: # Should not happen if called correctly
                 msg = f"Unknown entity type '{entity_type}' for path validation."
                 self.add_error(msg)
-                ServiceLogger.log_operation_error(logger, operation_desc, error_msg=msg)
+                ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
                 return
 
 
@@ -112,7 +112,7 @@ class PathValidator(BaseValidator):
                 except Exception as e:
                     msg = f"Failed to create {directory_name} directory at {path_obj}: {e}"
                     self.add_error(msg)
-                    ServiceLogger.log_operation_error(logger, operation_desc, error_msg=msg)
+                    ServiceLogger.log_operation_error(logger, operation_desc, Exception(msg))
                     return
             else:
                 self.add_error(f"{directory_name} directory does not exist and creation not enabled: {path_obj}")
@@ -228,7 +228,12 @@ class PathValidator(BaseValidator):
         # Log overall operation failure if errors were added by sub-logics
         # ServiceLogger is called within sub-logics, this is a fallback.
         if self.has_errors():
-            ServiceLogger.log_operation_error(logger, f"PathValidator operation '{operation}' failed", 
-                                              error_details=self.get_errors())
+            combined_msg = "; ".join(self.get_errors())
+            ServiceLogger.log_operation_error(
+                logger,
+                f"PathValidator operation '{operation}' failed",
+                Exception(combined_msg),
+                error_details=self.get_errors()
+            )
         
         return not self.has_errors()
