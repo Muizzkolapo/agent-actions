@@ -80,13 +80,13 @@ def create_dynamic_agent(
               if not isinstance(context_data_str, str) else context_data_str)
     )
 
-    # Inject user-defined function outputs into the prompt, if any 
-    prompt_config = PromptUtils.inject_function_outputs_into_prompt(
+    # Inject user-defined function outputs into the prompt, if any
+    prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
         prompt_config_base,
         tools_path,
-        context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False)
+        context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False),
+        agent_config=agent_config
     )
-    
 
     _debug_print_prompt(
         agent_config,
@@ -95,15 +95,24 @@ def create_dynamic_agent(
     )
 
     # ----- schema prep ----------------------------------------------------
-    schema       = _prepare_schema(agent_config, model_vendor)
-    granularity  = agent_config.get('granularity', 'record').lower()
+    schema = _prepare_schema(agent_config, model_vendor)
+    granularity = agent_config.get('granularity', 'record').lower()
 
     # ----- dispatch to vendor handler ------------------------------------
-    return _invoke_vendor_handler(
+    response_data = _invoke_vendor_handler(
         model_vendor, agent_config, prompt_config,
         context_data, schema, granularity, formatted_prompt,
-        tool_args, source_content # Pass tool_args and source_content
+        tool_args, source_content
     )
+
+    # If there are captured results, add them to the response
+    if captured_results:
+        # This assumes response_data is a list of dictionaries
+        for item in response_data:
+            if isinstance(item, dict):
+                item.update(captured_results)
+
+    return response_data
 
 # ---------------------------------------------------------------------------
 # 3. helpers

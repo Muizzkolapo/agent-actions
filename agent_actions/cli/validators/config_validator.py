@@ -42,6 +42,7 @@ class ConfigValidator(BaseValidator):
         "conditional_clause",
         "is_operational",
         "ephemeral",
+        "add_dispatch",
     }
 
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
