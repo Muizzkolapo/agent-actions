@@ -52,7 +52,8 @@ class StagingProcessor:
                 self.agent_config,
                 self.agent_name,
                 prepared_context,
-                formatted_prompt
+                formatted_prompt,
+                tools_path=self.agent_config.get('tools', {}).get('path')
             )
             
             # Step 7: Generate guid if not available

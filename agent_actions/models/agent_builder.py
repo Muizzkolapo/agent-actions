@@ -1,4 +1,5 @@
 import json
+import sys
 from typing import Dict, Any, Optional, List, Union
 
 # vendor handlers
@@ -56,7 +57,7 @@ def create_dynamic_agent(
     formatted_prompt: Optional[str] = None,
     tools_path: Optional[str] = None,
     tool_args: Optional[Dict[str, Any]] = None,
-    source_content: Optional[Any] = None # Add source_content parameter
+    source_content: Optional[Any] = None  # Add source_content parameter
 ) -> List[Any]:
     """
     Build and execute a prompt against the selected vendor, returning
@@ -66,6 +67,8 @@ def create_dynamic_agent(
     prompt_config_base = _prepare_prompt(agent_config, formatted_prompt)
     if not tools_path:
         tools_path = agent_config.get('tools', {}).get('path')
+    if tools_path and tools_path not in sys.path:
+        sys.path.insert(0, tools_path)
 
     model_vendor = agent_config.get("model_vendor", "").lower()
     is_tool      = model_vendor == "tool"

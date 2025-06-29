@@ -55,9 +55,10 @@ class DataGenerator(IDataGenerator):
                 self.agent_config,
                 self.agent_name,
                 contents,
-                source_content=source_content, # Pass source_content explicitly
+                source_content=source_content,  # Pass source_content explicitly
                 tool_args=tool_args,
-                formatted_prompt=formatted_prompt
+                formatted_prompt=formatted_prompt,
+                tools_path=self.agent_config.get('tools', {}).get('path')
             )
         except Exception as e:
             raise RuntimeError(f"Failed to create agent with data: {str(e)}")
