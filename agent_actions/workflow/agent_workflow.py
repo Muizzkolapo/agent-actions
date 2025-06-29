@@ -1,4 +1,5 @@
 import sys
+import os
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
@@ -24,8 +25,10 @@ class AgentWorkflow:
         self.ephemeral_directories = []
         self.failed = False
 
-        if self.user_code_path and self.user_code_path not in sys.path:
-            sys.path.insert(0, self.user_code_path)
+        if self.user_code_path:
+            abs_user_code_path = os.path.abspath(self.user_code_path)
+            if abs_user_code_path not in sys.path:
+                sys.path.insert(0, abs_user_code_path)
 
         # Initialize components
         self.config_manager = ConfigManager(self.constructor_path, self.default_path)
