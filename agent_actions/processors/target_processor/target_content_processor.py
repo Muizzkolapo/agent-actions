@@ -147,7 +147,6 @@ class TargetContentProcessor(IContentProcessor):
             conditional_clause = self.agent_config.get('conditional_clause', '').lower()
             if conditional_clause:
                 # For conditional_clause UDFs, only pass the primary 'contents' data.
-                # This prevents TypeErrors for UDFs not defined to accept extra context kwargs.
                 if execute_user_defined_function(conditional_clause, contents):
                     # Generate data with agent
                     generated_data = self.data_generator.create_agent_with_data(
@@ -162,7 +161,11 @@ class TargetContentProcessor(IContentProcessor):
                     contents, source_content
                 )
             
-            # Process the generated data
-            return self.data_processor.process_item(contents, generated_data, guid)
+            # Process the generated data, but only apply side_collection if the agent was actually run
+            if not (conditional_clause and not execute_user_defined_function(conditional_clause, contents)):
+                return self.data_processor.process_item(contents, generated_data, guid)
+            else:
+                # If the agent was skipped, just transform the structure without side_collection
+                return DataTransformer.transform_structure([{guid: generated_data}])
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

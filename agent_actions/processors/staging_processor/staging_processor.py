@@ -1,4 +1,6 @@
 """Module for orchestrating prompt processing workflow."""
+from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.models import agent_builder
 from agent_actions.core.utils import Utils
 
@@ -47,23 +49,39 @@ class StagingProcessor:
             # Step 5: Apply remove_collection transformations
             prepared_context = ContextPreprocessor.prepare_context(enriched_data, self.agent_config)
             
-            # Step 6: Create dynamic agent This is where tuple issue is Invalid input type:
-            response = agent_builder.create_dynamic_agent(
-                self.agent_config,
-                self.agent_name,
-                prepared_context,
-                formatted_prompt,
-                tools_path=self.agent_config.get('tools', {}).get('path')
-            )
+            # Step 6: Check conditional clause
+            conditional_clause = self.agent_config.get('conditional_clause', '').lower()
+            if conditional_clause:
+                if execute_user_defined_function(conditional_clause, prepared_context):
+                    response = agent_builder.create_dynamic_agent(
+                        self.agent_config,
+                        self.agent_name,
+                        prepared_context,
+                        formatted_prompt,
+                        tools_path=self.agent_config.get('tools', {}).get('path')
+                    )
+                else:
+                    response = [prepared_context]
+            else:
+                response = agent_builder.create_dynamic_agent(
+                    self.agent_config,
+                    self.agent_name,
+                    prepared_context,
+                    formatted_prompt,
+                    tools_path=self.agent_config.get('tools', {}).get('path')
+                )
             
             # Step 7: Generate guid if not available
             if not guid:
                 guid = Utils.generate_id()
             
             # Step 8: Transform response
-            transformed_response = ResponseTransformer.transform_response(
-                response, enriched_data, guid, self.agent_config
-            )
+            if not (conditional_clause and not execute_user_defined_function(conditional_clause, prepared_context)):
+                transformed_response = ResponseTransformer.transform_response(
+                    response, enriched_data, guid, self.agent_config
+                )
+            else:
+                transformed_response = DataTransformer.transform_structure([{guid: response}])
             
             # Step 9: Prepare source text
             if source_path is not None and isinstance(context_data, dict) and "guid" in context_data:
