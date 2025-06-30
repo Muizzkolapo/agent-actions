@@ -1,5 +1,4 @@
 """Module for managing source paths and files."""
-import os
 import json
 import logging
 from pathlib import Path
@@ -82,11 +81,12 @@ class SourcePathManager:
             if not source_path:
                 return None
                 
+            source_path = Path(source_path)
             # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(source_path), exist_ok=True)
+            source_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Create empty source file if it doesn't exist
-            if not os.path.exists(source_path):
+            if not source_path.exists():
                 empty_source = []
                 with open(source_path, 'w') as file:
                     json.dump(empty_source, file, indent=2)

@@ -1,6 +1,6 @@
 """Module for managing and executing agents with different strategies in a workflow."""
 
-import os
+from pathlib import Path
 from typing import Tuple, Dict, Optional
 from agent_actions.handlers.file_handler import FileHandler
 from agent_actions.core.agent_strategies import (
@@ -46,8 +46,8 @@ class AgentRunner:
         Raises:
             ValueError: If the agent folder is not found.
         """
-        current_dir: str = os.getcwd()
-        agent_folder: Optional[str] = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
+        current_dir: Path = Path.cwd()
+        agent_folder: Optional[str] = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
         if agent_folder is None:
             raise ValueError(f"Agent folder not found for agent: {agent_name}")
         return agent_folder
@@ -76,14 +76,14 @@ class AgentRunner:
         if previous_agent_type:
             prev_idx: int = idx - 1
             indexed_previous_agent_type: str = f"node_{prev_idx}_{previous_agent_type}"
-            input_directory: str = os.path.join(agent_folder, 'target', indexed_previous_agent_type)
+            input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
         else:
-            input_directory = os.path.join(agent_folder, 'staging')
+            input_directory = Path(agent_folder) / 'staging'
 
-        output_directory: str = os.path.join(agent_folder, 'target', indexed_agent_type)
-        os.makedirs(output_directory, exist_ok=True)
+        output_directory: Path = Path(agent_folder) / 'target' / indexed_agent_type
+        output_directory.mkdir(exist_ok=True)
 
-        return input_directory, output_directory
+        return str(input_directory), str(output_directory)
 
     def process_files(
         self,
@@ -109,29 +109,29 @@ class AgentRunner:
         files_processed_count: int = 0
 
         for current_input_root, dir_names, _ in os.walk(input_directory):
-            relative_dir_path = os.path.relpath(current_input_root, input_directory)
-            current_output_root = os.path.join(output_directory, relative_dir_path)
+            relative_dir_path = Path(current_input_root).relative_to(input_directory)
+            current_output_root = Path(output_directory) / relative_dir_path
     
-            os.makedirs(current_output_root, exist_ok=True)
+            current_output_root.mkdir(exist_ok=True)
             
             for dir_name in dir_names:
-                output_subdir_path = os.path.join(current_output_root, dir_name)
-                os.makedirs(output_subdir_path, exist_ok=True)
+                output_subdir_path = current_output_root / dir_name
+                output_subdir_path.mkdir(exist_ok=True)
 
         for root, _, files in os.walk(input_directory):
             for file in files:
-                file_path: str = os.path.join(root, file)
+                file_path: Path = Path(root) / file
                 strategy.execute(
                     agent_config,
                     agent_name,
-                    file_path,
+                    str(file_path),
                     input_directory,
                     output_directory
                 )
                 files_processed_count += 1
 
         if files_processed_count == 0:
-            if not os.listdir(input_directory): # True if directory is empty (no files, no subdirs)
+            if not any(Path(input_directory).iterdir()): # True if directory is empty (no files, no subdirs)
                 print(f"Warning: No files found in directory: {input_directory}, and the directory itself is empty. Processing continues.")
             else: # Directory had subdirectories, which were mirrored.
                 print(f"Info: No files found to process in {input_directory}, but directory structure was mirrored. Processing continues.")

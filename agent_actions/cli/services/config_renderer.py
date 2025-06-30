@@ -5,7 +5,6 @@ This module provides services for rendering configuration templates
 and processing the resulting configuration data.
 """
 
-import os
 import yaml
 from yaml import YAMLError
 import logging
@@ -280,10 +279,10 @@ class FileOutputWriter(OutputWriter):
                                            output_path=output_path)
             
             # Create directory if it doesn't exist
-            output_dir = os.path.dirname(output_path)
+            output_dir = Path(output_path).parent
             if output_dir:
                 PathValidator.create_directory_if_needed(
-                    Path(output_dir),
+                    output_dir,
                     "Output directory"
                 )
                 

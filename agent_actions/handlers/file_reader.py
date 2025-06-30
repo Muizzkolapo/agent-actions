@@ -1,5 +1,4 @@
 """Module for reading data loading and processing."""
-import os
 import json
 import csv
 import xml.etree.ElementTree as ET
@@ -7,12 +6,13 @@ import PyPDF2
 from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 from agent_actions.cli.exceptions import FileNotFoundError as AgentFileNotFoundError, AgentActionsError
 class FileReader:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.file_type = os.path.splitext(file_path)[1].lower()
+        self.file_type = Path(file_path).suffix.lower()
 
     def read(self):
         file_type_handlers = {

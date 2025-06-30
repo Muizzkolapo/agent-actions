@@ -1,4 +1,5 @@
 """Module for target data generation based on configuration."""
+from pathlib import Path
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
@@ -66,9 +67,8 @@ class TargetGenerator:
             self._process_by_strategy(data, file_path, base_directory, output_directory)
             
             # Return the output file path for compatibility
-            import os
-            relative_path = os.path.relpath(file_path, base_directory)
-            return os.path.join(output_directory, relative_path)
+            relative_path = Path(file_path).relative_to(base_directory)
+            return str(Path(output_directory) / relative_path)
         except (AgentActionsError, ConfigurationError, ValueError) as e: # Catch known specific errors
             # Log e if necessary, or let it propagate if it's already informative
             raise AgentActionsError(f"Error generating target for {file_path}: {str(e)}") from e
