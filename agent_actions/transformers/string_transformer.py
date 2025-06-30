@@ -2,6 +2,7 @@
 
 import importlib
 import re
+import os
 import sys
 from typing import List
 import tiktoken
