@@ -3,6 +3,7 @@ Module for generating agent lineage and providing agent details.
 """
 from pathlib import Path
 import yaml
+import os
 from flask import Flask, jsonify, render_template, request
 import networkx as nx
 from flask_cors import CORS
