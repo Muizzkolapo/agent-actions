@@ -1,5 +1,5 @@
 import sys
-import os
+from pathlib import Path
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
@@ -26,7 +26,7 @@ class AgentWorkflow:
         self.failed = False
 
         if self.user_code_path:
-            abs_user_code_path = os.path.abspath(self.user_code_path)
+            abs_user_code_path = str(Path(self.user_code_path).resolve())
             if abs_user_code_path not in sys.path:
                 sys.path.insert(0, abs_user_code_path)
 

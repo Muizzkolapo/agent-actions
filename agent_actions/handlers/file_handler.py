@@ -1,6 +1,6 @@
 """Module for staging data loading and processing."""
-import os
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class FileHandler:
         """
         for root, _, files in os.walk(directory):
             if target_filename in files:
-                return os.path.join(root, target_filename)
+                return str(Path(root) / target_filename)
         return None
 
     @staticmethod
@@ -41,9 +41,9 @@ class FileHandler:
         """
         for root, dirs, _ in os.walk(current_dir):
             if parent_folder_name in dirs:
-                target_folder_path = os.path.join(root, parent_folder_name, folder_name)
-                if os.path.isdir(target_folder_path):
-                    return target_folder_path
+                target_folder_path = Path(root) / parent_folder_name / folder_name
+                if target_folder_path.is_dir():
+                    return str(target_folder_path)
         return None
 
     @staticmethod
@@ -59,10 +59,10 @@ class FileHandler:
         Returns:
             str or None: The full path to the folder if found, otherwise None.
         """
-        base_path = os.path.join(working_directory, base_dir)
-        for root, dirs, _ in os.walk(base_path):
+        base_path = Path(working_directory) / base_dir
+        for root, dirs, _ in os.walk(str(base_path)):
             if folder_name in dirs:
-                return os.path.join(root, folder_name)
+                return str(Path(root) / folder_name)
         return None
 
     @staticmethod
@@ -76,9 +76,9 @@ class FileHandler:
         Returns:
             tuple: (agent_config_dir, io_dir, few_shot_samples_path)
         """
-        current_dir = os.getcwd()
-        agent_config_dir = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_config')
-        io_dir = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
+        current_dir = Path.cwd()
+        agent_config_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_config')
+        io_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
 
         if agent_config_dir is None:
             print(f"Configuration directory for agent '{agent_name}' not found.")
@@ -87,9 +87,9 @@ class FileHandler:
 
         few_shot_samples_path = None
         if io_dir:
-            potential_path = os.path.join(io_dir, 'few_shot_samples')
-            if os.path.exists(potential_path):
-                few_shot_samples_path = potential_path
+            potential_path = Path(io_dir) / 'few_shot_samples'
+            if potential_path.exists():
+                few_shot_samples_path = str(potential_path)
             else:
                 logger.warning(
                     "Few shot samples folder not found at %s", potential_path
@@ -111,11 +111,11 @@ class FileHandler:
         """
         for root, _, files in os.walk(base_dir):
             if filename in files:
-                return os.path.join(root, filename)
+                return str(Path(root) / filename)
 
-        parent_dir = os.path.dirname(base_dir)
-        if parent_dir != base_dir:  # Ensure we're not at the root
-            return FileHandler.find_config_file(parent_dir, filename)
+        parent_dir = Path(base_dir).parent
+        if parent_dir != Path(base_dir):  # Ensure we're not at the root
+            return FileHandler.find_config_file(str(parent_dir), filename)
 
         print(f"Config file '{filename}' not found in {base_dir} or its parent directories.")
 
@@ -130,12 +130,12 @@ class FileHandler:
         Returns:
             str or None: The folder name following 'agent_config' or None if not found.
         """
-        path_components = path.split(os.sep)
+        path_components = Path(path).parts
 
         if 'agent_config' in path_components:
             agent_config_index = path_components.index('agent_config')
 
-            if agent_config_index + 1 == len(path_components) - 1 and os.path.isfile(path):
+            if agent_config_index + 1 == len(path_components) - 1 and Path(path).is_file():
                 return '(isfile)'
 
             if agent_config_index + 1 < len(path_components):
@@ -154,9 +154,9 @@ class FileHandler:
         Returns:
             tuple: (folder_name, full_path) or (None, None) if not found.
         """
-        agent_config_dir = os.path.join(os.getcwd(), 'agent_config')
+        agent_config_dir = Path.cwd() / 'agent_config'
         filename = f"{agent_name}.yml" if not agent_name.endswith(".yml") else agent_name
-        full_path = FileHandler.find_config_file(agent_config_dir, filename)
+        full_path = FileHandler.find_config_file(str(agent_config_dir), filename)
         return FileHandler.get_folder_after_agent_config(full_path), full_path
 
     @staticmethod
@@ -174,7 +174,7 @@ class FileHandler:
         for root, _, files in os.walk(base_dir):
             for file in files:
                 if file.endswith(".yml"):
-                    agent_paths.append(os.path.join(root, file))
+                    agent_paths.append(str(Path(root) / file))
         return agent_paths
 
     @staticmethod
@@ -188,15 +188,16 @@ class FileHandler:
         Returns:
             str: The source file path or an error message.
         """
-        if not os.path.exists(file_path):
+        file_path = Path(file_path)
+        if not file_path.exists():
             return f"File '{file_path}' does not exist."
 
-        dir_path, file_name = os.path.split(file_path)
-        agent_dir = os.path.dirname(dir_path)
-        source_path = os.path.join(agent_dir, 'source')
-        source_file_path = os.path.join(source_path, file_name)
+        dir_path = file_path.parent
+        agent_dir = dir_path.parent
+        source_path = agent_dir / 'source'
+        source_file_path = source_path / file_path.name
 
-        if os.path.exists(source_path):
-            return source_file_path
+        if source_path.exists():
+            return str(source_file_path)
         else:
             return None

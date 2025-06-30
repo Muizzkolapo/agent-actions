@@ -1,5 +1,5 @@
 """Module for processing and combining output files."""
-import os
+from pathlib import Path
 from typing import List, Dict, Optional
 from agent_actions.processors.output_processor.directory_handler import DirectoryCombiner
 from agent_actions.processors.output_processor.file_handler import FileHandler
@@ -49,14 +49,14 @@ class OutputProcessor:
         final_agent_output_folder = ephemeral_directories[-1]['output_folder']
         
         # Create the final workflow output directory
-        final_workflow_output = os.path.join(os.path.dirname(final_agent_output_folder), 'final_workflow_output')
-        FileHandler.ensure_directory(final_workflow_output)
+        final_workflow_output = Path(final_agent_output_folder).parent / 'final_workflow_output'
+        FileHandler.ensure_directory(str(final_workflow_output))
         
         # Get the side output directory
-        side_output_dir = os.path.join(os.path.dirname(final_agent_output_folder), 'side_output')
+        side_output_dir = Path(final_agent_output_folder).parent / 'side_output'
         
         # Combine the final agent output with side output if available
-        if os.path.exists(side_output_dir):
-            self.combine_json_arrays(final_agent_output_folder, side_output_dir, final_workflow_output)
+        if side_output_dir.exists():
+            self.combine_json_arrays(final_agent_output_folder, str(side_output_dir), str(final_workflow_output))
         
-        return final_workflow_output
+        return str(final_workflow_output)

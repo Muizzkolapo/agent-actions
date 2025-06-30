@@ -1,5 +1,5 @@
 """Module for staging data loading and processing."""
-import os
+from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_processor.staging_content import StagingContentLoader
@@ -56,18 +56,18 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     else:
         print(f"Unsupported file type: {file_type}")
 
-    relative_path = os.path.relpath(file_path, base_directory)
-    output_file_path = os.path.join(output_directory, relative_path.replace(file_type, '.json'))
-    os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
-    file_writer = FileWriter(output_file_path)
+    relative_path = Path(file_path).relative_to(base_directory)
+    output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
+    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_writer = FileWriter(str(output_file_path))
     file_writer.write_staging(data_chunk)
     
-    base_path = os.path.join(base_directory, "..")
-    source_path = os.path.join(base_path, "source")
-    output_src_path = os.path.join(source_path, relative_path.replace(file_type, '.json'))
-    os.makedirs(os.path.dirname(output_src_path), exist_ok=True)
+    base_path = Path(base_directory).parent
+    source_path = base_path / "source"
+    output_src_path = source_path / relative_path.with_suffix('.json')
+    output_src_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if os.path.exists(output_src_path):
+    if output_src_path.exists():
         with open(output_src_path, 'r') as existing_file:
             existing_source = json.load(existing_file)
         
@@ -75,9 +75,9 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         
         if new_guids:
             existing_source.extend([item for item in src_text if list(item.keys())[0] in new_guids])
-            source_file_writer = FileWriter(output_src_path)
+            source_file_writer = FileWriter(str(output_src_path))
             source_file_writer.write_source(existing_source)
     else:
-        source_file_writer = FileWriter(output_src_path)
+        source_file_writer = FileWriter(str(output_src_path))
         source_file_writer.write_source(src_text)
 

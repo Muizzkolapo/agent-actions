@@ -1,13 +1,13 @@
 """Module for writing data loading and processing."""
-import os
 import json
 import csv
+from pathlib import Path
 from agent_actions.cli.exceptions import AgentActionsError
 
 class FileWriter:
     def __init__(self, file_path):
         self.file_path = file_path
-        self.file_type = os.path.splitext(file_path)[1].lower()
+        self.file_type = Path(file_path).suffix.lower()
 
     def write_staging(self, data):
         try:
@@ -31,7 +31,7 @@ class FileWriter:
 
     def write_target(self, data):
         try:
-            os.makedirs(os.path.dirname(self.file_path), exist_ok=True)
+            Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except IOError as e:

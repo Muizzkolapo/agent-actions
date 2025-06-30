@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 from typing import Callable, Optional, Dict, Any
 from agent_actions.handlers.file_handler import FileHandler
@@ -44,18 +43,18 @@ class AgentManager:
         Returns:
             bool: True if directories were successfully cleaned, False otherwise
         """
-        current_dir = os.getcwd()
-        agent_folder = FileHandler.find_specific_folder(current_dir, agent_name, 'agent_io')
+        current_dir = Path.cwd()
+        agent_folder = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
         
         if agent_folder is None:
             print(f"Agent folder not found for agent: {agent_name}")
             return False
         
-        source_dir = os.path.join(agent_folder, 'source')
-        target_dir = os.path.join(agent_folder, 'target')
+        source_dir = Path(agent_folder) / 'source'
+        target_dir = Path(agent_folder) / 'target'
         
         for directory in [source_dir, target_dir]:
-            if os.path.exists(directory):
+            if directory.exists():
                 shutil.rmtree(directory)
                 print(f"Deleted directory: {directory}")
             else:
@@ -77,18 +76,18 @@ class AgentManager:
         Returns:
             int: Number of files successfully processed
         """
-        project_root = os.getcwd()
-        input_directory = os.path.join(project_root, 'agent_io', agent_name, 'target', agent_type)
+        project_root = Path.cwd()
+        input_directory = project_root / 'agent_io' / agent_name / 'target' / agent_type
         
         # Get the function from globals
         function_call: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = globals().get(function_name)
         
         processed_count = 0
         if function_call and callable(function_call):
-            for root, _, files in os.walk(input_directory):
+            for root, _, files in os.walk(str(input_directory)):
                 for file_name in files:
                     if file_name.endswith('.json'):
-                        file_path = os.path.join(root, file_name)
+                        file_path = Path(root) / file_name
                         try:
                             with open(file_path, 'r', encoding='utf-8') as file:
                                 data = json.load(file)
@@ -139,7 +138,7 @@ class AgentManager:
             AgentNotFoundError: If agent_actions.yml or agent configuration cannot be found
         """
         # Find project root
-        project_root = AgentManager.find_project_root(os.getcwd())
+        project_root = AgentManager.find_project_root(Path.cwd())
         if not project_root:
             raise AgentNotFoundError("Could not find agent_actions.yml in current or parent directories")
 
