@@ -78,8 +78,12 @@ class FileHandler:
             tuple: (agent_config_dir, io_dir, few_shot_samples_path)
         """
         current_dir = Path.cwd()
-        agent_config_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_config')
-        io_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
+        agent_config_dir = FileHandler.find_specific_folder(
+            str(current_dir), agent_name, 'agent_config'
+        )
+        io_dir = FileHandler.find_specific_folder(
+            str(current_dir), agent_name, 'agent_io'
+        )
 
         if agent_config_dir is None:
             print(f"Configuration directory for agent '{agent_name}' not found.")
@@ -119,6 +123,7 @@ class FileHandler:
             return FileHandler.find_config_file(str(parent_dir), filename)
 
         print(f"Config file '{filename}' not found in {base_dir} or its parent directories.")
+        return None
 
     @staticmethod
     def get_folder_after_agent_config(path):
@@ -200,5 +205,4 @@ class FileHandler:
 
         if source_path.exists():
             return str(source_file_path)
-        else:
-            return None
+        return None
