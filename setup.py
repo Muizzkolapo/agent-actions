@@ -1,11 +1,11 @@
 """Setup script for the package."""
-import os
+from pathlib import Path
 from setuptools import setup, find_packages
 
 
 def read(fname):
     """Read the contents of a file."""
-    with open(os.path.join(os.path.dirname(__file__), fname), encoding='utf-8') as file:
+    with open(Path(__file__).parent / fname, encoding='utf-8') as file:
         return file.read()
 
 

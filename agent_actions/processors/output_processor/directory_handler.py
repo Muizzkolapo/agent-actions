@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Set
 from agent_actions.processors.output_processor.file_handler import FileHandler
 
@@ -50,16 +50,16 @@ class DirectoryCombiner:
             common_files: Set of filenames common to both directories
         """
         for filename in common_files:
-            file_path_1 = os.path.join(dir_1, filename)
-            file_path_2 = os.path.join(dir_2, filename)
+            file_path_1 = Path(dir_1) / filename
+            file_path_2 = Path(dir_2) / filename
             
-            data1 = self.file_handler.read_json_file(file_path_1)
-            data2 = self.file_handler.read_json_file(file_path_2)
+            data1 = self.file_handler.read_json_file(str(file_path_1))
+            data2 = self.file_handler.read_json_file(str(file_path_2))
             
             combined_data = data1 + data2
             
-            output_path = os.path.join(output_dir, filename)
-            self.file_handler.write_json_file(output_path, combined_data)
+            output_path = Path(output_dir) / filename
+            self.file_handler.write_json_file(str(output_path), combined_data)
     
     def _copy_unique_files(self, source_dir: str, output_dir: str, unique_files: Set[str], dir_name: str) -> None:
         """
@@ -72,9 +72,9 @@ class DirectoryCombiner:
             dir_name: Name of the source directory for logging
         """
         for filename in unique_files:
-            file_path = os.path.join(source_dir, filename)
-            data = self.file_handler.read_json_file(file_path)
+            file_path = Path(source_dir) / filename
+            data = self.file_handler.read_json_file(str(file_path))
             
-            output_path = os.path.join(output_dir, filename)
-            self.file_handler.write_json_file(output_path, data)
+            output_path = Path(output_dir) / filename
+            self.file_handler.write_json_file(str(output_path), data)
             print(f"Copied {filename} from {dir_name} to {output_path}")

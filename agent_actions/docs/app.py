@@ -1,7 +1,7 @@
 """
 Module for generating agent lineage and providing agent details.
 """
-import os
+from pathlib import Path
 import yaml
 from flask import Flask, jsonify, render_template, request
 import networkx as nx
@@ -11,8 +11,8 @@ app = Flask(__name__, template_folder='agent_dags/templates', static_folder='age
 CORS(app)
 
 # Ensure BASE_DIR is the current working directory of the running application
-BASE_DIR = os.getcwd()
-CONFIG_DIR = os.path.join(BASE_DIR, 'agent_config')
+BASE_DIR = Path.cwd()
+CONFIG_DIR = BASE_DIR / 'agent_config'
 
 
 def get_folder_structure(directory, base_path=''):
@@ -21,28 +21,28 @@ def get_folder_structure(directory, base_path=''):
     """
     structure = []
     for item in os.listdir(directory):
-        item_path = os.path.join(directory, item)
-        relative_path = os.path.join(base_path, item)
-        if os.path.isdir(item_path):
+        item_path = Path(directory) / item
+        relative_path = Path(base_path) / item
+        if item_path.is_dir():
             if item == 'agent_config':
-                parent_dir = os.path.basename(os.path.dirname(item_path))
+                parent_dir = item_path.parent.name
                 structure.append({
                     'name': parent_dir,
-                    'path': os.path.dirname(relative_path),
+                    'path': str(relative_path.parent),
                     'type': 'folder',
-                    'children': get_folder_structure(item_path, relative_path)
+                    'children': get_folder_structure(str(item_path), str(relative_path))
                 })
             else:
                 structure.append({
                     'name': item,
-                    'path': relative_path,
+                    'path': str(relative_path),
                     'type': 'folder',
-                    'children': get_folder_structure(item_path, relative_path)
+                    'children': get_folder_structure(str(item_path), str(relative_path))
                 })
-        elif os.path.isfile(item_path) and item.endswith('.yml'):
+        elif item_path.is_file() and item.endswith('.yml'):
             structure.append({
                 'name': item,
-                'path': relative_path,
+                'path': str(relative_path),
                 'type': 'file'
             })
     return structure
@@ -54,21 +54,21 @@ def get_yaml_files(directory, base_path=''):
     """
     structure = []
     for root, dirs, files in os.walk(directory):
-        if os.path.basename(root) == 'agent_config':
-            parent_dir = os.path.basename(os.path.dirname(root))
-            relative_path = os.path.relpath(root, directory)
+        if Path(root).name == 'agent_config':
+            parent_dir = Path(root).parent.name
+            relative_path = Path(root).relative_to(directory)
             subdir_structure = []
             for file in files:
                 if file.endswith('.yml'):
                     subdir_structure.append({
                         'name': file,
-                        'path': os.path.join(relative_path, file),
+                        'path': str(relative_path / file),
                         'type': 'file'
                     })
             if subdir_structure:
                 structure.append({
                     'name': parent_dir,
-                    'path': os.path.dirname(relative_path),
+                    'path': str(relative_path.parent),
                     'type': 'folder',
                     'children': subdir_structure
                 })
@@ -79,8 +79,8 @@ def list_yaml_files():
     """
     List all YAML files in the directory containing 'agent_actions.yml' and its subdirectories named 'agent_config'.
     """
-    base_dir = os.path.dirname(os.path.abspath('agent_actions.yml'))
-    structure = get_yaml_files(base_dir)
+    base_dir = Path('agent_actions.yml').resolve().parent
+    structure = get_yaml_files(str(base_dir))
     return jsonify(structure)
 
 
@@ -88,7 +88,7 @@ def load_single_yaml_file(filename):
     """
     Load a single YAML file.
     """
-    filepath = os.path.join(BASE_DIR, filename)
+    filepath = BASE_DIR / filename
     with open(filepath, 'r', encoding='utf-8') as file:
         content = yaml.safe_load(file)
     return content

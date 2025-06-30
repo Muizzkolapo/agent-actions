@@ -1,6 +1,6 @@
 """Module for Configuration Validation Functions."""
-import os
 import yaml
+from pathlib import Path
 from pydantic import ValidationError
 from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
@@ -21,7 +21,7 @@ class ConfigManager:
         self.agent_configs = {}
         self.execution_order = []
         self.child_pipeline = None
-        self.template_dir = os.path.join(os.getcwd(), "templates")
+        self.template_dir = str(Path.cwd() / "templates")
 
     def load_configs(self):
         try:
@@ -58,7 +58,7 @@ class ConfigManager:
     
     def validate_agent_name(self):
         self.agent_name = self.find_agent_name(self.user_config)
-        config_filename = os.path.splitext(os.path.basename(self.constructor_path))[0]
+        config_filename = Path(self.constructor_path).stem
         if self.agent_name != config_filename:
             error_msg = f"Top-level key '{self.agent_name}' does not match the filename '{config_filename}'"
             raise ValueError(error_msg)

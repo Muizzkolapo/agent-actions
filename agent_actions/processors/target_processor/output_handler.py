@@ -1,6 +1,6 @@
 """Module for handling output data saving operations."""
 import json
-import os
+from pathlib import Path
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.cli.exceptions import AgentActionsError
 
@@ -19,11 +19,11 @@ class OutputHandler:
             output_directory: Directory where the output file will be saved
         """
         try:
-            relative_path = os.path.relpath(file_path, base_directory)
-            output_file_path = os.path.join(output_directory, relative_path)
-            self._ensure_directory_exists(output_file_path)
+            relative_path = Path(file_path).relative_to(base_directory)
+            output_file_path = Path(output_directory) / relative_path
+            self._ensure_directory_exists(str(output_file_path))
             
-            file_writer = FileWriter(output_file_path)
+            file_writer = FileWriter(str(output_file_path))
             file_writer.write_target(data)
         except IOError as e:
             raise AgentActionsError(f"IOError saving main output to {output_file_path}: {str(e)}") from e
@@ -41,13 +41,13 @@ class OutputHandler:
             output_directory: Directory where the main output is saved
         """
         try:
-            relative_path = os.path.relpath(file_path, base_directory)
-            side_output_dir = os.path.join(os.path.dirname(output_directory), 'side_output')
-            side_output_file_path = os.path.join(side_output_dir, os.path.basename(relative_path))
-            self._ensure_directory_exists(side_output_file_path)
+            relative_path = Path(file_path).relative_to(base_directory)
+            side_output_dir = Path(output_directory).parent / 'side_output'
+            side_output_file_path = side_output_dir / relative_path.name
+            self._ensure_directory_exists(str(side_output_file_path))
             
             # Load existing content if available
-            existing_content = self._load_existing_content(side_output_file_path)
+            existing_content = self._load_existing_content(str(side_output_file_path))
             
             # Merge and save content
             existing_content.extend(data)
@@ -60,12 +60,12 @@ class OutputHandler:
     
     def _ensure_directory_exists(self, file_path):
         """Ensure the directory for the file path exists."""
-        directory = os.path.dirname(file_path)
-        os.makedirs(directory, exist_ok=True)
+        directory = Path(file_path).parent
+        directory.mkdir(parents=True, exist_ok=True)
     
     def _load_existing_content(self, file_path):
         """Load existing content from file if it exists."""
-        if os.path.exists(file_path):
+        if Path(file_path).exists():
             with open(file_path, 'r', encoding='utf-8') as file:
                 try:
                     existing_content = json.load(file)

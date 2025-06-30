@@ -1,11 +1,11 @@
 """Module for String Processing Functions"""
 
 import importlib
-import os
 import re
 import sys
 from typing import List
 import tiktoken
+from pathlib import Path
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 class StringProcessor:
@@ -49,7 +49,7 @@ class StringProcessor:
         """
         try:
             if tools_path and tools_path not in sys.path:
-                sys.path.insert(0, os.path.abspath(tools_path))
+                sys.path.insert(0, str(Path(tools_path).resolve()))
             module = importlib.import_module(function_name)
             function = getattr(module, function_name)
             result = function(context_data_str) if context_data_str else function()
@@ -203,7 +203,7 @@ class Tokenizer:
         try:
             tools_path = os.environ.get("TOOLS_PATH", "tools")
             if tools_path and tools_path not in sys.path:
-                sys.path.insert(0, os.path.abspath(tools_path))
+                sys.path.insert(0, str(Path(tools_path).resolve()))
 
             module = importlib.import_module(split_method)
             function = getattr(module, split_method)
