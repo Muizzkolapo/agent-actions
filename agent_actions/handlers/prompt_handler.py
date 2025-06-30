@@ -30,12 +30,18 @@ class PromptLoader:
         Raises:
             ValueError: If the prompt is not found.
         """
-        pattern = re.compile(rf"\{{prompt {re.escape(prompt_name)}\}}(.*?)\{{end_prompt\}}", re.DOTALL)
-        match = pattern.search(content)
-        if match:
-            return match.group(1).strip()
-        else:
+        start_token = f"{{prompt {prompt_name}}}"
+        end_token = "{end_prompt}"
+        start_index = content.find(start_token)
+        if start_index == -1:
             raise ValueError(f"Prompt '{prompt_name}' not found in the content.")
+
+        end_index = content.find(end_token, start_index + len(start_token))
+        if end_index == -1:
+            raise ValueError(f"Unclosed prompt block for '{prompt_name}'.")
+
+        prompt_body = content[start_index + len(start_token):end_index]
+        return prompt_body.strip()
 
     @staticmethod
     def get_all_prompt_names(content: str) -> List[str]:
@@ -69,6 +75,16 @@ class PromptLoader:
             raise ValueError(f"Duplicate prompt names found in {filename}: {', '.join(duplicates)}")
 
     @staticmethod
+    def validate_prompt_blocks(filename: str, content: str) -> None:
+        """Ensure every prompt block is closed with an end token."""
+        pattern = re.compile(r"\{prompt\s+(\w+)\}")
+        for match in pattern.finditer(content):
+            name = match.group(1)
+            start = match.end()
+            if content.find("{end_prompt}", start) == -1:
+                raise ValueError(f"Unclosed prompt block for '{name}' in {filename}.")
+
+    @staticmethod
     def load_prompt(prompt_name: str) -> str:
         """
         Retrieve and generate a prompt based on the prompt name provided.
@@ -99,6 +115,7 @@ class PromptLoader:
         prompt_file_path = Path(prompt_file_str)
         content = prompt_file_path.read_text(encoding='utf-8')
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
+        PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)
         return PromptLoader.extract_prompt(content, prompt_key)
 
     @staticmethod
