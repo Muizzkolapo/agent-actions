@@ -81,7 +81,7 @@ class AgentRunner:
             input_directory = Path(agent_folder) / 'staging'
 
         output_directory: Path = Path(agent_folder) / 'target' / indexed_agent_type
-        output_directory.mkdir(exist_ok=True)
+        output_directory.mkdir(parents=True, exist_ok=True)
 
         return str(input_directory), str(output_directory)
 

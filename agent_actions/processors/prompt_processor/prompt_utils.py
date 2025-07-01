@@ -3,6 +3,8 @@
 import re
 import textwrap
 from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+
 
 class PromptUtils:
     """
@@ -32,7 +34,8 @@ class PromptUtils:
             replacements = []
             for key in placeholder_keys:
                 if key in content_dict:
-                    replacements.append(f"{key}: {convert_to_string(content_dict[key])}")
+                    replacement = f"{key}: {convert_to_string(content_dict[key])}"
+                    replacements.append(replacement)
                     used_keys.add(key)
             replacement_text = ', '.join(replacements)
             prompt = prompt.replace(f'return_collection[{placeholder}]', replacement_text)
@@ -62,9 +65,13 @@ class PromptUtils:
         return cleaned_content
 
     @staticmethod
-    def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None, agent_config=None):
+    def inject_function_outputs_into_prompt(prompt_config,
+                                            tools_path=None,
+                                            context_data_str=None,
+                                            agent_config=None):
         """
-        Replace multiple dispatch_task() calls in prompt_config with the result of their corresponding function.
+        Replace multiple dispatch_task() calls in prompt_config with the result of their
+        corresponding function.
         Always passes `context_data_str` to the function.
 
         Parameters:
@@ -74,7 +81,8 @@ class PromptUtils:
             agent_config (dict): Agent configuration to check for 'add_dispatch' flag.
 
         Returns:
-            tuple: (The prompt_config with dispatch_task() calls replaced by function outputs, captured_results)
+            tuple: (The prompt_config with dispatch_task() calls replaced by function outputs,
+                    captured_results)
         """
         captured_results = {}
 
@@ -90,14 +98,24 @@ class PromptUtils:
 
             for function_name in function_calls:
                 try:
-                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                    transformed_text = StringProcessor.call_user_function(function_name,
+                                                                        tools_path,
+                                                                        context_data_str)
                     if agent_config and agent_config.get('add_dispatch'):
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
                         transformed_text = "Error: No valid return from function."
-                    single_text = single_text.replace(f"dispatch_task('{function_name}')", transformed_text, 1)
+                    single_text = single_text.replace(f"dispatch_task('{function_name}')",
+                                                    transformed_text,
+                                                    1)
+                except (AgentActionsError, ConfigurationError) as e:
+                    # Re-raise the specific error to be caught by the main error handler
+                    raise e
                 except Exception as e:
-                    print(f"Function call error for '{function_name}': {str(e)}")
+                    # Wrap other exceptions in a standard error type
+                    raise AgentActionsError(
+                        f"An unexpected error occurred in function '{function_name}': {str(e)}"
+                    ) from e
 
             return single_text
 
@@ -106,7 +124,6 @@ class PromptUtils:
         elif isinstance(prompt_config, str):
             processed_prompt = process_single_text(prompt_config)
         else:
-            print(f"Invalid input type: {type(prompt_config).__name__}")
             processed_prompt = prompt_config
 
         return processed_prompt, captured_results
