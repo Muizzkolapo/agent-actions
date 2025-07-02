@@ -10,8 +10,7 @@ from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 class GroqLlama3Handler(BaseVendorHandler):
     @staticmethod
-    def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
         groq = Groq(api_key=api_key)
         model_name = agent_config['model_name']
 
@@ -44,8 +43,7 @@ class GroqLlama3Handler(BaseVendorHandler):
             raise VendorAPIError(f"Failed to create chat completion with Groq Llama 3: {str(e)}") from e
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, context_data):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_non_json(api_key, agent_config, prompt_config, context_data):
         groq = Groq(api_key=api_key)
         model_name = agent_config['model_name']
         context_data_str = StringProcessor.process_as_string(context_data)

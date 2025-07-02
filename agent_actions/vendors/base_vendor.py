@@ -12,8 +12,9 @@ class BaseVendorHandler:
 
     @classmethod
     def invoke(cls, agent_config, prompt_config, context_data, schema):
-        """Dispatch to JSON or non-JSON methods based on ``json_mode``."""
+        """Dispatch to JSON or non-JSON methods after loading the API key."""
+        api_key = cls.get_api_key(agent_config)
         json_mode = agent_config.get("json_mode", True)
         if json_mode:
-            return cls.call_json(agent_config, prompt_config, context_data, schema)
-        return cls.call_non_json(agent_config, prompt_config, context_data)
+            return cls.call_json(api_key, agent_config, prompt_config, context_data, schema)
+        return cls.call_non_json(api_key, agent_config, prompt_config, context_data)

@@ -244,10 +244,10 @@ You can also document and test models — skip ahead to the section on testing a
 
 """
 # Use OllamaHandler's non-JSON mode since json_mode is False
-result = OllamaHandler.call_non_json(
-    agent_config=agent_cfg,
-    prompt_config=prompt_config,
-    context_data=context_data,
+result = OllamaHandler.invoke(
+    agent_cfg,
+    prompt_config,
+    context_data,
     schema=None
 )
 

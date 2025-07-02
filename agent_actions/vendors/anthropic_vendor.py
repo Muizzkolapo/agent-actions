@@ -7,8 +7,7 @@ from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 class ClaudeHandler(BaseVendorHandler):
     @staticmethod
-    def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
         model_name = agent_config['model_name']
         client = anthropic.Anthropic(api_key=api_key)
         context_data_str = StringProcessor.process_as_string(context_data)
@@ -34,7 +33,7 @@ class ClaudeHandler(BaseVendorHandler):
         return response_content
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, context_data):
+    def call_non_json(api_key, agent_config, prompt_config, context_data):
         """Non-JSON mode is not implemented for Claude."""
         raise NotImplementedError("Non-JSON mode not implemented for Claude")
    

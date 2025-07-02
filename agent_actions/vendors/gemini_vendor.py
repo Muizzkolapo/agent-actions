@@ -8,8 +8,7 @@ from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 class GeminiHandler(BaseVendorHandler):
     @staticmethod
-    def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
         genai.configure(api_key=api_key)
         model_name = agent_config['model_name']
 
@@ -34,8 +33,7 @@ class GeminiHandler(BaseVendorHandler):
         return response
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, context_data):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_non_json(api_key, agent_config, prompt_config, context_data):
         genai.configure(api_key=api_key)
         model_name = agent_config['model_name']
 
