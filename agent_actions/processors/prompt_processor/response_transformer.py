@@ -1,5 +1,6 @@
 """Module for transforming agent responses."""
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.config_keys import SIDE_COLLECTION_KEY
 
 
 class ResponseTransformer:
@@ -19,7 +20,7 @@ class ResponseTransformer:
         Returns:
             Transformed response structure
         """
-        side_collection = agent_config.get('side_collection', [])
+        side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         
         if side_collection:
             updated_response = [

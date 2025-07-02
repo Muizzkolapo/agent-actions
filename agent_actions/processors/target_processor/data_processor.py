@@ -2,6 +2,7 @@
 from typing import Dict, List
 
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.config_keys import SIDE_COLLECTION_KEY
 
 from .interfaces import IDataProcessor
 
@@ -39,7 +40,7 @@ class DataProcessor(IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            side_collection = self.agent_config.get('side_collection', [])
+            side_collection = self.agent_config.get(SIDE_COLLECTION_KEY, [])
             
             if side_collection:
                 # Apply side_collection transformation to each item

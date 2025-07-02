@@ -3,6 +3,7 @@ from pathlib import Path
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
+from agent_actions.config_keys import PROMPT_KEY, SCHEMA_NAME_KEY
 
 from rich.console import Console
 from rich.table import Table
@@ -65,7 +66,7 @@ class AgentWorkflow:
 
         for idx, (agent_name, details) in enumerate(self.agent_status.items(), start=1):
             agent_config = self.agent_configs[agent_name]
-            schema = str(agent_config.get('schema_name', 'No schema specified'))
+            schema = str(agent_config.get(SCHEMA_NAME_KEY, 'No schema specified'))
 
             table.add_row(
                 str(idx),
@@ -85,7 +86,7 @@ class AgentWorkflow:
                 for idx, agent_type in enumerate(self.execution_order):
                     agent_config = self.agent_configs[agent_type]
                     self.agent_status[agent_type]["status"] = "⏳ Running"
-                    self.agent_status[agent_type]["prompt"] = agent_config.get('prompt', 'No prompt specified')
+                    self.agent_status[agent_type]["prompt"] = agent_config.get(PROMPT_KEY, 'No prompt specified')
 
                     # Update live display
                     live.update(self.create_status_table())

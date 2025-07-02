@@ -3,6 +3,7 @@ from textwrap import dedent
 from openai import OpenAI
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler
+from agent_actions.config_keys import MODEL_NAME_KEY
 
 
 class OpenAIHandler(BaseVendorHandler):
@@ -10,7 +11,7 @@ class OpenAIHandler(BaseVendorHandler):
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         client = OpenAI(api_key=api_key)
 
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         context_data_str = StringProcessor.process_as_string(context_data)
 
@@ -48,7 +49,7 @@ class OpenAIHandler(BaseVendorHandler):
     def call_non_json(api_key, agent_config, prompt_config, context_data):
         client = OpenAI(api_key=api_key)
 
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         context_data_str = StringProcessor.process_as_string(context_data)
 
