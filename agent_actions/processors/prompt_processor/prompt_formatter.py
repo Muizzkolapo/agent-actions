@@ -1,5 +1,6 @@
 """Module for prompt formatting and loading."""
 from agent_actions.handlers.prompt_handler import PromptLoader
+from agent_actions.config_keys import PROMPT_KEY
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 
 
@@ -21,7 +22,7 @@ class PromptFormatter:
             ValueError: If prompt retrieval fails
         """
         try:
-            raw_prompt = agent_config.get('prompt', '')
+            raw_prompt = agent_config.get(PROMPT_KEY, '')
             if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
                 raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
             if not raw_prompt:

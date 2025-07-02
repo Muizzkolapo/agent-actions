@@ -5,6 +5,7 @@ from textwrap import dedent
 from agent_actions.cli.exceptions import VendorAPIError
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.vendors.base_vendor import BaseVendorHandler
+from agent_actions.config_keys import MODEL_NAME_KEY
 
 
 
@@ -12,7 +13,7 @@ class GroqLlama3Handler(BaseVendorHandler):
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         groq = Groq(api_key=api_key)
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         context_data_str = StringProcessor.process_as_string(context_data)
         
@@ -45,7 +46,7 @@ class GroqLlama3Handler(BaseVendorHandler):
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
         groq = Groq(api_key=api_key)
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
         context_data_str = StringProcessor.process_as_string(context_data)
 
 

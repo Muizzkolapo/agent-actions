@@ -17,6 +17,11 @@ from agent_actions.handlers.schema_handler         import SchemaLoader
 from agent_actions.handlers.prompt_handler         import PromptLoader
 from agent_actions.models.schema_change            import compile_unified_schema
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
+from agent_actions.config_keys import (
+    MODEL_VENDOR_KEY,
+    PROMPT_KEY,
+    SCHEMA_NAME_KEY,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,7 +75,7 @@ def create_dynamic_agent(
     if tools_path and tools_path not in sys.path:
         sys.path.insert(0, tools_path)
 
-    model_vendor = agent_config.get("model_vendor", "").lower()
+    model_vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
     is_tool      = model_vendor == "tool"
 
     # Convert context-data to a JSON string unless the vendor is 'tool'
@@ -124,7 +129,7 @@ def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str
     if formatted_prompt is not None:
         return formatted_prompt
 
-    prompt_cfg = agent_config.get('prompt', '')
+    prompt_cfg = agent_config.get(PROMPT_KEY, '')
     if isinstance(prompt_cfg, str) and prompt_cfg.startswith('$'):
         return PromptLoader.load_prompt(prompt_cfg[1:])
     
@@ -145,7 +150,7 @@ def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str, contex
 
 
 def _prepare_schema(agent_config: Dict[str, Any], model_vendor: str) -> Optional[Dict[str, Any]]:
-    schema_name = agent_config.get('schema_name') if model_vendor != 'tool' else None
+    schema_name = agent_config.get(SCHEMA_NAME_KEY) if model_vendor != 'tool' else None
     if not schema_name:
         return None
 

@@ -5,6 +5,7 @@ from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_processor.staging_content import StagingContentLoader
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
+from agent_actions.config_keys import CHUNK_CONFIG_KEY
 import json
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
@@ -29,7 +30,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
         # Get chunk configuration with defaults if not specified
-        chunk_config = agent_config.get("chunk_config", {})
+        chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
         chunk_size = chunk_config.get("chunk_size", 1000)  # Default chunk size
         chunk_overlap = chunk_config.get("overlap", 200)   # Default overlap
         tokenizer_model = agent_config.get("tokenizer_model", "cl100k_base")

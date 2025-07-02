@@ -4,6 +4,7 @@ from agent_actions.handlers.file_reader import FileReader
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.config_keys import MODEL_VENDOR_KEY
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -23,7 +24,7 @@ class TargetGenerator:
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.model_vendor = agent_config.get('model_vendor', '').lower()
+        self.model_vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         self.content_processor = TargetContentProcessor(agent_config, agent_name)
