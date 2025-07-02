@@ -6,8 +6,7 @@ from agent_actions.vendors.base_vendor import BaseVendorHandler
 
 class MistralHandler(BaseVendorHandler):
     @staticmethod
-    def call_json(agent_config, prompt_config, context_data, schema):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
         model_name = agent_config['model_name']
 
         client = Mistral(api_key=api_key)
@@ -37,8 +36,7 @@ class MistralHandler(BaseVendorHandler):
         return data
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, context_data):
-        api_key = BaseVendorHandler.get_api_key(agent_config)
+    def call_non_json(api_key, agent_config, prompt_config, context_data):
         model_name = agent_config['model_name']
 
         client = Mistral(api_key=api_key)

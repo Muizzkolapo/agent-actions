@@ -35,7 +35,7 @@ class OllamaHandler(BaseVendorHandler):
 
     # ---------- public entry-points -------------------------------------- #
     @staticmethod
-    def call_json(agent_config, prompt_config, context_data, schema):
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
         """
         Enforce the supplied JSON schema and return a list of dicts.
         """
@@ -60,7 +60,7 @@ class OllamaHandler(BaseVendorHandler):
 
 
     @staticmethod
-    def call_non_json(agent_config, prompt_config, context_data, schema=None):
+    def call_non_json(api_key, agent_config, prompt_config, context_data, schema=None):
         """
         Plain-text chat (no schema enforcement).
         """
