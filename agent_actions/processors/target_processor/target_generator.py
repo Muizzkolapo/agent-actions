@@ -4,7 +4,7 @@ from agent_actions.handlers.file_reader import FileReader
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
-from agent_actions.config_keys import MODEL_VENDOR_KEY
+from agent_actions.constants import MODEL_VENDOR_KEY
 
 # Constants
 TOOL_VENDOR = 'tool'

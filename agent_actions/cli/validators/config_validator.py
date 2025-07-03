@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Set
 
 from agent_actions.handlers.file_handler import FileHandler
 from .base_validator import BaseValidator
-from agent_actions.config_keys import (
+from agent_actions.constants import (
     MODEL_VENDOR_KEY,
     MODEL_NAME_KEY,
     JSON_MODE_KEY,

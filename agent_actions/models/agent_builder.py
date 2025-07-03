@@ -17,7 +17,7 @@ from agent_actions.handlers.schema_handler         import SchemaLoader
 from agent_actions.handlers.prompt_handler         import PromptLoader
 from agent_actions.models.schema_change            import compile_unified_schema
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
-from agent_actions.config_keys import (
+from agent_actions.constants import (
     MODEL_VENDOR_KEY,
     PROMPT_KEY,
     SCHEMA_NAME_KEY,

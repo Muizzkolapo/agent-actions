@@ -3,7 +3,7 @@ from pathlib import Path
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
-from agent_actions.config_keys import PROMPT_KEY, SCHEMA_NAME_KEY
+from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 
 from rich.console import Console
 from rich.table import Table
