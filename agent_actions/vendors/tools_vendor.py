@@ -1,6 +1,6 @@
 import json
 from agent_actions.core.tooling import execute_user_defined_function
-from agent_actions.config_keys import MODEL_NAME_KEY
+from agent_actions.constants import MODEL_NAME_KEY
 
 from typing import Dict, Any, Optional, Union
 class ToolHandler:

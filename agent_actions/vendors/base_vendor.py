@@ -1,6 +1,6 @@
 import os
 
-from agent_actions.config_keys import API_KEY_KEY, JSON_MODE_KEY
+from agent_actions.constants import API_KEY_KEY, JSON_MODE_KEY
 class BaseVendorHandler:
     """Common functionality shared by vendor handlers."""
 

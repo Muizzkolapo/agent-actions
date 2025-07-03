@@ -3,7 +3,7 @@ from textwrap import dedent
 from openai import OpenAI
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler
-from agent_actions.config_keys import MODEL_NAME_KEY
+from agent_actions.constants import MODEL_NAME_KEY
 
 
 class OpenAIHandler(BaseVendorHandler):

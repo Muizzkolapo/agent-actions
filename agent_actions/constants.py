@@ -1,4 +1,4 @@
-# Configuration key constants
+"""Centralized configuration key constants."""
 
 MODEL_VENDOR_KEY = "model_vendor"
 MODEL_NAME_KEY = "model_name"

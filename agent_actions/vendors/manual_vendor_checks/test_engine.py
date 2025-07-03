@@ -1,5 +1,5 @@
 from agent_actions.vendors.ollama_vendor import OllamaHandler
-from agent_actions.config_keys import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY
+from agent_actions.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY
 
 agent_cfg = {
     MODEL_VENDOR_KEY: "ollama",

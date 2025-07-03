@@ -5,7 +5,7 @@ from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_processor.staging_content import StagingContentLoader
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
-from agent_actions.config_keys import CHUNK_CONFIG_KEY
+from agent_actions.constants import CHUNK_CONFIG_KEY
 import json
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):

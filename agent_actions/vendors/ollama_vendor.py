@@ -15,7 +15,7 @@ import os
 
 from ollama import Client                         # <— changed
 from agent_actions.vendors.base_vendor import BaseVendorHandler
-from agent_actions.config_keys import MODEL_NAME_KEY
+from agent_actions.constants import MODEL_NAME_KEY
 
 
 class OllamaHandler(BaseVendorHandler):
