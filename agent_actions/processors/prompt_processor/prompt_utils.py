@@ -28,17 +28,24 @@ class PromptUtils:
             return prompt, content_dict
 
         used_keys = set()
-        placeholders = re.findall(r'return_collection\[(.*?)\]', prompt)
-        for placeholder in placeholders:
+        ci_content = {str(k).lower(): (k, v) for k, v in content_dict.items()}
+
+        pattern = re.compile(r'return_collection\[(.*?)\]', flags=re.IGNORECASE)
+
+        def repl(match):
+            placeholder = match.group(1)
             placeholder_keys = [key.strip() for key in placeholder.split(',')]
             replacements = []
             for key in placeholder_keys:
-                if key in content_dict:
-                    replacement = f"{key}: {convert_to_string(content_dict[key])}"
+                original = ci_content.get(key.lower())
+                if original:
+                    orig_key, value = original
+                    replacement = f"{orig_key}: {convert_to_string(value)}"
                     replacements.append(replacement)
-                    used_keys.add(key)
-            replacement_text = ', '.join(replacements)
-            prompt = prompt.replace(f'return_collection[{placeholder}]', replacement_text)
+                    used_keys.add(orig_key)
+            return ', '.join(replacements)
+
+        prompt = pattern.sub(repl, prompt)
 
         cleaned_dict = {k: v for k, v in content_dict.items() if k not in used_keys}
         return prompt, cleaned_dict
@@ -60,7 +67,12 @@ class PromptUtils:
         if not isinstance(data, str):
             return data
 
-        replaced_data = data.replace('return_collection{{source_context}}', guid)
+        replaced_data = re.sub(
+            r'return_collection\{\{source_context\}\}',
+            guid,
+            data,
+            flags=re.IGNORECASE,
+        )
         cleaned_content = textwrap.dedent(replaced_data).strip()
         return cleaned_content
 
