@@ -10,6 +10,7 @@ import logging
 import traceback
 from pathlib import Path
 from typing import Optional, Dict, Any, List
+from agent_actions.models.config_types import AgentEntryDict
 from contextlib import contextmanager
 
 from agent_actions.handlers.file_handler import FileHandler
@@ -203,7 +204,7 @@ class AgentRunnerService:
 
   
     @staticmethod
-    def get_parent_pipeline(agent_config: List[Dict[str, Any]]) -> Optional[str]:
+    def get_parent_pipeline(agent_config: List[AgentEntryDict]) -> Optional[str]:
         """
         Get the parent pipeline from the agent configuration.
 

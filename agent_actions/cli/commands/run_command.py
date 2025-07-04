@@ -37,7 +37,7 @@ class RunCommand:
         self.agent_name = Path(agent).stem
           
     
-    def _load_and_validate_config(self, full_path: Path, paths) -> Tuple[Dict[str, Any], str]:
+    def _load_and_validate_config(self, full_path: Path, paths) -> str:
         """
         Load and validate the configuration data.
         
@@ -46,7 +46,7 @@ class RunCommand:
             paths: Project paths container
             
         Returns:
-            Tuple of (agent_config, parent_pipeline)
+            Parent pipeline name
         """
         click.echo("Rendering and loading configuration...")
         
