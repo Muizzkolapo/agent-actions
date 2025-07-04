@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.models import agent_builder
 from agent_actions.transformers.data_transformer import DataTransformer
-from agent_actions.config_keys import SIDE_COLLECTION_KEY
+from agent_actions.constants import SIDE_COLLECTION_KEY
 
 
 def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
