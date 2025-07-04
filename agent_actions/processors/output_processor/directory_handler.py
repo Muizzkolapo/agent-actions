@@ -1,6 +1,9 @@
 from pathlib import Path
 from typing import Set
+import logging
 from agent_actions.processors.output_processor.file_handler import FileHandler
+
+logger = logging.getLogger(__name__)
 
 class DirectoryCombiner:
     """Handles combining JSON data from directories."""
@@ -77,4 +80,4 @@ class DirectoryCombiner:
             
             output_path = Path(output_dir) / filename
             self.file_handler.write_json_file(str(output_path), data)
-            print(f"Copied {filename} from {dir_name} to {output_path}")
+            logger.info("Copied %s from %s to %s", filename, dir_name, output_path)

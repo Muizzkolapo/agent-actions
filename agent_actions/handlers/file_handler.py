@@ -2,6 +2,11 @@
 import logging
 import os
 from pathlib import Path
+from agent_actions.cli.exceptions import (
+    DirectoryNotFoundError,
+    FileNotFoundError as AgentFileNotFoundError,
+    AgentActionsError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +91,13 @@ class FileHandler:
         )
 
         if agent_config_dir is None:
-            print(f"Configuration directory for agent '{agent_name}' not found.")
+            msg = f"Configuration directory for agent '{agent_name}' not found."
+            logger.error(msg)
+            raise DirectoryNotFoundError(msg)
         if io_dir is None:
-            print(f"IO directory for agent '{agent_name}' not found.")
+            msg = f"IO directory for agent '{agent_name}' not found."
+            logger.error(msg)
+            raise DirectoryNotFoundError(msg)
 
         few_shot_samples_path = None
         if io_dir:
@@ -122,8 +131,9 @@ class FileHandler:
         if parent_dir != Path(base_dir):  # Ensure we're not at the root
             return FileHandler.find_config_file(str(parent_dir), filename)
 
-        print(f"Config file '{filename}' not found in {base_dir} or its parent directories.")
-        return None
+        msg = f"Config file '{filename}' not found in {base_dir} or its parent directories."
+        logger.error(msg)
+        raise AgentFileNotFoundError(msg)
 
     @staticmethod
     def get_folder_after_agent_config(path):
