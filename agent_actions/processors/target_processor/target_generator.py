@@ -85,7 +85,7 @@ class TargetGenerator:
         """Select and apply the appropriate processing strategy based on configuration."""
         # Tool vendor with record granularity and side output
         if self.model_vendor == TOOL_VENDOR and self.granularity == 'record' and self.side_output_enabled:
-            main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path)
+            main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path, output_directory)
             self.output_handler.save_main_output(main_output, file_path, base_directory, output_directory)
             
             if side_output_data:
@@ -93,10 +93,10 @@ class TargetGenerator:
         
         # Tool vendor with file granularity
         elif self.model_vendor == TOOL_VENDOR and self.granularity == 'file':
-            output = self.content_processor.process_file_level(data)
+            output = self.content_processor.process_file_level(data, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
         
         # Record granularity (default)
         elif self.granularity == 'record':
-            output = self.content_processor.process(data, file_path)
+            output = self.content_processor.process(data, file_path, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

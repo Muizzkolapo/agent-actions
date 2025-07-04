@@ -57,7 +57,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     if agent_config.get('run_mode') == 'batch':
         batch_service = BatchService()
-        batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk)
+        batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk, output_directory)
         # Write a placeholder to the output to signify a batch job was submitted
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')

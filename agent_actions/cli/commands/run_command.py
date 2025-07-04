@@ -19,21 +19,26 @@ from agent_actions.cli.exceptions import (
     FileNotFoundError,
     AgentExecutionError
 )
+from agent_actions.services.batch_service import BatchService
 
 
 class RunCommand:
     """Implementation of the run command."""
     
-    def __init__(self, agent: str, user_code: Optional[str]):
+    def __init__(self, agent: str, user_code: Optional[str], batch_continue: bool = False, force_batch: bool = False):
         """
         Initialize the run command.
         
         Args:
             agent: Name of the agent configuration to run.
             user_code: Path to user-defined functions directory.
+            batch_continue: Whether to continue workflow after processing completed batches.
+            force_batch: Whether to force new batch submission even if existing jobs are in-flight.
         """
         self.agent = agent
         self.user_code = user_code
+        self.batch_continue = batch_continue
+        self.force_batch = force_batch
         self.agent_name = Path(agent).stem
           
     
@@ -80,6 +85,14 @@ class RunCommand:
             parent_pipeline = self._load_and_validate_config(full_path, paths)
             click.echo(f"Starting workflow execution for pipeline: {parent_pipeline}")
             
+            # Set batch force flag if requested
+            if self.force_batch:
+                BatchService.force_batch = True
+            
+            # Handle batch continuation if requested
+            if self.batch_continue:
+                self._handle_batch_continuation(paths)
+            
             AgentRunnerService.run_agent_workflow(
                 self.agent_name,
                 full_path,
@@ -88,6 +101,9 @@ class RunCommand:
                 parent_pipeline
             )
             
+            # Reset batch force flag after workflow
+            BatchService.force_batch = False
+            
             click.echo(f"Successfully completed agent run for: {self.agent}")
             
         except (ValidationError, FileNotFoundError, ConfigurationError, AgentExecutionError) as e:
@@ -95,6 +111,31 @@ class RunCommand:
             
         except Exception as e:
             raise click.ClickException(f"Failed to run agent {self.agent}: {str(e)}")
+    
+    def _handle_batch_continuation(self, paths) -> None:
+        """
+        Handle batch continuation logic.
+        
+        Args:
+            paths: Project paths container
+        """
+        click.echo("Checking for completed batch jobs...")
+        
+        batch_service = BatchService()
+        agent_io_path = paths.io_dir
+        
+        # Look for batch placeholders in the agent's output directories
+        processed_files = batch_service.check_and_process_completed_batches(
+            str(agent_io_path),  # output_directory
+            str(agent_io_path)   # base_directory
+        )
+        
+        if processed_files:
+            click.echo(f"Processed {len(processed_files)} completed batch jobs:")
+            for file_path in processed_files:
+                click.echo(f"  - {file_path}")
+        else:
+            click.echo("No completed batch jobs found to process.")
 
 
 @click.command()
@@ -102,7 +143,9 @@ class RunCommand:
               help="Agent configuration file name without path or extension")
 @click.option('-u', '--user_code', help="Path to the user's code folder containing UDFs")
 @click.option('--force', is_flag=True, help="Force execution even if validation warnings occur")
-def run(agent: str, user_code: Optional[str], force: bool = False) -> None:
+@click.option('--force_batch', is_flag=True, help="Force new batch submission even if existing batch jobs are in-flight")
+@click.option('--batch_continue', is_flag=True, help="Continue workflow after checking batch status and processing completed batches")
+def run(agent: str, user_code: Optional[str], force: bool = False, force_batch: bool = False, batch_continue: bool = False) -> None:
     """
     Run agents with a specified agent configuration.
 
@@ -114,5 +157,5 @@ def run(agent: str, user_code: Optional[str], force: bool = False) -> None:
         agent-actions run -a my_agent
         agent-actions run -a my_agent -u ./user_code
     """
-    command = RunCommand(agent, user_code)
+    command = RunCommand(agent, user_code, batch_continue, force_batch)
     command.execute()

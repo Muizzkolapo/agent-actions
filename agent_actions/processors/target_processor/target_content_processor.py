@@ -31,13 +31,14 @@ class TargetContentProcessor(IContentProcessor):
         self.data_processor = DataProcessor(agent_config)
         self.batch_service = BatchService()
 
-    def process(self, data: List[Dict], file_path: str) -> List[Dict]:
+    def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
         Process a list of data items.
         
         Args:
             data: List of data items to process
             file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
             
         Returns:
             List of processed data items
@@ -46,7 +47,7 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
             return [] # Return empty list to signify batch submission
 
         try:
@@ -68,7 +69,8 @@ class TargetContentProcessor(IContentProcessor):
     def process_for_side_output(
         self, 
         data: List[Dict], 
-        file_path: str
+        file_path: str,
+        output_directory: str = None
     ) -> Tuple[List[Dict], List[Dict]]:
         """
         Process data and separate into main and side outputs.
@@ -76,6 +78,7 @@ class TargetContentProcessor(IContentProcessor):
         Args:
             data: List of data items to process
             file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
             
         Returns:
             Tuple of (main_output, side_output)
@@ -84,7 +87,7 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
             return [], [] # Return empty lists for main and side output
 
         try:
@@ -104,12 +107,13 @@ class TargetContentProcessor(IContentProcessor):
         except Exception as e:
             raise RuntimeError(f"Failed to process for side output: {str(e)}")
 
-    def process_file_level(self, data: List[Dict]) -> List[Dict]:
+    def process_file_level(self, data: List[Dict], output_directory: str = None) -> List[Dict]:
         """
         Process data at the file level.
         
         Args:
             data: List of data items to process
+            output_directory: Directory where batch files should be created
             
         Returns:
             Processed data
@@ -118,7 +122,7 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
             return []
 
         try:

@@ -3,6 +3,7 @@ from pathlib import Path
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
+from agent_actions.services.batch_service import BatchService
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 
 from rich.console import Console
@@ -35,6 +36,7 @@ class AgentWorkflow:
         self.config_manager = ConfigManager(self.constructor_path, self.default_path)
         self.agent_runner = AgentRunner(self.use_tools)
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
+        self.batch_service = BatchService()
 
         # Load configurations and setup agents dynamically
         self._load_configs()
@@ -77,8 +79,34 @@ class AgentWorkflow:
 
         return table
 
+    def _check_and_process_completed_batches(self):
+        """Check for completed batch jobs and process them before starting workflow."""
+        agent_io_path = Path(self.config_manager.agent_name) / "agent_io"
+        
+        if agent_io_path.exists():
+            self.console.print("[yellow]Checking for completed batch jobs...[/yellow]")
+            
+            # Check all target directories for completed batches
+            target_dirs = list(agent_io_path.glob("target/node_*"))
+            processed_count = 0
+            
+            for target_dir in target_dirs:
+                processed_files = self.batch_service.check_and_process_completed_batches(
+                    str(target_dir),
+                    str(agent_io_path)
+                )
+                processed_count += len(processed_files)
+            
+            if processed_count > 0:
+                self.console.print(f"[green]✅ Processed {processed_count} completed batch jobs[/green]")
+            else:
+                self.console.print("[dim]No completed batch jobs found[/dim]")
+
     def run(self):
         try:
+            # Check for completed batch jobs before starting workflow
+            self._check_and_process_completed_batches()
+            
             with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
                 # Get total number of agents
                 total_agents = len(self.execution_order)
