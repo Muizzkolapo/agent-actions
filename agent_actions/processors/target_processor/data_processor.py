@@ -40,18 +40,12 @@ class DataProcessor(IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            side_collection = self.agent_config.get(SIDE_COLLECTION_KEY, [])
-            
-            if side_collection:
-                # Apply side_collection transformation to each item
-                updated_data = [
-                    DataTransformer.update_schema_objects(contents, data, side_collection)
-                    for data in generated_data
-                ]
-                return DataTransformer.transform_structure([{guid: updated_data}])
-            else:
-                # No transformation needed
-                return DataTransformer.transform_structure([{guid: generated_data}])
+            return transform_with_side_collection(
+                generated_data,
+                contents,
+                guid,
+                self.agent_config,
+            )
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
 

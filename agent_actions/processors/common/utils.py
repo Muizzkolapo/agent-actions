@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.models import agent_builder
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.config_keys import SIDE_COLLECTION_KEY
 
 
 def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
@@ -25,7 +26,7 @@ def run_dynamic_agent(
     tools_path: Optional[str] = None,
     tool_args: Optional[Dict[str, Any]] = None,
     source_content: Optional[Any] = None,
-) -> tuple[Any, bool]:
+    ) -> tuple[Any, bool]:
     """Execute an agent based on a conditional clause configuration.
 
     Returns a tuple of the response and a boolean indicating whether
@@ -48,3 +49,22 @@ def run_dynamic_agent(
         source_content=source_content,
     )
     return response, True
+
+
+def transform_with_side_collection(
+    data: list,
+    context_data: dict,
+    guid: str,
+    agent_config: Dict,
+) -> list:
+    """Apply ``side_collection`` logic to generated data consistently."""
+    side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
+
+    if side_collection:
+        updated = [
+            DataTransformer.update_schema_objects(context_data, item, side_collection)
+            for item in data
+        ]
+        return DataTransformer.transform_structure([{guid: updated}])
+
+    return DataTransformer.transform_structure([{guid: data}])

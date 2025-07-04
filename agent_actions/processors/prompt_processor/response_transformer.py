@@ -20,13 +20,9 @@ class ResponseTransformer:
         Returns:
             Transformed response structure
         """
-        side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
-        
-        if side_collection:
-            updated_response = [
-                DataTransformer.update_schema_objects(context_data, data, side_collection)
-                for data in response
-            ]
-            return DataTransformer.transform_structure([{guid: updated_response}])
-        else:
-            return DataTransformer.transform_structure([{guid: response}])
+        return transform_with_side_collection(
+            response,
+            context_data,
+            guid,
+            agent_config,
+        )
