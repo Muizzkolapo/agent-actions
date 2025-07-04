@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
+from agent_actions.models.config_types import AgentConfigMap
 
 from agent_actions.handlers.file_handler import FileHandler
 from .base_validator import BaseValidator
@@ -254,7 +255,7 @@ class ConfigValidator(BaseValidator):
     # -----------------------------------------------------------------------------------------
     # CONFIG‑WIDE VALIDATIONS (CI)
     # -----------------------------------------------------------------------------------------
-    def _validate_config_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+    def _validate_config_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         available_agents = {name.lower() for name in full_config_data}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
@@ -295,7 +296,7 @@ class ConfigValidator(BaseValidator):
                     if not dep_cfg_ci.get("is_operational", True):
                         self.add_error(f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.")
 
-    def _check_circular_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+    def _check_circular_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         graph: Dict[str, List[str]] = {}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):

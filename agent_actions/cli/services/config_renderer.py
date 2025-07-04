@@ -9,7 +9,7 @@ import yaml
 from yaml import YAMLError
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List, cast
 from abc import ABC, abstractmethod
 
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
@@ -23,6 +23,7 @@ from agent_actions.cli.validators.schema_validator import SchemaValidator
 from agent_actions.cli.validators.config_validator import ConfigValidator
 from pydantic import ValidationError
 from agent_actions.models.config_schema import AgentConfig
+from agent_actions.models.config_types import AgentEntryDict, AgentConfigMap
 from agent_actions.handlers.agent_handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -54,7 +55,7 @@ class ConfigParser(ABC):
     """Abstract interface for configuration parsing."""
     
     @abstractmethod
-    def parse(self, config_data: str) -> Dict[str, Any]:
+    def parse(self, config_data: str) -> AgentConfigMap:
         """
         Parse configuration data from a string.
         
@@ -214,8 +215,8 @@ class JinjaTemplateRenderer(TemplateRenderer):
 
 class YAMLConfigParser(ConfigParser):
     """Configuration parser implementation for YAML."""
-    
-    def parse(self, config_data: str) -> Dict[str, Any]:
+
+    def parse(self, config_data: str) -> AgentConfigMap:
         """
         Parse YAML configuration data from a string.
         
@@ -242,7 +243,7 @@ class YAMLConfigParser(ConfigParser):
                 )
                 
             ServiceLogger.log_operation_success(logger, "parse YAML configuration")
-            return config
+            return cast(AgentConfigMap, config)
             
         except YAMLError as e:
             ErrorHandler.handle_config_error(
@@ -324,7 +325,7 @@ class ConfigRenderingService:
         self.output_writer = output_writer or FileOutputWriter()
 
 
-    def _safe_load_yaml(self, raw: str, src: Path) -> Dict[str, Any]:
+    def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
         """Parse YAML and fail instantly on syntax OR empty content."""
         if not raw.strip():
             raise ConfigurationError(f"Configuration file is empty: {src}")
@@ -339,16 +340,16 @@ class ConfigRenderingService:
             )
         if not data:
             raise ConfigurationError(f"Configuration results in empty data: {src}")
-        return data
+        return cast(AgentConfigMap, data)
     
-    def _validate_agent_config_block(self, config: Dict[str, Any], agent_name: str) -> None:
+    def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
         """
         Validate the full agent config using ConfigValidator.
         """
         current_directory = Path.cwd() 
         project_root_path = AgentManager.find_project_root(start_path=current_directory)
-        agent_entries_list = config.get(agent_name)
-        validated_entries = []
+        agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
+        validated_entries: List[AgentEntryDict] = []
         for entry in agent_entries_list:
             try:
                 entry_model = AgentConfig.model_validate(entry)
@@ -380,7 +381,7 @@ class ConfigRenderingService:
         config_path: Union[str, Path],
         template_dir: Union[str, Path],
         output_dir: Union[str, Path]
-    ) -> Dict[str, Any]:
+    ) -> AgentConfigMap:
         """
         Render templates and load configuration data.
 
@@ -438,10 +439,10 @@ class ConfigRenderingService:
 class ConfigRenderer:
     """Static facade for backwards compatibility with old code."""
     @as_validation_error(ConfigValidationError)
-    def _safe_load_yaml(self, raw: str, src: Path):
+    def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
         """Parse YAML, turning low-level YAMLError into our own exception."""
         try:
-            return yaml.safe_load(raw) or {}
+            return cast(AgentConfigMap, yaml.safe_load(raw) or {})
         except yaml.MarkedYAMLError as exc:
             # Build a human sentence: file, 1-based line/col, parser complaint
             mark = exc.problem_mark            # has .line & .column (0-based)
@@ -456,7 +457,7 @@ class ConfigRenderer:
         config_path: Path,
         template_dir: Path,
         output_dir: Path
-    ) -> Dict[str, Any]:
+    ) -> AgentConfigMap:
         """
         Static method for backwards compatibility.
         
