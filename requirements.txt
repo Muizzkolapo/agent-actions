@@ -98,3 +98,4 @@ sentence-transformers==2.2.2
 jsonschema
 markdown2
 markdown
+openai

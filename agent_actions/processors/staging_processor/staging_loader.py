@@ -6,6 +6,7 @@ from agent_actions.processors.staging_processor.staging_content import StagingCo
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.constants import CHUNK_CONFIG_KEY
+from agent_actions.services.batch_service import BatchService
 import json
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
@@ -27,21 +28,18 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     content = file_reader.read()
     file_type = file_reader.file_type  
     content_processor = StagingContentLoader(agent_config, agent_name)
+    data_chunk = []
+    src_text = []
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
-        # Get chunk configuration with defaults if not specified
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
-        chunk_size = chunk_config.get("chunk_size", 1000)  # Default chunk size
-        chunk_overlap = chunk_config.get("overlap", 200)   # Default overlap
+        chunk_size = chunk_config.get("chunk_size", 1000)
+        chunk_overlap = chunk_config.get("overlap", 200)
         tokenizer_model = agent_config.get("tokenizer_model", "cl100k_base")
         split_method = agent_config.get("split_method", "tiktoken")
         
         chunks = Tokenizer.split_text_content(
-            content, 
-            chunk_size, 
-            chunk_overlap,
-            tokenizer_model=tokenizer_model,
-            split_method=split_method
+            content, chunk_size, chunk_overlap, tokenizer_model=tokenizer_model, split_method=split_method
         )
         data_chunk, src_text = content_processor._process_chunks(chunks)
 
@@ -56,6 +54,22 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
 
     else:
         print(f"Unsupported file type: {file_type}")
+
+    if agent_config.get('run_mode') == 'batch':
+        batch_service = BatchService()
+        batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk)
+        # Write a placeholder to the output to signify a batch job was submitted
+        relative_path = Path(file_path).relative_to(base_directory)
+        output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
+        output_file_path.parent.mkdir(parents=True, exist_ok=True)
+        placeholder = {
+            "batch_job_id": batch_id,
+            "status": "submitted",
+            "agent": agent_name
+        }
+        with open(output_file_path, 'w') as f:
+            json.dump(placeholder, f)
+        return
 
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix('.json')

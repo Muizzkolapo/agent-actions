@@ -18,6 +18,7 @@ from agent_actions.cli.commands.docs_command import docs
 from agent_actions.cli.commands.init_command import init
 from agent_actions.cli.commands.render_command import render
 from agent_actions.cli.commands.run_command import run
+from agent_actions.cli.commands.batch_command import batch
 
 # Version information
 __version__ = '1.0.0'
@@ -41,6 +42,7 @@ class CLI:
         self.click_group.add_command(init)
         self.click_group.add_command(render)
         self.click_group.add_command(run)
+        self.click_group.add_command(batch)
     
     def _register_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown."""

@@ -1,6 +1,6 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
-
+from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IContentProcessor
@@ -29,6 +29,7 @@ class TargetContentProcessor(IContentProcessor):
         self.sample_manager = FewShotSampleManager(agent_config, agent_name)
         self.data_generator = DataGenerator(agent_config, agent_name)
         self.data_processor = DataProcessor(agent_config)
+        self.batch_service = BatchService()
 
     def process(self, data: List[Dict], file_path: str) -> List[Dict]:
         """
@@ -44,6 +45,10 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            return [] # Return empty list to signify batch submission
+
         try:
             source_data = self.source_loader.load_source_data(file_path)
             processed_data = []
@@ -78,6 +83,10 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            return [], [] # Return empty lists for main and side output
+
         try:
             source_data = self.source_loader.load_source_data(file_path)
             all_processed_items = []
@@ -108,6 +117,10 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data)
+            return []
+
         try:
             contents, guid = data[0]['content'], data[0]['guid']
             generated_data, _ = self.data_generator.create_agent_with_data(data)
