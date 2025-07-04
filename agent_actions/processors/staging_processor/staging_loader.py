@@ -1,12 +1,16 @@
 """Module for staging data loading and processing."""
 from pathlib import Path
+import logging
 from agent_actions.models import agent_builder
 from agent_actions.transformers.string_transformer import Tokenizer
 from agent_actions.processors.staging_processor.staging_content import StagingContentLoader
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.constants import CHUNK_CONFIG_KEY
+from agent_actions.cli.exceptions import AgentActionsError
 import json
+
+logger = logging.getLogger(__name__)
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
     """
@@ -21,7 +25,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         output_directory (str): Directory where the output file will be saved.
     """
     if agent_builder is None:
-        print("Agent builder import error.")
+        logger.error("Agent builder import error.")
+        raise AgentActionsError("Agent builder import error.")
 
     file_reader = FileReader(file_path)
     content = file_reader.read()
@@ -55,7 +60,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
 
     else:
-        print(f"Unsupported file type: {file_type}")
+        logger.error("Unsupported file type: %s", file_type)
+        raise AgentActionsError(f"Unsupported file type: {file_type}")
 
     relative_path = Path(file_path).relative_to(base_directory)
     output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
