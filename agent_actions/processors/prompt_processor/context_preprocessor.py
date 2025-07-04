@@ -1,5 +1,5 @@
 """Module for preprocessing context data."""
-from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.processors.common.utils import apply_remove_collection
 
 
 class ContextPreprocessor:
@@ -17,10 +17,7 @@ class ContextPreprocessor:
         Returns:
             Processed context data
         """
-        remove_collection = agent_config.get('remove_collection', [])
-        if remove_collection and isinstance(context_data, dict):
-            return DataTransformer.remove_schema_objects(context_data, remove_collection)
-        return context_data
+        return apply_remove_collection(context_data, agent_config)
     
     @staticmethod
     def extract_guid_and_content(context_data):
