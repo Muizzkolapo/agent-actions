@@ -6,6 +6,7 @@ from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 from agent_actions.constants import PROMPT_KEY
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
 from .interfaces import IDataGenerator
 
@@ -43,24 +44,24 @@ class DataGenerator(IDataGenerator):
             RuntimeError: If agent creation or data generation fails
         """
         try:
-
             # Apply remove_collection before creating the agent
-            contents = self._apply_remove_collection(contents)
-            
+            contents = apply_remove_collection(contents, self.agent_config)
+
             # Format prompt with content
             formatted_prompt, contents = self._format_prompt(contents, source_content)
             tool_args = self.agent_config.get('tool_args', {})
 
-            # Create and run the agent
-            return agent_builder.create_dynamic_agent(
+            # Create and run the agent through the shared utility
+            response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
                 contents,
-                source_content=source_content,  # Pass source_content explicitly
+                formatted_prompt,
+                tools_path=self.agent_config.get('tools', {}).get('path'),
                 tool_args=tool_args,
-                formatted_prompt=formatted_prompt,
-                tools_path=self.agent_config.get('tools', {}).get('path')
+                source_content=source_content,
             )
+            return response, executed
         except Exception as e:
             raise RuntimeError(f"Failed to create agent with data: {str(e)}")
 
@@ -74,10 +75,7 @@ class DataGenerator(IDataGenerator):
         Returns:
             Transformed content
         """
-        remove_collection = self.agent_config.get('remove_collection', [])
-        if remove_collection:
-            return DataTransformer.remove_schema_objects(contents, remove_collection)
-        return contents
+        return apply_remove_collection(contents, self.agent_config)
 
     def _format_prompt(self, contents: Dict, source_content: Optional[Any] = None) -> str:
         """

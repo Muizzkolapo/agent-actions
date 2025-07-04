@@ -1,7 +1,6 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
 
-from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IContentProcessor
@@ -111,7 +110,7 @@ class TargetContentProcessor(IContentProcessor):
         """
         try:
             contents, guid = data[0]['content'], data[0]['guid']
-            generated_data = self.data_generator.create_agent_with_data(data)
+            generated_data, _ = self.data_generator.create_agent_with_data(data)
             return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")
@@ -143,29 +142,14 @@ class TargetContentProcessor(IContentProcessor):
             # Add few-shot samples
             contents = self.sample_manager.add_few_shot_samples(contents)
             
-            # Check conditional clause
-            conditional_clause = self.agent_config.get('conditional_clause', '').lower()
-            if conditional_clause:
-                # For conditional_clause UDFs, only pass the primary 'contents' data.
-                if execute_user_defined_function(conditional_clause, contents):
-                    # Generate data with agent
-                    generated_data = self.data_generator.create_agent_with_data(
-                        contents, source_content
-                    )
-                else:
-                    # Skip agent generation, use contents directly
-                    generated_data = [contents]
-            else:
-                # No conditional clause, always generate
-                generated_data = self.data_generator.create_agent_with_data(
-                    contents, source_content
-                )
-            
-            # Process the generated data, but only apply side_collection if the agent was actually run
-            if not (conditional_clause and not execute_user_defined_function(conditional_clause, contents)):
+            # Generate data through the shared utility
+            generated_data, executed = self.data_generator.create_agent_with_data(
+                contents, source_content
+            )
+
+            if executed:
                 return self.data_processor.process_item(contents, generated_data, guid)
             else:
-                # If the agent was skipped, just transform the structure without side_collection
                 return DataTransformer.transform_structure([{guid: generated_data}])
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
