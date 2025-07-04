@@ -6,6 +6,7 @@ from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 from agent_actions.constants import PROMPT_KEY
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
 from .interfaces import IDataGenerator
 

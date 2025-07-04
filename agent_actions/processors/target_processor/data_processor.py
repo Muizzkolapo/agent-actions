@@ -3,6 +3,7 @@ from typing import Dict, List
 
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
+from agent_actions.processors.common.utils import transform_with_side_collection
 
 from .interfaces import IDataProcessor
 
