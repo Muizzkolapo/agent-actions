@@ -94,7 +94,8 @@ class AgentRunner:
         output_directory: str
     ) -> None:
         """
-        Walks through the input directory, processing each file with the given strategy.
+        Walks through the input directory, processing each file with the given strategy,
+        explicitly excluding any directory named 'batch'.
         
         Args:
             agent_config (dict): Configuration for the agent.
@@ -107,31 +108,29 @@ class AgentRunner:
             ValueError: If no files are found in the input directory.
         """
         files_processed_count: int = 0
+        input_path = Path(input_directory)
+        output_path = Path(output_directory)
 
-        for current_input_root, dir_names, _ in os.walk(input_directory):
-            relative_dir_path = Path(current_input_root).relative_to(input_directory)
-            current_output_root = Path(output_directory) / relative_dir_path
-    
-            current_output_root.mkdir(exist_ok=True)
-            
-            for dir_name in dir_names:
-                output_subdir_path = current_output_root / dir_name
-                output_subdir_path.mkdir(exist_ok=True)
+        for item in input_path.rglob('*'):
+            if 'batch' in item.parts:
+                continue
 
-        for root, _, files in os.walk(input_directory):
-            for file in files:
-                file_path: Path = Path(root) / file
+            if item.is_file():
+                relative_path = item.relative_to(input_path)
+                output_file_path = output_path / relative_path
+                output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                
                 strategy.execute(
                     agent_config,
                     agent_name,
-                    str(file_path),
+                    str(item),
                     input_directory,
-                    output_directory
+                    str(output_file_path.parent)
                 )
                 files_processed_count += 1
 
         if files_processed_count == 0:
-            if not any(Path(input_directory).iterdir()): # True if directory is empty (no files, no subdirs)
+            if not any(input_path.iterdir()): # True if directory is empty (no files, no subdirs)
                 print(f"Warning: No files found in directory: {input_directory}, and the directory itself is empty. Processing continues.")
             else: # Directory had subdirectories, which were mirrored.
                 print(f"Info: No files found to process in {input_directory}, but directory structure was mirrored. Processing continues.")
