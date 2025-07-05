@@ -82,45 +82,34 @@ class AgentWorkflow:
 
     def _handle_batch_agent(self, agent_config, agent_type, idx):
         """Handle batch agent processing during workflow execution."""
-        # Generate the expected output directory for this agent
         agent_io_path = Path(self.config_manager.agent_name) / "agent_io"
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_type}"
         
-        # Check if there's a completed batch for this specific agent
-        processed_files = self.batch_service.check_and_process_completed_batches(
-            str(output_directory),
-            str(agent_io_path)
-        )
+        batch_id = self.batch_service._get_last_batch_job_id(str(output_directory))
         
-        if processed_files:
-            self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green]")
-            return str(output_directory)
-        else:
-            # Check if there's an in-flight batch job
-            batch_id = self.batch_service._get_last_batch_job_id(str(output_directory))
-            if batch_id:
-                try:
-                    status = self.batch_service.check_status(batch_id)
-                    if status in ['validating', 'in_progress', 'finalizing']:
-                        self.console.print(f"[yellow]Batch job {batch_id} still {status} for {agent_type}[/yellow]")
-                        return None  # Batch not ready
-                    elif status == 'completed':
-                        # Try processing again
-                        processed_files = self.batch_service.check_and_process_completed_batches(
-                            str(output_directory),
-                            str(agent_io_path)
-                        )
-                        if processed_files:
-                            self.console.print(f"[green]✅ Processed completed batch for {agent_type}[/green]")
-                            return str(output_directory)
-                except Exception as e:
-                    self.console.print(f"[red]Error checking batch status: {e}[/red]")
-            
-            # If in batch_continue mode, we should not re-run the agent.
-            # Instead, we inform the user that no completed batch was found to process.
-            self.console.print(f"[yellow]No completed batch job found for {agent_type} to continue from.[/yellow]")
-            self.console.print(f"[blue]💡 Please ensure a batch job for '{agent_type}' has been submitted and completed.[/blue]")
-            return None # Indicate that no action was taken.
+        if not batch_id:
+            self.console.print(f"[yellow]No batch job ID found for {agent_type}. Cannot continue.[/yellow]")
+            return None
+
+        try:
+            status = self.batch_service.check_status(batch_id)
+            if status == 'completed':
+                self.console.print(f"[green]Batch job {batch_id} is completed. Processing results...[/green]")
+                processed_file = self.batch_service.process_batch_results_to_workflow_output_direct(
+                    batch_id, 
+                    str(output_directory)
+                )
+                self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green]")
+                return str(output_directory)
+            elif status in ['validating', 'in_progress', 'finalizing']:
+                self.console.print(f"[yellow]Batch job {batch_id} is still {status}. Please wait and run again.[/yellow]")
+                return None
+            else:
+                self.console.print(f"[red]Batch job {batch_id} has failed with status: {status}.[/red]")
+                return None
+        except Exception as e:
+            self.console.print(f"[red]Error processing batch job {batch_id}: {e}[/red]")
+            return None
 
     def run(self):
         try:

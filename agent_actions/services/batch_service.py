@@ -351,3 +351,37 @@ class BatchService:
                 continue
         
         return processed_files
+
+    def process_batch_results_to_workflow_output_direct(self, batch_id: str, output_directory: str):
+        """
+        Retrieves, processes, and saves batch results directly without a placeholder.
+        """
+        try:
+            # Retrieve batch results
+            batch_job = self.client.batches.retrieve(batch_id)
+            if batch_job.status != 'completed':
+                raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
+                
+            result_file_id = batch_job.output_file_id
+            result_content = self.client.files.content(result_file_id).content
+            
+            # Parse batch results
+            batch_results = []
+            for line in result_content.decode('utf-8').strip().split('\n'):
+                if line.strip():
+                    batch_results.append(json.loads(line))
+            
+            # Process results into workflow format
+            processed_data = self._convert_batch_results_to_workflow_format(batch_results)
+            
+            # Save to a generic file in the workflow output directory
+            output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            file_writer = FileWriter(str(output_file_path))
+            file_writer.write_target(processed_data)
+            
+            return str(output_file_path)
+            
+        except Exception as e:
+            raise RuntimeError(f"Error processing batch results to workflow output: {e}")
