@@ -118,58 +118,68 @@ class AgentWorkflow:
             self.console.print(f"[red]Error processing batch job {batch_id}: {e}[/red]")
             return None
 
+    def _is_batch_submitted(self, agent_name, agent_type, idx):
+        """Check if a batch job has been submitted for the current agent."""
+        agent_io_path = Path(self.agent_runner.get_agent_folder(agent_name))
+        output_directory = agent_io_path / "target" / f"node_{idx}_{agent_type}"
+        
+        # Check for the placeholder file that indicates a batch job was submitted
+        # This is a simplified check; you might want to make it more robust
+        return self.batch_service._get_last_batch_job_id(str(output_directory)) is not None
+
     def run(self):
         try:
             with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
-                # Get total number of agents
                 total_agents = len(self.execution_order)
+                batch_in_progress = False
 
                 for idx, agent_type in enumerate(self.execution_order):
                     agent_config = self.agent_configs[agent_type]
                     self.agent_status[agent_type]["status"] = "⏳ Running"
-                    self.agent_status[agent_type]["prompt"] = agent_config.get(PROMPT_KEY, 'No prompt specified')
-
-                    # Update live display
                     live.update(self.create_status_table())
 
-                    # Check if this is a batch agent and we're in batch_continue mode
-                    if self.batch_continue and agent_config.get('run_mode') == 'batch':
-                        output_folder = self._handle_batch_agent(agent_config, agent_type,self.agent_name, idx)
-                        if output_folder is None:
-                            # Batch not ready or no completed batch found to process.
-                            # The user has been notified in _handle_batch_agent.
-                            # We can skip this agent and check the next one.
-                            self.agent_status[agent_type]["status"] = "⏭️ Skipped"
-                            live.update(self.create_status_table())
-                            self.previous_agent_type = agent_type
-                            continue
-                    else:
-                        # Check if this is the last agent
-                        is_last_agent = idx == total_agents - 1
+                    output_folder = None
+                    is_batch_agent = agent_config.get('run_mode') == 'batch'
 
-                        # Regular agent processing (or batch agent in normal mode)
+                    if is_batch_agent:
+                        if self.batch_continue:
+                            output_folder = self._handle_batch_agent(agent_config, agent_type, self.agent_name, idx)
+                            if output_folder is None:
+                                self.agent_status[agent_type]["status"] = "⏳ In Progress"
+                                live.update(self.create_status_table())
+                                batch_in_progress = True
+                                break
+                        else:
+                            output_folder = self.agent_runner.run_agent(
+                                agent_config, self.agent_name, self.previous_agent_type, idx, idx == total_agents - 1
+                            )
+                            if self._is_batch_submitted(self.agent_name, agent_type, idx):
+                                self.agent_status[agent_type]["status"] = "⏳ Batch Submitted"
+                                live.update(self.create_status_table())
+                                batch_in_progress = True
+                                for i in range(idx + 1, total_agents):
+                                    self.agent_status[self.execution_order[i]]["status"] = "⏳ Pending"
+                                live.update(self.create_status_table())
+                                break
+                    else:
                         output_folder = self.agent_runner.run_agent(
-                            agent_config, 
-                            self.agent_name, 
-                            self.previous_agent_type,
-                            idx,  # Current index
-                            is_last_agent  # Flag indicating if this is the last agent
+                            agent_config, self.agent_name, self.previous_agent_type, idx, idx == total_agents - 1
                         )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
                     live.update(self.create_status_table())
-
                     self.previous_agent_type = agent_type
                     self.ephemeral_directories.append({
                         'output_folder': output_folder,
                         'ephemeral': agent_config.get('ephemeral', False)
                     })
 
-                # Process final output
-                self.output_processor.process_final_output(self.ephemeral_directories)
+                if batch_in_progress:
+                    self.console.print("\n[bold yellow]Batch job is in progress. To continue, run the command again with the `--batch-continue` flag.[/bold yellow]")
+                else:
+                    self.output_processor.process_final_output(self.ephemeral_directories)
+                    self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
 
-            # Move the completion message outside the 'with Live' block
-            self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         except Exception as e:
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
             self.failed = True

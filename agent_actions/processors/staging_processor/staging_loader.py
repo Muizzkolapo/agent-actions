@@ -7,6 +7,7 @@ from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.constants import CHUNK_CONFIG_KEY
 from agent_actions.services.batch_service import BatchService
+from agent_actions.cli.exceptions import AgentActionsError
 import json
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
@@ -21,15 +22,11 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         base_directory (str): Base directory for the relative file path.
         output_directory (str): Directory where the output file will be saved.
     """
-    if agent_builder is None:
-        print("Agent builder import error.")
-
     file_reader = FileReader(file_path)
     content = file_reader.read()
-    file_type = file_reader.file_type  
+    file_type = file_reader.file_type
     content_processor = StagingContentLoader(agent_config, agent_name)
-    data_chunk = []
-    src_text = []
+    data_chunk, src_text = [], []
 
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
@@ -53,12 +50,11 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
 
     else:
-        print(f"Unsupported file type: {file_type}")
+        raise AgentActionsError(f"Unsupported file type: {file_type}")
 
     if agent_config.get('run_mode') == 'batch':
         batch_service = BatchService()
         batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk, output_directory)
-        # Write a placeholder to the output to signify a batch job was submitted
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -69,6 +65,26 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         }
         with open(output_file_path, 'w') as f:
             json.dump(placeholder, f)
+
+        base_path = Path(base_directory).parent
+        source_path = base_path / "source"
+        output_src_path = source_path / relative_path.with_suffix('.json')
+        output_src_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if output_src_path.exists():
+            with open(output_src_path, 'r') as existing_file:
+                existing_source = json.load(existing_file)
+
+            new_guids = [list(item.keys())[0] for item in src_text if list(item.keys())[0] not in [list(existing_item.keys())[0] for existing_item in existing_source]]
+
+            if new_guids:
+                existing_source.extend([item for item in src_text if list(item.keys())[0] in new_guids])
+                source_file_writer = FileWriter(str(output_src_path))
+                source_file_writer.write_source(existing_source)
+        else:
+            source_file_writer = FileWriter(str(output_src_path))
+            source_file_writer.write_source(src_text)
+
         return
 
     relative_path = Path(file_path).relative_to(base_directory)
