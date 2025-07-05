@@ -123,8 +123,7 @@ class AgentRunnerService:
         full_path: Path,
         default_config_path: Path,
         user_code: Optional[str],
-        parent_pipeline: Optional[str],
-        batch_continue: bool = False
+        parent_pipeline: Optional[str]
     ) -> Dict[str, Any]:
         """
         Run the agent workflow.
@@ -172,8 +171,7 @@ class AgentRunnerService:
                     user_code_path=user_code,
                     default_path=str(default_config_path),
                     use_tools=use_tools,
-                    parent_pipeline=parent_pipeline,
-                    batch_continue=batch_continue
+                    parent_pipeline=parent_pipeline
                 )
                 
                 logger.info("Initializing workflow execution...")
