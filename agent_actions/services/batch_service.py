@@ -255,11 +255,17 @@ class BatchService:
             List of processed data in workflow format
         """
         processed_data = []
+        #muizzchange this is the transformed data we use for the output
+        # This is where we transform the data to what we want which matches usual agent actions flow 
         
+        #===start here===#
         for result in batch_results:
-            if result.get('body'):
-                response_body = result['body']
-                custom_id = result['custom_id']  # This is the GUID
+            # The 'response' key contains the main data, including the body
+            response_data = result.get('response')
+            custom_id = result.get('custom_id')
+
+            if response_data and response_data.get('body'):
+                response_body = response_data['body']
                 
                 # Extract the generated content
                 if 'choices' in response_body and response_body['choices']:
@@ -298,16 +304,17 @@ class BatchService:
                             }
                             processed_data.append(error_item)
             else:
-                # Handle error cases
-                custom_id = result.get('custom_id', 'unknown')
+                # Handle error cases where 'response' or 'body' is missing
                 error_item = {
-                    "guid": custom_id,
-                    "error": "Batch processing failed",
+                    "guid": custom_id or 'unknown',
+                    "error": "Batch processing failed or missing response body",
                     "raw_result": result
                 }
                 processed_data.append(error_item)
+        #===end here===#
         
         return processed_data
+
 
     def check_and_process_completed_batches(self, output_directory: str, base_directory: str):
         """
@@ -370,7 +377,6 @@ class BatchService:
                 print(f"Using locally saved results from: {local_results_file}")
                 with open(local_results_file, 'r') as f:
                     result_content = f.read()
-                    print(result_content)
             else:
                 # Fallback to API retrieval if local file doesn't exist
                 print(f"Local results file not found, retrieving from API...")
@@ -380,8 +386,10 @@ class BatchService:
                     
                 result_file_id = batch_job.output_file_id
                 result_content = self.client.files.content(result_file_id).content.decode('utf-8')
+                
             
             # Parse batch results
+            #muizz change this is where we get the outcpme of the run like the result from the model
             batch_results = []
             for line in result_content.strip().split('\n'):
                 if line.strip():

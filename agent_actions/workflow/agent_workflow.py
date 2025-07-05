@@ -105,7 +105,7 @@ class AgentWorkflow:
                     batch_id, 
                     str(output_directory)
                 )
-                self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green]")
+                self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green] {processed_file}")
                 return str(output_directory)
             elif status in ['validating', 'in_progress', 'finalizing']:
                 self.console.print(f"[yellow]Batch job {batch_id} is still {status}. Please wait and run again.[/yellow]")
