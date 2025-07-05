@@ -4,46 +4,44 @@ from validators.prompt_validator import PromptValidator  # Adjust import path as
 # Initialize the validator
 validator = PromptValidator()
 
-# Setup: Create a temporary directory with sample prompt files
-prompt_dir = Path("/tmp/my_prompts")
-prompt_dir.mkdir(parents=True, exist_ok=True)
+# Example 1: Validate a directory of prompts
+# Assume you have a directory structure like:
+# /tmp/prompts/
+#   - prompt1.txt
+#   - prompt2.json
+#   - invalid.yaml  (if you have specific format requirements)
+prompt_dir = Path("/tmp/prompts")
+# For demonstration, let's create these files
+prompt_dir.mkdir(exist_ok=True)
+(prompt_dir / "prompt1.txt").write_text("This is a simple text prompt.")
+(prompt_dir / "prompt2.json").write_text('{"key": "value", "template": "Hello, {{name}}"}')
+(prompt_dir / "invalid.yaml").write_text('key: value\n- item1') # Potentially invalid based on your rules
 
-# File with valid and duplicate prompts across files
-(prompt_dir / "file1.md").write_text("""
-# Section 1
-```prompt:GREETING```
-Hello there!
-prompt:FAREWELL
-Goodbye!
-""")
-
-(prompt_dir / "file2.md").write_text("""
-# Section 2
-```prompt:GREETING``` 
-Hi again!
-prompt:QUESTION
-How are you?
-""")  # GREETING is a duplicate across files
-
-# File with duplicate prompts within the same file
-(prompt_dir / "file_with_internal_dup.md").write_text("""
-# Section 3
-```prompt:ACTION```
-Do something.
-prompt:ACTION
-Do something else.
-""")  # ACTION is duplicated within the same file
-
-# Run validation
+# Perform validation
 if validator.validate(prompt_dir):
-    print(f"✅ Prompt validation passed for: {prompt_dir}")
+    print("All prompts in the directory are valid.")
 else:
-    print(f"❌ Prompt validation failed for: {prompt_dir}")
+    print("Prompt validation failed:")
     for error in validator.get_errors():
-        print(f"  ERROR: {error}")
-    for warning in validator.get_warnings():
-        print(f"  WARNING: {warning}")
+        print(f"- {error}")
 
-# Optional cleanup
-# import shutil
-# shutil.rmtree(prompt_dir)
+# Example 2: Validate a single prompt file
+single_prompt_path = prompt_dir / "prompt2.json"
+# Re-initialize validator for a clean slate of errors
+validator = PromptValidator()
+if validator.validate(single_prompt_path):
+    print(f"Prompt at {single_prompt_path} is valid.")
+else:
+    print(f"Validation for {single_prompt_path} failed:")
+    for error in validator.get_errors():
+        print(f"- {error}")
+
+# Example 3: Handling a non-existent path
+non_existent_path = Path("/tmp/non_existent_prompts")
+validator = PromptValidator()
+if validator.validate(non_existent_path):
+    print("Validation passed (but this shouldn't happen for a non-existent path).")
+else:
+    print("Validation failed as expected for a non-existent path:")
+    for error in validator.get_errors():
+        print(f"- {error}")

@@ -1,4 +1,6 @@
 # Example: Validate agent entries
+from agent_actions.cli.validators.config_validator import ConfigValidator
+
 config_val = ConfigValidator()
 my_agent_config_data = [
     {"agent_type": "llm", "name": "MyAgent", "model": "gpt-4"},

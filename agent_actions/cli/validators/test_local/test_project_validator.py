@@ -1,23 +1,62 @@
 from pathlib import Path
-# Assuming ProjectValidator is in validators.project_validator
-from agent_actions.cli.validators.project_validator import ProjectValidator
+from validators.project_validator import ProjectValidator # Adjust import as needed
 
-# Example usage:
-validator = ProjectValidator()
-project_data = {
-    "project_name": "My-Project_123",
-    "output_dir": Path("/mnt/data/projects"),
-    "project_dir": Path("/mnt/data/projects/My-Project_123"),
-    "template": "basic_web_app",
-    "available_templates": ["basic_web_app", "data_science_proj", "cli_tool"],
-    "force": False
-}
+# Setup a dummy project structure for testing
+project_root = Path("/tmp/test_project_root")
+project_root.mkdir(exist_ok=True)
+(project_root / "agent_actions").mkdir(exist_ok=True)
+(project_root / "agent_actions" / "workflows").mkdir(exist_ok=True)
+(project_root / "agent_actions" / "configs").mkdir(exist_ok=True)
+(project_root / "agent_actions" / "prompts").mkdir(exist_ok=True)
+(project_root / "agent_actions" / "outputs").mkdir(exist_ok=True)
+(project_root / "agent_actions" / "templates").mkdir(exist_ok=True)
 
-if validator.validate(project_data):
-    print("Project parameters are valid!")
-    # Proceed with project creation
+# Create a validator instance
+validator = ProjectValidator(project_root)
+
+# --- Test Case 1: Valid Project Structure ---
+print("--- Running Test Case 1: Valid Project Structure ---")
+is_valid = validator.validate()
+if is_valid:
+    print("Project structure is valid.")
 else:
-    print("Project validation failed:")
+    print("Project structure validation failed:")
     for error in validator.get_errors():
         print(f"- {error}")
-    # Handle errors appropriately
+print("-" * 20)
+
+
+# --- Test Case 2: Missing a Directory ---
+print("--- Running Test Case 2: Missing Directory ---")
+# Temporarily remove a directory to test failure
+import shutil
+shutil.rmtree(project_root / "agent_actions" / "prompts")
+
+validator_missing_dir = ProjectValidator(project_root)
+is_valid_missing = validator_missing_dir.validate()
+if not is_valid_missing:
+    print("Project structure validation failed as expected.")
+    for error in validator_missing_dir.get_errors():
+        print(f"- {error}")
+else:
+    print("Validation passed, but it should have failed.")
+print("-" * 20)
+
+# Restore for next tests if any
+(project_root / "agent_actions" / "prompts").mkdir(exist_ok=True)
+
+
+# --- Test Case 3: Custom Paths (if your validator supports them) ---
+# This part depends on your implementation of ProjectValidator.
+# If it can take custom paths, you would set them up here.
+# For example:
+# custom_paths = {
+#     "workflows": project_root / "my_custom_workflows",
+#     ...
+# }
+# validator_custom = ProjectValidator(project_root, custom_paths=custom_paths)
+# ... and so on.
+
+# Cleanup the dummy project structure
+shutil.rmtree(project_root)
+print("Cleanup complete.")

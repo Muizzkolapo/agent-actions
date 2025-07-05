@@ -116,15 +116,11 @@ class AgentWorkflow:
                 except Exception as e:
                     self.console.print(f"[red]Error checking batch status: {e}[/red]")
             
-            # No batch found or batch failed - run normally
-            is_last_agent = idx == len(self.execution_order) - 1
-            return self.agent_runner.run_agent(
-                agent_config, 
-                self.agent_name, 
-                self.previous_agent_type,
-                idx,
-                is_last_agent
-            )
+            # If in batch_continue mode, we should not re-run the agent.
+            # Instead, we inform the user that no completed batch was found to process.
+            self.console.print(f"[yellow]No completed batch job found for {agent_type} to continue from.[/yellow]")
+            self.console.print(f"[blue]💡 Please ensure a batch job for '{agent_type}' has been submitted and completed.[/blue]")
+            return None # Indicate that no action was taken.
 
     def run(self):
         try:
@@ -144,10 +140,11 @@ class AgentWorkflow:
                     if self.batch_continue and agent_config.get('run_mode') == 'batch':
                         output_folder = self._handle_batch_agent(agent_config, agent_type, idx)
                         if output_folder is None:
-                            # Batch not ready, skip this agent for now
-                            self.agent_status[agent_type]["status"] = "⏸️ Batch Pending"
+                            # Batch not ready or no completed batch found to process.
+                            # The user has been notified in _handle_batch_agent.
+                            # We can skip this agent and check the next one.
+                            self.agent_status[agent_type]["status"] = "⏭️ Skipped"
                             live.update(self.create_status_table())
-                            # Don't add to ephemeral_directories, but do update previous_agent_type
                             self.previous_agent_type = agent_type
                             continue
                     else:

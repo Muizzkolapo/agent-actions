@@ -1,99 +1,76 @@
 from pathlib import Path
 from validators.schema_validator import SchemaValidator # Adjust import as needed
 
-validator = SchemaValidator()
-
-# --- Create dummy schema files for testing ---
-schema_dir = Path("/tmp/my_agent_schemas")
-schema_dir.mkdir(exist_ok=True, parents=True)
-
-# Valid schema
-(schema_dir / "valid_schema.json").write_text(json.dumps({
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Valid Person Schema",
+# --- Setup ---
+# Create a dummy schema for testing
+schema_dir = Path("/tmp/test_schemas")
+schema_dir.mkdir(exist_ok=True)
+schema_content = """
+{
     "type": "object",
     "properties": {
         "name": {"type": "string"},
-        "age": {"type": "integer", "minimum": 0}
+        "age": {"type": "integer"}
     },
     "required": ["name", "age"]
-}))
+}
+"""
+(schema_dir / "my_schema.json").write_text(schema_content)
 
-# Invalid schema (syntax error)
-(schema_dir / "invalid_json_schema.json").write_text("{'name': 'test',}") # Invalid JSON
-
-# Invalid schema (logical error - required property not defined)
-(schema_dir / "logical_error_schema.json").write_text(json.dumps({
-    "$schema": "http://json-schema.org/draft-07/schema#",
-    "title": "Logical Error Schema",
-    "type": "object",
-    "properties": {
-        "address": {"type": "string"}
-    },
-    "required": ["name"] # 'name' is not in properties
-}))
-
-# --- Test Case 1: Validate all schemas for an agent ---
-print("\n--- Validating all agent schemas ---")
-validation_data = {
-    "agent_name": "TestAgent1",
+# --- Test Case 1: Valid Data ---
+print("--- Running Test Case 1: Valid Data ---")
+validator_valid = SchemaValidator()
+data_valid = {
+    "operation": "validate_data",
+    "schema_name": "my_schema",
+    "data": {"name": "John Doe", "age": 30},
     "schema_dir": schema_dir
 }
-if validator.validate(validation_data):
-    print(f"Schema validation for agent '{validation_data['agent_name']}' passed.")
+if validator_valid.validate(data_valid):
+    print("Data validation passed.")
 else:
-    print(f"Schema validation for agent '{validation_data['agent_name']}' failed:")
-    for err in validator.get_errors():
-        print(f"  - {err}")
+    print("Data validation failed:")
+    for error in validator_valid.get_errors():
+        print(f"- {error}")
+print("-" * 20)
 
-# --- Test Case 2: Validate specific schemas ---
-print("\n--- Validating specific schemas ---")
-validation_data_specific = {
-    "agent_name": "TestAgent2",
-    "schema_dir": schema_dir,
-    "schema_files": ["valid_schema.json", "non_existent_schema.json"]
+
+# --- Test Case 2: Invalid Data (Missing Required Property) ---
+print("--- Running Test Case 2: Invalid Data ---")
+validator_invalid = SchemaValidator()
+data_invalid = {
+    "operation": "validate_data",
+    "schema_name": "my_schema",
+    "data": {"name": "Jane Doe"}, # Missing 'age'
+    "schema_dir": schema_dir
 }
-if validator.validate(validation_data_specific):
-    print(f"Specific schema validation for agent '{validation_data_specific['agent_name']}' passed.")
+if not validator_invalid.validate(data_invalid):
+    print("Data validation failed as expected.")
+    for error in validator_invalid.get_errors():
+        print(f"- {error}")
 else:
-    print(f"Specific schema validation for agent '{validation_data_specific['agent_name']}' failed:")
-    for err in validator.get_errors():
-        print(f"  - {err}")
+    print("Validation passed, but it should have failed.")
+print("-" * 20)
 
-# --- Test Case 3: Test schema compatibility ---
-print("\n--- Checking schema compatibility ---")
-schema_a_data = {
-    "type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}}
-}
-schema_b_data_compatible = {
-    "type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "number"}, "optional_field": {"type": "boolean"}}
-}
-schema_c_data_incompatible_type = {
-    "type": "array"
-}
-schema_d_data_incompatible_prop = {
-    "type": "object", "properties": {"name": {"type": "integer"}} # name type changed
-}
 
-if validator.check_schema_compatibility(schema_a_data, schema_b_data_compatible, "SchemaA", "SchemaB_Compatible"):
-    print("SchemaA and SchemaB_Compatible are compatible.")
+# --- Test Case 3: Schema Not Found ---
+print("--- Running Test Case 3: Schema Not Found ---")
+validator_no_schema = SchemaValidator()
+data_no_schema = {
+    "operation": "validate_data",
+    "schema_name": "non_existent_schema",
+    "data": {"name": "Test", "age": 100},
+    "schema_dir": schema_dir
+}
+if not validator_no_schema.validate(data_no_schema):
+    print("Validation failed as expected because schema was not found.")
+    for error in validator_no_schema.get_errors():
+        print(f"- {error}")
 else:
-    print("Compatibility check failed (SchemaA, SchemaB_Compatible):")
-    for err in validator.get_errors(): print(f"  - {err}")
+    print("Validation passed, but it should have failed.")
+print("-" * 20)
 
-if validator.check_schema_compatibility(schema_a_data, schema_c_data_incompatible_type, "SchemaA", "SchemaC_IncompatibleType"):
-    print("SchemaA and SchemaC_IncompatibleType are compatible (unexpected).")
-else:
-    print("Compatibility check failed (SchemaA, SchemaC_IncompatibleType):")
-    for err in validator.get_errors(): print(f"  - {err}")
-
-if validator.check_schema_compatibility(schema_a_data, schema_d_data_incompatible_prop, "SchemaA", "SchemaD_IncompatibleProp"):
-    print("SchemaA and SchemaD_IncompatibleProp are compatible (unexpected).")
-else:
-    print("Compatibility check failed (SchemaA, SchemaD_IncompatibleProp):")
-    for err in validator.get_errors(): print(f"  - {err}")
-
-
-# Clean up dummy files
+# Cleanup
 import shutil
-shutil.rmtree(schema_dir, ignore_errors=True)
+shutil.rmtree(schema_dir)
+print("Cleanup complete.")

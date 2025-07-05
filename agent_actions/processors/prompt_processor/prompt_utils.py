@@ -127,22 +127,25 @@ class PromptUtils:
             nonlocal captured_results
             if not isinstance(single_text, str):
                 single_text = str(single_text)
-            function_call_pattern = r"dispatch_task\('(\w+)'\)"
+            function_call_pattern = r"dispatch_task\((.*?)\)"
             function_calls = re.findall(function_call_pattern, single_text)
 
             if not function_calls:
                 return single_text
 
-            for function_name in function_calls:
+            for call_args in function_calls:
+                # Assuming the first argument is the function name
+                function_name = call_args.split(',')[0].strip().strip("'\"")
                 try:
-                    transformed_text = StringProcessor.call_user_function(function_name,
+                    transformed_text = StringProcessor.call_user_function(call_args,
                                                                         tools_path,
                                                                         context_data_str)
                     if agent_config and agent_config.get('add_dispatch'):
+                        function_name = call_args.split(',')[0].strip().strip("'\"")
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
                         transformed_text = "Error: No valid return from function."
-                    single_text = single_text.replace(f"dispatch_task('{function_name}')",
+                    single_text = single_text.replace(f"dispatch_task({call_args})",
                                                     transformed_text,
                                                     1)
                 except (AgentActionsError, ConfigurationError) as e:

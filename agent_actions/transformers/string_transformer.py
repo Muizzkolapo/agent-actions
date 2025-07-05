@@ -35,13 +35,13 @@ class StringProcessor:
 
 
     @staticmethod
-    def call_user_function(function_name, tools_path=None, context_data_str=None):
+    def call_user_function(call_args, tools_path=None, context_data_str=None):
         """
         Dynamically loads and executes a user-defined function from the tools folder.
         Always passes `context_data_str` as input.
 
         Parameters:
-            function_name (str): Name of the function to call.
+            call_args (str): The arguments to the function call.
             tools_path (str): Path to the tools directory.
             context_data_str (str): Documentation string to pass to the function.
 
@@ -49,11 +49,21 @@ class StringProcessor:
             Any: The result returned by the user function.
         """
         try:
+            args = [arg.strip().strip("'\"") for arg in call_args.split(',')]
+            function_name = args[0]
+            function_args = args[1:]
+
             if tools_path and tools_path not in sys.path:
                 sys.path.insert(0, str(Path(tools_path).resolve()))
             module = importlib.import_module(function_name)
             function = getattr(module, function_name)
-            result = function(context_data_str) if context_data_str else function()
+            
+            # Pass context_data_str as the first argument if it exists
+            if context_data_str:
+                result = function(context_data_str, *function_args)
+            else:
+                result = function(*function_args)
+
             return result
         except ImportError as e:
             raise ConfigurationError(f"Could not import module for UDF '{function_name}': {e}. Ensure '{tools_path}' is correct and module exists.") from e

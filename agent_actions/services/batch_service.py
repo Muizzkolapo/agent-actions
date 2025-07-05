@@ -243,6 +243,7 @@ class BatchService:
     def _convert_batch_results_to_workflow_format(self, batch_results):
         """
         Convert batch API results to the workflow's expected format.
+        Extracts content and preserves metadata, matching non-batch agent output format.
         
         Args:
             batch_results: List of batch API result objects
@@ -253,8 +254,8 @@ class BatchService:
         processed_data = []
         
         for result in batch_results:
-            if result.get('response') and result['response'].get('body'):
-                response_body = result['response']['body']
+            if result.get('body'):
+                response_body = result['body']
                 custom_id = result['custom_id']  # This is the GUID
                 
                 # Extract the generated content
@@ -267,16 +268,30 @@ class BatchService:
                             # Parse JSON content from the response
                             generated_data = json.loads(content)
                             
-                            # Transform to workflow format using DataTransformer
-                            workflow_item = DataTransformer.transform_structure([{custom_id: generated_data}])
-                            processed_data.extend(workflow_item)
+                            # Create workflow format: extract content and preserve metadata
+                            workflow_item = {
+                                "guid": custom_id,
+                                "content": generated_data,  # This is the actual content extracted
+                                "metadata": {
+                                    "model": response_body.get('model'),
+                                    "usage": response_body.get('usage'),
+                                    "finish_reason": choice.get('finish_reason'),
+                                    "created": response_body.get('created'),
+                                    "system_fingerprint": response_body.get('system_fingerprint')
+                                }
+                            }
+                            processed_data.append(workflow_item)
                             
                         except json.JSONDecodeError:
                             # If not valid JSON, wrap in error structure
                             error_item = {
                                 "guid": custom_id,
                                 "error": "Invalid JSON response",
-                                "raw_content": content
+                                "raw_content": content,
+                                "metadata": {
+                                    "model": response_body.get('model'),
+                                    "finish_reason": choice.get('finish_reason', 'error')
+                                }
                             }
                             processed_data.append(error_item)
             else:
