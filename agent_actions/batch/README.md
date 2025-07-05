@@ -33,37 +33,35 @@ my_batch_agent:
 
 ## Workflow Integration
 
-### Batch Submission During Workflow
+### State-Aware Workflow
 
-When you run a workflow containing batch agents:
+The `agent run` command is now state-aware and idempotent. It automatically manages the workflow state, including batch jobs, without requiring special flags.
+
+When you run a workflow containing a batch agent:
 
 ```bash
 agent-actions run -a my_workflow
 ```
 
-The system automatically:
+The system will:
 
-1. **Prepares batch tasks** from staging or target processor data
-2. **Loads schema** using the configured `schema_name`
-3. **Creates batch input file** (`{agent_type}_batch_input.jsonl`)
-4. **Submits job** to OpenAI Batch API
-5. **Creates placeholder files** in the workflow output directory structure
-6. **Continues workflow** with subsequent agents
+1.  **Submit the batch job** if it hasn't been submitted already.
+2.  **Update the workflow status** to `batch_submitted`.
+3.  **Exit** and instruct you to run the command again to check the status.
 
-### Batch Continuation
-
-To continue the workflow after batch jobs complete:
+When you run the same command again:
 
 ```bash
-agent-actions run -a my_workflow --batch_continue
+agent-actions run -a my_workflow
 ```
 
-This command:
+The system will:
 
-1. **Checks all batch jobs** for completion status
-2. **Processes completed results** into workflow output directories
-3. **Converts batch responses** to workflow-compatible format
-4. **Continues normal workflow** execution
+1.  **Check the status** of the in-flight batch job.
+2.  If the job is **complete**, it will download the results and **continue the workflow** from where it left off.
+3.  If the job is **still running**, it will report the status and exit.
+
+This creates a seamless experience where the same command is used to initiate, monitor, and continue the workflow.
 
 ## Directory Structure
 
@@ -72,6 +70,7 @@ Batch processing integrates seamlessly with the existing workflow directory stru
 ```
 my_agent/
 ├── agent_io/
+│   ├── .agent_status.json        # Workflow state file
 │   ├── staging/                    # Initial input files
 │   ├── target/
 │   │   ├── node_0_staging_agent/   # Staging output
@@ -86,40 +85,30 @@ my_agent/
 
 ## Command Reference
 
-### Batch Management Commands
-
-#### Check Batch Status
-
-```bash
-# Check last submitted batch job
-agent-actions batch status
-
-# Check specific batch job
-agent-actions batch status --batch-id <batch_id>
-```
-
-#### Retrieve Batch Results
-
-```bash
-# Retrieve last batch job results
-agent-actions batch retrieve
-
-# Retrieve specific batch job results
-agent-actions batch retrieve --batch-id <batch_id> --output-dir ./results
-```
-
 ### Workflow Commands
 
-#### Standard Workflow Run
+#### `agent run`
+
+The primary command to execute a workflow. It is idempotent and state-aware.
 
 ```bash
 agent-actions run -a my_workflow
 ```
 
-#### Batch Continuation Run
+#### `agent status`
+
+A read-only command to check the current state of a workflow.
 
 ```bash
-agent-actions run -a my_workflow --batch_continue
+agent-actions status -a my_workflow
+```
+
+#### `agent clean`
+
+Wipes the `agent_io` directory, including the status file, for a fresh run.
+
+```bash
+agent-actions clean -a my_workflow
 ```
 
 ## Best Practices
@@ -157,14 +146,14 @@ prompt: |
 
 ### 3. Batch Job Monitoring
 
-Monitor batch job progress:
+Monitor batch job progress using the `status` command:
 
 ```bash
 # Check status periodically
-agent-actions batch status
+agent-actions status -a my_workflow
 
-# Continue workflow when ready
-agent-actions run -a my_workflow --batch_continue
+# Continue workflow when ready by running the run command again
+agent-actions run -a my_workflow
 ```
 
 ### 4. Error Handling
@@ -173,7 +162,7 @@ The system handles common batch processing issues:
 
 - **Invalid JSON responses** are captured with error metadata
 - **Failed batch items** are logged but don't stop processing
-- **Incomplete batches** can be resubmitted after investigation
+- **Failed batch jobs** will be marked as `failed` in the status file.
 
 ## Integration with Existing Workflows
 
@@ -198,15 +187,14 @@ Batch processing provides significant cost savings:
 ### Common Issues
 
 1. **Schema not found**: Ensure schema files exist in the schema directory
-2. **Batch job failed**: Check OpenAI API limits and model availability
-3. **No results processed**: Verify batch job completion before using `--batch_continue`
-4. **Directory not found**: Ensure agent directory structure exists
+2. **Batch job failed**: Check OpenAI API limits and model availability. Run `agent status` to see the failed state.
+3. **Directory not found**: Ensure agent directory structure exists
 
 ### Debug Commands
 
 ```bash
-# Check batch job details
-agent-actions batch status --batch-id <batch_id>
+# Check workflow status
+agent-actions status -a my_workflow
 
 # Verify schema loading
 agent-actions render -a my_workflow  # Check schema references
