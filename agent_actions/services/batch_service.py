@@ -182,7 +182,7 @@ class BatchService:
 
     # This is the function that retrieves the job 
     # Muizzchange
-    def retrieve_results(self, batch_id: str, output_dir: str):
+    def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
         try:
             batch_job = self.client.batches.retrieve(batch_id)
             if batch_job.status == 'completed':
@@ -191,7 +191,14 @@ class BatchService:
                 
                 output_path = Path(output_dir)
                 output_path.mkdir(exist_ok=True)
-                result_file_name = output_path / f"{batch_id}_results.jsonl"
+                
+                # Use original file name if provided (like batch1.json -> batch1_results.jsonl)
+                if file_path:
+                    original_file_name = Path(file_path).stem  # Gets 'batch1' from 'batch1.json'
+                    result_file_name = output_path / f"{original_file_name}_results.jsonl"
+                else:
+                    # Fallback to batch_id naming
+                    result_file_name = output_path / f"{batch_id}_results.jsonl"
                 
                 with open(result_file_name, 'wb') as file:
                     file.write(result)
@@ -402,8 +409,23 @@ class BatchService:
             
             print(f"Processed {len(processed_data)} items into workflow format")
             
-            # Save to a generic file in the workflow output directory
-            output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
+            # Find the original staging file to use its name (like batch_15.json)
+            staging_dir = Path(output_directory).parent.parent / "staging"
+            original_file_name = None
+            
+            if staging_dir.exists():
+                # Look for .json files in staging directory
+                json_files = list(staging_dir.glob("*.json"))
+                if json_files:
+                    # Use the first json file found (or you could match by some other criteria)
+                    original_file_name = json_files[0].stem  # Gets 'batch_15' from 'batch_15.json'
+            
+            # Create output filename based on original file name or fallback to batch_id
+            if original_file_name:
+                output_file_path = Path(output_directory) / f"{original_file_name}.json"
+            else:
+                output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
+            
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
             
             file_writer = FileWriter(str(output_file_path))

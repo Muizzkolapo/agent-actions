@@ -101,11 +101,12 @@ class AgentWorkflow:
             status = self.batch_service.check_status(batch_id)
             if status == 'completed':
                 self.console.print(f"[green]Batch job {batch_id} is completed. Processing results...[/green]")
+                #muizzchange
                 processed_file = self.batch_service.process_batch_results_to_workflow_output_direct(
                     batch_id, 
                     str(output_directory)
                 )
-                self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green] {processed_file}")
+                self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green]")
                 return str(output_directory)
             elif status in ['validating', 'in_progress', 'finalizing']:
                 self.console.print(f"[yellow]Batch job {batch_id} is still {status}. Please wait and run again.[/yellow]")
