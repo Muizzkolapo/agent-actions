@@ -180,6 +180,8 @@ class BatchService:
         except Exception as e:
             raise RuntimeError(f"Error checking batch status: {e}")
 
+    # This is the function that retrieves the job 
+    # Muizzchange
     def retrieve_results(self, batch_id: str, output_dir: str):
         try:
             batch_job = self.client.batches.retrieve(batch_id)
@@ -216,6 +218,7 @@ class BatchService:
                 raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
                 
             result_file_id = batch_job.output_file_id
+            #this is where we load the file for the processng
             result_content = self.client.files.content(result_file_id).content
             
             # Parse batch results
@@ -355,24 +358,41 @@ class BatchService:
     def process_batch_results_to_workflow_output_direct(self, batch_id: str, output_directory: str):
         """
         Retrieves, processes, and saves batch results directly without a placeholder.
+        Uses the locally saved results file from retrieve_results.
         """
         try:
-            # Retrieve batch results
-            batch_job = self.client.batches.retrieve(batch_id)
-            if batch_job.status != 'completed':
-                raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
-                
-            result_file_id = batch_job.output_file_id
-            result_content = self.client.files.content(result_file_id).content
+            # First, check if results were already saved locally by retrieve_results
+            batch_dir = Path(output_directory) / "batch"
+            local_results_file = batch_dir / f"{batch_id}_results.jsonl"
+            
+            if local_results_file.exists():
+                # Use the locally saved results
+                print(f"Using locally saved results from: {local_results_file}")
+                with open(local_results_file, 'r') as f:
+                    result_content = f.read()
+                    print(result_content)
+            else:
+                # Fallback to API retrieval if local file doesn't exist
+                print(f"Local results file not found, retrieving from API...")
+                batch_job = self.client.batches.retrieve(batch_id)
+                if batch_job.status != 'completed':
+                    raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
+                    
+                result_file_id = batch_job.output_file_id
+                result_content = self.client.files.content(result_file_id).content.decode('utf-8')
             
             # Parse batch results
             batch_results = []
-            for line in result_content.decode('utf-8').strip().split('\n'):
+            for line in result_content.strip().split('\n'):
                 if line.strip():
                     batch_results.append(json.loads(line))
             
+            print(f"Parsed {len(batch_results)} batch results")
+            
             # Process results into workflow format
             processed_data = self._convert_batch_results_to_workflow_format(batch_results)
+            
+            print(f"Processed {len(processed_data)} items into workflow format")
             
             # Save to a generic file in the workflow output directory
             output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"

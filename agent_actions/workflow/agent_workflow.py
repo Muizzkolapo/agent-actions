@@ -14,6 +14,7 @@ from rich.live import Live
 class AgentWorkflow:
     def __init__(self, constructor_path, user_code_path, default_path, use_tools,
                  parent_output=None, parent_source=None, parent_pipeline=None, batch_continue=False):
+        print(f"Initializing AgentWorkflow with batch_continue: {batch_continue}")
         self.constructor_path = constructor_path
         self.user_code_path = user_code_path
         self.default_path = default_path
@@ -73,16 +74,21 @@ class AgentWorkflow:
 
             table.add_row(
                 str(idx),
-                agent_name,
+                f"{agent_name}_demo",
                 details["status"],
                 schema
             )
 
         return table
 
-    def _handle_batch_agent(self, agent_config, agent_type, idx):
+    def _handle_batch_agent(self, agent_config, agent_type,agent_name, idx):
         """Handle batch agent processing during workflow execution."""
-        agent_io_path = Path(self.config_manager.agent_name) / "agent_io"
+        agent_io_path = Path(self.agent_runner.get_agent_folder(agent_name))
+        print("=================")
+        print(agent_io_path)
+        print("=================")
+        #muizzchange----> finding the output dir where batch content is put cause we are not seeing it.
+        # This is where we take it and put in the right target folder
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_type}"
         
         batch_id = self.batch_service._get_last_batch_job_id(str(output_directory))
@@ -127,7 +133,7 @@ class AgentWorkflow:
 
                     # Check if this is a batch agent and we're in batch_continue mode
                     if self.batch_continue and agent_config.get('run_mode') == 'batch':
-                        output_folder = self._handle_batch_agent(agent_config, agent_type, idx)
+                        output_folder = self._handle_batch_agent(agent_config, agent_type,self.agent_name, idx)
                         if output_folder is None:
                             # Batch not ready or no completed batch found to process.
                             # The user has been notified in _handle_batch_agent.
