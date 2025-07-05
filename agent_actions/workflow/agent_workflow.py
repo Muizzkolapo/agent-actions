@@ -13,7 +13,7 @@ from rich.live import Live
 
 class AgentWorkflow:
     def __init__(self, constructor_path, user_code_path, default_path, use_tools,
-                 parent_output=None, parent_source=None, parent_pipeline=None):
+                 parent_output=None, parent_source=None, parent_pipeline=None, batch_continue=False):
         self.constructor_path = constructor_path
         self.user_code_path = user_code_path
         self.default_path = default_path
@@ -21,6 +21,7 @@ class AgentWorkflow:
         self.parent_output = parent_output
         self.parent_source = parent_source
         self.parent_pipeline = parent_pipeline
+        self.batch_continue = batch_continue
 
         self.current_agent_idx = 0
         self.previous_agent_type = None
@@ -79,34 +80,54 @@ class AgentWorkflow:
 
         return table
 
-    def _check_and_process_completed_batches(self):
-        """Check for completed batch jobs and process them before starting workflow."""
+    def _handle_batch_agent(self, agent_config, agent_type, idx):
+        """Handle batch agent processing during workflow execution."""
+        # Generate the expected output directory for this agent
         agent_io_path = Path(self.config_manager.agent_name) / "agent_io"
+        output_directory = agent_io_path / "target" / f"node_{idx}_{agent_type}"
         
-        if agent_io_path.exists():
-            self.console.print("[yellow]Checking for completed batch jobs...[/yellow]")
+        # Check if there's a completed batch for this specific agent
+        processed_files = self.batch_service.check_and_process_completed_batches(
+            str(output_directory),
+            str(agent_io_path)
+        )
+        
+        if processed_files:
+            self.console.print(f"[green]✅ Processed batch results for {agent_type}[/green]")
+            return str(output_directory)
+        else:
+            # Check if there's an in-flight batch job
+            batch_id = self.batch_service._get_last_batch_job_id(str(output_directory))
+            if batch_id:
+                try:
+                    status = self.batch_service.check_status(batch_id)
+                    if status in ['validating', 'in_progress', 'finalizing']:
+                        self.console.print(f"[yellow]Batch job {batch_id} still {status} for {agent_type}[/yellow]")
+                        return None  # Batch not ready
+                    elif status == 'completed':
+                        # Try processing again
+                        processed_files = self.batch_service.check_and_process_completed_batches(
+                            str(output_directory),
+                            str(agent_io_path)
+                        )
+                        if processed_files:
+                            self.console.print(f"[green]✅ Processed completed batch for {agent_type}[/green]")
+                            return str(output_directory)
+                except Exception as e:
+                    self.console.print(f"[red]Error checking batch status: {e}[/red]")
             
-            # Check all target directories for completed batches
-            target_dirs = list(agent_io_path.glob("target/node_*"))
-            processed_count = 0
-            
-            for target_dir in target_dirs:
-                processed_files = self.batch_service.check_and_process_completed_batches(
-                    str(target_dir),
-                    str(agent_io_path)
-                )
-                processed_count += len(processed_files)
-            
-            if processed_count > 0:
-                self.console.print(f"[green]✅ Processed {processed_count} completed batch jobs[/green]")
-            else:
-                self.console.print("[dim]No completed batch jobs found[/dim]")
+            # No batch found or batch failed - run normally
+            is_last_agent = idx == len(self.execution_order) - 1
+            return self.agent_runner.run_agent(
+                agent_config, 
+                self.agent_name, 
+                self.previous_agent_type,
+                idx,
+                is_last_agent
+            )
 
     def run(self):
         try:
-            # Check for completed batch jobs before starting workflow
-            self._check_and_process_completed_batches()
-            
             with Live(self.create_status_table(), refresh_per_second=2, console=self.console) as live:
                 # Get total number of agents
                 total_agents = len(self.execution_order)
@@ -119,17 +140,28 @@ class AgentWorkflow:
                     # Update live display
                     live.update(self.create_status_table())
 
-                    # Check if this is the last agent
-                    is_last_agent = idx == total_agents - 1
+                    # Check if this is a batch agent and we're in batch_continue mode
+                    if self.batch_continue and agent_config.get('run_mode') == 'batch':
+                        output_folder = self._handle_batch_agent(agent_config, agent_type, idx)
+                        if output_folder is None:
+                            # Batch not ready, skip this agent for now
+                            self.agent_status[agent_type]["status"] = "⏸️ Batch Pending"
+                            live.update(self.create_status_table())
+                            # Don't add to ephemeral_directories, but do update previous_agent_type
+                            self.previous_agent_type = agent_type
+                            continue
+                    else:
+                        # Check if this is the last agent
+                        is_last_agent = idx == total_agents - 1
 
-                    # Agent processing with actual index and last agent flag
-                    output_folder = self.agent_runner.run_agent(
-                        agent_config, 
-                        self.agent_name, 
-                        self.previous_agent_type,
-                        idx,  # Current index
-                        is_last_agent  # Flag indicating if this is the last agent
-                    )
+                        # Regular agent processing (or batch agent in normal mode)
+                        output_folder = self.agent_runner.run_agent(
+                            agent_config, 
+                            self.agent_name, 
+                            self.previous_agent_type,
+                            idx,  # Current index
+                            is_last_agent  # Flag indicating if this is the last agent
+                        )
 
                     self.agent_status[agent_type]["status"] = "✅ Completed"
                     live.update(self.create_status_table())

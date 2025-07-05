@@ -66,9 +66,12 @@ class RunCommand:
         parent_pipeline = AgentRunnerService.get_parent_pipeline(agent_config)
         return parent_pipeline
 
-    def execute(self) -> None:
+    def execute(self, force: bool = False) -> None:
         """
         Execute the run command.
+        
+        Args:
+            force: Force execution even if validation warnings occur
         
         Raises:
             Various exceptions depending on the stage that fails
@@ -89,16 +92,13 @@ class RunCommand:
             if self.force_batch:
                 BatchService.force_batch = True
             
-            # Handle batch continuation if requested
-            if self.batch_continue:
-                self._handle_batch_continuation(paths)
-            
             AgentRunnerService.run_agent_workflow(
                 self.agent_name,
                 full_path,
                 paths.default_config_path,
                 self.user_code,
-                parent_pipeline
+                parent_pipeline,
+                self.batch_continue
             )
             
             # Reset batch force flag after workflow
@@ -112,30 +112,6 @@ class RunCommand:
         except Exception as e:
             raise click.ClickException(f"Failed to run agent {self.agent}: {str(e)}")
     
-    def _handle_batch_continuation(self, paths) -> None:
-        """
-        Handle batch continuation logic.
-        
-        Args:
-            paths: Project paths container
-        """
-        click.echo("Checking for completed batch jobs...")
-        
-        batch_service = BatchService()
-        agent_io_path = paths.io_dir
-        
-        # Look for batch placeholders in the agent's output directories
-        processed_files = batch_service.check_and_process_completed_batches(
-            str(agent_io_path),  # output_directory
-            str(agent_io_path)   # base_directory
-        )
-        
-        if processed_files:
-            click.echo(f"Processed {len(processed_files)} completed batch jobs:")
-            for file_path in processed_files:
-                click.echo(f"  - {file_path}")
-        else:
-            click.echo("No completed batch jobs found to process.")
 
 
 @click.command()
@@ -158,4 +134,4 @@ def run(agent: str, user_code: Optional[str], force: bool = False, force_batch: 
         agent-actions run -a my_agent -u ./user_code
     """
     command = RunCommand(agent, user_code, batch_continue, force_batch)
-    command.execute()
+    command.execute(force)
