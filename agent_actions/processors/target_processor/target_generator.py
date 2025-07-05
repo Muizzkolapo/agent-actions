@@ -49,7 +49,9 @@ class TargetGenerator:
         """
         if agent_config.get('run_mode') == 'batch':
             batch_service = BatchService()
-            batch_id = batch_service.submit_batch_job_from_file(agent_config, agent_name, file_path, output_directory)
+            file_reader = FileReader(file_path)
+            data = file_reader.read()
+            batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
