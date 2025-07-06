@@ -1,16 +1,8 @@
 import os
-import logging
 from pathlib import Path
 from agent_actions.handlers.file_handler import FileHandler
 import yaml
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
-from agent_actions.cli.exceptions import (
-    FileNotFoundError as AgentFileNotFoundError,
-    TemplateRenderingError,
-    AgentActionsError,
-)
-
-logger = logging.getLogger(__name__)
 
 
 class SchemaLoader:
@@ -36,10 +28,7 @@ class SchemaLoader:
             }
             return dynamic_schema_names
         except Exception as e:
-            logger.error("Error rendering schema for agent '%s': %s", agent_name, str(e))
-            raise TemplateRenderingError(
-                f"Error rendering schema for agent '{agent_name}': {str(e)}"
-            ) from e
+            print(f"Error rendering schema for agent '{agent_name}': {str(e)}")
 
     @staticmethod
     def load_schema(schema_name: str) -> dict:
@@ -64,8 +53,7 @@ class SchemaLoader:
             ]
 
             if not schema_paths:
-                logger.error("Schema '%s' not found.", schema_name)
-                raise AgentFileNotFoundError(f"Schema '{schema_name}' not found.")
+                print(f"Schema '{schema_name}' not found.")
 
             selected_path = None
             shortest_path_length = float('inf')
@@ -80,18 +68,14 @@ class SchemaLoader:
             if not selected_path and schema_paths:
                 selected_path = schema_paths[0]
             if not selected_path:
-                logger.error("Schema '%s' not found.", schema_name)
-                raise AgentFileNotFoundError(f"Schema '{schema_name}' not found.")
+                print(f"Schema '{schema_name}' not found.")
 
             with selected_path.open('r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
             return documents
 
         except Exception as e:
-            logger.error("Error loading schema '%s': %s", schema_name, str(e))
-            raise AgentActionsError(
-                f"Error loading schema '{schema_name}': {str(e)}"
-            ) from e
+            print(f"Error loading schema '{schema_name}': {str(e)}")
 
     @staticmethod
     def validate_schemas_exist(agent_name: str, directory: str) -> None:
@@ -116,8 +100,6 @@ class SchemaLoader:
                 missing_files.append(f"{schema_name}.yml")
         if missing_files:
             if len(missing_files) == 1:
-                msg = f"Schema file missing: {missing_files[0]}"
+                print(f"Schema file missing: {missing_files[0]}")
             else:
-                msg = f"Multiple schema files missing: {', '.join(missing_files)}"
-            logger.error(msg)
-            raise AgentFileNotFoundError(msg)
+                print(f"Multiple schema files missing: {', '.join(missing_files)}")

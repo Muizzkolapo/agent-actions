@@ -3,12 +3,7 @@ import shutil
 from typing import Callable, Optional, Dict, Any
 from agent_actions.handlers.file_handler import FileHandler
 from pathlib import Path
-from agent_actions.cli.exceptions import (
-    AgentNotFoundError,
-    DirectoryNotFoundError,
-    FileNotFoundError as AgentFileNotFoundError,
-    AgentActionsError,
-)
+from agent_actions.cli.exceptions import AgentNotFoundError
 import logging
 import os
 from pathlib import Path
@@ -53,9 +48,8 @@ class AgentManager:
         agent_folder = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
         
         if agent_folder is None:
-            msg = f"Agent folder not found for agent: {agent_name}"
-            logger.error(msg)
-            raise DirectoryNotFoundError(msg)
+            print(f"Agent folder not found for agent: {agent_name}")
+            return False
         
         source_dir = Path(agent_folder) / 'source'
         target_dir = Path(agent_folder) / 'target'
@@ -63,11 +57,9 @@ class AgentManager:
         for directory in [source_dir, target_dir]:
             if directory.exists():
                 shutil.rmtree(directory)
-                logger.info("Deleted directory: %s", directory)
+                print(f"Deleted directory: {directory}")
             else:
-                msg = f"Directory not found: {directory}"
-                logger.error(msg)
-                raise DirectoryNotFoundError(msg)
+                print(f"Directory not found: {directory}")
                 
         return True
     
@@ -108,12 +100,7 @@ class AgentManager:
                             
                             processed_count += 1
                         except (json.JSONDecodeError, IOError) as e:
-                            logger.error(
-                                "Error processing file %s: %s", file_path, str(e)
-                            )
-                            raise AgentActionsError(
-                                f"Error processing file {file_path}: {str(e)}"
-                            ) from e
+                            print(f"Error processing file {file_path}: {str(e)}")
         
         return processed_count
     

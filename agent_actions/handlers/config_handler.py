@@ -21,6 +21,7 @@ class ConfigManager:
         self.agent_configs = {}
         self.execution_order = []
         self.child_pipeline = None
+        self.tool_path = None
         self.template_dir = str(Path.cwd() / "templates")
 
     def load_configs(self):
@@ -37,6 +38,7 @@ class ConfigManager:
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
+            self.tool_path = self.default_config.get("tool_path")
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(f"Error rendering or loading default config from {self.default_path}: {e}") from e
         except yaml.YAMLError as e:

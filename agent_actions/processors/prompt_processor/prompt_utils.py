@@ -28,7 +28,27 @@ class PromptUtils:
             return prompt, content_dict
 
         used_keys = set()
-        ci_content = {str(k).lower(): (k, v) for k, v in content_dict.items()}
+        
+        # Handle nested structures - flatten the content_dict to find all keys
+        def flatten_dict(d, parent_key=''):
+            items = []
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    new_key = f"{parent_key}.{k}" if parent_key else k
+                    if isinstance(v, dict):
+                        items.extend(flatten_dict(v, new_key))
+                    else:
+                        items.append((new_key, v))
+                        items.append((k, v))  # Also add the key without parent prefix
+            elif isinstance(d, list):
+                for i, item in enumerate(d):
+                    if isinstance(item, dict):
+                        items.extend(flatten_dict(item, f"{parent_key}[{i}]" if parent_key else f"[{i}]"))
+            return items
+        
+        # Create a flattened version of content_dict
+        flattened_items = flatten_dict(content_dict)
+        ci_content = {str(k).lower(): (k, v) for k, v in flattened_items}
 
         pattern = re.compile(r'return_collection\[(.*?)\]', flags=re.IGNORECASE)
 
@@ -36,6 +56,7 @@ class PromptUtils:
             placeholder = match.group(1)
             placeholder_keys = [key.strip() for key in placeholder.split(',')]
             replacements = []
+            
             for key in placeholder_keys:
                 original = ci_content.get(key.lower())
                 if original:
@@ -43,6 +64,10 @@ class PromptUtils:
                     replacement = f"{orig_key}: {convert_to_string(value)}"
                     replacements.append(replacement)
                     used_keys.add(orig_key)
+                else:
+                    # Handle missing keys
+                    replacement = f"[{key}: not available in current context]"
+                    replacements.append(replacement)
             return ', '.join(replacements)
 
         prompt = pattern.sub(repl, prompt)
@@ -102,22 +127,25 @@ class PromptUtils:
             nonlocal captured_results
             if not isinstance(single_text, str):
                 single_text = str(single_text)
-            function_call_pattern = r"dispatch_task\('(\w+)'\)"
+            function_call_pattern = r"dispatch_task\((.*?)\)"
             function_calls = re.findall(function_call_pattern, single_text)
 
             if not function_calls:
                 return single_text
 
-            for function_name in function_calls:
+            for call_args in function_calls:
+                # Assuming the first argument is the function name
+                function_name = call_args.split(',')[0].strip().strip("'\"")
                 try:
-                    transformed_text = StringProcessor.call_user_function(function_name,
+                    transformed_text = StringProcessor.call_user_function(call_args,
                                                                         tools_path,
                                                                         context_data_str)
                     if agent_config and agent_config.get('add_dispatch'):
+                        function_name = call_args.split(',')[0].strip().strip("'\"")
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
                         transformed_text = "Error: No valid return from function."
-                    single_text = single_text.replace(f"dispatch_task('{function_name}')",
+                    single_text = single_text.replace(f"dispatch_task({call_args})",
                                                     transformed_text,
                                                     1)
                 except (AgentActionsError, ConfigurationError) as e:

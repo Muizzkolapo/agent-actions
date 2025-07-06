@@ -9,6 +9,7 @@ class DefaultAgentConfig(BaseModel):
     model_name: Optional[str] = None
     chunk_config: Optional[Dict[str, Any]] = None
     is_operational: bool = True
+    run_mode: str = 'online'
 
     model_config = ConfigDict(extra="allow")
 
@@ -22,5 +23,7 @@ class AgentConfig(BaseModel):
     code_path: Optional[str] = None
     dependencies: List[str] = Field(default_factory=list)
     is_operational: bool = True
+    run_mode: str = 'online'
+    data_source: Optional[str] = None
 
     model_config = ConfigDict(extra="allow")
