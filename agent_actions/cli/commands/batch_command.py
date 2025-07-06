@@ -1,5 +1,7 @@
 import click
 from agent_actions.services.batch_service import BatchService
+from agent_actions.cli.validators.batch_validator import BatchCommandArgs
+from pydantic import ValidationError
 
 @click.group()
 def batch():
@@ -10,15 +12,19 @@ def batch():
 @click.option('--batch-id', help='The ID of the batch job to check. If not provided, the last submitted job ID will be used.')
 def status(batch_id: str = None):
     """Checks the status of a running batch job."""
-    service = BatchService()
-    if not batch_id:
-        batch_id = service._get_last_batch_job_id()
-        if not batch_id:
-            click.echo("No batch ID provided and no previous batch job found.")
-            return
     try:
-        status = service.check_status(batch_id)
+        args = BatchCommandArgs(batch_id=batch_id)
+        service = BatchService()
+        if not args.batch_id:
+            args.batch_id = service._get_last_batch_job_id()
+            if not args.batch_id:
+                click.echo("No batch ID provided and no previous batch job found.")
+                return
+        
+        status = service.check_status(args.batch_id)
         click.echo(f"Batch job status: {status}")
+    except ValidationError as e:
+        raise click.ClickException(str(e))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
 
@@ -27,14 +33,18 @@ def status(batch_id: str = None):
 @click.option('--output-dir', '-o', default='.', type=click.Path(), help='Directory to save the retrieved results.')
 def retrieve(batch_id: str = None, output_dir: str = '.'):
     """Retrieves the results of a completed batch job."""
-    service = BatchService()
-    if not batch_id:
-        batch_id = service._get_last_batch_job_id()
-        if not batch_id:
-            click.echo("No batch ID provided and no previous batch job found.")
-            return
     try:
-        result = service.retrieve_results(batch_id, output_dir)
+        args = BatchCommandArgs(batch_id=batch_id, output_dir=output_dir)
+        service = BatchService()
+        if not args.batch_id:
+            args.batch_id = service._get_last_batch_job_id()
+            if not args.batch_id:
+                click.echo("No batch ID provided and no previous batch job found.")
+                return
+        
+        result = service.retrieve_results(args.batch_id, str(args.output_dir))
         click.echo(result)
+    except ValidationError as e:
+        raise click.ClickException(str(e))
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

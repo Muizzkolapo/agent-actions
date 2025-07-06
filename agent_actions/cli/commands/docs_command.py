@@ -12,25 +12,21 @@ import webbrowser
 
 from agent_actions.docs.app import run_app
 from agent_actions.cli.exceptions import PermissionError
+from agent_actions.cli.validators.docs_validator import DocsCommandArgs
+from pydantic import ValidationError
 
 
 class DocsCommand:
     """Implementation of the docs command."""
     
-    def __init__(self, host: str, port: int, debug: bool, open_browser: bool):
+    def __init__(self, args: DocsCommandArgs):
         """
         Initialize the docs command.
         
         Args:
-            host: Host address to serve documentation.
-            port: Port number to serve documentation.
-            debug: Whether to run the server in debug mode.
-            open_browser: Whether to open the browser automatically.
+            args: Pydantic model containing the command arguments.
         """
-        self.host = host
-        self.port = port
-        self.debug = debug
-        self.open_browser = open_browser
+        self.args = args
     
     def _validate_port_available(self) -> bool:
         """
@@ -41,7 +37,7 @@ class DocsCommand:
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.bind((self.host, self.port))
+                s.bind((self.args.host, self.args.port))
                 return True
         except socket.error:
             return False
@@ -60,7 +56,7 @@ class DocsCommand:
         for port in range(start_port, start_port + max_attempts):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.bind((self.host, port))
+                    s.bind((self.args.host, port))
                     return port
             except socket.error:
                 continue
@@ -88,30 +84,30 @@ class DocsCommand:
         try:
             # Check if port is available
             if not self._validate_port_available():
-                alternative_port = self._find_available_port(self.port + 1)
+                alternative_port = self._find_available_port(self.args.port + 1)
                 if alternative_port:
                     click.echo(
-                        f"Port {self.port} is not available, using port {alternative_port} instead"
+                        f"Port {self.args.port} is not available, using port {alternative_port} instead"
                     )
-                    self.port = alternative_port
+                    self.args.port = alternative_port
                 else:
                     raise click.ClickException(
-                        f"Port {self.port} is not available. Please specify a different port."
+                        f"Port {self.args.port} is not available. Please specify a different port."
                     )
             
             # Construct the URL
-            url = f"http://{self.host if self.host != '0.0.0.0' else 'localhost'}:{self.port}"
+            url = f"http://{self.args.host if self.args.host != '0.0.0.0' else 'localhost'}:{self.args.port}"
             
             # Print out information
             click.echo(f"Starting documentation server at {url}")
             click.echo("Press Ctrl+C to stop the server")
             
             # Open browser if requested
-            if self.open_browser:
+            if self.args.open_browser:
                 self._open_browser_tab(url)
             
             # Run the documentation server
-            run_app(self.host, self.port, self.debug)
+            run_app(self.args.host, self.args.port, self.args.debug)
             
         except PermissionError as e:
             raise click.ClickException(f"Permission denied: {str(e)}")
@@ -139,5 +135,9 @@ def docs(host: str, port: int, debug: bool, open_browser: bool) -> None:
         agent-actions docs --port 9000
         agent-actions docs --no-open
     """
-    command = DocsCommand(host, port, debug, open_browser)
-    command.execute()
+    try:
+        args = DocsCommandArgs(host=host, port=port, debug=debug, open_browser=open_browser)
+        command = DocsCommand(args)
+        command.execute()
+    except ValidationError as e:
+        raise click.ClickException(str(e))
