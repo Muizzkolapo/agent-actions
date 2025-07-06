@@ -96,7 +96,7 @@ class RunCommand:
 @click.command()
 @click.option('-a', '--agent', required=True,
               help="Agent configuration file name without path or extension")
-@click.option('-u', '--user_code', help="Path to the user's code folder containing UDFs")
+@click.option('-u', '--user_code', required=False, help="Path to the user's code folder containing UDFs")
 @click.option('--use-tools', is_flag=True, help="Enable tool usage for agents")
 @click.option('--force', is_flag=True, help="Force execution even if validation warnings occur")
 def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = False) -> None:

@@ -26,17 +26,23 @@ class AgentWorkflow:
         self.ephemeral_directories = []
         self.failed = False
 
+        self.config_manager = ConfigManager(self.constructor_path, self.default_path)
+        self._load_configs()
+
         if self.user_code_path:
             abs_user_code_path = str(Path(self.user_code_path).resolve())
             if abs_user_code_path not in sys.path:
                 sys.path.insert(0, abs_user_code_path)
+        elif self.config_manager.tool_path:
+            for path in self.config_manager.tool_path:
+                abs_tool_path = str(Path(path).resolve())
+                if abs_tool_path not in sys.path:
+                    sys.path.insert(0, abs_tool_path)
 
-        self.config_manager = ConfigManager(self.constructor_path, self.default_path)
         self.agent_runner = AgentRunner(self.use_tools)
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()
 
-        self._load_configs()
         self.status_file = Path(self.agent_runner.get_agent_folder(self.agent_name)) / ".agent_status.json"
         self._load_status()
 
