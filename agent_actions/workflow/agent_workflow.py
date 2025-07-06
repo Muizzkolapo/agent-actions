@@ -1,6 +1,7 @@
 import sys
 import json
 from pathlib import Path
+from datetime import datetime
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.processors.output_processor.output_processor import OutputProcessor
@@ -8,8 +9,6 @@ from agent_actions.services.batch_service import BatchService
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 
 from rich.console import Console
-from rich.table import Table
-from rich.live import Live
 
 
 class AgentWorkflow:
@@ -42,7 +41,6 @@ class AgentWorkflow:
         self._load_status()
 
         self.console = Console()
-        self.live_display = None
 
     def _load_configs(self):
         self.config_manager.load_configs()
@@ -76,17 +74,6 @@ class AgentWorkflow:
             self.agent_status[agent_name]['batch_id'] = batch_id
         self._save_status()
 
-    def create_status_table(self):
-        table = Table(title="Workflow Execution Status")
-        table.add_column("#", justify="center", style="cyan")
-        table.add_column("Agent Name", justify="left", style="green")
-        table.add_column("Status", justify="center", style="yellow")
-
-        for idx, agent_name in enumerate(self.execution_order, start=1):
-            details = self.agent_status.get(agent_name, {"status": "pending"})
-            table.add_row(str(idx), agent_name, details["status"])
-        return table
-
     def _handle_batch_agent(self, agent_name, idx, batch_id):
         agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_name}"
@@ -97,7 +84,7 @@ class AgentWorkflow:
         status = self.batch_service.check_status(batch_id)
         if status == 'completed':
             self.console.print(f"[green]Batch job {batch_id} is completed. Processing results...[/green]")
-            processed_file = self.batch_service.process_batch_results_to_workflow_output_direct(
+            self.batch_service.process_batch_results_to_workflow_output_direct(
                 batch_id, 
                 str(output_directory)
             )
@@ -110,73 +97,96 @@ class AgentWorkflow:
 
     def run(self):
         try:
-            with Live(self.create_status_table(), refresh_per_second=4, console=self.console) as live:
-                workflow_complete = True
-                for idx, agent_name in enumerate(self.execution_order):
-                    agent_config = self.agent_configs[agent_name]
-                    status_details = self.agent_status.get(agent_name, {})
-                    current_status = status_details.get('status', 'pending')
+            workflow_complete = True
+            total_agents = len(self.execution_order)
+            self.console.print(f"Found {total_agents} agents to run.")
 
-                    if current_status == 'completed':
-                        self.previous_agent_type = agent_name
-                        continue
+            for idx, agent_name in enumerate(self.execution_order):
+                agent_config = self.agent_configs[agent_name]
+                status_details = self.agent_status.get(agent_name, {})
+                current_status = status_details.get('status', 'pending')
 
-                    workflow_complete = False
+                start_time = datetime.now()
+                self.console.print(f"{start_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} START agent: [bold]{agent_name}[/bold]...")
+
+                if current_status == 'completed':
+                    self.previous_agent_type = agent_name
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                    continue
+
+                workflow_complete = False
+                
+                if current_status == 'batch_submitted':
+                    self._update_status(agent_name, 'checking_batch')
                     
-                    if current_status == 'batch_submitted':
-                        self._update_status(agent_name, 'checking_batch')
-                        live.update(self.create_status_table())
-                        
-                        batch_id = status_details.get('batch_id')
-                        output_folder, batch_status = self._handle_batch_agent(agent_name, idx, batch_id)
-                        
-                        if batch_status == 'completed':
-                            self._update_status(agent_name, 'completed')
-                            self.previous_agent_type = agent_name
-                            self.ephemeral_directories.append({'output_folder': output_folder, 'ephemeral': agent_config.get('ephemeral', False)})
-                            workflow_complete = True
-                            live.update(self.create_status_table())
-                            continue
-                        elif batch_status == 'in_progress':
-                            self._update_status(agent_name, 'batch_submitted')
-                            self.console.print(f"\n[yellow]Batch job for '{agent_name}' is still in progress. Run 'agent run' again later.[/yellow]")
-                            break
-                        else:
-                            self._update_status(agent_name, 'failed')
-                            self.console.print(f"\n[red]Batch job for '{agent_name}' failed.[/red]")
-                            break
+                    batch_id = status_details.get('batch_id')
+                    output_folder, batch_status = self._handle_batch_agent(agent_name, idx, batch_id)
                     
-                    self._update_status(agent_name, 'running')
-                    live.update(self.create_status_table())
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
 
-                    output_folder = self.agent_runner.run_agent(
-                        agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
-                    )
-
-                    if agent_config.get('run_mode') == 'batch':
-                        agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
-                        node_output_dir = agent_io_path / "target" / f"node_{idx}_{agent_name}"
-                        batch_id = self.batch_service._get_last_batch_job_id(str(node_output_dir))
-                        
-                        if batch_id:
-                            self._update_status(agent_name, 'batch_submitted', batch_id)
-                            self.console.print(f"\n[yellow]Batch job submitted for '{agent_name}'. Run 'agent run' again to check status.[/yellow]")
-                        else:
-                            self._update_status(agent_name, 'failed')
-                            self.console.print(f"\n[red]Agent '{agent_name}' was configured for batch mode, but no batch ID was found after execution.[/red]")
-                        break
-                    else:
+                    if batch_status == 'completed':
                         self._update_status(agent_name, 'completed')
                         self.previous_agent_type = agent_name
                         self.ephemeral_directories.append({'output_folder': output_folder, 'ephemeral': agent_config.get('ephemeral', False)})
                         workflow_complete = True
-                        live.update(self.create_status_table())
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
+                        continue
+                    elif batch_status == 'in_progress':
+                        self._update_status(agent_name, 'batch_submitted')
+                        self.console.print(f"\n[yellow]Batch job for '{agent_name}' is still in progress. Run 'agent run' again later.[/yellow]")
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]IN PROGRESS[/yellow] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
+                        break
+                    else:
+                        self._update_status(agent_name, 'failed')
+                        self.console.print(f"\n[red]Batch job for '{agent_name}' failed.[/red]")
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [red]FAIL[/red] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
+                        break
+                
+                self._update_status(agent_name, 'running')
 
-                if workflow_complete and any(d['status'] != 'completed' for d in self.agent_status.values()):
-                    pass
-                elif workflow_complete:
-                    self.output_processor.process_final_output(self.ephemeral_directories)
-                    self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
+                output_folder = self.agent_runner.run_agent(
+                    agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
+                )
+
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+
+                if agent_config.get('run_mode') == 'batch':
+                    agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
+                    node_output_dir = agent_io_path / "target" / f"node_{idx}_{agent_name}"
+                    batch_id = self.batch_service._get_last_batch_job_id(str(node_output_dir))
+                    
+                    if batch_id:
+                        self._update_status(agent_name, 'batch_submitted', batch_id)
+                        self.console.print(f"\n[yellow]Batch job submitted for '{agent_name}'. Run 'agent run' again to check status.[/yellow]")
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SUBMITTED[/yellow] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
+                    else:
+                        self._update_status(agent_name, 'failed')
+                        self.console.print(f"\n[red]Agent '{agent_name}' was configured for batch mode, but no batch ID was found after execution.[/red]")
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [red]FAIL[/red] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                    break
+                else:
+                    self._update_status(agent_name, 'completed')
+                    self.previous_agent_type = agent_name
+                    self.ephemeral_directories.append({'output_folder': output_folder, 'ephemeral': agent_config.get('ephemeral', False)})
+                    workflow_complete = True
+                    self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
+
+            if workflow_complete and any(d['status'] != 'completed' for d in self.agent_status.values()):
+                pass
+            elif workflow_complete:
+                self.console.print("\n[bold]Workflow Summary:[/bold]")
+                for idx, agent_name in enumerate(self.execution_order):
+                    status = self.agent_status[agent_name]['status']
+                    color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
+                    self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
+                
+                self.output_processor.process_final_output(self.ephemeral_directories)
+                self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
+                self.console.print("Done.")
 
         except Exception as e:
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
