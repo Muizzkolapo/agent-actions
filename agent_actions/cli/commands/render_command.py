@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Optional
 
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
-from agent_actions.cli.validators.render_validator import RenderValidator
 from agent_actions.cli.exceptions import (
     ValidationError,
     FileNotFoundError,
@@ -42,7 +41,7 @@ class RenderCommand:
             rendered_template = render_pipeline_with_templates(
                 str(agent_config_file), 
                 str(self.template_dir),
-                output_path
+                str(output_path)
             )
             
             logger.info("Template rendering completed successfully", extra={
@@ -61,13 +60,9 @@ class RenderCommand:
         logger.info(f"Starting template rendering for agent: {self.args.agent_name}")
         
         try:
-            # Validate inputs using RenderValidator
-            RenderValidator.validate_template_directory(self.template_dir)
-            if self.args.output_file:
-                RenderValidator.validate_output_file(str(self.args.output_file))
-            
-            # Get and validate agent paths
-            _, agent_config_file = RenderValidator.validate_agent_paths(self.args.agent_name)
+            from agent_actions.cli.services.project_paths_factory import ProjectPathsFactory
+            paths = ProjectPathsFactory.create_project_paths(self.args.agent_name, self.args.agent_name)
+            agent_config_file = paths.agent_config_dir / f"{self.args.agent_name}.yml"
             
             # Render the template
             rendered_template = self._render_template(agent_config_file)
