@@ -71,7 +71,8 @@ class OpenAIHandler(BaseVendorHandler):
         )
 
         response_message = response.choices[0].message
-        response_content = {"raw_response": response_message.content}
+        output_field = agent_config.get("output_field", "raw_response")
+        response_content = {output_field: response_message.content}
 
         return [response_content]
 

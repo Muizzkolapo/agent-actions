@@ -78,7 +78,8 @@ class OllamaHandler(BaseVendorHandler):
             messages=messages,
             stream=False
         )
-        response_content = {"raw_response": response.message.content}
+        output_field = agent_config.get("output_field", "raw_response")
+        response_content = {output_field: response.message.content}
         return [response_content]
 
 
