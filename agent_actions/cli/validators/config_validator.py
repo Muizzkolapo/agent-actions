@@ -54,6 +54,7 @@ class ConfigValidator(BaseValidator):
         "is_operational",
         "ephemeral",
         "add_dispatch",
+        "output_field",
     }
 
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
@@ -221,6 +222,12 @@ class ConfigValidator(BaseValidator):
             self.add_error(f"{desc} 'prompt_debug' should be a boolean.")
         if "granularity" in entry_ci and granularity not in ["record", "file"]:
             self.add_error(f"{desc} 'granularity' must be 'record' or 'file'.")
+
+        # -------------------------- output_field validation --------------------------
+        if "output_field" in entry_ci and entry_ci.get(JSON_MODE_KEY, True):
+            self.add_error(
+                f"{desc} 'output_field' can only be used when 'json_mode' is false."
+            )
 
     # -----------------------------------------------------------------------------------------
     # LIST VALIDATION (delegates to CI single‑entry)
