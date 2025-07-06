@@ -19,23 +19,20 @@ from agent_actions.cli.exceptions import (
     FileNotFoundError,
     AgentExecutionError
 )
+from agent_actions.cli.validators.run_validator import RunCommandArgs
 
 class RunCommand:
     """Implementation of the run command."""
     
-    def __init__(self, agent: str, user_code: Optional[str], use_tools: bool):
+    def __init__(self, args: RunCommandArgs):
         """
         Initialize the run command.
         
         Args:
-            agent: Name of the agent configuration to run.
-            user_code: Path to user-defined functions directory.
-            use_tools: Whether to enable tool usage for agents.
+            args: Pydantic model containing the command arguments.
         """
-        self.agent = agent
-        self.user_code = user_code
-        self.use_tools = use_tools
-        self.agent_name = Path(agent).stem
+        self.args = args
+        self.agent_name = Path(args.agent).stem
           
     def _find_config_file(self, config_dir: Path, filename: str) -> Path:
         """Find the configuration file."""
@@ -44,21 +41,18 @@ class RunCommand:
             raise FileNotFoundError(f"Configuration file not found at {full_path}")
         return full_path
 
-    def execute(self, force: bool = False) -> None:
+    def execute(self) -> None:
         """
         Execute the run command.
-        
-        Args:
-            force: Force execution even if validation warnings occur
         
         Raises:
             Various exceptions depending on the stage that fails
         """
-        click.echo(f"Starting agent run for: {self.agent}")
+        click.echo(f"Starting agent run for: {self.args.agent}")
         
         try:
             click.echo("Setting up project paths...")
-            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)   
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)   
             
             # Validate prompts directory
             PromptValidator().validate(paths.prompt_dir)    
@@ -77,26 +71,27 @@ class RunCommand:
             click.echo("Initializing agent workflow...")
             workflow = AgentWorkflow(
                 constructor_path=str(full_path),
-                user_code_path=self.user_code,
+                user_code_path=str(self.args.user_code) if self.args.user_code else None,
                 default_path=str(paths.default_config_path),
-                use_tools=self.use_tools
+                use_tools=self.args.use_tools
             )
             
             click.echo("Starting workflow execution...")
             workflow.run()
             
-            click.echo(f"Successfully completed agent run for: {self.agent}")
+            click.echo(f"Successfully completed agent run for: {self.args.agent}")
             
         except (ValidationError, FileNotFoundError, ConfigurationError, AgentExecutionError) as e:
             raise click.ClickException(str(e))
             
         except Exception as e:
-            raise click.ClickException(f"Failed to run agent {self.agent}: {str(e)}")
+            raise click.ClickException(f"Failed to run agent {self.args.agent}: {str(e)}")
 
 @click.command()
 @click.option('-a', '--agent', required=True,
               help="Agent configuration file name without path or extension")
-@click.option('-u', '--user_code', required=False, help="Path to the user's code folder containing UDFs")
+@click.option('-u', '--user_code', required=False, type=click.Path(exists=True, file_okay=False, dir_okay=True),
+              help="Path to the user's code folder containing UDFs")
 @click.option('--use-tools', is_flag=True, help="Enable tool usage for agents")
 @click.option('--force', is_flag=True, help="Force execution even if validation warnings occur")
 def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = False) -> None:
@@ -111,5 +106,9 @@ def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = Fal
         agent-actions run -a my_agent
         agent-actions run -a my_agent -u ./user_code --use-tools
     """
-    command = RunCommand(agent, user_code, use_tools)
-    command.execute(force)
+    try:
+        args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force)
+        command = RunCommand(args)
+        command.execute()
+    except ValidationError as e:
+        raise click.ClickException(str(e))

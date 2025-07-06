@@ -12,18 +12,22 @@ from rich.console import Console
 from rich.table import Table
 
 from agent_actions.cli.services.project_paths_factory import ProjectPathsFactory
+from agent_actions.cli.validators.status_validator import StatusCommandArgs
+from pydantic import ValidationError
+
 
 class StatusCommand:
     """Implementation of the status command."""
 
-    def __init__(self, agent: str):
+    def __init__(self, args: StatusCommandArgs):
         """
         Initialize the status command.
 
         Args:
-            agent: Name of the agent configuration.
+            args: Pydantic model containing the command arguments.
         """
-        self.agent_name = Path(agent).stem
+        self.args = args
+        self.agent_name = Path(args.agent).stem
         self.console = Console()
 
     def execute(self) -> None:
@@ -31,7 +35,7 @@ class StatusCommand:
         Execute the status command.
         """
         try:
-            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent_name)
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
             status_file = paths.agent_io_dir / ".agent_status.json"
 
             if not status_file.exists():
@@ -61,5 +65,9 @@ def status(agent: str) -> None:
     """
     Display the status of an agent workflow.
     """
-    command = StatusCommand(agent)
-    command.execute()
+    try:
+        args = StatusCommandArgs(agent=agent)
+        command = StatusCommand(args)
+        command.execute()
+    except ValidationError as e:
+        raise click.ClickException(str(e))
