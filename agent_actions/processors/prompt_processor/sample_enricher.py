@@ -1,4 +1,5 @@
-"""Module for enriching context with few-shot samples."""
+"""Module for enriching prompts with few-shot samples."""
+
 import json
 import logging
 from agent_actions.handlers.file_handler import FileHandler
@@ -8,25 +9,24 @@ logger = logging.getLogger(__name__)
 
 
 class SampleEnricher:
-    """Handles enriching context with few-shot samples (Single Responsibility)."""
-    
+    """Handles enriching prompts with few-shot samples."""
+
     @staticmethod
-    def append_few_shot_samples(context_data, agent_name, agent_config):
-        """
-        Append few shot samples to the input documentation if configured.
-        
+    def append_few_shot_samples(prompt_config, agent_config):
+        """Append few-shot samples to the prompt if configured.
+
         Parameters:
-            context_data: Data to enrich with samples
-            agent_name: Name of the agent
+            prompt_config: The prompt string to enrich with samples
             agent_config: Configuration containing sample settings
-            
+
         Returns:
-            Enriched context data
-        
+            str: Enriched prompt string
+
         Raises:
             ValueError: If sample enrichment fails
         """
         try:
+            agent_name = agent_config.get("agent_name", agent_config.get("agent_type"))
             _, _, few_shot_samples_path = FileHandler.get_agent_paths(agent_name)
             sample_count = agent_config.get("use_few_shot_samples", 0)
             try:
@@ -40,21 +40,27 @@ class SampleEnricher:
                         "Few shot samples directory not found for agent '%s'. Skipping enrichment.",
                         agent_name,
                     )
-                    return context_data
+                    return prompt_config
 
                 samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
-                    agent_type=agent_config['agent_type'],
-                    sample_count=sample_count
+                    agent_type=agent_config["agent_type"],
+                    sample_count=sample_count,
                 )
                 samples_str = "\n\n".join(
                     json.dumps(sample, indent=2) for sample in samples
                 )
 
-                if isinstance(context_data, dict):
-                    context_data = json.dumps(context_data, indent=2)
-                context_data += "\n\nfew shot samples:\n" + samples_str
+                if isinstance(prompt_config, list):
+                    prompt_config = [
+                        p + "\n\nfew shot samples:\n" + samples_str
+                        for p in prompt_config
+                    ]
+                else:
+                    prompt_config = (
+                        str(prompt_config) + "\n\nfew shot samples:\n" + samples_str
+                    )
 
-            return context_data
+            return prompt_config
         except Exception as e:
             raise ValueError(f"Failed to append few shot samples: {str(e)}")
