@@ -5,7 +5,6 @@ from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IContentProcessor
 from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
-from .few_shot_sample_manager import FewShotSampleManager
 from .data_generator import DataGenerator
 from .data_processor import DataProcessor
 
@@ -26,7 +25,6 @@ class TargetContentProcessor(IContentProcessor):
         
         # Initialize component services
         self.source_loader = SourceDataLoader(agent_name)
-        self.sample_manager = FewShotSampleManager(agent_config, agent_name)
         self.data_generator = DataGenerator(agent_config, agent_name)
         self.data_processor = DataProcessor(agent_config)
         self.batch_service = BatchService()
@@ -155,9 +153,6 @@ class TargetContentProcessor(IContentProcessor):
             
             # Get corresponding source content
             source_content = DataTransformer.get_content_by_guid(source_data, guid)
-            
-            # Add few-shot samples
-            contents = self.sample_manager.add_few_shot_samples(contents)
             
             # Generate data through the shared utility
             generated_data, executed = self.data_generator.create_agent_with_data(

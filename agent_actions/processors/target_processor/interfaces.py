@@ -17,15 +17,6 @@ class IContentProcessor(ABC):
         pass
 
 
-class IFewShotSampleManager(ABC):
-    """Interface for few-shot sample management."""
-
-    @abstractmethod
-    def add_few_shot_samples(self, contents: Dict) -> Dict:
-        """Add few-shot samples to content."""
-        pass
-
-
 class IDataGenerator(ABC):
     """Interface for data generation."""
 
