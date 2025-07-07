@@ -26,8 +26,19 @@ class SampleEnricher:
             ValueError: If sample enrichment fails
         """
         try:
-            agent_name = agent_config.get("agent_name", agent_config.get("agent_type"))
-            _, _, few_shot_samples_path = FileHandler.get_agent_paths(agent_name)
+            agent_name = agent_config.get("agent_name")
+            agent_type = agent_config.get("agent_type")
+
+            # Try locating the few-shot directory using both the agent name
+            # and the agent type to handle differences between config keys and
+            # folder names.
+            search_names = [n for n in (agent_name, agent_type) if n]
+            few_shot_samples_path = None
+            for name in search_names:
+                _, _, few_shot_samples_path = FileHandler.get_agent_paths(name)
+                if few_shot_samples_path:
+                    agent_name = name
+                    break
             sample_count = agent_config.get("use_few_shot_samples", 0)
             try:
                 sample_count = int(sample_count)
@@ -44,7 +55,7 @@ class SampleEnricher:
 
                 samples = PromptLoader.load_few_shot_samples(
                     few_shot_samples_path,
-                    agent_type=agent_config["agent_type"],
+                    agent_type=agent_type or agent_name,
                     sample_count=sample_count,
                 )
                 samples_str = "\n\n".join(

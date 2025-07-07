@@ -41,8 +41,17 @@ class FewShotSampleManager(IFewShotSampleManager):
         sample_count = self._parse_sample_count()
         if sample_count > 0:
             try:
-                agent_id = self.agent_config.get("agent_type", self.agent_name)
-                _, _, few_shot_samples_path = FileHandler.get_agent_paths(agent_id)
+                agent_name = self.agent_config.get("agent_name") or self.agent_name
+                agent_type = self.agent_config.get("agent_type")
+
+                search_names = [n for n in (agent_name, agent_type) if n]
+                few_shot_samples_path = None
+                agent_id = agent_name
+                for name in search_names:
+                    _, _, few_shot_samples_path = FileHandler.get_agent_paths(name)
+                    if few_shot_samples_path:
+                        agent_id = name
+                        break
                 if not few_shot_samples_path:
                     logger.warning(
                         "Few shot samples directory not found for agent '%s'. Skipping few-shot enrichment.",
