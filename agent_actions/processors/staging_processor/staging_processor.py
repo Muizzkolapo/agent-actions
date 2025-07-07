@@ -19,6 +19,9 @@ class StagingProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
+        print("========")
+        print(agent_name)
+        print("========")
 
     def staging_dynamic_creator(
         self, context_data, source_path=None, formatted_prompt=None
@@ -51,7 +54,7 @@ class StagingProcessor:
 
             # Step 3: Enrich prompt with few-shot samples
             formatted_prompt = SampleEnricher.append_few_shot_samples(
-                formatted_prompt, self.agent_config
+                formatted_prompt, self.agent_config, self.agent_name
             )
 
             # Step 4: Extract guid and content if available

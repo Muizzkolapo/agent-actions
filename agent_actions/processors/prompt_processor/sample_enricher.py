@@ -12,7 +12,7 @@ class SampleEnricher:
     """Handles enriching prompts with few-shot samples."""
 
     @staticmethod
-    def append_few_shot_samples(prompt_config, agent_config):
+    def append_few_shot_samples(prompt_config, agent_config, agent_name):
         """Append few-shot samples to the prompt if configured.
 
         Parameters:
@@ -26,19 +26,10 @@ class SampleEnricher:
             ValueError: If sample enrichment fails
         """
         try:
-            agent_name = agent_config.get("agent_name")
+            agent_name = agent_name
             agent_type = agent_config.get("agent_type")
-
-            # Try locating the few-shot directory using both the agent name
-            # and the agent type to handle differences between config keys and
-            # folder names.
-            search_names = [n for n in (agent_name, agent_type) if n]
             few_shot_samples_path = None
-            for name in search_names:
-                _, _, few_shot_samples_path = FileHandler.get_agent_paths(name)
-                if few_shot_samples_path:
-                    agent_name = name
-                    break
+            _, _, few_shot_samples_path = FileHandler.get_agent_paths(agent_name)
             sample_count = agent_config.get("use_few_shot_samples", 0)
             try:
                 sample_count = int(sample_count)
@@ -48,7 +39,7 @@ class SampleEnricher:
             if sample_count > 0:
                 if not few_shot_samples_path:
                     logger.warning(
-                        "Few shot samples directory not found for agent '%s'. Skipping enrichment.",
+                        f"Few shot samples directory not found for agent '%s'. Skipping enrichment.",
                         agent_name,
                     )
                     return prompt_config
