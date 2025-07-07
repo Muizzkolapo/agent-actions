@@ -1,4 +1,5 @@
 """Module for orchestrating prompt processing workflow."""
+
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import run_dynamic_agent
 from agent_actions.core.utils import Utils
@@ -7,16 +8,24 @@ from ..prompt_processor.sample_enricher import SampleEnricher
 from ..prompt_processor.prompt_formatter import PromptFormatter
 from ..prompt_processor.response_transformer import ResponseTransformer
 from ..prompt_processor.context_preprocessor import ContextPreprocessor
-from agent_actions.processors.source_processor.source_path_manager import SourcePathManager
+from agent_actions.processors.source_processor.source_path_manager import (
+    SourcePathManager,
+)
+
 
 class StagingProcessor:
     """Orchestrates the prompt processing workflow (Open/Closed principle)."""
-    
+
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
+        print("========")
+        print(agent_name)
+        print("========")
 
-    def staging_dynamic_creator(self, context_data, source_path=None, formatted_prompt=None):
+    def staging_dynamic_creator(
+        self, context_data, source_path=None, formatted_prompt=None
+    ):
         """
         Create a dynamic agent for processing input documentation.
 
@@ -29,54 +38,70 @@ class StagingProcessor:
             tuple: Transformed response and source text.
         """
         try:
-            # Step 1: Enrich context with few-shot samples
-            context_data = SampleEnricher.append_few_shot_samples(
-                context_data, self.agent_name, self.agent_config
-            )
-            
-            # Step 2: Get raw prompt and load source content
+            # Step 1: Get raw prompt and load source content
             raw_prompt = PromptFormatter.get_raw_prompt(self.agent_config)
-            source_content = SourcePathManager.load_source_content(source_path, context_data) if source_path else None
-            
-            # Step 3: Format prompt if not provided
+            source_content = (
+                SourcePathManager.load_source_content(source_path, context_data)
+                if source_path
+                else None
+            )
+
+            # Step 2: Format prompt if not provided
             if not formatted_prompt:
-                formatted_prompt = PromptFormatter.format_prompt(raw_prompt, source_content, context_data)
-            
+                formatted_prompt = PromptFormatter.format_prompt(
+                    raw_prompt, source_content, context_data
+                )
+
+            # Step 3: Enrich prompt with few-shot samples
+            formatted_prompt = SampleEnricher.append_few_shot_samples(
+                formatted_prompt, self.agent_config, self.agent_name
+            )
+
             # Step 4: Extract guid and content if available
-            guid, enriched_data = ContextPreprocessor.extract_guid_and_content(context_data)
-            
+            guid, enriched_data = ContextPreprocessor.extract_guid_and_content(
+                context_data
+            )
+
             # Step 5: Apply remove_collection transformations
-            prepared_context = ContextPreprocessor.prepare_context(enriched_data, self.agent_config)
-            
+            prepared_context = ContextPreprocessor.prepare_context(
+                enriched_data, self.agent_config
+            )
+
             # Step 6: Run the agent through the shared utility
             response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
                 prepared_context,
                 formatted_prompt,
-                tools_path=self.agent_config.get('tools', {}).get('path'),
+                tools_path=self.agent_config.get("tools", {}).get("path"),
             )
-            
+
             # Step 7: Generate guid if not available
             if not guid:
                 guid = Utils.generate_id()
-            
+
             # Step 8: Transform response
             if executed:
                 transformed_response = ResponseTransformer.transform_response(
                     response, enriched_data, guid, self.agent_config
                 )
             else:
-                transformed_response = DataTransformer.transform_structure([{guid: response}])
-            
+                transformed_response = DataTransformer.transform_structure(
+                    [{guid: response}]
+                )
+
             # Step 9: Prepare source text
-            if source_path is not None and isinstance(context_data, dict) and "guid" in context_data:
+            if (
+                source_path is not None
+                and isinstance(context_data, dict)
+                and "guid" in context_data
+            ):
                 src_text = [{guid: formatted_prompt}]
             else:
                 src_text = [{guid: context_data}]
-            
+
             return transformed_response, src_text
-            
+
         except Exception as e:
             # Propagate exceptions instead of swallowing them
             raise RuntimeError(f"Error in staging_dynamic_creator: {str(e)}") from e

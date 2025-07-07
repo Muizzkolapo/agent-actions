@@ -5,6 +5,7 @@ from agent_actions.models import agent_builder
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
 from agent_actions.constants import PROMPT_KEY
+from agent_actions.processors.prompt_processor.sample_enricher import SampleEnricher
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
@@ -49,6 +50,12 @@ class DataGenerator(IDataGenerator):
 
             # Format prompt with content
             formatted_prompt, contents = self._format_prompt(contents, source_content)
+            
+            # Append few-shot samples if configured
+            formatted_prompt = SampleEnricher.append_few_shot_samples(
+                formatted_prompt, self.agent_config, self.agent_name
+            )
+            
             tool_args = self.agent_config.get('tool_args', {})
 
             # Create and run the agent through the shared utility
