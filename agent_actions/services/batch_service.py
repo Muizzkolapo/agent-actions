@@ -404,7 +404,7 @@ class BatchService:
                         try:
                             # Parse JSON content from the response
                             generated_data = json.loads(content)
-                            
+
                             if side_collection and custom_id in context_map:
                                 original = context_map.get(custom_id, {})
                                 if isinstance(generated_data, list):
@@ -414,21 +414,27 @@ class BatchService:
                                         for item in generated_data
                                     ]
                                 elif isinstance(generated_data, dict):
-                                    generated_data = DataTransformer.update_schema_objects(original, generated_data, side_collection)
+                                    generated_data = DataTransformer.update_schema_objects(
+                                        original,
+                                        generated_data,
+                                        side_collection,
+                                    )
 
-                            # Create workflow format: extract content and preserve metadata
-                            workflow_item = {
-                                "guid": custom_id,
-                                "content": generated_data,
-                                "metadata": {
-                                    "model": response_body.get('model'),
-                                    "usage": response_body.get('usage'),
-                                    "finish_reason": choice.get('finish_reason'),
-                                    "created": response_body.get('created'),
-                                    "system_fingerprint": response_body.get('system_fingerprint')
+                            structured_items = DataTransformer.transform_structure(
+                                [{custom_id: generated_data}]
+                            )
+
+                            for itm in structured_items:
+                                itm["metadata"] = {
+                                    "model": response_body.get("model"),
+                                    "usage": response_body.get("usage"),
+                                    "finish_reason": choice.get("finish_reason"),
+                                    "created": response_body.get("created"),
+                                    "system_fingerprint": response_body.get(
+                                        "system_fingerprint"
+                                    ),
                                 }
-                            }
-                            processed_data.append(workflow_item)
+                            processed_data.extend(structured_items)
                             
                         except json.JSONDecodeError:
                             # If not valid JSON, wrap in error structure
