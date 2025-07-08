@@ -41,17 +41,25 @@ class BatchService:
     def _save_side_output(data, file_path):
         """Persist side output data, merging with existing content if present."""
         file_path.parent.mkdir(parents=True, exist_ok=True)
+
         existing = []
         if file_path.exists():
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 try:
                     existing = json.load(f)
                 except json.JSONDecodeError:
                     existing = []
+
         if not isinstance(existing, list):
             existing = [existing]
+
+        # Ensure the incoming data is a list for consistent appends
+        if not isinstance(data, list):
+            data = [data]
+
         existing.extend(data)
-        with open(file_path, 'w', encoding='utf-8') as f:
+
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=4)
 
     def _resolve_tools_path(self, agent_config):
@@ -403,25 +411,21 @@ class BatchService:
                         
                         try:
                             # Parse JSON content from the response
-                            generated_data = json.loads(content)
+                            generated_obj = json.loads(content)
+
+                            # Normalize to a list for consistent processing
+                            generated_list = DataTransformer.ensure_list(generated_obj)
 
                             if side_collection and custom_id in context_map:
                                 original = context_map.get(custom_id, {})
-                                if isinstance(generated_data, list):
-                                    generated_data = [
-                                        DataTransformer.update_schema_objects(original, item, side_collection)
-                                        if isinstance(item, dict) else item
-                                        for item in generated_data
-                                    ]
-                                elif isinstance(generated_data, dict):
-                                    generated_data = DataTransformer.update_schema_objects(
-                                        original,
-                                        generated_data,
-                                        side_collection,
-                                    )
+                                generated_list = [
+                                    DataTransformer.update_schema_objects(original, item, side_collection)
+                                    if isinstance(item, dict) else item
+                                    for item in generated_list
+                                ]
 
                             structured_items = DataTransformer.transform_structure(
-                                [{custom_id: generated_data}]
+                                [{custom_id: generated_list}]
                             )
 
                             for itm in structured_items:
