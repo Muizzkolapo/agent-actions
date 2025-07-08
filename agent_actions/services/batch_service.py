@@ -187,7 +187,7 @@ class BatchService:
         
         batch_dir.mkdir(parents=True, exist_ok=True)
         
-        file_name = f"{agent_type}_batch_input.jsonl"
+        file_name = f"{agent_config.get('agent_type')}_batch_input.jsonl"
         file_path = batch_dir / file_name
 
         with open(file_path, 'w') as file:
@@ -215,9 +215,7 @@ class BatchService:
         # Save to global batch directory (for backward compatibility)
         global_batch_dir = Path.cwd() / "batch"
         global_batch_dir.mkdir(exist_ok=True)
-        global_job_id_file = global_batch_dir / ".last_batch_id"
-        with open(global_job_id_file, 'w') as f:
-            f.write(batch_id)
+
         
         # Also save to output directory if provided
         if output_directory:
@@ -234,7 +232,7 @@ class BatchService:
         else:
             batch_dir = Path.cwd() / "batch"
         batch_dir.mkdir(parents=True, exist_ok=True)
-        path = batch_dir / f"{agent_type}_context_map.json"
+        path = batch_dir / f"{agent_config.get('agent_type')}_context_map.json"
         payload = {
             "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
             "data": context_map,
