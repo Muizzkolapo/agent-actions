@@ -1,11 +1,7 @@
 """Loaders module initialization."""
 
-from agent_actions.processors.data_loaders.base_loader import BaseLoader
-from agent_actions.processors.data_loaders.batch_data_loader import BatchDataLoader
-from agent_actions.processors.data_loaders.text_loader import TextLoader
-from agent_actions.processors.data_loaders.json_loader import JsonLoader
-from agent_actions.processors.data_loaders.tabular_loader import TabularLoader
-from agent_actions.processors.data_loaders.xml_loader import XmlLoader
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "BaseLoader",
@@ -15,3 +11,22 @@ __all__ = [
     "TabularLoader",
     "XmlLoader",
 ]
+
+_module_map = {
+    "BaseLoader": ".base_loader",
+    "BatchDataLoader": ".batch_data_loader",
+    "TextLoader": ".text_loader",
+    "JsonLoader": ".json_loader",
+    "TabularLoader": ".tabular_loader",
+    "XmlLoader": ".xml_loader",
+}
+
+
+def __getattr__(name: str) -> Any:  # pragma: no cover - thin wrapper
+    if name in _module_map:
+        module = import_module(f"{__name__}{_module_map[name]}")
+        attr = getattr(module, name)
+        globals()[name] = attr
+        return attr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+

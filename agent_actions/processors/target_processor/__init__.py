@@ -1,10 +1,7 @@
 """Target processor package initialization."""
 
-from .data_generator import DataGenerator
-from .data_processor import DataProcessor
-from .output_handler import OutputHandler
-from .target_generator import TargetGenerator
-from .target_content_processor import TargetContentProcessor
+from importlib import import_module
+from typing import Any
 
 __all__ = [
     "DataGenerator",
@@ -13,3 +10,21 @@ __all__ = [
     "TargetGenerator",
     "TargetContentProcessor",
 ]
+
+_module_map = {
+    "DataGenerator": ".data_generator",
+    "DataProcessor": ".data_processor",
+    "OutputHandler": ".output_handler",
+    "TargetGenerator": ".target_generator",
+    "TargetContentProcessor": ".target_content_processor",
+}
+
+
+def __getattr__(name: str) -> Any:  # pragma: no cover - thin wrapper
+    if name in _module_map:
+        module = import_module(f"{__name__}{_module_map[name]}")
+        attr = getattr(module, name)
+        globals()[name] = attr
+        return attr
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
