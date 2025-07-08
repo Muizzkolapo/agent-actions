@@ -1,4 +1,5 @@
 import json
+import sys
 from pathlib import Path
 from openai import OpenAI
 from agent_actions.handlers.config_handler import ConfigManager
@@ -39,6 +40,10 @@ class BatchService:
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
 
+        tools_path = agent_config.get('tools', {}).get('path')
+        if tools_path and tools_path not in sys.path:
+            sys.path.insert(0, tools_path)
+
         tasks = []
         for row in data:
             # In batch mode, the 'id' is the guid.
@@ -48,6 +53,12 @@ class BatchService:
                 continue
 
             formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, row)
+            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
+                formatted_prompt,
+                tools_path,
+                json.dumps(row, ensure_ascii=False),
+                agent_config=agent_config
+            )
             
             task = {
                     # Unique ID to match results back to the original input
