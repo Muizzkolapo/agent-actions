@@ -1,6 +1,8 @@
 import json
 import sys
 from pathlib import Path
+import yaml
+from agent_actions.handlers.agent_handlers import AgentManager
 from openai import OpenAI
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.processors.data_loaders.batch_data_loader import BatchDataLoader
@@ -19,6 +21,32 @@ class BatchService:
     def __init__(self):
         self.data_loader = BatchDataLoader()
         self.client = OpenAI()
+
+    def _resolve_tools_path(self, agent_config):
+        path = agent_config.get('tools', {}).get('path')
+        if path:
+            return str(Path(path).resolve())
+
+        project_root = AgentManager.find_project_root(Path.cwd())
+        if not project_root:
+            return None
+
+        config_file = project_root / 'agent_actions.yml'
+        if not config_file.exists():
+            return None
+
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                default_cfg = yaml.safe_load(f)
+            tool_path = default_cfg.get('tool_path')
+            if isinstance(tool_path, list):
+                return str(Path(project_root / tool_path[0]).resolve()) if tool_path else None
+            if tool_path:
+                return str(Path(project_root / tool_path).resolve())
+        except Exception:
+            return None
+
+        return None
 
     def _prepare_schema(self, agent_config):
         """Load and prepare schema from config"""
@@ -40,7 +68,7 @@ class BatchService:
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
 
-        tools_path = agent_config.get('tools', {}).get('path')
+        tools_path = self._resolve_tools_path(agent_config)
         if tools_path and tools_path not in sys.path:
             sys.path.insert(0, tools_path)
 
