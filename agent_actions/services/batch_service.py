@@ -122,7 +122,8 @@ class BatchService:
                 print(f"Warning: Skipping row in batch data due to missing 'guid'.")
                 continue
 
-            self.context_map[uuid] = row
+            # Store only the content portion of the row for side_collection merging
+            self.context_map[uuid] = row.get("content", row)
 
             processed_row = apply_remove_collection(row, agent_config)
 
@@ -249,7 +250,16 @@ class BatchService:
         try:
             with open(context_files[0], "r", encoding="utf-8") as f:
                 payload = json.load(f)
-            return payload.get("data", {}), payload.get("side_collection", [])
+
+            raw_map = payload.get("data", {})
+            cleaned_map = {}
+            for guid, value in raw_map.items():
+                if isinstance(value, dict) and "content" in value:
+                    cleaned_map[guid] = value.get("content", {})
+                else:
+                    cleaned_map[guid] = value
+
+            return cleaned_map, payload.get("side_collection", [])
         except Exception:
             return {}, []
 
@@ -418,6 +428,8 @@ class BatchService:
 
                             if side_collection and custom_id in context_map:
                                 original = context_map.get(custom_id, {})
+                                if isinstance(original, dict) and "content" in original:
+                                    original = original.get("content", {})
                                 generated_list = [
                                     DataTransformer.update_schema_objects(original, item, side_collection)
                                     if isinstance(item, dict) else item
