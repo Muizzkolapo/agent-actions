@@ -12,7 +12,8 @@ from agent_actions.handlers.schema_handler import SchemaLoader
 from agent_actions.models.schema_change import compile_unified_schema
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.transformers.data_transformer import DataTransformer
-from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
+from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
+from agent_actions.processors.common.utils import apply_remove_collection
 
 class BatchService:
     # Class variable to control force batch behavior
@@ -21,6 +22,8 @@ class BatchService:
     def __init__(self):
         self.data_loader = BatchDataLoader()
         self.client = OpenAI()
+        self.context_map = {}
+        self.side_collection = []
 
     def _resolve_tools_path(self, agent_config):
         path = agent_config.get('tools', {}).get('path')
@@ -72,6 +75,8 @@ class BatchService:
         if tools_path and tools_path not in sys.path:
             sys.path.insert(0, tools_path)
 
+        self.context_map = {}
+        self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         tasks = []
         for row in data:
             # In batch mode, the 'id' is the guid.
@@ -80,11 +85,15 @@ class BatchService:
                 print(f"Warning: Skipping row in batch data due to missing 'guid'.")
                 continue
 
-            formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, row)
+            self.context_map[uuid] = row
+
+            processed_row = apply_remove_collection(row, agent_config)
+
+            formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
                 tools_path,
-                json.dumps(row, ensure_ascii=False),
+                json.dumps(processed_row, ensure_ascii=False),
                 agent_config=agent_config
             )
             
@@ -146,8 +155,9 @@ class BatchService:
         with open(file_path, 'w') as file:
             for obj in tasks:
                 file.write(json.dumps(obj) + '\n')
-        
+
         print(f"Batch file created at: {file_path}")
+        self._save_context_map(self.context_map, agent_config, output_directory, agent_type)
 
         try:
             batch_file = self.client.files.create(file=open(file_path, "rb"), purpose="batch")
@@ -178,6 +188,33 @@ class BatchService:
             local_job_id_file = local_batch_dir / ".last_batch_id"
             with open(local_job_id_file, 'w') as f:
                 f.write(batch_id)
+
+    def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, agent_type: str):
+        """Persist original context data for side_collection processing."""
+        if output_directory:
+            batch_dir = Path(output_directory) / "batch"
+        else:
+            batch_dir = Path.cwd() / "batch"
+        batch_dir.mkdir(parents=True, exist_ok=True)
+        path = batch_dir / f"{agent_type}_context_map.json"
+        payload = {
+            "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
+            "data": context_map,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        return path
+
+    def _load_context_map(self, batch_dir: Path):
+        context_files = list(batch_dir.glob("*_context_map.json"))
+        if not context_files:
+            return {}, []
+        try:
+            with open(context_files[0], "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            return payload.get("data", {}), payload.get("side_collection", [])
+        except Exception:
+            return {}, []
 
     def _get_last_batch_job_id(self, output_directory: str = None):
         """Get the last batch job ID, checking local directory first if provided."""
@@ -273,8 +310,15 @@ class BatchService:
                 if line.strip():
                     batch_results.append(json.loads(line))
             
+            batch_dir = Path(output_directory) / "batch"
+            context_map, side_collection = self._load_context_map(batch_dir)
+
             # Process results into workflow format
-            processed_data = self._convert_batch_results_to_workflow_format(batch_results)
+            processed_data = self._convert_batch_results_to_workflow_format(
+                batch_results,
+                side_collection=side_collection,
+                context_map=context_map,
+            )
             
             # Save to workflow output directory structure
             relative_path = Path(file_path).relative_to(base_directory)
@@ -289,7 +333,7 @@ class BatchService:
         except Exception as e:
             raise RuntimeError(f"Error processing batch results to workflow output: {e}")
 
-    def _convert_batch_results_to_workflow_format(self, batch_results):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None):
         """
         Convert batch API results to the workflow's expected format.
         Extracts content and preserves metadata, matching non-batch agent output format.
@@ -301,6 +345,8 @@ class BatchService:
             List of processed data in workflow format
         """
         processed_data = []
+        context_map = context_map or {}
+        side_collection = side_collection or []
         #muizzchange this is the transformed data we use for the output
         # This is where we transform the data to what we want which matches usual agent actions flow 
         
@@ -323,10 +369,21 @@ class BatchService:
                             # Parse JSON content from the response
                             generated_data = json.loads(content)
                             
+                            if side_collection and custom_id in context_map:
+                                original = context_map.get(custom_id, {})
+                                if isinstance(generated_data, list):
+                                    generated_data = [
+                                        DataTransformer.update_schema_objects(original, item, side_collection)
+                                        if isinstance(item, dict) else item
+                                        for item in generated_data
+                                    ]
+                                elif isinstance(generated_data, dict):
+                                    generated_data = DataTransformer.update_schema_objects(original, generated_data, side_collection)
+
                             # Create workflow format: extract content and preserve metadata
                             workflow_item = {
                                 "guid": custom_id,
-                                "content": generated_data,  # This is the actual content extracted
+                                "content": generated_data,
                                 "metadata": {
                                     "model": response_body.get('model'),
                                     "usage": response_body.get('usage'),
@@ -443,8 +500,14 @@ class BatchService:
             
             print(f"Parsed {len(batch_results)} batch results")
             
+            context_map, side_collection = self._load_context_map(batch_dir)
+
             # Process results into workflow format
-            processed_data = self._convert_batch_results_to_workflow_format(batch_results)
+            processed_data = self._convert_batch_results_to_workflow_format(
+                batch_results,
+                side_collection=side_collection,
+                context_map=context_map,
+            )
             
             print(f"Processed {len(processed_data)} items into workflow format")
             
