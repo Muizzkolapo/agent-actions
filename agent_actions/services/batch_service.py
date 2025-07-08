@@ -25,6 +25,35 @@ class BatchService:
         self.context_map = {}
         self.side_collection = []
 
+    @staticmethod
+    def _separate_side_output(items):
+        """Split processed items into main and side output collections."""
+        main_output, side_output = [], []
+        for item in items:
+            content = item.get('content', {})
+            if isinstance(content, dict) and content.get('side_output', False):
+                side_output.append(item)
+            else:
+                main_output.append(item)
+        return main_output, side_output
+
+    @staticmethod
+    def _save_side_output(data, file_path):
+        """Persist side output data, merging with existing content if present."""
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        existing = []
+        if file_path.exists():
+            with open(file_path, 'r', encoding='utf-8') as f:
+                try:
+                    existing = json.load(f)
+                except json.JSONDecodeError:
+                    existing = []
+        if not isinstance(existing, list):
+            existing = [existing]
+        existing.extend(data)
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(existing, f, indent=4)
+
     def _resolve_tools_path(self, agent_config):
         path = agent_config.get('tools', {}).get('path')
         if path:
@@ -319,6 +348,8 @@ class BatchService:
                 side_collection=side_collection,
                 context_map=context_map,
             )
+
+            main_output, side_output_data = self._separate_side_output(processed_data)
             
             # Save to workflow output directory structure
             relative_path = Path(file_path).relative_to(base_directory)
@@ -326,8 +357,13 @@ class BatchService:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
             
             file_writer = FileWriter(str(output_file_path))
-            file_writer.write_target(processed_data)
-            
+            file_writer.write_target(main_output)
+
+            if side_output_data:
+                side_output_dir = Path(output_directory).parent / 'side_output'
+                side_output_file_path = side_output_dir / relative_path.name
+                self._save_side_output(side_output_data, side_output_file_path)
+
             return str(output_file_path)
             
         except Exception as e:
@@ -508,9 +544,11 @@ class BatchService:
                 side_collection=side_collection,
                 context_map=context_map,
             )
-            
+
             print(f"Processed {len(processed_data)} items into workflow format")
-            
+
+            main_output, side_output_data = self._separate_side_output(processed_data)
+
             # Find the original staging file to use its name (like batch_15.json)
             staging_dir = Path(output_directory).parent.parent / "staging"
             original_file_name = None
@@ -531,8 +569,16 @@ class BatchService:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
             
             file_writer = FileWriter(str(output_file_path))
-            file_writer.write_target(processed_data)
-            
+            file_writer.write_target(main_output)
+
+            if side_output_data:
+                side_output_dir = Path(output_directory).parent / "side_output"
+                if original_file_name:
+                    side_output_file = side_output_dir / f"{original_file_name}.json"
+                else:
+                    side_output_file = side_output_dir / f"{batch_id}_processed_output.json"
+                self._save_side_output(side_output_data, side_output_file)
+
             return str(output_file_path)
             
         except Exception as e:
