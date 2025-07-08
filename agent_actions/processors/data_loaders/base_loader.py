@@ -1,7 +1,8 @@
 """Base class for content loaders."""
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypeVar, Generic
+from agent_actions.models.config_types import AgentEntryDict
 
 __version__ = "0.1.0"
 
@@ -9,10 +10,13 @@ __version__ = "0.1.0"
 logger = logging.getLogger(__name__)
 
 
-class BaseLoader(ABC):
+T = TypeVar("T")
+
+
+class BaseLoader(ABC, Generic[T]):
     """Abstract base class for all content loaders."""
     
-    def __init__(self, agent_config: Dict[str, Any], agent_name: str):
+    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
         """Initialize with agent configuration and name.
         
         Args:
@@ -33,9 +37,11 @@ class BaseLoader(ABC):
             raise
         
     @abstractmethod
-    def process(self, 
-                content: Any,
-                file_path: Optional[str] = None) -> Any:
+    def process(
+        self,
+        content: Any,
+        file_path: Optional[str] = None
+    ) -> T:
         """Load and parse content from a file or in-memory input.
 
         Args:

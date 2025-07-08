@@ -1,6 +1,7 @@
 """JSON content loader implementation."""
 import logging
 from typing import Any, Dict, List, Optional, Union
+from agent_actions.models.config_types import AgentEntryDict
 
 
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
@@ -11,10 +12,10 @@ import json
 logger = logging.getLogger(__name__)
 
 
-class JsonLoader(BaseLoader):
+class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
     """Loader for JSON content."""
     
-    def __init__(self, agent_config: Dict[str, Any], agent_name: str):
+    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
         """Initialize with agent configuration and name.
         
         Args:
