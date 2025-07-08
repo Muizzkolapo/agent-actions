@@ -1,4 +1,15 @@
-"""Prompt module initialization."""
-from agent_actions.processors.staging_processor.staging_processor import StagingProcessor
+"""Prompt processor package initialization."""
 
-__all__ = ['StagingProcessor']
+from .context_preprocessor import ContextPreprocessor
+from .prompt_formatter import PromptFormatter
+from .response_transformer import ResponseTransformer
+from .sample_enricher import SampleEnricher
+from .prompt_utils import PromptUtils
+
+__all__ = [
+    "ContextPreprocessor",
+    "PromptFormatter",
+    "ResponseTransformer",
+    "SampleEnricher",
+    "PromptUtils",
+]

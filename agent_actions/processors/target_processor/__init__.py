@@ -1,4 +1,15 @@
-"""Initialize target processor package."""
-from agent_actions.processors.target_processor.target_content_processor import TargetContentProcessor
+"""Target processor package initialization."""
 
-__all__ = ['TargetContentProcessor']
+from .data_generator import DataGenerator
+from .data_processor import DataProcessor
+from .output_handler import OutputHandler
+from .target_generator import TargetGenerator
+from .target_content_processor import TargetContentProcessor
+
+__all__ = [
+    "DataGenerator",
+    "DataProcessor",
+    "OutputHandler",
+    "TargetGenerator",
+    "TargetContentProcessor",
+]
