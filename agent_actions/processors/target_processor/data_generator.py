@@ -1,5 +1,6 @@
 """Module for generating data using agents."""
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
+from agent_actions.models.config_types import AgentEntryDict
 
 from agent_actions.models import agent_builder
 from agent_actions.handlers.prompt_handler import PromptLoader
@@ -15,7 +16,7 @@ from .interfaces import IDataGenerator
 class DataGenerator(IDataGenerator):
     """Handles agent creation and data generation (Single Responsibility)."""
 
-    def __init__(self, agent_config: Dict, agent_name: str):
+    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
         """
         Initialize the data generator.
         
@@ -27,10 +28,10 @@ class DataGenerator(IDataGenerator):
         self.agent_name = agent_name
 
     def create_agent_with_data(
-        self, 
-        contents: Any, 
+        self,
+        contents: Any,
         source_content: Optional[Any] = None
-    ) -> List[Dict]:
+    ) -> Tuple[List[Dict], bool]:
         """
         Create an agent with the provided data and generate results.
         
@@ -39,7 +40,8 @@ class DataGenerator(IDataGenerator):
             source_content: Optional source content for prompt formatting
             
         Returns:
-            Generated data from the agent
+            Tuple containing the generated data and a flag indicating if the
+            agent was executed
             
         Raises:
             RuntimeError: If agent creation or data generation fails
@@ -84,7 +86,9 @@ class DataGenerator(IDataGenerator):
         """
         return apply_remove_collection(contents, self.agent_config)
 
-    def _format_prompt(self, contents: Dict, source_content: Optional[Any] = None) -> str:
+    def _format_prompt(
+        self, contents: Dict, source_content: Optional[Any] = None
+    ) -> Tuple[str, Dict]:
         """
         Format the prompt with contents and source content.
         
@@ -93,7 +97,7 @@ class DataGenerator(IDataGenerator):
             source_content: Optional source content for prompt formatting
             
         Returns:
-            Formatted prompt
+            Tuple of the formatted prompt and cleaned content
         """
         # Get raw prompt
         raw_prompt = self.agent_config.get(PROMPT_KEY, '')

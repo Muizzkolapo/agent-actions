@@ -2,7 +2,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Any, Union
+from typing import Any, Dict, Optional, Union
 from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)
@@ -62,7 +62,10 @@ class SourcePathManager:
             raise
             
     @staticmethod
-    def load_source_content(source_path, context_data):
+    def load_source_content(
+        source_path: Union[str, Path],
+        context_data: Dict[str, Any]
+    ) -> Optional[Any]:
         """
         Load source content based on the input documentation's GUID.
         If the source file doesn't exist, create it with an empty structure.
