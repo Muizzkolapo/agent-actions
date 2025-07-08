@@ -25,6 +25,43 @@ class BatchService:
         self.context_map = {}
         self.side_collection = []
 
+    @staticmethod
+    def _separate_side_output(items):
+        """Split processed items into main and side output collections."""
+        main_output, side_output = [], []
+        for item in items:
+            content = item.get('content', {})
+            if isinstance(content, dict) and content.get('side_output', False):
+                side_output.append(item)
+            else:
+                main_output.append(item)
+        return main_output, side_output
+
+    @staticmethod
+    def _save_side_output(data, file_path):
+        """Persist side output data, merging with existing content if present."""
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+
+        existing = []
+        if file_path.exists():
+            with open(file_path, "r", encoding="utf-8") as f:
+                try:
+                    existing = json.load(f)
+                except json.JSONDecodeError:
+                    existing = []
+
+        if not isinstance(existing, list):
+            existing = [existing]
+
+        # Ensure the incoming data is a list for consistent appends
+        if not isinstance(data, list):
+            data = [data]
+
+        existing.extend(data)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            json.dump(existing, f, indent=4)
+
     def _resolve_tools_path(self, agent_config):
         path = agent_config.get('tools', {}).get('path')
         if path:
@@ -85,7 +122,8 @@ class BatchService:
                 print(f"Warning: Skipping row in batch data due to missing 'guid'.")
                 continue
 
-            self.context_map[uuid] = row
+            # Store only the content portion of the row for side_collection merging
+            self.context_map[uuid] = row.get("content", row)
 
             processed_row = apply_remove_collection(row, agent_config)
 
@@ -149,7 +187,7 @@ class BatchService:
         
         batch_dir.mkdir(parents=True, exist_ok=True)
         
-        file_name = f"{agent_type}_batch_input.jsonl"
+        file_name = f"{agent_config.get('agent_type')}_batch_input.jsonl"
         file_path = batch_dir / file_name
 
         with open(file_path, 'w') as file:
@@ -177,9 +215,7 @@ class BatchService:
         # Save to global batch directory (for backward compatibility)
         global_batch_dir = Path.cwd() / "batch"
         global_batch_dir.mkdir(exist_ok=True)
-        global_job_id_file = global_batch_dir / ".last_batch_id"
-        with open(global_job_id_file, 'w') as f:
-            f.write(batch_id)
+
         
         # Also save to output directory if provided
         if output_directory:
@@ -196,7 +232,7 @@ class BatchService:
         else:
             batch_dir = Path.cwd() / "batch"
         batch_dir.mkdir(parents=True, exist_ok=True)
-        path = batch_dir / f"{agent_type}_context_map.json"
+        path = batch_dir / f"{agent_config.get('agent_type')}_context_map.json"
         payload = {
             "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
             "data": context_map,
@@ -212,7 +248,16 @@ class BatchService:
         try:
             with open(context_files[0], "r", encoding="utf-8") as f:
                 payload = json.load(f)
-            return payload.get("data", {}), payload.get("side_collection", [])
+
+            raw_map = payload.get("data", {})
+            cleaned_map = {}
+            for guid, value in raw_map.items():
+                if isinstance(value, dict) and "content" in value:
+                    cleaned_map[guid] = value.get("content", {})
+                else:
+                    cleaned_map[guid] = value
+
+            return cleaned_map, payload.get("side_collection", [])
         except Exception:
             return {}, []
 
@@ -319,6 +364,8 @@ class BatchService:
                 side_collection=side_collection,
                 context_map=context_map,
             )
+
+            main_output, side_output_data = self._separate_side_output(processed_data)
             
             # Save to workflow output directory structure
             relative_path = Path(file_path).relative_to(base_directory)
@@ -326,8 +373,13 @@ class BatchService:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
             
             file_writer = FileWriter(str(output_file_path))
-            file_writer.write_target(processed_data)
-            
+            file_writer.write_target(main_output)
+
+            if side_output_data:
+                side_output_dir = Path(output_directory).parent / 'side_output'
+                side_output_file_path = side_output_dir / relative_path.name
+                self._save_side_output(side_output_data, side_output_file_path)
+
             return str(output_file_path)
             
         except Exception as e:
@@ -367,32 +419,36 @@ class BatchService:
                         
                         try:
                             # Parse JSON content from the response
-                            generated_data = json.loads(content)
-                            
+                            generated_obj = json.loads(content)
+
+                            # Normalize to a list for consistent processing
+                            generated_list = DataTransformer.ensure_list(generated_obj)
+
                             if side_collection and custom_id in context_map:
                                 original = context_map.get(custom_id, {})
-                                if isinstance(generated_data, list):
-                                    generated_data = [
-                                        DataTransformer.update_schema_objects(original, item, side_collection)
-                                        if isinstance(item, dict) else item
-                                        for item in generated_data
-                                    ]
-                                elif isinstance(generated_data, dict):
-                                    generated_data = DataTransformer.update_schema_objects(original, generated_data, side_collection)
+                                if isinstance(original, dict) and "content" in original:
+                                    original = original.get("content", {})
+                                generated_list = [
+                                    DataTransformer.update_schema_objects(original, item, side_collection)
+                                    if isinstance(item, dict) else item
+                                    for item in generated_list
+                                ]
 
-                            # Create workflow format: extract content and preserve metadata
-                            workflow_item = {
-                                "guid": custom_id,
-                                "content": generated_data,
-                                "metadata": {
-                                    "model": response_body.get('model'),
-                                    "usage": response_body.get('usage'),
-                                    "finish_reason": choice.get('finish_reason'),
-                                    "created": response_body.get('created'),
-                                    "system_fingerprint": response_body.get('system_fingerprint')
+                            structured_items = DataTransformer.transform_structure(
+                                [{custom_id: generated_list}]
+                            )
+
+                            for itm in structured_items:
+                                itm["metadata"] = {
+                                    "model": response_body.get("model"),
+                                    "usage": response_body.get("usage"),
+                                    "finish_reason": choice.get("finish_reason"),
+                                    "created": response_body.get("created"),
+                                    "system_fingerprint": response_body.get(
+                                        "system_fingerprint"
+                                    ),
                                 }
-                            }
-                            processed_data.append(workflow_item)
+                            processed_data.extend(structured_items)
                             
                         except json.JSONDecodeError:
                             # If not valid JSON, wrap in error structure
@@ -508,9 +564,11 @@ class BatchService:
                 side_collection=side_collection,
                 context_map=context_map,
             )
-            
+
             print(f"Processed {len(processed_data)} items into workflow format")
-            
+
+            main_output, side_output_data = self._separate_side_output(processed_data)
+
             # Find the original staging file to use its name (like batch_15.json)
             staging_dir = Path(output_directory).parent.parent / "staging"
             original_file_name = None
@@ -531,8 +589,16 @@ class BatchService:
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
             
             file_writer = FileWriter(str(output_file_path))
-            file_writer.write_target(processed_data)
-            
+            file_writer.write_target(main_output)
+
+            if side_output_data:
+                side_output_dir = Path(output_directory).parent / "side_output"
+                if original_file_name:
+                    side_output_file = side_output_dir / f"{original_file_name}.json"
+                else:
+                    side_output_file = side_output_dir / f"{batch_id}_processed_output.json"
+                self._save_side_output(side_output_data, side_output_file)
+
             return str(output_file_path)
             
         except Exception as e:
