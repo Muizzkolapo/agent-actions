@@ -16,27 +16,23 @@ from agent_actions.cli.exceptions import (
     PermissionError,
     ConfigurationError
 )
+from agent_actions.cli.validators.init_validator import InitCommandArgs
+from pydantic import ValidationError as PydanticValidationError
 
 
 class InitCommand:
     """Implementation of the init command."""
     
-    def __init__(self, project_name: str, output_dir: Optional[str] = None, 
-                 template: str = 'default', force: bool = False):
+    def __init__(self, args: InitCommandArgs):
         """
         Initialize the init command.
         
         Args:
-            project_name: Name of the project to create.
-            output_dir: Directory to create the project in (default: current directory).
-            template: Template to use for project initialization.
-            force: Whether to force initialization even if the directory exists.
+            args: Pydantic model containing the command arguments.
         """
-        self.project_name = project_name
-        self.output_dir = Path(output_dir) if output_dir else Path.cwd()
-        self.template = template
-        self.force = force
-        self.project_dir = self.output_dir / self.project_name
+        self.args = args
+        self.output_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+        self.project_dir = self.output_dir / self.args.project_name
     
     def _get_available_templates(self) -> List[str]:
         """
@@ -58,12 +54,12 @@ class InitCommand:
         """
         try:
             # Remove existing directory if force is True
-            if self.project_dir.exists() and self.force:
+            if self.project_dir.exists() and self.args.force:
                 import shutil
                 shutil.rmtree(self.project_dir)
             
             # Create the directory
-            self.project_dir.mkdir(exist_ok=self.force)
+            self.project_dir.mkdir(exist_ok=self.args.force)
             
         except PermissionError as e:
             raise PermissionError(f"Permission denied when creating project directory: {str(e)}")
@@ -79,9 +75,9 @@ class InitCommand:
         """
         try:
             initializer = ProjectInitializer(
-                project_name=self.project_name,
+                project_name=self.args.project_name,
                 project_dir=str(self.project_dir),
-                template=self.template
+                template=self.args.template
             )
             initializer.init_project()
             
@@ -97,9 +93,9 @@ class InitCommand:
         """
         try:
             # Validate inputs using ProjectValidator
-            ProjectValidator.validate_project_name(self.project_name)
-            ProjectValidator.validate_project_directory(self.output_dir, self.project_dir, self.force)
-            ProjectValidator.validate_template(self.template, self._get_available_templates())
+            ProjectValidator.validate_project_name(self.args.project_name)
+            ProjectValidator.validate_project_directory(self.output_dir, self.project_dir, self.args.force)
+            ProjectValidator.validate_template(self.args.template, self._get_available_templates())
             
             # Create project directory
             self._create_project_directory()
@@ -108,17 +104,17 @@ class InitCommand:
             self._initialize_project()
             
             # Success message
-            click.echo(f"Successfully initialized project: {self.project_name}")
+            click.echo(f"Successfully initialized project: {self.args.project_name}")
             click.echo(f"Project created at: {self.project_dir}")
             click.echo("\nNext steps:")
-            click.echo(f"  cd {self.project_name}")
+            click.echo(f"  cd {self.args.project_name}")
             click.echo("  agent-actions run -a sample_agent")
             
         except (ValidationError, PermissionError, ConfigurationError) as e:
             raise click.ClickException(str(e))
             
         except Exception as e:
-            raise click.ClickException(f"Failed to initialize project {self.project_name}: {str(e)}")
+            raise click.ClickException(f"Failed to initialize project {self.args.project_name}: {str(e)}")
 
 
 @click.command()
@@ -143,5 +139,9 @@ def init(project_name: str, output_dir: Optional[str] = None,
         agent-actions init my_project --template minimal
         agent-actions init my_project --output-dir /path/to/dir
     """
-    command = InitCommand(project_name, output_dir, template, force)
-    command.execute()
+    try:
+        args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)
+        command = InitCommand(args)
+        command.execute()
+    except PydanticValidationError as e:
+        raise click.ClickException(str(e))

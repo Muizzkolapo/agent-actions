@@ -35,7 +35,8 @@ setup(
             'agent_actions.yml',
             'agent_config/*.yml',
             'agent_dags/templates/*.html',
-            'agent_dags/static/**/*'
+            'agent_dags/static/**/*',
+            'py.typed'
         ],
     },
     author='Muizz Lateef',

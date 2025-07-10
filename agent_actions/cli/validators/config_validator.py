@@ -1,9 +1,20 @@
 import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
+from agent_actions.models.config_types import AgentConfigMap
 
 from agent_actions.handlers.file_handler import FileHandler
 from .base_validator import BaseValidator
+from agent_actions.constants import (
+    MODEL_VENDOR_KEY,
+    MODEL_NAME_KEY,
+    JSON_MODE_KEY,
+    API_KEY_KEY,
+    PROMPT_KEY,
+    SCHEMA_NAME_KEY,
+    CHUNK_CONFIG_KEY,
+    SIDE_COLLECTION_KEY,
+)
 
 # ---------------------------------------------------------------------------------------------
 # ConfigValidator (Case‑Insensitive Validation)
@@ -17,7 +28,7 @@ class ConfigValidator(BaseValidator):
     # -----------------------------------------------------------------------------------------
     # CONSTANTS (stored lower‑case for cheap comparisons)
     # -----------------------------------------------------------------------------------------
-    _REQUIRED_AGENT_KEYS: Set[str] = {"agent_type", "model_name"}
+    _REQUIRED_AGENT_KEYS: Set[str] = {"agent_type", MODEL_NAME_KEY}
 
     _OPTIONAL_AGENT_KEYS: Set[str] = {
         "description",
@@ -28,27 +39,28 @@ class ConfigValidator(BaseValidator):
         "config",
         "parent",
         "granularity",
-        "side_collection",
+        SIDE_COLLECTION_KEY,
         "remove_collection",
-        "model_vendor",
-        "json_mode",
+        MODEL_VENDOR_KEY,
+        JSON_MODE_KEY,
         "prompt_debug",
-        "api_key",
-        "prompt",
-        "schema_name",
+        API_KEY_KEY,
+        PROMPT_KEY,
+        SCHEMA_NAME_KEY,
         "tools",
-        "chunk_config",
+        CHUNK_CONFIG_KEY,
         "use_few_shot_samples",
         "conditional_clause",
         "is_operational",
         "ephemeral",
         "add_dispatch",
+        "output_field",
     }
 
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
-        "llm": {"model_name"},
+        "llm": {MODEL_NAME_KEY},
         "function": {"code_path"},
-        "tool": {"model_name"},
+        "tool": {MODEL_NAME_KEY},
     }
 
     # -----------------------------------------------------------------------------------------
@@ -137,7 +149,7 @@ class ConfigValidator(BaseValidator):
         # -------------------------- core fields (CI) --------------------------------
         name = entry_ci.get("name")
         agent_type = str(entry_ci.get("agent_type", "")).lower()
-        model_vendor = str(entry_ci.get("model_vendor", "")).lower()
+        model_vendor = str(entry_ci.get(MODEL_VENDOR_KEY, "")).lower()
         granularity_raw = entry_ci.get("granularity", "record")
         granularity = str(granularity_raw).lower()
 
@@ -170,7 +182,7 @@ class ConfigValidator(BaseValidator):
 
         # -------------------------- tool vendor w/ file granularity ------------------
         if model_vendor == "tool" and granularity == "file":
-            if "side_collection" in entry_ci:
+            if SIDE_COLLECTION_KEY in entry_ci:
                 self.add_error(
                     f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'side_collection' defined. "
                     "This key should be removed for this agent configuration as file‑level tools process content wholesale, "
@@ -204,12 +216,18 @@ class ConfigValidator(BaseValidator):
             self.add_error(f"{desc} 'dependencies' should be a list.")
         if "is_operational" in entry_ci and not isinstance(entry_ci["is_operational"], bool):
             self.add_error(f"{desc} 'is_operational' should be a boolean.")
-        if "json_mode" in entry_ci and not isinstance(entry_ci["json_mode"], bool):
+        if JSON_MODE_KEY in entry_ci and not isinstance(entry_ci[JSON_MODE_KEY], bool):
             self.add_error(f"{desc} 'json_mode' should be a boolean.")
         if "prompt_debug" in entry_ci and not isinstance(entry_ci["prompt_debug"], bool):
             self.add_error(f"{desc} 'prompt_debug' should be a boolean.")
         if "granularity" in entry_ci and granularity not in ["record", "file"]:
             self.add_error(f"{desc} 'granularity' must be 'record' or 'file'.")
+
+        # -------------------------- output_field validation --------------------------
+        if "output_field" in entry_ci and entry_ci.get(JSON_MODE_KEY, True):
+            self.add_error(
+                f"{desc} 'output_field' can only be used when 'json_mode' is false."
+            )
 
     # -----------------------------------------------------------------------------------------
     # LIST VALIDATION (delegates to CI single‑entry)
@@ -244,7 +262,7 @@ class ConfigValidator(BaseValidator):
     # -----------------------------------------------------------------------------------------
     # CONFIG‑WIDE VALIDATIONS (CI)
     # -----------------------------------------------------------------------------------------
-    def _validate_config_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+    def _validate_config_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         available_agents = {name.lower() for name in full_config_data}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):
@@ -285,7 +303,7 @@ class ConfigValidator(BaseValidator):
                     if not dep_cfg_ci.get("is_operational", True):
                         self.add_error(f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.")
 
-    def _check_circular_dependencies_logic(self, full_config_data: Dict[str, List[Dict[str, Any]]]) -> None:
+    def _check_circular_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         graph: Dict[str, List[str]] = {}
         for agent_name, entries in full_config_data.items():
             if not isinstance(entries, list):

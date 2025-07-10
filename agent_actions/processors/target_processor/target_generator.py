@@ -1,9 +1,12 @@
 """Module for target data generation based on configuration."""
 from pathlib import Path
+import json
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.constants import MODEL_VENDOR_KEY
+from agent_actions.services.batch_service import BatchService
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -23,7 +26,7 @@ class TargetGenerator:
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
-        self.model_vendor = agent_config.get('model_vendor', '').lower()
+        self.model_vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         self.content_processor = TargetContentProcessor(agent_config, agent_name)
@@ -44,6 +47,23 @@ class TargetGenerator:
         Returns:
             Path to the generated output file for compatibility
         """
+        if agent_config.get('run_mode') == 'batch':
+            batch_service = BatchService()
+            file_reader = FileReader(file_path)
+            data = file_reader.read()
+            batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data, output_directory)
+            relative_path = Path(file_path).relative_to(base_directory)
+            output_file_path = Path(output_directory) / relative_path
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            placeholder = {
+                "batch_job_id": batch_id,
+                "status": "submitted",
+                "agent": agent_name
+            }
+            with open(output_file_path, 'w') as f:
+                json.dump(placeholder, f)
+            return str(output_file_path)
+
         generator = TargetGenerator(agent_config, agent_name)
         return generator.process(file_path, base_directory, output_directory)
     
@@ -84,7 +104,7 @@ class TargetGenerator:
         """Select and apply the appropriate processing strategy based on configuration."""
         # Tool vendor with record granularity and side output
         if self.model_vendor == TOOL_VENDOR and self.granularity == 'record' and self.side_output_enabled:
-            main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path)
+            main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path, output_directory)
             self.output_handler.save_main_output(main_output, file_path, base_directory, output_directory)
             
             if side_output_data:
@@ -92,10 +112,10 @@ class TargetGenerator:
         
         # Tool vendor with file granularity
         elif self.model_vendor == TOOL_VENDOR and self.granularity == 'file':
-            output = self.content_processor.process_file_level(data)
+            output = self.content_processor.process_file_level(data, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
         
         # Record granularity (default)
         elif self.granularity == 'record':
-            output = self.content_processor.process(data, file_path)
+            output = self.content_processor.process(data, file_path, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

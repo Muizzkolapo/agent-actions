@@ -5,6 +5,11 @@ Module for initializing new Agent Actions projects.
 from pathlib import Path
 import yaml
 import logging
+from agent_actions.constants import (
+    API_KEY_KEY,
+    MODEL_NAME_KEY,
+    CHUNK_CONFIG_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +61,9 @@ class ProjectInitializer:
         # Define default configuration
         config_data = {
             "default_agent_config": {
-                "api_key": "OPENAI_API_KEY",
-                "model_name": "gpt-3.5-turbo",
-                "chunk_config": {
+                API_KEY_KEY: "OPENAI_API_KEY",
+                MODEL_NAME_KEY: "gpt-3.5-turbo",
+                CHUNK_CONFIG_KEY: {
                     "chunk_size": 300,
                     "overlap": 10
                 }

@@ -1,12 +1,10 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
-
-from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from .interfaces import IContentProcessor
 from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
-from .few_shot_sample_manager import FewShotSampleManager
 from .data_generator import DataGenerator
 from .data_processor import DataProcessor
 
@@ -27,17 +25,18 @@ class TargetContentProcessor(IContentProcessor):
         
         # Initialize component services
         self.source_loader = SourceDataLoader(agent_name)
-        self.sample_manager = FewShotSampleManager(agent_config, agent_name)
         self.data_generator = DataGenerator(agent_config, agent_name)
         self.data_processor = DataProcessor(agent_config)
+        self.batch_service = BatchService()
 
-    def process(self, data: List[Dict], file_path: str) -> List[Dict]:
+    def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
         Process a list of data items.
         
         Args:
             data: List of data items to process
             file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
             
         Returns:
             List of processed data items
@@ -45,6 +44,10 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            return [] # Return empty list to signify batch submission
+
         try:
             source_data = self.source_loader.load_source_data(file_path)
             processed_data = []
@@ -64,7 +67,8 @@ class TargetContentProcessor(IContentProcessor):
     def process_for_side_output(
         self, 
         data: List[Dict], 
-        file_path: str
+        file_path: str,
+        output_directory: str = None
     ) -> Tuple[List[Dict], List[Dict]]:
         """
         Process data and separate into main and side outputs.
@@ -72,6 +76,7 @@ class TargetContentProcessor(IContentProcessor):
         Args:
             data: List of data items to process
             file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
             
         Returns:
             Tuple of (main_output, side_output)
@@ -79,6 +84,10 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            return [], [] # Return empty lists for main and side output
+
         try:
             source_data = self.source_loader.load_source_data(file_path)
             all_processed_items = []
@@ -96,12 +105,13 @@ class TargetContentProcessor(IContentProcessor):
         except Exception as e:
             raise RuntimeError(f"Failed to process for side output: {str(e)}")
 
-    def process_file_level(self, data: List[Dict]) -> List[Dict]:
+    def process_file_level(self, data: List[Dict], output_directory: str = None) -> List[Dict]:
         """
         Process data at the file level.
         
         Args:
             data: List of data items to process
+            output_directory: Directory where batch files should be created
             
         Returns:
             Processed data
@@ -109,9 +119,13 @@ class TargetContentProcessor(IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            return []
+
         try:
             contents, guid = data[0]['content'], data[0]['guid']
-            generated_data = self.data_generator.create_agent_with_data(data)
+            generated_data, _ = self.data_generator.create_agent_with_data(data)
             return self.data_processor.process_item(contents, generated_data, guid)
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")
@@ -140,32 +154,14 @@ class TargetContentProcessor(IContentProcessor):
             # Get corresponding source content
             source_content = DataTransformer.get_content_by_guid(source_data, guid)
             
-            # Add few-shot samples
-            contents = self.sample_manager.add_few_shot_samples(contents)
-            
-            # Check conditional clause
-            conditional_clause = self.agent_config.get('conditional_clause', '').lower()
-            if conditional_clause:
-                # For conditional_clause UDFs, only pass the primary 'contents' data.
-                if execute_user_defined_function(conditional_clause, contents):
-                    # Generate data with agent
-                    generated_data = self.data_generator.create_agent_with_data(
-                        contents, source_content
-                    )
-                else:
-                    # Skip agent generation, use contents directly
-                    generated_data = [contents]
-            else:
-                # No conditional clause, always generate
-                generated_data = self.data_generator.create_agent_with_data(
-                    contents, source_content
-                )
-            
-            # Process the generated data, but only apply side_collection if the agent was actually run
-            if not (conditional_clause and not execute_user_defined_function(conditional_clause, contents)):
+            # Generate data through the shared utility
+            generated_data, executed = self.data_generator.create_agent_with_data(
+                contents, source_content
+            )
+
+            if executed:
                 return self.data_processor.process_item(contents, generated_data, guid)
             else:
-                # If the agent was skipped, just transform the structure without side_collection
                 return DataTransformer.transform_structure([{guid: generated_data}])
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

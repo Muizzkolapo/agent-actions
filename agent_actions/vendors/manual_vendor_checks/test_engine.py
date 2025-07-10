@@ -1,9 +1,10 @@
 from agent_actions.vendors.ollama_vendor import OllamaHandler
+from agent_actions.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY
 
 agent_cfg = {
-    "model_vendor": "ollama",
-    "model_name": "llama3",
-    "json_mode": False
+    MODEL_VENDOR_KEY: "ollama",
+    MODEL_NAME_KEY: "llama3",
+    JSON_MODE_KEY: False
 }
 
 prompt_config = """

@@ -17,21 +17,14 @@ class IContentProcessor(ABC):
         pass
 
 
-class IFewShotSampleManager(ABC):
-    """Interface for few-shot sample management."""
-
-    @abstractmethod
-    def add_few_shot_samples(self, contents: Dict) -> Dict:
-        """Add few-shot samples to content."""
-        pass
-
-
 class IDataGenerator(ABC):
     """Interface for data generation."""
 
     @abstractmethod
-    def create_agent_with_data(self, contents: Dict, source_content: Optional[Dict] = None) -> Any:
-        """Create an agent with the provided data."""
+    def create_agent_with_data(
+        self, contents: Dict, source_content: Optional[Any] = None
+    ) -> Tuple[List[Dict], bool]:
+        """Create an agent with the provided data and return results."""
         pass
 
 

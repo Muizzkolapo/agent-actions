@@ -3,6 +3,7 @@ import google.generativeai as genai
 from agent_actions.transformers.string_transformer import StringProcessor
 from textwrap import dedent
 from agent_actions.vendors.base_vendor import BaseVendorHandler
+from agent_actions.constants import MODEL_NAME_KEY
 
 
 
@@ -10,7 +11,7 @@ class GeminiHandler(BaseVendorHandler):
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         genai.configure(api_key=api_key)
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         llm = genai.GenerativeModel(
             model_name,
@@ -35,7 +36,7 @@ class GeminiHandler(BaseVendorHandler):
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
         genai.configure(api_key=api_key)
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         llm = genai.GenerativeModel(
             model_name,

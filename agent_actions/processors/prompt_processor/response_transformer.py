@@ -1,5 +1,7 @@
 """Module for transforming agent responses."""
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.constants import SIDE_COLLECTION_KEY
+from agent_actions.processors.common.utils import transform_with_side_collection
 
 
 class ResponseTransformer:
@@ -19,13 +21,9 @@ class ResponseTransformer:
         Returns:
             Transformed response structure
         """
-        side_collection = agent_config.get('side_collection', [])
-        
-        if side_collection:
-            updated_response = [
-                DataTransformer.update_schema_objects(context_data, data, side_collection)
-                for data in response
-            ]
-            return DataTransformer.transform_structure([{guid: updated_response}])
-        else:
-            return DataTransformer.transform_structure([{guid: response}])
+        return transform_with_side_collection(
+            response,
+            context_data,
+            guid,
+            agent_config,
+        )

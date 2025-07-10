@@ -19,6 +19,7 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
     # Make the prompt loader available within Jinja2 templates in case it's needed
     env.globals['load_prompt'] = PromptLoader.load_prompt
     
+    
     template_files = [f for f in os.listdir(templates_folder) if f.endswith(('.j2', '.jinja2'))]
     for template_file in template_files:
         try:
@@ -53,23 +54,24 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         
         def resolve_prompt_fields(item):
             """
-            Recursively search for keys named 'prompt' whose values begin with '$'.
+            Recursively search for keys named 'prompt' whose values begin with '$' or contain 'return_collection'.
             If found, resolve the prompt using PromptLoader.load_prompt and update the value.
             """
             if isinstance(item, dict):
                 for key, value in item.items():
-                    if key == 'prompt' and isinstance(value, str) and value.strip().startswith('$'):
-                        # Extract the prompt key (e.g., 'code_quiz_generator.code_generation_agent')
-                        # and any extra text after it.
-                        parts = value.strip().split(maxsplit=1)
-                        prompt_key = parts[0][1:]  # Remove the '$'
-                        extra = parts[1] if len(parts) > 1 else ""
-                        try:
-                            resolved = PromptLoader.load_prompt(prompt_key)
-                            item[key] = resolved + (" " + extra if extra else "")
-                        except Exception:
-                            # If prompt resolution fails, leave the original prompt text.
-                            item[key] = value
+                    if key == 'prompt' and isinstance(value, str):
+                        # Handle $ prompt references
+                        if value.strip().startswith('$'):
+                            parts = value.strip().split(maxsplit=1)
+                            prompt_key = parts[0][1:]  # Remove the '$'
+                            extra = parts[1] if len(parts) > 1 else ""
+                            try:
+                                resolved = PromptLoader.load_prompt(prompt_key)
+                                item[key] = resolved + (" " + extra if extra else "")
+                            except Exception:
+                                # If prompt resolution fails, leave the original prompt text.
+                                item[key] = value
+                        # Handle return_collection syntax - leave as-is for runtime processing
                     elif isinstance(value, (dict, list)):
                         resolve_prompt_fields(value)
             elif isinstance(item, list):

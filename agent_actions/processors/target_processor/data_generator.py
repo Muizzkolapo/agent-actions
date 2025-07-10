@@ -1,10 +1,14 @@
 """Module for generating data using agents."""
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
+from agent_actions.models.config_types import AgentEntryDict
 
 from agent_actions.models import agent_builder
 from agent_actions.handlers.prompt_handler import PromptLoader
 from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
+from agent_actions.constants import PROMPT_KEY
+from agent_actions.processors.prompt_processor.sample_enricher import SampleEnricher
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
 from .interfaces import IDataGenerator
 
@@ -12,7 +16,7 @@ from .interfaces import IDataGenerator
 class DataGenerator(IDataGenerator):
     """Handles agent creation and data generation (Single Responsibility)."""
 
-    def __init__(self, agent_config: Dict, agent_name: str):
+    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
         """
         Initialize the data generator.
         
@@ -24,10 +28,10 @@ class DataGenerator(IDataGenerator):
         self.agent_name = agent_name
 
     def create_agent_with_data(
-        self, 
-        contents: Any, 
+        self,
+        contents: Any,
         source_content: Optional[Any] = None
-    ) -> List[Dict]:
+    ) -> Tuple[List[Dict], bool]:
         """
         Create an agent with the provided data and generate results.
         
@@ -36,30 +40,37 @@ class DataGenerator(IDataGenerator):
             source_content: Optional source content for prompt formatting
             
         Returns:
-            Generated data from the agent
+            Tuple containing the generated data and a flag indicating if the
+            agent was executed
             
         Raises:
             RuntimeError: If agent creation or data generation fails
         """
         try:
-
             # Apply remove_collection before creating the agent
-            contents = self._apply_remove_collection(contents)
-            
+            contents = apply_remove_collection(contents, self.agent_config)
+
             # Format prompt with content
             formatted_prompt, contents = self._format_prompt(contents, source_content)
+            
+            # Append few-shot samples if configured
+            formatted_prompt = SampleEnricher.append_few_shot_samples(
+                formatted_prompt, self.agent_config, self.agent_name
+            )
+            
             tool_args = self.agent_config.get('tool_args', {})
 
-            # Create and run the agent
-            return agent_builder.create_dynamic_agent(
+            # Create and run the agent through the shared utility
+            response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
                 contents,
-                source_content=source_content,  # Pass source_content explicitly
+                formatted_prompt,
+                tools_path=self.agent_config.get('tools', {}).get('path'),
                 tool_args=tool_args,
-                formatted_prompt=formatted_prompt,
-                tools_path=self.agent_config.get('tools', {}).get('path')
+                source_content=source_content,
             )
+            return response, executed
         except Exception as e:
             raise RuntimeError(f"Failed to create agent with data: {str(e)}")
 
@@ -73,12 +84,11 @@ class DataGenerator(IDataGenerator):
         Returns:
             Transformed content
         """
-        remove_collection = self.agent_config.get('remove_collection', [])
-        if remove_collection:
-            return DataTransformer.remove_schema_objects(contents, remove_collection)
-        return contents
+        return apply_remove_collection(contents, self.agent_config)
 
-    def _format_prompt(self, contents: Dict, source_content: Optional[Any] = None) -> str:
+    def _format_prompt(
+        self, contents: Dict, source_content: Optional[Any] = None
+    ) -> Tuple[str, Dict]:
         """
         Format the prompt with contents and source content.
         
@@ -87,10 +97,10 @@ class DataGenerator(IDataGenerator):
             source_content: Optional source content for prompt formatting
             
         Returns:
-            Formatted prompt
+            Tuple of the formatted prompt and cleaned content
         """
         # Get raw prompt
-        raw_prompt = self.agent_config.get('prompt', '')
+        raw_prompt = self.agent_config.get(PROMPT_KEY, '')
         if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
             raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
         if not raw_prompt:

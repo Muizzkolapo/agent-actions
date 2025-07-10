@@ -1,6 +1,21 @@
 """Common interfaces for processors."""
 from typing import List, Dict, Optional, Any
 
+class IDataLoader:
+    """Interface for data loading operations."""
+    
+    def load_data(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Loads data from the given file path.
+
+        Args:
+            file_path: The path to the data file.
+
+        Returns:
+            A list of dictionaries, where each dictionary represents a row of data.
+        """
+        pass
+
 class ISourceDataLoader:
     """Interface for source data loading operations."""
     

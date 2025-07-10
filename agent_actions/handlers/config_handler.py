@@ -21,6 +21,7 @@ class ConfigManager:
         self.agent_configs = {}
         self.execution_order = []
         self.child_pipeline = None
+        self.tool_path = None
         self.template_dir = str(Path.cwd() / "templates")
 
     def load_configs(self):
@@ -43,6 +44,20 @@ class ConfigManager:
             raise ConfigurationError(f"Error parsing YAML for default config from {self.default_path}: {e}") from e
         except Exception as e: # Catch other unexpected errors
             raise ConfigurationError(f"Unexpected error loading default config from {self.default_path}: {str(e)}") from e
+
+        # Prioritize tool_path from user_config, then fallback to default_config
+        user_tool_path = None
+        if isinstance(self.user_config, dict):
+            user_tool_path = self.user_config.get("tool_path") or self.user_config.get("tool")
+
+        default_tool_path = None
+        if isinstance(self.default_config, dict):
+            default_tool_path = self.default_config.get("tool_path") or self.default_config.get("tool")
+
+        if user_tool_path is not None:
+            self.tool_path = user_tool_path
+        else:
+            self.tool_path = default_tool_path
 
     def find_agent_name(self,config: Dict[str, Any]) -> str:
         """

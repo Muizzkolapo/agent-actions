@@ -2,6 +2,7 @@ import json
 from openai import OpenAI
 from agent_actions.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler
+from agent_actions.constants import MODEL_NAME_KEY
 
 
 class DeepSeekHandler(BaseVendorHandler):
@@ -9,7 +10,7 @@ class DeepSeekHandler(BaseVendorHandler):
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
 
-        model_name = agent_config['model_name']
+        model_name = agent_config[MODEL_NAME_KEY]
 
         context_data_str = StringProcessor.process_as_string(context_data)
 

@@ -2,6 +2,8 @@
 from typing import Dict, List
 
 from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.constants import SIDE_COLLECTION_KEY
+from agent_actions.processors.common.utils import transform_with_side_collection
 
 from .interfaces import IDataProcessor
 
@@ -39,18 +41,12 @@ class DataProcessor(IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            side_collection = self.agent_config.get('side_collection', [])
-            
-            if side_collection:
-                # Apply side_collection transformation to each item
-                updated_data = [
-                    DataTransformer.update_schema_objects(contents, data, side_collection)
-                    for data in generated_data
-                ]
-                return DataTransformer.transform_structure([{guid: updated_data}])
-            else:
-                # No transformation needed
-                return DataTransformer.transform_structure([{guid: generated_data}])
+            return transform_with_side_collection(
+                generated_data,
+                contents,
+                guid,
+                self.agent_config,
+            )
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
 

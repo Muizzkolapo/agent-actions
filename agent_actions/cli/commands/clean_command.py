@@ -1,6 +1,7 @@
 import click
 from agent_actions.handlers.cleaner import Cleaner
-
+from agent_actions.cli.validators.clean_validator import CleanCommandArgs
+from pydantic import ValidationError
 
 @click.command(
     name="clean",
@@ -32,4 +33,8 @@ def clean_cli(agent: str, force: bool, all: bool) -> None:
     Default behavior removes source and target directories.
     Use --all flag to also remove staging directory.
     """
-    Cleaner(agent=agent, force=force, remove_all=all).run()
+    try:
+        args = CleanCommandArgs(agent=agent, force=force, all=all)
+        Cleaner(agent=args.agent, force=args.force, remove_all=args.all).run()
+    except ValidationError as e:
+        raise click.ClickException(str(e))

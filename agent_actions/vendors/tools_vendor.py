@@ -1,5 +1,6 @@
 import json
 from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.constants import MODEL_NAME_KEY
 
 from typing import Dict, Any, Optional, Union
 class ToolHandler:
@@ -14,7 +15,7 @@ class ToolHandler:
         """
         Invoke a user-defined function (UDF) specified in the configuration.
         """
-        model_name = agent_config.get('model_name')
+        model_name = agent_config.get(MODEL_NAME_KEY)
         if not model_name:
             raise ValueError("Tool vendor requires 'model_name' (UDF path) in agent config.")
 

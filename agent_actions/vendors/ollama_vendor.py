@@ -15,6 +15,7 @@ import os
 
 from ollama import Client                         # <— changed
 from agent_actions.vendors.base_vendor import BaseVendorHandler
+from agent_actions.constants import MODEL_NAME_KEY
 
 
 class OllamaHandler(BaseVendorHandler):
@@ -39,7 +40,7 @@ class OllamaHandler(BaseVendorHandler):
         """
         Enforce the supplied JSON schema and return a list of dicts.
         """
-        model = agent_config["model_name"]
+        model = agent_config[MODEL_NAME_KEY]
         if hasattr(schema, "model_json_schema"):
             schema = schema.model_json_schema()               # allow Pydantic models
 
@@ -64,7 +65,7 @@ class OllamaHandler(BaseVendorHandler):
         """
         Plain-text chat (no schema enforcement).
         """
-        model = agent_config["model_name"]
+        model = agent_config[MODEL_NAME_KEY]
         ctx_str = (
             json.dumps(context_data, ensure_ascii=False)
             if not isinstance(context_data, str)
@@ -77,7 +78,8 @@ class OllamaHandler(BaseVendorHandler):
             messages=messages,
             stream=False
         )
-        response_content = {"raw_response": response.message.content}
+        output_field = agent_config.get("output_field", "raw_response")
+        response_content = {output_field: response.message.content}
         return [response_content]
 
 
