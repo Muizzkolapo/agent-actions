@@ -153,14 +153,7 @@ class TargetContentProcessor(IContentProcessor):
             contents, guid = item['content'], item['guid']
             
             # Get corresponding source content
-            source_content = DataTransformer.get_content_by_guid(source_data, guid)
-
-            #==================temp fix=========
-            source_content = [
-                s for s in json.dumps(source_content, ensure_ascii=False).split('"')
-                if r'\x' in s              # r'\x' prevents the interpreter from parsing it
-            ]  
-            #==================temp fix=========         
+            source_content = DataTransformer.get_content_by_guid(source_data, guid)  
             # Generate data through the shared utility
             generated_data, executed = self.data_generator.create_agent_with_data(
                 contents, source_content

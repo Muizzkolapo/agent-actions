@@ -94,7 +94,7 @@ class PromptUtils:
 
         replaced_data = re.sub(
             r'return_collection\{\{source_context\}\}',
-            guid,
+            lambda _: guid,
             data,
             flags=re.IGNORECASE,
         )
