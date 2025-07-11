@@ -1,5 +1,6 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
+import json
 from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
@@ -152,8 +153,7 @@ class TargetContentProcessor(IContentProcessor):
             contents, guid = item['content'], item['guid']
             
             # Get corresponding source content
-            source_content = DataTransformer.get_content_by_guid(source_data, guid)
-            
+            source_content = DataTransformer.get_content_by_guid(source_data, guid)  
             # Generate data through the shared utility
             generated_data, executed = self.data_generator.create_agent_with_data(
                 contents, source_content
