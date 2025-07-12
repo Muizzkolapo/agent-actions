@@ -1,7 +1,9 @@
 """Module for loading and running user-defined functions from a specified module."""
 
 import importlib
+import importlib.util
 import sys
+from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
@@ -45,10 +47,20 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
-        search_paths = ", ".join(sys.path)
-        raise ConfigurationError(
-            f"Module '{module_name}' for UDF not found. Searched paths: {search_paths}"
-        ) from e
+        module = None
+        for path in sys.path:
+            potential_file = Path(path) / f"{module_name}.py"
+            if potential_file.exists():
+                spec = importlib.util.spec_from_file_location(module_name, potential_file)
+                if spec and spec.loader:
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    break
+        if module is None:
+            search_paths = ", ".join(sys.path)
+            raise ConfigurationError(
+                f"Module '{module_name}' for UDF not found. Searched paths: {search_paths}"
+            ) from e
     
     try:
         function = getattr(module, function_name)
