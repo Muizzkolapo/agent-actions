@@ -10,6 +10,8 @@ from .data_generator import DataGenerator
 from .data_processor import DataProcessor
 
 
+import asyncio  # For async processing
+
 class TargetContentProcessor(IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
@@ -29,6 +31,30 @@ class TargetContentProcessor(IContentProcessor):
         self.data_generator = DataGenerator(agent_config, agent_name)
         self.data_processor = DataProcessor(agent_config)
         self.batch_service = BatchService()
+
+    async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
+        """
+        Async version: process a list of data items in parallel using asyncio.
+        """
+        if self.agent_config.get('run_mode') == 'batch':
+            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            return []
+        try:
+            source_data = self.source_loader.load_source_data(file_path)
+            async def process_one(item):
+                try:
+                    # _process_single_item is sync, so run in thread
+                    return await asyncio.to_thread(self._process_single_item, item, source_data)
+                except Exception as e:
+                    guid = item.get('guid', 'unknown')
+                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+            results = await asyncio.gather(*(process_one(item) for item in data))
+            processed_data = []
+            for result in results:
+                processed_data.extend(result)
+            return processed_data
+        except Exception as e:
+            raise RuntimeError(f"Failed to process content: {str(e)}")
 
     def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
