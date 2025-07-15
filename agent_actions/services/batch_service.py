@@ -14,6 +14,7 @@ from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
 from agent_actions.processors.common.utils import apply_remove_collection
+import uuid
 
 class BatchService:
     # Class variable to control force batch behavior
@@ -116,14 +117,14 @@ class BatchService:
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         tasks = []
         for row in data:
-            # In batch mode, the 'id' is the guid.
-            uuid = row.get("guid")
-            if not uuid:
-                print(f"Warning: Skipping row in batch data due to missing 'guid'.")
+            # Use batch_uuid if present (batch mode), else fallback to guid
+            custom_id = row.get("batch_uuid") or row.get("guid")
+            if not custom_id:
+                print(f"Warning: Skipping row in batch data due to missing 'batch_uuid' and 'guid'.")
                 continue
 
             # Store only the content portion of the row for side_collection merging
-            self.context_map[uuid] = row.get("content", row)
+            self.context_map[custom_id] = row.get("content", row)
 
             processed_row = apply_remove_collection(row, agent_config)
 
@@ -137,7 +138,7 @@ class BatchService:
             
             task = {
                     # Unique ID to match results back to the original input
-                    "custom_id": uuid,
+                    "custom_id": custom_id,
                     "method": "POST",
                     "url": "/v1/chat/completions",
                     "body": {
@@ -154,14 +155,6 @@ class BatchService:
                 }
             tasks.append(task)
         return tasks
-
-
-
-
-
-
-
-
 
     def submit_batch_job_from_data(self, agent_config, agent_type, data, output_directory=None, force=False):
         # Check for existing in-flight batch job unless forced
