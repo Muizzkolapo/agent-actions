@@ -117,11 +117,11 @@ class BatchService:
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         tasks = []
         for row in data:
-            # Use batch_uuid if present (batch mode), else fallback to guid
-            custom_id = row.get("batch_uuid") or row.get("guid")
+            # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
+            custom_id = row.get("target_id")
             if not custom_id:
-                print(f"Warning: Skipping row in batch data due to missing 'batch_uuid' and 'guid'.")
-                continue
+                custom_id = str(uuid.uuid4())
+                row["target_id"] = custom_id
 
             # Store only the content portion of the row for side_collection merging
             self.context_map[custom_id] = row.get("content", row)
