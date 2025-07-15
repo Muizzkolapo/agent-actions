@@ -1,6 +1,7 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
 import json
+import uuid
 from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
@@ -186,8 +187,15 @@ class TargetContentProcessor(IContentProcessor):
             )
 
             if executed:
-                return self.data_processor.process_item(contents, generated_data, guid)
+                processed = self.data_processor.process_item(contents, generated_data, guid)
+                # Attach a unique target_id to each processed object
+                for obj in processed:
+                    obj['target_id'] = str(uuid.uuid4())
+                return processed
             else:
-                return DataTransformer.transform_structure([{guid: generated_data}])
+                transformed = DataTransformer.transform_structure([{guid: generated_data}])
+                for obj in transformed:
+                    obj['target_id'] = str(uuid.uuid4())
+                return transformed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
