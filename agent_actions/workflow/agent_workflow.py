@@ -1,5 +1,6 @@
 import sys
 import json
+import asyncio  # Added for async processing
 from pathlib import Path
 from datetime import datetime
 from agent_actions.handlers.config_handler import ConfigManager
@@ -12,6 +13,69 @@ from rich.console import Console
 
 
 class AgentWorkflow:
+    async def async_run(self, concurrency_limit=None):
+        """
+        Run agents in parallel using asyncio. Optionally limit concurrency.
+        """
+        semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit else None
+        total_agents = len(self.execution_order)
+        self.console.print(f"[async] Found {total_agents} agents to run.")
+        results = []
+        exceptions = []
+
+        async def run_single_agent(idx, agent_name):
+            agent_config = self.agent_configs[agent_name]
+            status_details = self.agent_status.get(agent_name, {})
+            current_status = status_details.get('status', 'pending')
+            start_time = datetime.now()
+            self.console.print(f"[async] {start_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} START agent: [bold]{agent_name}[/bold]...")
+            if current_status == 'completed':
+                self.previous_agent_type = agent_name
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                return 'completed'
+            try:
+                if semaphore:
+                    async with semaphore:
+                        output_folder = await asyncio.to_thread(
+                            self.agent_runner.run_agent,
+                            agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
+                        )
+                else:
+                    output_folder = await asyncio.to_thread(
+                        self.agent_runner.run_agent,
+                        agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
+                    )
+                self._update_status(agent_name, 'completed')
+                self.previous_agent_type = agent_name
+                self.ephemeral_directories.append({'output_folder': output_folder, 'ephemeral': agent_config.get('ephemeral', False)})
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                return 'completed'
+            except Exception as e:
+                self.console.print(f"[async] [red]Agent '{agent_name}' failed with error: {e}[/red]")
+                self._update_status(agent_name, 'failed')
+                exceptions.append((agent_name, e))
+                return 'failed'
+
+        tasks = [run_single_agent(idx, agent_name) for idx, agent_name in enumerate(self.execution_order)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        self.console.print("\n[bold][async] Workflow Summary:[/bold]")
+        for idx, agent_name in enumerate(self.execution_order):
+            status = self.agent_status[agent_name]['status']
+            color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
+            self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
+        self.output_processor.process_final_output(self.ephemeral_directories)
+        self.console.print("\n🎉 [bold green][async] Workflow Complete[/bold green]")
+        self.console.print("Done.")
+        if exceptions:
+            raise Exception(f"Some agents failed: {exceptions}")
+
+    # (rest of class unchanged)
+
     def __init__(self, constructor_path, user_code_path, default_path, use_tools,
                  parent_output=None, parent_source=None, parent_pipeline=None):
         self.constructor_path = constructor_path

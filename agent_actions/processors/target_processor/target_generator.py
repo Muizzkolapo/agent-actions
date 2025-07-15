@@ -67,9 +67,9 @@ class TargetGenerator:
         generator = TargetGenerator(agent_config, agent_name)
         return generator.process(file_path, base_directory, output_directory)
     
-    def process(self, file_path, base_directory, output_directory):
+    async def process(self, file_path, base_directory, output_directory):
         """
-        Process input file and generate output.
+        Async: Process input file and generate output.
         
         Args:
             file_path: Path to the input JSON file
@@ -84,7 +84,7 @@ class TargetGenerator:
             data = self._read_input_data(file_path)
             
             # Process according to configuration
-            self._process_by_strategy(data, file_path, base_directory, output_directory)
+            await self._process_by_strategy(data, file_path, base_directory, output_directory)
             
             # Return the output file path for compatibility
             relative_path = Path(file_path).relative_to(base_directory)
@@ -100,8 +100,8 @@ class TargetGenerator:
         file_reader = FileReader(file_path)
         return file_reader.read()
     
-    def _process_by_strategy(self, data, file_path, base_directory, output_directory):
-        """Select and apply the appropriate processing strategy based on configuration."""
+    async def _process_by_strategy(self, data, file_path, base_directory, output_directory):
+        """Select and apply the appropriate processing strategy based on configuration. Async for record granularity."""
         # Tool vendor with record granularity and side output
         if self.model_vendor == TOOL_VENDOR and self.granularity == 'record' and self.side_output_enabled:
             main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path, output_directory)
@@ -117,5 +117,5 @@ class TargetGenerator:
         
         # Record granularity (default)
         elif self.granularity == 'record':
-            output = self.content_processor.process(data, file_path, output_directory)
+            output = await self.content_processor.process_async(data, file_path, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

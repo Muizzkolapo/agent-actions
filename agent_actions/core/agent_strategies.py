@@ -7,7 +7,7 @@ and generating outputs based on the agent's position in a workflow.
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any
-
+import asyncio
 from agent_actions.processors.staging_processor.staging_loader import generate_staging
 from agent_actions.processors.target_processor.target_generator import TargetGenerator
 
@@ -59,7 +59,19 @@ class AgentStrategy(ABC):
         Returns:
             Path to the generated output file.
         """
-        return TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory)
+        result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory)
+        if asyncio.iscoroutine(result):
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                # If already in an event loop, schedule and wait
+                return loop.run_until_complete(result)
+            else:
+                return asyncio.run(result)
+        return result
+
 
 
 class InitialStrategy(AgentStrategy):
