@@ -56,6 +56,7 @@ def transform_with_side_collection(
     context_data: dict,
     source_guid: str,
     agent_config: Dict,
+    idx: int = 0,
 ) -> list:
     """Apply ``side_collection`` logic to generated data consistently."""
     side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
@@ -69,14 +70,12 @@ def transform_with_side_collection(
     else:
         output = data
     # Patch: Ensure every output object has target_id, source_guid, node_id
-    node_id = str(uuid.uuid4())
-    for obj in output:
+    for idx_obj, obj in enumerate(output):
         if 'target_id' not in obj or not obj['target_id']:
             obj['target_id'] = str(uuid.uuid4())
         if 'source_guid' not in obj or not obj['source_guid']:
             obj['source_guid'] = source_guid
         if 'node_id' not in obj or not obj['node_id']:
-            obj['node_id'] = node_id
+            obj['node_id'] = f"node_{idx}_{uuid.uuid4()}"
     return output
 
-    return DataTransformer.transform_structure([{source_guid: data}])
