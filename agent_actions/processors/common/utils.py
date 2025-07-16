@@ -68,7 +68,7 @@ def transform_with_side_collection(
         output = DataTransformer.transform_structure([{source_guid: updated}])
     else:
         output = data
-    # Patch: Ensure every output object has target_id, source_guid, node_id, parent_node_id, and lineage
+    # Patch: Ensure every output object has target_id, source_guid, node_id
     node_id = str(uuid.uuid4())
     for obj in output:
         if 'target_id' not in obj or not obj['target_id']:
@@ -77,19 +77,6 @@ def transform_with_side_collection(
             obj['source_guid'] = source_guid
         if 'node_id' not in obj or not obj['node_id']:
             obj['node_id'] = node_id
-        parent_node_id = obj.get('parent_node_id')
-        if not parent_node_id:
-            # Try to inherit from input context_data if possible
-            parent_node_id = context_data.get('node_id') if isinstance(context_data, dict) else None
-            obj['parent_node_id'] = parent_node_id
-        # Build lineage
-        lineage = obj.get('lineage', [])
-        if not lineage:
-            lineage = [parent_node_id] if parent_node_id else []
-        else:
-            if parent_node_id and parent_node_id not in lineage:
-                lineage.append(parent_node_id)
-        obj['lineage'] = lineage
     return output
 
     return DataTransformer.transform_structure([{source_guid: data}])

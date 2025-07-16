@@ -16,16 +16,18 @@ import asyncio  # For async processing
 class TargetContentProcessor(IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
-    def __init__(self, agent_config: Dict, agent_name: str):
+    def __init__(self, agent_config: Dict, agent_name: str, idx: int):
         """
         Initialize the target content processor.
         
         Args:
             agent_config: Configuration for the agent
             agent_name: Name of the agent
+            idx: Index of the config being processed
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+        self.idx = idx
         
         # Initialize component services
         self.source_loader = SourceDataLoader(agent_name)
@@ -189,53 +191,23 @@ class TargetContentProcessor(IContentProcessor):
             if executed:
                 processed = self.data_processor.process_item(contents, generated_data, source_guid)
                 # Attach a unique target_id to each processed object
-                node_id = str(uuid.uuid4())
-                parent_node_id = item.get('node_id')
-                lineage = item.get('lineage', [])
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
                 for obj in processed:
                     if 'target_id' not in obj or not obj['target_id']:
                         obj['target_id'] = str(uuid.uuid4())
                     if 'source_guid' not in obj or not obj['source_guid']:
                         obj['source_guid'] = source_guid
-                    if 'node_id' not in obj or not obj['node_id']:
-                        obj['node_id'] = node_id
-                    if 'parent_node_id' not in obj or not obj['parent_node_id']:
-                        obj['parent_node_id'] = parent_node_id
-                    # Build lineage
-                    obj_lineage = obj.get('lineage', [])
-                    if not obj_lineage:
-                        obj_lineage = lineage.copy() if lineage else []
-                        if parent_node_id and parent_node_id not in obj_lineage:
-                            obj_lineage.append(parent_node_id)
-                    else:
-                        if parent_node_id and parent_node_id not in obj_lineage:
-                            obj_lineage.append(parent_node_id)
-                    obj['lineage'] = obj_lineage
+                    obj['node_id'] = node_id  # Always use new node_id format
                 return processed
             else:
                 transformed = DataTransformer.transform_structure([{source_guid: generated_data}])
-                node_id = str(uuid.uuid4())
-                parent_node_id = item.get('node_id')
-                lineage = item.get('lineage', [])
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
                 for obj in transformed:
                     if 'target_id' not in obj or not obj['target_id']:
                         obj['target_id'] = str(uuid.uuid4())
                     if 'source_guid' not in obj or not obj['source_guid']:
                         obj['source_guid'] = source_guid
-                    if 'node_id' not in obj or not obj['node_id']:
-                        obj['node_id'] = node_id
-                    if 'parent_node_id' not in obj or not obj['parent_node_id']:
-                        obj['parent_node_id'] = parent_node_id
-                    # Build lineage
-                    obj_lineage = obj.get('lineage', [])
-                    if not obj_lineage:
-                        obj_lineage = lineage.copy() if lineage else []
-                        if parent_node_id and parent_node_id not in obj_lineage:
-                            obj_lineage.append(parent_node_id)
-                    else:
-                        if parent_node_id and parent_node_id not in obj_lineage:
-                            obj_lineage.append(parent_node_id)
-                    obj['lineage'] = obj_lineage
+                    obj['node_id'] = node_id 
                 return transformed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

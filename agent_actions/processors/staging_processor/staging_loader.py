@@ -11,7 +11,7 @@ from agent_actions.cli.exceptions import AgentActionsError
 import json
 import uuid
 
-def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
+def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory, idx):
     """
     Processes a file by splitting its content into chunks or looping through its objects/rows,
     and generating data using an agent.
@@ -22,6 +22,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         file_path (str): Path to the input file.
         base_directory (str): Base directory for the relative file path.
         output_directory (str): Directory where the output file will be saved.
+        idx (int): Index of the config being processed.
     """
     file_reader = FileReader(file_path)
     content = file_reader.read()
@@ -31,7 +32,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     if agent_config.get('run_mode') == 'batch':
         # Generate a unique batch_id for this batch job
         local_batch_id = f"batch_{uuid.uuid4().hex}"
-        node_id = str(uuid.uuid4())  # Unique node ID for this staging batch
+        node_id = f"node_{idx}_{uuid.uuid4()}"  # Unique node ID for this staging batch
         if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
             chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
             chunk_size = chunk_config.get("chunk_size", 1000)
@@ -49,9 +50,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                     "batch_uuid": f"{local_batch_id}_{idx}",
                     "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
                     "target_id": str(uuid.uuid4()),
-                    "node_id": node_id,
-                    "parent_node_id": None,
-                    "lineage": []
+                    "node_id": node_id
                 }
                 for idx, chunk in enumerate(chunks)
             ]
@@ -70,9 +69,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                         "batch_uuid": f"{local_batch_id}_{idx}",
                         "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
                         "target_id": str(uuid.uuid4()),
-                        "node_id": node_id,
-                        "parent_node_id": row.get("node_id"),
-                        "lineage": [row["node_id"]] if row.get("node_id") else []
+                        "node_id": node_id
                     }
                     for idx, row in enumerate(parsed)
                 ]
@@ -88,9 +85,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                     "batch_uuid": f"{local_batch_id}_{idx}",
                     "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
                     "target_id": str(uuid.uuid4()),
-                    "node_id": node_id,
-                    "parent_node_id": row.get("node_id"),
-                    "lineage": [row["node_id"]] if row.get("node_id") else []
+                    "node_id": node_id
                 }
                 for idx, row in enumerate(rows)
             ]
@@ -105,9 +100,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                         "batch_uuid": f"{local_batch_id}_{idx}",
                         "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
                         "target_id": str(uuid.uuid4()),
-                        "node_id": node_id,
-                        "parent_node_id": row.get("node_id"),
-                        "lineage": [row["node_id"]] if row.get("node_id") else []
+                        "node_id": node_id
                     }
                     for idx, row in enumerate(rows)
                 ]

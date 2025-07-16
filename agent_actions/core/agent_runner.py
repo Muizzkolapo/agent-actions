@@ -91,7 +91,8 @@ class AgentRunner:
         agent_name: str,
         strategy: AgentStrategy,
         input_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> None:
         """
         Walks through the input directory, processing each file with the given strategy,
@@ -103,6 +104,7 @@ class AgentRunner:
             strategy (AgentStrategy): Strategy instance to execute.
             input_directory (str): Path to the input directory.
             output_directory (str): Path to the output directory.
+            idx (int): Index of the config being processed.
         
         Raises:
             ValueError: If no files are found in the input directory.
@@ -125,7 +127,8 @@ class AgentRunner:
                     agent_name,
                     str(item),
                     input_directory,
-                    str(output_file_path.parent)
+                    str(output_file_path.parent),
+                    idx
                 )
                 files_processed_count += 1
 
@@ -158,7 +161,7 @@ class AgentRunner:
         """
         agent_folder: str = self.get_agent_folder(agent_name)
         input_directory, output_directory = self.setup_directories(agent_folder, agent_config, previous_agent_type, idx)
-        self.process_files(agent_config, agent_name, strategy, input_directory, output_directory)
+        self.process_files(agent_config, agent_name, strategy, input_directory, output_directory, idx)
         return output_directory
 
     def run_agent(

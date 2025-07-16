@@ -19,9 +19,6 @@ class StagingProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        print("========")
-        print(agent_name)
-        print("========")
 
     def staging_dynamic_creator(
         self, context_data, source_path=None, formatted_prompt=None

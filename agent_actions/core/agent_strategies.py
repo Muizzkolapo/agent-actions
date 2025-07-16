@@ -48,7 +48,8 @@ class AgentStrategy(ABC):
         agent_name: str,
         file_path: str,
         base_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> str:
         """
         Helper method to generate target data.
@@ -59,7 +60,7 @@ class AgentStrategy(ABC):
         Returns:
             Path to the generated output file.
         """
-        result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory)
+        result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory, idx)
         if asyncio.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()
@@ -87,7 +88,8 @@ class InitialStrategy(AgentStrategy):
         agent_name: str,
         file_path: str,
         base_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> str:
         """
         Execute the initial agent strategy.
@@ -100,11 +102,11 @@ class InitialStrategy(AgentStrategy):
             file_path: Path to the file being processed.
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
-            
+            idx: Index of the config being processed.
         Returns:
             Path to the generated output file.
         """
-        return generate_staging(agent_config, agent_name, file_path, base_directory, output_directory)
+        return generate_staging(agent_config, agent_name, file_path, base_directory, output_directory, idx)
 
 
 class TerminalStrategy(AgentStrategy):
@@ -120,7 +122,8 @@ class TerminalStrategy(AgentStrategy):
         agent_name: str,
         file_path: str,
         base_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> str:
         """
         Execute the terminal agent strategy.
@@ -133,11 +136,11 @@ class TerminalStrategy(AgentStrategy):
             file_path: Path to the file being processed.
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
-            
+            idx: Index of the config being processed.
         Returns:
             Path to the generated output file.
         """
-        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory)
+        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx)
 
 
 class IntermediateStrategy(AgentStrategy):
@@ -153,7 +156,8 @@ class IntermediateStrategy(AgentStrategy):
         agent_name: str,
         file_path: str,
         base_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> str:
         """
         Execute the intermediate agent strategy.
@@ -166,8 +170,8 @@ class IntermediateStrategy(AgentStrategy):
             file_path: Path to the file being processed.
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
-            
+            idx: Index of the config being processed.
         Returns:
             Path to the generated output file.
         """
-        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory)
+        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx)
