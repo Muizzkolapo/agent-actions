@@ -87,6 +87,17 @@ class StagingProcessor:
                     [{source_guid: response}]
                 )
 
+            # Step 8b: Add lineage tracking (using node_id only)
+            idx = self.agent_config.get('idx', 0)
+            for node in transformed_response:
+                node_id = f"node_{idx}_{Utils.generate_id()}"
+                node["node_id"] = node_id
+                if isinstance(context_data, dict) and "lineage" in context_data:
+                    node["lineage"] = context_data["lineage"] + [node_id]
+                else:
+                    node["lineage"] = [node_id]
+
+
             # Step 9: Prepare source text
             if (
                 source_path is not None

@@ -198,6 +198,12 @@ class TargetContentProcessor(IContentProcessor):
                     if 'source_guid' not in obj or not obj['source_guid']:
                         obj['source_guid'] = source_guid
                     obj['node_id'] = node_id  # Always use new node_id format
+                    # Add lineage tracking
+                    if 'lineage' in item and isinstance(item['lineage'], list):
+                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
+                        obj['lineage'] = filtered_lineage + [node_id]
+                    else:
+                        obj['lineage'] = [node_id]
                 return processed
             else:
                 transformed = DataTransformer.transform_structure([{source_guid: generated_data}])
@@ -207,7 +213,13 @@ class TargetContentProcessor(IContentProcessor):
                         obj['target_id'] = str(uuid.uuid4())
                     if 'source_guid' not in obj or not obj['source_guid']:
                         obj['source_guid'] = source_guid
-                    obj['node_id'] = node_id 
+                    obj['node_id'] = node_id
+                    # Add lineage tracking
+                    if 'lineage' in item and isinstance(item['lineage'], list):
+                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
+                        obj['lineage'] = filtered_lineage + [node_id]
+                    else:
+                        obj['lineage'] = [node_id]
                 return transformed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
