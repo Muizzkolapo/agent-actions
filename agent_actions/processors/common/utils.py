@@ -1,6 +1,6 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
-
+import uuid
 from typing import Any, Dict, Optional
 
 from agent_actions.core.tooling import execute_user_defined_function
@@ -65,6 +65,15 @@ def transform_with_side_collection(
             DataTransformer.update_schema_objects(context_data, item, side_collection)
             for item in data
         ]
-        return DataTransformer.transform_structure([{guid: updated}])
+        output = DataTransformer.transform_structure([{guid: updated}])
+    else:
+        output = data
+    # Patch: Ensure every output object has target_id and guid
+    for obj in output:
+        if 'target_id' not in obj or not obj['target_id']:
+            obj['target_id'] = str(uuid.uuid4())
+        if 'guid' not in obj or not obj['guid']:
+            obj['guid'] = guid
+    return output
 
     return DataTransformer.transform_structure([{guid: data}])
