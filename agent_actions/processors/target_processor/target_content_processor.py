@@ -47,8 +47,8 @@ class TargetContentProcessor(IContentProcessor):
                     # _process_single_item is sync, so run in thread
                     return await asyncio.to_thread(self._process_single_item, item, source_data)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
             results = await asyncio.gather(*(process_one(item) for item in data))
             processed_data = []
             for result in results:
@@ -85,8 +85,8 @@ class TargetContentProcessor(IContentProcessor):
                     processed_item = self._process_single_item(item, source_data)
                     processed_data.extend(processed_item)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
 
             return processed_data
         except Exception as e:
@@ -125,8 +125,8 @@ class TargetContentProcessor(IContentProcessor):
                     processed_item = self._process_single_item(item, source_data)
                     all_processed_items.extend(processed_item)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
 
             # Separate main and side outputs
             return self.data_processor.separate_side_output(all_processed_items)
@@ -152,9 +152,9 @@ class TargetContentProcessor(IContentProcessor):
             return []
 
         try:
-            contents, guid = data[0]['content'], data[0]['guid']
+            contents, source_guid = data[0]['content'], data[0]['source_guid']
             generated_data, _ = self.data_generator.create_agent_with_data(data)
-            return self.data_processor.process_item(contents, generated_data, guid)
+            return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")
 
@@ -177,25 +177,65 @@ class TargetContentProcessor(IContentProcessor):
             ValueError: If item processing fails
         """
         try:
-            contents, guid = item['content'], item['guid']
+            contents, source_guid = item['content'], item['source_guid']
             
             # Get corresponding source content
-            source_content = DataTransformer.get_content_by_guid(source_data, guid)  
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)  
             # Generate data through the shared utility
             generated_data, executed = self.data_generator.create_agent_with_data(
                 contents, source_content
             )
 
             if executed:
-                processed = self.data_processor.process_item(contents, generated_data, guid)
+                processed = self.data_processor.process_item(contents, generated_data, source_guid)
                 # Attach a unique target_id to each processed object
+                node_id = str(uuid.uuid4())
+                parent_node_id = item.get('node_id')
+                lineage = item.get('lineage', [])
                 for obj in processed:
-                    obj['target_id'] = str(uuid.uuid4())
+                    if 'target_id' not in obj or not obj['target_id']:
+                        obj['target_id'] = str(uuid.uuid4())
+                    if 'source_guid' not in obj or not obj['source_guid']:
+                        obj['source_guid'] = source_guid
+                    if 'node_id' not in obj or not obj['node_id']:
+                        obj['node_id'] = node_id
+                    if 'parent_node_id' not in obj or not obj['parent_node_id']:
+                        obj['parent_node_id'] = parent_node_id
+                    # Build lineage
+                    obj_lineage = obj.get('lineage', [])
+                    if not obj_lineage:
+                        obj_lineage = lineage.copy() if lineage else []
+                        if parent_node_id and parent_node_id not in obj_lineage:
+                            obj_lineage.append(parent_node_id)
+                    else:
+                        if parent_node_id and parent_node_id not in obj_lineage:
+                            obj_lineage.append(parent_node_id)
+                    obj['lineage'] = obj_lineage
                 return processed
             else:
-                transformed = DataTransformer.transform_structure([{guid: generated_data}])
+                transformed = DataTransformer.transform_structure([{source_guid: generated_data}])
+                node_id = str(uuid.uuid4())
+                parent_node_id = item.get('node_id')
+                lineage = item.get('lineage', [])
                 for obj in transformed:
-                    obj['target_id'] = str(uuid.uuid4())
+                    if 'target_id' not in obj or not obj['target_id']:
+                        obj['target_id'] = str(uuid.uuid4())
+                    if 'source_guid' not in obj or not obj['source_guid']:
+                        obj['source_guid'] = source_guid
+                    if 'node_id' not in obj or not obj['node_id']:
+                        obj['node_id'] = node_id
+                    if 'parent_node_id' not in obj or not obj['parent_node_id']:
+                        obj['parent_node_id'] = parent_node_id
+                    # Build lineage
+                    obj_lineage = obj.get('lineage', [])
+                    if not obj_lineage:
+                        obj_lineage = lineage.copy() if lineage else []
+                        if parent_node_id and parent_node_id not in obj_lineage:
+                            obj_lineage.append(parent_node_id)
+                    else:
+                        if parent_node_id and parent_node_id not in obj_lineage:
+                            obj_lineage.append(parent_node_id)
+                    obj['lineage'] = obj_lineage
                 return transformed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

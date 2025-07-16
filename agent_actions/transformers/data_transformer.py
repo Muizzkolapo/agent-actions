@@ -129,10 +129,10 @@ class DataTransformer:
         """
         transformed_data = []
         for data_item in data:
-            for guid, contents in data_item.items():
+            for source_guid, contents in data_item.items():
                 for content in contents:
                     transformed_data.append({
-                        "guid": guid,
+                        "source_guid": source_guid,
                         "content": content
                     })
         return transformed_data
@@ -153,18 +153,18 @@ class DataTransformer:
         return obj
 
     @staticmethod
-    def get_content_by_guid(data, guid):
+    def get_content_by_source_guid(data, source_guid):
         """
         Retrieve the content associated with a specific GUID from a list of dictionaries.
 
         Parameters:
             data (list of dict): The list containing dictionaries with GUIDs as keys.
-            guid (str): The GUID to search for.
+            source_guid (str): The GUID to search for.
 
         Returns:
             str: The content associated with the GUID.
         """
         for item in data:
-            if guid in item:
-                return item[guid]
-        raise KeyError(f"GUID not found: {guid}")
+            if source_guid in item:
+                return item[source_guid]
+        raise KeyError(f"GUID not found: {source_guid}")
