@@ -41,7 +41,7 @@ agent-actions/
 
 
 
-* we had a situation where we had code objects in json and need to load the source along side them into staging, what we did was to create the code and ensure they had guid and we used tooling as the first to extract
+* we had a situation where we had code objects in json and need to load the source along side them into staging, what we did was to create the code and ensure they had source_guid and we used tooling as the first to extract
 
 
 
@@ -137,7 +137,7 @@ not this anything within key_ideas cant be side collected
 {
     'data': [
         {
-            'guid': '412fceb5-2e06-488c-9274-d5f4b7034e36',
+            'source_guid': '412fceb5-2e06-488c-9274-d5f4b7034e36',
             'content': [
                 {'what_to_test_for': 'Understanding of GitHub search methods (global vs context search).'},
                 {'what_to_test_for': "Knowledge of GitHub's search syntax and how to apply search filters effectively."},
@@ -147,7 +147,7 @@ not this anything within key_ideas cant be side collected
             ]
         },
         {
-            'guid': '2146889e-cc00-4f38-b67e-fdc945dde82c',
+            'source_guid': '2146889e-cc00-4f38-b67e-fdc945dde82c',
             'content': [
                 {'what_to_test_for': "Understanding 'git blame' functionality and its user interface on GitHub"},
                 {'what_to_test_for': 'Methods to access the blame view in GitHub'},

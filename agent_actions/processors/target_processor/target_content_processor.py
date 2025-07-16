@@ -50,7 +50,7 @@ class TargetContentProcessor(IContentProcessor):
                     return await asyncio.to_thread(self._process_single_item, item, source_data)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
             results = await asyncio.gather(*(process_one(item) for item in data))
             processed_data = []
             for result in results:
@@ -88,7 +88,7 @@ class TargetContentProcessor(IContentProcessor):
                     processed_data.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
 
             return processed_data
         except Exception as e:
@@ -128,7 +128,7 @@ class TargetContentProcessor(IContentProcessor):
                     all_processed_items.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {source_guid}: {str(e)}")
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
 
             # Separate main and side outputs
             return self.data_processor.separate_side_output(all_processed_items)

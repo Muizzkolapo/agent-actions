@@ -78,13 +78,13 @@ class PromptUtils:
 
 
     @staticmethod
-    def replace_guid_placeholder(data, guid):
+    def replace_guid_placeholder(data, source_guid):
         """
-        Replace the placeholder 'return_collection{{source_context}}' with the specified GUID in a string.
+        Replace the placeholder 'return_collection{{source_context}}' with the specified source_guid in a string.
 
         Parameters:
             data (str): The string to process.
-            guid (str): The GUID to replace the placeholder with.
+            source_guid (str): The source_guid to replace the placeholder with.
 
         Returns:
             str: The updated string with the placeholder replaced.
@@ -94,7 +94,7 @@ class PromptUtils:
 
         replaced_data = re.sub(
             r'return_collection\{\{source_context\}\}',
-            lambda _: guid,
+            lambda _: source_guid,
             data,
             flags=re.IGNORECASE,
         )

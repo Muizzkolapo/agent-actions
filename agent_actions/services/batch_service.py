@@ -244,11 +244,11 @@ class BatchService:
 
             raw_map = payload.get("data", {})
             cleaned_map = {}
-            for guid, value in raw_map.items():
+            for source_guid, value in raw_map.items():
                 if isinstance(value, dict) and "content" in value:
-                    cleaned_map[guid] = value.get("content", {})
+                    cleaned_map[source_guid] = value.get("content", {})
                 else:
-                    cleaned_map[guid] = value
+                    cleaned_map[source_guid] = value
 
             return cleaned_map, payload.get("side_collection", [])
         except Exception:
@@ -446,7 +446,7 @@ class BatchService:
                         except json.JSONDecodeError:
                             # If not valid JSON, wrap in error structure
                             error_item = {
-                                "guid": custom_id,
+                                "source_guid": custom_id,
                                 "error": "Invalid JSON response",
                                 "raw_content": content,
                                 "metadata": {
@@ -458,7 +458,7 @@ class BatchService:
             else:
                 # Handle error cases where 'response' or 'body' is missing
                 error_item = {
-                    "guid": custom_id or 'unknown',
+                    "source_guid": custom_id or 'unknown',
                     "error": "Batch processing failed or missing response body",
                     "raw_result": result
                 }

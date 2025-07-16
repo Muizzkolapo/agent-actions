@@ -155,16 +155,16 @@ class DataTransformer:
     @staticmethod
     def get_content_by_source_guid(data, source_guid):
         """
-        Retrieve the content associated with a specific GUID from a list of dictionaries.
+        Retrieve the content associated with a specific source_guid from a list of dictionaries.
 
         Parameters:
             data (list of dict): The list containing dictionaries with GUIDs as keys.
-            source_guid (str): The GUID to search for.
+            source_guid (str): The source_guid to search for.
 
         Returns:
-            str: The content associated with the GUID.
+            str: The content associated with the source_guid.
         """
         for item in data:
             if source_guid in item:
                 return item[source_guid]
-        raise KeyError(f"GUID not found: {source_guid}")
+        raise KeyError(f"source_guid not found: {source_guid}")
