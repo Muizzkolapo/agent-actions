@@ -115,6 +115,12 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 row['target_id'] = str(uuid.uuid4())
         batch_service = BatchService()
         vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk, output_directory)
+        # Save source for each row in data_chunk- this is where we generate source for batch
+        for row in data_chunk:
+            custom_id = row.get("target_id")
+            if custom_id:
+                src_text = {custom_id: row}
+                batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -128,6 +134,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             json.dump(placeholder, f)
         return
     # Non-batch mode: original behavior (calls agent/LLM for each chunk/row)
+    # Save source for each row in data_chunk - this is where we generate source for non-batch
     data_chunk, src_text = [], []
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})

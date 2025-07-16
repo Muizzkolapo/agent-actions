@@ -17,6 +17,41 @@ from agent_actions.processors.common.utils import apply_remove_collection
 import uuid
 
 class BatchService:
+    def _save_task_source(self, src_text, file_path, base_directory, output_directory):
+        """
+        Save or merge a single task's source data into the appropriate file in the source directory.
+        src_text: dict, e.g. {guid: row}
+        file_path: str or Path to the original file
+        base_directory: str or Path to the base directory
+        output_directory: str or Path to the output directory (for structure)
+        """
+        from pathlib import Path
+        import json
+        relative_path = Path(file_path).relative_to(base_directory)
+        base_path = Path(base_directory).parent
+        source_path = base_path / "source"
+        output_src_path = source_path / relative_path.with_suffix('.json')
+        output_src_path.parent.mkdir(parents=True, exist_ok=True)
+        print(f"[DEBUG] Saving source for file_path: {file_path}")
+        print(f"[DEBUG] Output source path: {output_src_path}")
+        print(f"[DEBUG] Custom ID: {list(src_text.keys())[0]}")
+        
+        if output_src_path.exists():
+            with open(output_src_path, 'r') as existing_file:
+                try:
+                    existing_source = json.load(existing_file)
+                except Exception:
+                    existing_source = []
+            # Only add if GUID is new
+            task_guid = list(src_text.keys())[0]
+            if task_guid not in [list(item.keys())[0] for item in existing_source]:
+                existing_source.append(src_text)
+                with open(output_src_path, 'w') as f:
+                    json.dump(existing_source, f, indent=2)
+        else:
+            with open(output_src_path, 'w') as f:
+                json.dump([src_text], f, indent=2)
+
     # Class variable to control force batch behavior
     force_batch = False
     
