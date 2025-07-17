@@ -114,7 +114,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             if 'target_id' not in row or not row['target_id']:
                 row['target_id'] = str(uuid.uuid4())
         batch_service = BatchService()
-        vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk, output_directory)
+        file_name = Path(file_path).name
+        vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
         # Save source for each row in data_chunk- this is where we generate source for batch
         for row in data_chunk:
             custom_id = row.get("target_id")

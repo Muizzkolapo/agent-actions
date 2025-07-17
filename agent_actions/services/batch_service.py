@@ -191,7 +191,7 @@ class BatchService:
             tasks.append(task)
         return tasks
 
-    def submit_batch_job_from_data(self, agent_config, agent_type, data, output_directory=None, force=False):
+    def submit_batch_job_from_data(self, agent_config, batch_name, data, output_directory=None, force=False):
         # Check for existing in-flight batch job unless forced
         force_submission = force or BatchService.force_batch
         if not force_submission:
@@ -215,7 +215,7 @@ class BatchService:
         
         batch_dir.mkdir(parents=True, exist_ok=True)
         
-        file_name = f"{agent_config.get('agent_type')}_batch_input.jsonl"
+        file_name = f"{Path(batch_name).stem}_batch_input.jsonl"
         file_path = batch_dir / file_name
 
         with open(file_path, 'w') as file:
@@ -223,7 +223,7 @@ class BatchService:
                 file.write(json.dumps(obj) + '\n')
 
         print(f"Batch file created at: {file_path}")
-        self._save_context_map(self.context_map, agent_config, output_directory, agent_type)
+        self._save_context_map(self.context_map, agent_config, output_directory, batch_name)
 
         try:
             batch_file = self.client.files.create(file=open(file_path, "rb"), purpose="batch")
@@ -253,14 +253,14 @@ class BatchService:
             with open(local_job_id_file, 'w') as f:
                 f.write(batch_id)
 
-    def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, agent_type: str):
+    def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
         else:
             batch_dir = Path.cwd() / "batch"
         batch_dir.mkdir(parents=True, exist_ok=True)
-        path = batch_dir / f"{agent_config.get('agent_type')}_context_map.json"
+        path = batch_dir / f"{Path(batch_name).stem}_context_map.json"
         payload = {
             "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
             "data": context_map,
