@@ -195,9 +195,9 @@ class BatchService:
         # Check for existing in-flight batch job unless forced
         force_submission = force or BatchService.force_batch
         if not force_submission:
-            existing_batch_id = self._check_for_existing_batch_job(output_directory)
+            existing_batch_id = self._check_for_existing_batch_job(output_directory, batch_name)
             if existing_batch_id:
-                print(f"Found existing in-flight batch job: {existing_batch_id}")
+                print(f"Found existing in-flight batch job for {batch_name}: {existing_batch_id}")
                 print("Skipping new batch submission. Use --batch_continue to process completed batches.")
                 return existing_batch_id
         
@@ -233,25 +233,45 @@ class BatchService:
                 completion_window="24h"
             )
             print(f"Batch job created with ID: {batch_job.id}")
-            self._save_batch_job_id(batch_job.id, output_directory)
+            self._save_batch_job_id(batch_job.id, output_directory, batch_name)
             return batch_job.id
         except Exception as e:
             raise RuntimeError(f"Error submitting batch job: {e}")
 
-    def _save_batch_job_id(self, batch_id: str, output_directory: str = None):
-        """Save batch job ID to both global and local directories."""
-        # Save to global batch directory (for backward compatibility)
-        global_batch_dir = Path.cwd() / "batch"
-        global_batch_dir.mkdir(exist_ok=True)
-
-        
-        # Also save to output directory if provided
+    def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None):
+        """Save batch job ID to batch registry."""
         if output_directory:
             local_batch_dir = Path(output_directory) / "batch"
             local_batch_dir.mkdir(parents=True, exist_ok=True)
-            local_job_id_file = local_batch_dir / ".last_batch_id"
-            with open(local_job_id_file, 'w') as f:
-                f.write(batch_id)
+            registry_file = local_batch_dir / ".batch_registry.json"
+            
+            # Load existing registry
+            registry = {}
+            if registry_file.exists():
+                try:
+                    with open(registry_file, 'r') as f:
+                        registry = json.load(f)
+                except json.JSONDecodeError:
+                    registry = {}
+            
+            # Add new batch job
+            from datetime import datetime
+            registry[file_name or 'default'] = {
+                'batch_id': batch_id,
+                'status': 'submitted',
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Save updated registry
+            with open(registry_file, 'w') as f:
+                json.dump(registry, f, indent=2)
+        
+        # Save to global batch directory (for backward compatibility)
+        global_batch_dir = Path.cwd() / "batch"
+        global_batch_dir.mkdir(exist_ok=True)
+        global_job_id_file = global_batch_dir / ".last_batch_id"
+        with open(global_job_id_file, 'w') as f:
+            f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
@@ -289,14 +309,156 @@ class BatchService:
         except Exception:
             return {}, []
 
-    def _get_last_batch_job_id(self, output_directory: str = None):
-        """Get the last batch job ID, checking local directory first if provided."""
-        # Check local directory first if provided
+    def _get_batch_job_id_for_file(self, output_directory: str = None, file_name: str = None):
+        """Get the batch job ID for a specific file from the registry."""
         if output_directory:
-            local_job_id_file = Path(output_directory) / "batch" / ".last_batch_id"
-            if local_job_id_file.exists():
-                with open(local_job_id_file, 'r') as f:
-                    return f.read().strip()
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if registry_file.exists():
+                try:
+                    with open(registry_file, 'r') as f:
+                        registry = json.load(f)
+                    file_entry = registry.get(file_name or 'default', {})
+                    return file_entry.get('batch_id')
+                except json.JSONDecodeError:
+                    pass
+        
+        # Fall back to global directory for backward compatibility
+        global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
+        if global_job_id_file.exists():
+            with open(global_job_id_file, 'r') as f:
+                return f.read().strip()
+        return None
+
+    def _update_batch_registry_status(self, output_directory: str, file_name: str, batch_id: str, status: str):
+        """Update the status of a batch job in the registry."""
+        if not output_directory:
+            return
+            
+        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_file.exists():
+            return
+            
+        try:
+            with open(registry_file, 'r') as f:
+                registry = json.load(f)
+            
+            if file_name in registry and registry[file_name].get('batch_id') == batch_id:
+                registry[file_name]['status'] = status
+                
+                with open(registry_file, 'w') as f:
+                    json.dump(registry, f, indent=2)
+        except (json.JSONDecodeError, KeyError):
+            pass
+
+    def _are_all_batch_jobs_completed(self, output_directory: str) -> bool:
+        """Check if all batch jobs in the registry are completed."""
+        if not output_directory:
+            return True
+            
+        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_file.exists():
+            return True
+            
+        try:
+            with open(registry_file, 'r') as f:
+                registry = json.load(f)
+            
+            if not registry:
+                return True
+                
+            # Check each batch job's actual status from the API
+            for file_name, entry in registry.items():
+                batch_id = entry.get('batch_id')
+                if not batch_id:
+                    continue
+                    
+                try:
+                    actual_status = self.check_status(batch_id)
+                    # Update registry with actual status
+                    if actual_status != entry.get('status'):
+                        entry['status'] = actual_status
+                        
+                    # If any job is not completed, return False
+                    if actual_status not in ['completed', 'failed', 'cancelled']:
+                        return False
+                        
+                except Exception:
+                    # If we can't check status, consider it not completed
+                    return False
+            
+            # Save updated registry
+            with open(registry_file, 'w') as f:
+                json.dump(registry, f, indent=2)
+                
+            return True
+            
+        except (json.JSONDecodeError, KeyError):
+            return True
+
+    def _get_batch_registry_status(self, output_directory: str) -> str:
+        """Get the overall status of all batch jobs in the registry."""
+        if not output_directory:
+            return 'no_batches'
+            
+        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_file.exists():
+            return 'no_batches'
+            
+        try:
+            with open(registry_file, 'r') as f:
+                registry = json.load(f)
+            
+            if not registry:
+                return 'no_batches'
+            
+            completed_count = 0
+            failed_count = 0
+            in_progress_count = 0
+            
+            for file_name, entry in registry.items():
+                batch_id = entry.get('batch_id')
+                if not batch_id:
+                    continue
+                    
+                try:
+                    actual_status = self.check_status(batch_id)
+                    if actual_status == 'completed':
+                        completed_count += 1
+                    elif actual_status in ['failed', 'cancelled']:
+                        failed_count += 1
+                    else:
+                        in_progress_count += 1
+                except Exception:
+                    in_progress_count += 1
+            
+            total_jobs = len(registry)
+            
+            if completed_count == total_jobs:
+                return 'completed'
+            elif failed_count > 0:
+                return 'partial_failed'
+            elif in_progress_count > 0:
+                return 'in_progress'
+            else:
+                return 'unknown'
+                
+        except (json.JSONDecodeError, KeyError):
+            return 'error'
+
+    def _get_last_batch_job_id(self, output_directory: str = None):
+        """Backward compatibility method - gets the most recent batch job ID."""
+        if output_directory:
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if registry_file.exists():
+                try:
+                    with open(registry_file, 'r') as f:
+                        registry = json.load(f)
+                    # Return the most recent batch job ID
+                    if registry:
+                        latest_entry = max(registry.values(), key=lambda x: x.get('timestamp', ''))
+                        return latest_entry.get('batch_id')
+                except json.JSONDecodeError:
+                    pass
         
         # Fall back to global directory
         global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
@@ -305,14 +467,18 @@ class BatchService:
                 return f.read().strip()
         return None
     
-    def _check_for_existing_batch_job(self, output_directory: str = None):
-        """Check if there's already an in-flight batch job for this output directory."""
-        batch_id = self._get_last_batch_job_id(output_directory)
+    def _check_for_existing_batch_job(self, output_directory: str = None, file_name: str = None):
+        """Check if there's already an in-flight batch job for this specific file."""
+        batch_id = self._get_batch_job_id_for_file(output_directory, file_name)
         if not batch_id:
             return None
         
         try:
             status = self.check_status(batch_id)
+            # Update registry with current status
+            if output_directory and file_name:
+                self._update_batch_registry_status(output_directory, file_name, batch_id, status)
+            
             # If batch is still processing, return the batch ID
             if status in ['validating', 'in_progress', 'finalizing']:
                 return batch_id
@@ -631,3 +797,112 @@ class BatchService:
             
         except Exception as e:
             raise RuntimeError(f"Error processing batch results to workflow output: {e}")
+
+    def process_all_batch_results_to_workflow_output(self, output_directory: str):
+        """
+        Process all completed batch jobs in the registry, maintaining file-to-file mapping.
+        Each input file produces its own corresponding output file.
+        """
+        try:
+            batch_dir = Path(output_directory) / "batch"
+            registry_file = batch_dir / ".batch_registry.json"
+            
+            if not registry_file.exists():
+                raise ValueError(f"No batch registry found at {registry_file}")
+            
+            # Load registry
+            with open(registry_file, 'r') as f:
+                registry = json.load(f)
+            
+            # Load context map and side collection once
+            context_map, side_collection = self._load_context_map(batch_dir)
+            
+            processed_files = []
+            
+            # Process each batch job separately to maintain file mapping
+            for file_name, entry in registry.items():
+                batch_id = entry.get('batch_id')
+                if not batch_id:
+                    continue
+                    
+                # Check if batch is completed
+                try:
+                    batch_status = self.check_status(batch_id)
+                    if batch_status != 'completed':
+                        print(f"Batch {batch_id} for {file_name} is not completed: {batch_status}")
+                        continue
+                except Exception as e:
+                    print(f"Could not check status for batch {batch_id}: {e}")
+                    continue
+                
+                # Get batch results for this specific file
+                try:
+                    local_results_file = batch_dir / f"{batch_id}_results.jsonl"
+                    
+                    if local_results_file.exists():
+                        with open(local_results_file, 'r') as f:
+                            result_content = f.read()
+                    else:
+                        # Fallback to API retrieval
+                        batch_job = self.client.batches.retrieve(batch_id)
+                        result_file_id = batch_job.output_file_id
+                        result_content = self.client.files.content(result_file_id).content.decode('utf-8')
+                    
+                    # Parse batch results for this specific file
+                    batch_results = []
+                    for line in result_content.strip().split('\\n'):
+                        if line.strip():
+                            batch_results.append(json.loads(line))
+                    
+                    if not batch_results:
+                        print(f"No results found for batch {batch_id} ({file_name})")
+                        continue
+                    
+                    print(f"Processing {len(batch_results)} batch results for {file_name}")
+                    
+                    # Process results for this file into workflow format
+                    processed_data = self._convert_batch_results_to_workflow_format(
+                        batch_results,
+                        side_collection=side_collection,
+                        context_map=context_map,
+                    )
+
+                    main_output, side_output_data = self._separate_side_output(processed_data)
+
+                    # Create output filename based on original file name
+                    if file_name and file_name != 'default':
+                        # Use the original file name from registry
+                        output_file_path = Path(output_directory) / f"{Path(file_name).stem}.json"
+                    else:
+                        # Fallback to batch_id naming
+                        output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
+                    
+                    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Write results for this specific file
+                    file_writer = FileWriter(str(output_file_path))
+                    file_writer.write_target(main_output)
+
+                    if side_output_data:
+                        side_output_dir = Path(output_directory).parent / "side_output"
+                        if file_name and file_name != 'default':
+                            side_output_file = side_output_dir / f"{Path(file_name).stem}.json"
+                        else:
+                            side_output_file = side_output_dir / f"{batch_id}_processed_output.json"
+                        self._save_side_output(side_output_data, side_output_file)
+                    
+                    processed_files.append(str(output_file_path))
+                    print(f"✅ Processed {file_name} → {output_file_path}")
+                    
+                except Exception as e:
+                    print(f"Could not process batch results for {file_name} (batch {batch_id}): {e}")
+                    continue
+            
+            if not processed_files:
+                raise ValueError("No batch results were successfully processed")
+            
+            print(f"Successfully processed {len(processed_files)} files")
+            return processed_files
+            
+        except Exception as e:
+            raise RuntimeError(f"Error processing all batch results to workflow output: {e}")
