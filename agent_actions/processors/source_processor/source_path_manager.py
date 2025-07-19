@@ -67,12 +67,12 @@ class SourcePathManager:
         context_data: Dict[str, Any]
     ) -> Optional[Any]:
         """
-        Load source content based on the input documentation's GUID.
+        Load source content based on the input documentation's source_guid.
         If the source file doesn't exist, create it with an empty structure.
         
         Parameters:
             source_path: Path to the source file
-            context_data: Context data containing GUID
+            context_data: Context data containing source_guid
             
         Returns:
             Loaded source content or empty structure if newly created
@@ -97,28 +97,28 @@ class SourcePathManager:
                 
             with open(source_path, 'r') as file:
                 source_data = json.load(file)
-                if isinstance(context_data, dict) and "guid" in context_data:
-                    guid = context_data["guid"]
+                if isinstance(context_data, dict) and "source_guid" in context_data:
+                    source_guid = context_data["source_guid"]
                     for item in source_data:
-                        if guid in item:
-                            return item[guid]
+                        if source_guid in item:
+                            return item[source_guid]
             return None
         except Exception as e:
             raise IOError(f"Failed to load or create source content: {str(e)}")
             
     @staticmethod
-    def save_source_content(source_path: Path, guid: str, content: Any) -> None:
+    def save_source_content(source_path: Path, source_guid: str, content: Any) -> None:
         """
         Save content to source file.
         
         Args:
             source_path: Path to the source file
-            guid: GUID to associate with the content
+            source_guid: source_guid to associate with the content
             content: Content to save
         """
         try:
             ServiceLogger.log_operation_start(logger, "save source content", 
-                                           source_path=str(source_path), guid=guid)
+                                           source_path=str(source_path), source_guid=source_guid)
             
             # Ensure source directory exists
             SourcePathManager.ensure_source_directory(source_path)
@@ -131,10 +131,10 @@ class SourcePathManager:
                 source_data = []
                 
             # Update or append content
-            content_entry = {guid: content}
+            content_entry = {source_guid: content}
             updated = False
             for i, item in enumerate(source_data):
-                if guid in item:
+                if source_guid in item:
                     source_data[i] = content_entry
                     updated = True
                     break
@@ -147,7 +147,7 @@ class SourcePathManager:
                 json.dump(source_data, file, indent=2)
                 
             ServiceLogger.log_operation_success(logger, "save source content", 
-                                             guid=guid)
+                                             source_guid=source_guid)
             
         except Exception as e:
             ServiceLogger.log_operation_error(logger, "save source content", e)

@@ -136,34 +136,48 @@ class AgentWorkflow:
         with open(self.status_file, 'w') as f:
             json.dump(self.agent_status, f, indent=4)
 
-    def _update_status(self, agent_name, status, batch_id=None):
+    def _update_status(self, agent_name, status):
         if agent_name not in self.agent_status:
             self.agent_status[agent_name] = {}
         self.agent_status[agent_name]['status'] = status
-        if batch_id:
-            self.agent_status[agent_name]['batch_id'] = batch_id
         self._save_status()
 
-    def _handle_batch_agent(self, agent_name, idx, batch_id):
+    def _handle_batch_agent(self, agent_name, idx):
         agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_name}"
         
-        if not batch_id:
-            return None, 'failed'
-
-        status = self.batch_service.check_status(batch_id)
-        if status == 'completed':
-            self.console.print(f"[green]Batch job {batch_id} is completed. Processing results...[/green]")
-            self.batch_service.process_batch_results_to_workflow_output_direct(
-                batch_id, 
-                str(output_directory)
-            )
-            self.console.print(f"[green]✅ Processed batch results for {agent_name}[/green]")
+        # Check overall batch registry status - this is the single source of truth
+        registry_status = self.batch_service._get_batch_registry_status(str(output_directory))
+        
+        if registry_status == 'completed':
+            self.console.print(f"[green]All batch jobs are completed. Processing results...[/green]")
+            # Process all completed batch jobs in the registry
+            self._process_all_batch_results(str(output_directory))
+            self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
             return str(output_directory), 'completed'
-        elif status in ['validating', 'in_progress', 'finalizing']:
-            return None, 'in_progress'
+        elif registry_status in ['in_progress', 'partial_failed']:
+            # Check if all jobs are actually done (some might have completed since last check)
+            if self.batch_service._are_all_batch_jobs_completed(str(output_directory)):
+                self.console.print(f"[green]All batch jobs are now completed. Processing results...[/green]")
+                self._process_all_batch_results(str(output_directory))
+                self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
+                return str(output_directory), 'completed'
+            else:
+                return None, 'in_progress'
+        elif registry_status == 'no_batches':
+            # No batch registry found - this means the agent didn't submit any batch jobs
+            self.console.print(f"[yellow]No batch jobs found for {agent_name}[/yellow]")
+            return None, 'failed'
         else:
             return None, 'failed'
+
+    def _process_all_batch_results(self, output_directory):
+        """Process all completed batch jobs in the registry together as one dataset."""
+        try:
+            # Use the new combined processing method
+            self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not process batch results: {e}[/yellow]")
 
     def run(self):
         try:
@@ -191,8 +205,7 @@ class AgentWorkflow:
                 if current_status == 'batch_submitted':
                     self._update_status(agent_name, 'checking_batch')
                     
-                    batch_id = status_details.get('batch_id')
-                    output_folder, batch_status = self._handle_batch_agent(agent_name, idx, batch_id)
+                    output_folder, batch_status = self._handle_batch_agent(agent_name, idx)
                     
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
@@ -227,15 +240,16 @@ class AgentWorkflow:
                 if agent_config.get('run_mode') == 'batch':
                     agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
                     node_output_dir = agent_io_path / "target" / f"node_{idx}_{agent_name}"
-                    batch_id = self.batch_service._get_last_batch_job_id(str(node_output_dir))
                     
-                    if batch_id:
-                        self._update_status(agent_name, 'batch_submitted', batch_id)
-                        self.console.print(f"\n[yellow]Batch job submitted for '{agent_name}'. Run 'agent run' again to check status.[/yellow]")
+                    # Check if batch registry exists to confirm batch jobs were submitted
+                    registry_file = Path(node_output_dir) / "batch" / ".batch_registry.json"
+                    if registry_file.exists():
+                        self._update_status(agent_name, 'batch_submitted')
+                        self.console.print(f"\n[yellow]Batch jobs submitted for '{agent_name}'. Run 'agent run' again to check status.[/yellow]")
                         self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SUBMITTED[/yellow] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
                     else:
                         self._update_status(agent_name, 'failed')
-                        self.console.print(f"\n[red]Agent '{agent_name}' was configured for batch mode, but no batch ID was found after execution.[/red]")
+                        self.console.print(f"\n[red]Agent '{agent_name}' was configured for batch mode, but no batch jobs were found after execution.[/red]")
                         self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [red]FAIL[/red] [bold]{agent_name}[/bold] in {duration:.2f}s")
                     break
                 else:

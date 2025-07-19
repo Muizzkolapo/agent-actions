@@ -32,6 +32,6 @@ class IDataProcessor(ABC):
     """Interface for data processing."""
 
     @abstractmethod
-    def process_item(self, contents: Dict, generated_data: List[Dict], guid: str) -> List[Dict]:
+    def process_item(self, contents: Dict, generated_data: List[Dict], source_guid: str) -> List[Dict]:
         """Process a single data item."""
         pass

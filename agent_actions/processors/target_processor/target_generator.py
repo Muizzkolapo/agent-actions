@@ -16,24 +16,26 @@ SOURCE_FOLDER = 'source'
 class TargetGenerator:
     """Responsible for generating target data from input files based on configuration."""
     
-    def __init__(self, agent_config, agent_name):
+    def __init__(self, agent_config, agent_name, idx):
         """
         Initialize the target generator.
         
         Args:
             agent_config: Configuration dictionary for the agent
             agent_name: Name of the agent
+            idx: Index of the config being processed
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+        self.idx = idx
         self.model_vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
-        self.content_processor = TargetContentProcessor(agent_config, agent_name)
+        self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
         self.output_handler = OutputHandler()
     
     @staticmethod
-    def generate(agent_config, agent_name, file_path, base_directory, output_directory):
+    def generate(agent_config, agent_name, file_path, base_directory, output_directory, idx):
         """
         Static method for generating target data (maintains original function signature).
         
@@ -43,7 +45,8 @@ class TargetGenerator:
             file_path: Path to the input JSON file
             base_directory: Base directory for calculating relative paths
             output_directory: Directory where the output file will be saved
-            
+            idx: Index of the config being processed
+        
         Returns:
             Path to the generated output file for compatibility
         """
@@ -51,7 +54,8 @@ class TargetGenerator:
             batch_service = BatchService()
             file_reader = FileReader(file_path)
             data = file_reader.read()
-            batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data, output_directory)
+            file_name = Path(file_path).name
+            batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -64,7 +68,7 @@ class TargetGenerator:
                 json.dump(placeholder, f)
             return str(output_file_path)
 
-        generator = TargetGenerator(agent_config, agent_name)
+        generator = TargetGenerator(agent_config, agent_name, idx)
         return generator.process(file_path, base_directory, output_directory)
     
     async def process(self, file_path, base_directory, output_directory):

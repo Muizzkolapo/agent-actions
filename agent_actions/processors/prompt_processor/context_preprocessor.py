@@ -22,14 +22,14 @@ class ContextPreprocessor:
     @staticmethod
     def extract_guid_and_content(context_data):
         """
-        Extract guid and content from context data if available.
+        Extract source_guid and content from context data if available.
         
         Parameters:
             context_data: Data to extract from
             
         Returns:
-            Tuple of (guid, content) where guid may be None
+            Tuple of (source_guid, content) where source_guid may be None
         """
-        if isinstance(context_data, dict) and "guid" in context_data and "content" in context_data:
-            return context_data["guid"], context_data["content"]
+        if isinstance(context_data, dict) and "source_guid" in context_data and "content" in context_data:
+            return context_data["source_guid"], context_data["content"]
         return None, context_data

@@ -19,9 +19,6 @@ class StagingProcessor:
     def __init__(self, agent_config, agent_name):
         self.agent_config = agent_config
         self.agent_name = agent_name
-        print("========")
-        print(agent_name)
-        print("========")
 
     def staging_dynamic_creator(
         self, context_data, source_path=None, formatted_prompt=None
@@ -57,8 +54,8 @@ class StagingProcessor:
                 formatted_prompt, self.agent_config, self.agent_name
             )
 
-            # Step 4: Extract guid and content if available
-            guid, enriched_data = ContextPreprocessor.extract_guid_and_content(
+            # Step 4: Extract source_guid and content if available
+            source_guid, enriched_data = ContextPreprocessor.extract_guid_and_content(
                 context_data
             )
 
@@ -76,29 +73,40 @@ class StagingProcessor:
                 tools_path=self.agent_config.get("tools", {}).get("path"),
             )
 
-            # Step 7: Generate guid if not available
-            if not guid:
-                guid = Utils.generate_id()
+            # Step 7: Generate source_guid if not available
+            if not source_guid:
+                source_guid = Utils.generate_id()
 
             # Step 8: Transform response
             if executed:
                 transformed_response = ResponseTransformer.transform_response(
-                    response, enriched_data, guid, self.agent_config
+                    response, enriched_data, source_guid, self.agent_config
                 )
             else:
                 transformed_response = DataTransformer.transform_structure(
-                    [{guid: response}]
+                    [{source_guid: response}]
                 )
+
+            # Step 8b: Add lineage tracking (using node_id only)
+            idx = self.agent_config.get('idx', 0)
+            for node in transformed_response:
+                node_id = f"node_{idx}_{Utils.generate_id()}"
+                node["node_id"] = node_id
+                if isinstance(context_data, dict) and "lineage" in context_data:
+                    node["lineage"] = context_data["lineage"] + [node_id]
+                else:
+                    node["lineage"] = [node_id]
+
 
             # Step 9: Prepare source text
             if (
                 source_path is not None
                 and isinstance(context_data, dict)
-                and "guid" in context_data
+                and "source_guid" in context_data
             ):
-                src_text = [{guid: formatted_prompt}]
+                src_text = [{source_guid: formatted_prompt}]
             else:
-                src_text = [{guid: context_data}]
+                src_text = [{source_guid: context_data}]
 
             return transformed_response, src_text
 

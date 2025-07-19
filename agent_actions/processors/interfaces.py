@@ -31,24 +31,24 @@ class ISourceDataLoader:
         """
         pass
         
-    def save_source_data(self, file_path: str, guid: str, content: Dict) -> None:
+    def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
         """
         Save source data to the source directory.
         
         Args:
             file_path: Path to the file containing processed data
-            guid: GUID to associate with the content
+            source_guid: source_guid to associate with the content
             content: Content to save
         """
         pass
         
     def load_source_content(self, file_path: str, context_data: Dict[str, Any]) -> Optional[Any]:
         """
-        Load specific content from source file by GUID.
+        Load specific content from source file by source_guid.
         
         Args:
             file_path: Path to the file containing processed data
-            context_data: Context data containing GUID
+            context_data: Context data containing source_guid
             
         Returns:
             Optional[Any]: Loaded content or None if not found

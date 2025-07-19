@@ -8,14 +8,14 @@ class ResponseTransformer:
     """Handles response transformation (Single Responsibility)."""
     
     @staticmethod
-    def transform_response(response, context_data, guid, agent_config):
+    def transform_response(response, context_data, source_guid, agent_config):
         """
         Transform agent response with context data.
         
         Parameters:
             response: Raw agent response data
             context_data: Original context data for side collections
-            guid: Identifier for the response
+            source_guid: Identifier for the response
             agent_config: Configuration containing transformation settings
             
         Returns:
@@ -24,6 +24,6 @@ class ResponseTransformer:
         return transform_with_side_collection(
             response,
             context_data,
-            guid,
+            source_guid,
             agent_config,
         )

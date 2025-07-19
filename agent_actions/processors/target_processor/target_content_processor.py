@@ -1,6 +1,7 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
 import json
+import uuid
 from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
@@ -15,16 +16,18 @@ import asyncio  # For async processing
 class TargetContentProcessor(IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
-    def __init__(self, agent_config: Dict, agent_name: str):
+    def __init__(self, agent_config: Dict, agent_name: str, idx: int):
         """
         Initialize the target content processor.
         
         Args:
             agent_config: Configuration for the agent
             agent_name: Name of the agent
+            idx: Index of the config being processed
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+        self.idx = idx
         
         # Initialize component services
         self.source_loader = SourceDataLoader(agent_name)
@@ -46,8 +49,8 @@ class TargetContentProcessor(IContentProcessor):
                     # _process_single_item is sync, so run in thread
                     return await asyncio.to_thread(self._process_single_item, item, source_data)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
             results = await asyncio.gather(*(process_one(item) for item in data))
             processed_data = []
             for result in results:
@@ -84,8 +87,8 @@ class TargetContentProcessor(IContentProcessor):
                     processed_item = self._process_single_item(item, source_data)
                     processed_data.extend(processed_item)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
 
             return processed_data
         except Exception as e:
@@ -124,8 +127,8 @@ class TargetContentProcessor(IContentProcessor):
                     processed_item = self._process_single_item(item, source_data)
                     all_processed_items.extend(processed_item)
                 except Exception as e:
-                    guid = item.get('guid', 'unknown')
-                    raise ValueError(f"Failed to process item with GUID {guid}: {str(e)}")
+                    source_guid = item.get('source_guid', 'unknown')
+                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
 
             # Separate main and side outputs
             return self.data_processor.separate_side_output(all_processed_items)
@@ -151,9 +154,9 @@ class TargetContentProcessor(IContentProcessor):
             return []
 
         try:
-            contents, guid = data[0]['content'], data[0]['guid']
+            contents, source_guid = data[0]['content'], data[0]['source_guid']
             generated_data, _ = self.data_generator.create_agent_with_data(data)
-            return self.data_processor.process_item(contents, generated_data, guid)
+            return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")
 
@@ -176,18 +179,47 @@ class TargetContentProcessor(IContentProcessor):
             ValueError: If item processing fails
         """
         try:
-            contents, guid = item['content'], item['guid']
+            contents, source_guid = item['content'], item['source_guid']
             
             # Get corresponding source content
-            source_content = DataTransformer.get_content_by_guid(source_data, guid)  
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)  
             # Generate data through the shared utility
             generated_data, executed = self.data_generator.create_agent_with_data(
                 contents, source_content
             )
 
             if executed:
-                return self.data_processor.process_item(contents, generated_data, guid)
+                processed = self.data_processor.process_item(contents, generated_data, source_guid)
+                # Attach a unique target_id to each processed object
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
+                for obj in processed:
+                    if 'target_id' not in obj or not obj['target_id']:
+                        obj['target_id'] = str(uuid.uuid4())
+                    if 'source_guid' not in obj or not obj['source_guid']:
+                        obj['source_guid'] = source_guid
+                    obj['node_id'] = node_id  # Always use new node_id format
+                    # Add lineage tracking
+                    if 'lineage' in item and isinstance(item['lineage'], list):
+                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
+                        obj['lineage'] = filtered_lineage + [node_id]
+                    else:
+                        obj['lineage'] = [node_id]
+                return processed
             else:
-                return DataTransformer.transform_structure([{guid: generated_data}])
+                transformed = DataTransformer.transform_structure([{source_guid: generated_data}])
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
+                for obj in transformed:
+                    if 'target_id' not in obj or not obj['target_id']:
+                        obj['target_id'] = str(uuid.uuid4())
+                    if 'source_guid' not in obj or not obj['source_guid']:
+                        obj['source_guid'] = source_guid
+                    obj['node_id'] = node_id
+                    # Add lineage tracking
+                    if 'lineage' in item and isinstance(item['lineage'], list):
+                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
+                        obj['lineage'] = filtered_lineage + [node_id]
+                    else:
+                        obj['lineage'] = [node_id]
+                return transformed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

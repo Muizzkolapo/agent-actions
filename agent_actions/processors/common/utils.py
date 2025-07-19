@@ -1,6 +1,6 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
-
+import uuid
 from typing import Any, Dict, Optional
 
 from agent_actions.core.tooling import execute_user_defined_function
@@ -54,8 +54,9 @@ def run_dynamic_agent(
 def transform_with_side_collection(
     data: list,
     context_data: dict,
-    guid: str,
+    source_guid: str,
     agent_config: Dict,
+    idx: int = 0,
 ) -> list:
     """Apply ``side_collection`` logic to generated data consistently."""
     side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
@@ -65,6 +66,16 @@ def transform_with_side_collection(
             DataTransformer.update_schema_objects(context_data, item, side_collection)
             for item in data
         ]
-        return DataTransformer.transform_structure([{guid: updated}])
+        output = DataTransformer.transform_structure([{source_guid: updated}])
+    else:
+        output = data
+    # Patch: Ensure every output object has target_id, source_guid, node_id
+    for idx_obj, obj in enumerate(output):
+        if 'target_id' not in obj or not obj['target_id']:
+            obj['target_id'] = str(uuid.uuid4())
+        if 'source_guid' not in obj or not obj['source_guid']:
+            obj['source_guid'] = source_guid
+        if 'node_id' not in obj or not obj['node_id']:
+            obj['node_id'] = f"node_{idx}_{uuid.uuid4()}"
+    return output
 
-    return DataTransformer.transform_structure([{guid: data}])

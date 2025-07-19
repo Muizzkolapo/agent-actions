@@ -11,7 +11,7 @@ from agent_actions.cli.exceptions import AgentActionsError
 import json
 import uuid
 
-def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory):
+def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory, idx):
     """
     Processes a file by splitting its content into chunks or looping through its objects/rows,
     and generating data using an agent.
@@ -22,6 +22,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         file_path (str): Path to the input file.
         base_directory (str): Base directory for the relative file path.
         output_directory (str): Directory where the output file will be saved.
+        idx (int): Index of the config being processed.
     """
     file_reader = FileReader(file_path)
     content = file_reader.read()
@@ -31,6 +32,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     if agent_config.get('run_mode') == 'batch':
         # Generate a unique batch_id for this batch job
         local_batch_id = f"batch_{uuid.uuid4().hex}"
+        node_id = f"node_{idx}_{uuid.uuid4()}"  # Unique node ID for this staging batch
         if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
             chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
             chunk_size = chunk_config.get("chunk_size", 1000)
@@ -42,7 +44,14 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             )
             # Assign a unique batch_uuid to each chunk for custom_id
             data_chunk = [
-                {"content": chunk, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_{idx}"}
+                {
+                    "content": chunk,
+                    "batch_id": local_batch_id,
+                    "batch_uuid": f"{local_batch_id}_{idx}",
+                    "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
+                    "target_id": str(uuid.uuid4()),
+                    "node_id": node_id
+                }
                 for idx, chunk in enumerate(chunks)
             ]
             src_text = []
@@ -54,7 +63,14 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             # Add batch_id and batch_uuid to each row if it's a list
             if isinstance(parsed, list):
                 data_chunk = [
-                    {**row, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_{idx}"}
+                    {
+                        **row,
+                        "batch_id": local_batch_id,
+                        "batch_uuid": f"{local_batch_id}_{idx}",
+                        "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                        "target_id": str(uuid.uuid4()),
+                        "node_id": node_id
+                    }
                     for idx, row in enumerate(parsed)
                 ]
             else:
@@ -63,7 +79,14 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         elif file_type in ('.csv', '.xlsx'):
             rows = content_processor.tabular_loader.process(content)
             data_chunk = [
-                {**row, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_{idx}"}
+                {
+                    **row,
+                    "batch_id": local_batch_id,
+                    "batch_uuid": f"{local_batch_id}_{idx}",
+                    "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                    "target_id": str(uuid.uuid4()),
+                    "node_id": node_id
+                }
                 for idx, row in enumerate(rows)
             ]
             src_text = []
@@ -71,7 +94,14 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             rows = content_processor.xml_loader.process(content)
             if isinstance(rows, list):
                 data_chunk = [
-                    {**row, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_{idx}"}
+                    {
+                        **row,
+                        "batch_id": local_batch_id,
+                        "batch_uuid": f"{local_batch_id}_{idx}",
+                        "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                        "target_id": str(uuid.uuid4()),
+                        "node_id": node_id
+                    }
                     for idx, row in enumerate(rows)
                 ]
             else:
@@ -79,8 +109,19 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             src_text = []
         else:
             raise AgentActionsError(f"Unsupported file type: {file_type}")
+        # Patch: Ensure every record has a unique target_id before batch submission
+        for row in data_chunk:
+            if 'target_id' not in row or not row['target_id']:
+                row['target_id'] = str(uuid.uuid4())
         batch_service = BatchService()
-        vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, agent_name, data_chunk, output_directory)
+        file_name = Path(file_path).name
+        vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
+        # Save source for each row in data_chunk- this is where we generate source for batch
+        for row in data_chunk:
+            custom_id = row.get("target_id")
+            if custom_id:
+                src_text = {custom_id: row}
+                batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -94,6 +135,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             json.dump(placeholder, f)
         return
     # Non-batch mode: original behavior (calls agent/LLM for each chunk/row)
+    # Save source for each row in data_chunk - this is where we generate source for non-batch
     data_chunk, src_text = [], []
     if file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
@@ -130,10 +172,10 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         with open(output_src_path, 'r') as existing_file:
             existing_source = json.load(existing_file)
         
-        new_guids = [list(item.keys())[0] for item in src_text if list(item.keys())[0] not in [list(existing_item.keys())[0] for existing_item in existing_source]]
+        new_source_guids = [list(item.keys())[0] for item in src_text if list(item.keys())[0] not in [list(existing_item.keys())[0] for existing_item in existing_source]]
         
-        if new_guids:
-            existing_source.extend([item for item in src_text if list(item.keys())[0] in new_guids])
+        if new_source_guids:
+            existing_source.extend([item for item in src_text if list(item.keys())[0] in new_source_guids])
             source_file_writer = FileWriter(str(output_src_path))
             source_file_writer.write_source(existing_source)
     else:
