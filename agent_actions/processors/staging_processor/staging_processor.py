@@ -1,5 +1,7 @@
 """Module for orchestrating prompt processing workflow."""
 
+import uuid
+import json
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import run_dynamic_agent
 from agent_actions.core.utils import Utils
@@ -75,7 +77,9 @@ class StagingProcessor:
 
             # Step 7: Generate source_guid if not available
             if not source_guid:
-                source_guid = Utils.generate_id()
+                # Use deterministic generation based on content to ensure consistency
+                content_for_hash = json.dumps(enriched_data, sort_keys=True) if enriched_data else str(context_data)
+                source_guid = str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
 
             # Step 8: Transform response
             if executed:

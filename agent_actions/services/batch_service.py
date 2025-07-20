@@ -158,8 +158,8 @@ class BatchService:
                 custom_id = str(uuid.uuid4())
                 row["target_id"] = custom_id
 
-            # Store only the content portion of the row for side_collection merging
-            self.context_map[custom_id] = row.get("content", row)
+            # Store the full row to preserve source_guid and other metadata
+            self.context_map[custom_id] = row
 
             processed_row = apply_remove_collection(row, agent_config)
 
@@ -298,14 +298,9 @@ class BatchService:
                 payload = json.load(f)
 
             raw_map = payload.get("data", {})
-            cleaned_map = {}
-            for source_guid, value in raw_map.items():
-                if isinstance(value, dict) and "content" in value:
-                    cleaned_map[source_guid] = value.get("content", {})
-                else:
-                    cleaned_map[source_guid] = value
-
-            return cleaned_map, payload.get("side_collection", [])
+            # Keep the full row data to preserve source_guid and other metadata
+            # The key is target_id (custom_id), the value should be the full row
+            return raw_map, payload.get("side_collection", [])
         except Exception:
             return {}, []
 
@@ -618,18 +613,21 @@ class BatchService:
                             # Normalize to a list for consistent processing
                             generated_list = DataTransformer.ensure_list(generated_obj)
 
+                            # Get the original source_guid from the stored row
+                            original_row = context_map.get(custom_id, {})
+                            original_source_guid = original_row.get("source_guid", custom_id)
+
                             if side_collection and custom_id in context_map:
-                                original = context_map.get(custom_id, {})
-                                if isinstance(original, dict) and "content" in original:
-                                    original = original.get("content", {})
+                                original_content = original_row.get("content", original_row)
                                 generated_list = [
-                                    DataTransformer.update_schema_objects(original, item, side_collection)
+                                    DataTransformer.update_schema_objects(original_content, item, side_collection)
                                     if isinstance(item, dict) else item
                                     for item in generated_list
                                 ]
 
+                            # Use the original source_guid instead of custom_id
                             structured_items = DataTransformer.transform_structure(
-                                [{custom_id: generated_list}]
+                                [{original_source_guid: generated_list}]
                             )
 
                             for itm in structured_items:
@@ -645,9 +643,13 @@ class BatchService:
                             processed_data.extend(structured_items)
                             
                         except json.JSONDecodeError:
+                            # Get the original source_guid for error cases too
+                            original_row = context_map.get(custom_id, {})
+                            original_source_guid = original_row.get("source_guid", custom_id)
+                            
                             # If not valid JSON, wrap in error structure
                             error_item = {
-                                "source_guid": custom_id,
+                                "source_guid": original_source_guid,
                                 "error": "Invalid JSON response",
                                 "raw_content": content,
                                 "metadata": {
@@ -658,8 +660,11 @@ class BatchService:
                             processed_data.append(error_item)
             else:
                 # Handle error cases where 'response' or 'body' is missing
+                original_row = context_map.get(custom_id, {})
+                original_source_guid = original_row.get("source_guid", custom_id or 'unknown')
+                
                 error_item = {
-                    "source_guid": custom_id or 'unknown',
+                    "source_guid": original_source_guid,
                     "error": "Batch processing failed or missing response body",
                     "raw_result": result
                 }
