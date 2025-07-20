@@ -37,7 +37,7 @@ def run_dynamic_agent(
     if conditional_clause and not execute_user_defined_function(
         conditional_clause, context
     ):
-        return [context], False
+        return context, False
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
@@ -68,9 +68,11 @@ def transform_with_side_collection(
         ]
         output = DataTransformer.transform_structure([{source_guid: updated}])
     else:
-        output = data
+        # Always apply transform_structure to ensure consistent output format
+        output = DataTransformer.transform_structure([{source_guid: data}])
+    
     # Patch: Ensure every output object has target_id, source_guid, node_id
-    for idx_obj, obj in enumerate(output):
+    for obj in output:
         if 'target_id' not in obj or not obj['target_id']:
             obj['target_id'] = str(uuid.uuid4())
         if 'source_guid' not in obj or not obj['source_guid']:

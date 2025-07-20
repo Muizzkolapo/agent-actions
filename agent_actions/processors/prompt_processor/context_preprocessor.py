@@ -30,6 +30,26 @@ class ContextPreprocessor:
         Returns:
             Tuple of (source_guid, content) where source_guid may be None
         """
+        # Handle standard format: {"source_guid": "...", "content": "..."}
         if isinstance(context_data, dict) and "source_guid" in context_data and "content" in context_data:
             return context_data["source_guid"], context_data["content"]
+        
+        # Handle direct source_guid in dict: {"source_guid": "..."}
+        if isinstance(context_data, dict) and "source_guid" in context_data:
+            return context_data["source_guid"], context_data
+        
+        # Handle nested structures like: [{"uuid": {"source_guid": "...", ...}}]
+        if isinstance(context_data, list):
+            for item in context_data:
+                if isinstance(item, dict):
+                    for _, value in item.items():
+                        if isinstance(value, dict) and "source_guid" in value:
+                            return value["source_guid"], context_data
+        
+        # Handle nested dict structures: {"uuid": {"source_guid": "...", ...}}
+        if isinstance(context_data, dict):
+            for _, value in context_data.items():
+                if isinstance(value, dict) and "source_guid" in value:
+                    return value["source_guid"], context_data
+        
         return None, context_data
