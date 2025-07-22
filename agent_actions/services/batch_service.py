@@ -14,6 +14,7 @@ from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
 from agent_actions.processors.common.utils import apply_remove_collection
+from agent_actions.core.tooling import execute_user_defined_function
 import uuid
 
 class BatchService:
@@ -151,6 +152,10 @@ class BatchService:
         self.context_map = {}
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         tasks = []
+        
+        # Check for conditional clause
+        conditional_clause = agent_config.get("conditional_clause", "").lower()
+        
         for row in data:
             # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
             custom_id = row.get("target_id")
@@ -161,6 +166,14 @@ class BatchService:
             # Store the full row to preserve source_guid and other metadata
             self.context_map[custom_id] = row
 
+            # Skip processing if conditional clause is present and evaluates to False
+            if conditional_clause and not execute_user_defined_function(
+                conditional_clause, row
+            ):
+                # Store the original row without processing for conditional failures
+                continue
+
+            # Apply remove_collection only for rows that pass the conditional check
             processed_row = apply_remove_collection(row, agent_config)
 
             formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)

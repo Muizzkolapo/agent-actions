@@ -47,9 +47,6 @@ class DataGenerator(IDataGenerator):
             RuntimeError: If agent creation or data generation fails
         """
         try:
-            # Apply remove_collection before creating the agent
-            contents = apply_remove_collection(contents, self.agent_config)
-
             # Format prompt with content
             formatted_prompt, contents = self._format_prompt(contents, source_content)
             

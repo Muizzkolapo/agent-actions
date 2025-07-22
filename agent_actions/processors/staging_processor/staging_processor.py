@@ -61,16 +61,11 @@ class StagingProcessor:
                 context_data
             )
 
-            # Step 5: Apply remove_collection transformations
-            prepared_context = ContextPreprocessor.prepare_context(
-                enriched_data, self.agent_config
-            )
-
-            # Step 6: Run the agent through the shared utility
+            # Step 5: Run the agent through the shared utility
             response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
-                prepared_context,
+                enriched_data,
                 formatted_prompt,
                 tools_path=self.agent_config.get("tools", {}).get("path"),
             )
