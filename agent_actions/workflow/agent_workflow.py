@@ -175,9 +175,12 @@ class AgentWorkflow:
         """Process all completed batch jobs in the registry together as one dataset."""
         try:
             # Use the new combined processing method
-            self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+            processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+            if not processed_files:
+                raise RuntimeError("No batch results were successfully processed")
         except Exception as e:
-            self.console.print(f"[yellow]Warning: Could not process batch results: {e}[/yellow]")
+            self.console.print(f"[red]Error: Could not process batch results: {e}[/red]")
+            raise  # Re-raise to stop the workflow instead of continuing with bad data
 
     def run(self):
         try:

@@ -42,7 +42,17 @@ class FileReader:
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
-            return json.load(file)
+            data = json.load(file)
+            
+            # Check if this is a batch placeholder file
+            if isinstance(data, dict) and 'batch_job_id' in data and data.get('status') == 'submitted':
+                raise AgentActionsError(
+                    f"Cannot process batch placeholder file: {self.file_path}. "
+                    f"Batch job {data['batch_job_id']} is still pending. "
+                    "Please wait for batch processing to complete."
+                )
+            
+            return data
 
     def _read_text(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:

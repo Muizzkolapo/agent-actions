@@ -510,7 +510,27 @@ class BatchService:
             batch_job = self.client.batches.retrieve(batch_id)
             if batch_job.status == 'completed':
                 result_file_id = batch_job.output_file_id
-                result = self.client.files.content(result_file_id).content
+                
+                # Add retry logic for file retrieval
+                max_retries = 3
+                retry_delay = 2  # seconds
+                last_error = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        result = self.client.files.content(result_file_id).content
+                        # Validate that we got content
+                        if not result or len(result) == 0:
+                            raise ValueError("Retrieved empty content from batch results")
+                        break
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries - 1:
+                            print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
+                            import time
+                            time.sleep(retry_delay)
+                        else:
+                            raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
                 
                 output_path = Path(output_dir)
                 output_path.mkdir(exist_ok=True)
@@ -549,13 +569,42 @@ class BatchService:
                 
             result_file_id = batch_job.output_file_id
             #this is where we load the file for the processng
-            result_content = self.client.files.content(result_file_id).content
             
-            # Parse batch results
+            # Add retry logic for file retrieval
+            max_retries = 3
+            retry_delay = 2
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    result_content = self.client.files.content(result_file_id).content
+                    if not result_content or len(result_content) == 0:
+                        raise ValueError("Retrieved empty content from batch results")
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
+                        import time
+                        time.sleep(retry_delay)
+                    else:
+                        raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
+            
+            # Parse batch results with error handling
             batch_results = []
-            for line in result_content.decode('utf-8').strip().split('\n'):
+            lines = result_content.decode('utf-8').strip().split('\n')
+            for line_num, line in enumerate(lines, 1):
                 if line.strip():
-                    batch_results.append(json.loads(line))
+                    try:
+                        batch_results.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                        if len(line) > 500:
+                            print(f"[DEBUG] Line length: {len(line)} characters")
+                        # Continue processing other lines instead of failing completely
+                        continue
             
             batch_dir = Path(output_directory) / "batch"
             context_map, side_collection = self._load_context_map(batch_dir)
@@ -565,6 +614,7 @@ class BatchService:
                 batch_results,
                 side_collection=side_collection,
                 context_map=context_map,
+                output_directory=output_directory,
             )
 
             main_output, side_output_data = self._separate_side_output(processed_data)
@@ -587,13 +637,16 @@ class BatchService:
         except Exception as e:
             raise RuntimeError(f"Error processing batch results to workflow output: {e}")
 
-    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None):
         """
         Convert batch API results to the workflow's expected format.
         Extracts content and preserves metadata, matching non-batch agent output format.
         
         Args:
             batch_results: List of batch API result objects
+            side_collection: List of side collection fields
+            context_map: Map of custom_id to original row data
+            output_directory: Output directory path to extract node information
             
         Returns:
             List of processed data in workflow format
@@ -601,6 +654,14 @@ class BatchService:
         processed_data = []
         context_map = context_map or {}
         side_collection = side_collection or []
+        
+        # Extract node index from output directory (e.g., "node_0_summary")
+        node_idx = None
+        if output_directory:
+            import re
+            match = re.search(r'node_(\d+)_(\w+)', str(output_directory))
+            if match:
+                node_idx = int(match.group(1))
         #muizzchange this is the transformed data we use for the output
         # This is where we transform the data to what we want which matches usual agent actions flow 
         
@@ -653,6 +714,28 @@ class BatchService:
                                         "system_fingerprint"
                                     ),
                                 }
+                                
+                                # Add node_id and lineage tracking
+                                if node_idx is not None:
+                                    # Generate a unique node_id for each item
+                                    item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                                    itm["node_id"] = item_node_id
+                                    
+                                    # Get lineage from original row
+                                    original_lineage = original_row.get("lineage", [])
+                                    if isinstance(original_lineage, list):
+                                        # Filter to keep only node_* entries and add current node
+                                        filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                                        itm["lineage"] = filtered_lineage + [item_node_id]
+                                    else:
+                                        itm["lineage"] = [item_node_id]
+                                
+                                # Ensure target_id and source_guid are set
+                                if 'target_id' not in itm or not itm['target_id']:
+                                    itm['target_id'] = original_row.get('target_id', str(uuid.uuid4()))
+                                if 'source_guid' not in itm or not itm['source_guid']:
+                                    itm['source_guid'] = original_source_guid
+                                    
                             processed_data.extend(structured_items)
                             
                         except json.JSONDecodeError:
@@ -759,12 +842,22 @@ class BatchService:
                 result_content = self.client.files.content(result_file_id).content.decode('utf-8')
                 
             
-            # Parse batch results
+            # Parse batch results with error handling
             #muizz change this is where we get the outcpme of the run like the result from the model
             batch_results = []
-            for line in result_content.strip().split('\n'):
+            lines = result_content.strip().split('\n')
+            for line_num, line in enumerate(lines, 1):
                 if line.strip():
-                    batch_results.append(json.loads(line))
+                    try:
+                        batch_results.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                        if len(line) > 500:
+                            print(f"[DEBUG] Line length: {len(line)} characters")
+                        # Continue processing other lines instead of failing completely
+                        continue
             
             print(f"Parsed {len(batch_results)} batch results")
             
@@ -775,6 +868,7 @@ class BatchService:
                 batch_results,
                 side_collection=side_collection,
                 context_map=context_map,
+                output_directory=output_directory,
             )
 
             print(f"Processed {len(processed_data)} items into workflow format")
@@ -868,9 +962,21 @@ class BatchService:
                     
                     # Parse batch results for this specific file
                     batch_results = []
-                    for line in result_content.strip().split('\\n'):
+                    lines = result_content.strip().split('\n')
+                    for line_num, line in enumerate(lines, 1):
                         if line.strip():
-                            batch_results.append(json.loads(line))
+                            try:
+                                batch_results.append(json.loads(line))
+                            except json.JSONDecodeError as e:
+                                print(f"[ERROR] JSON parsing error on line {line_num} for {file_name}: {e}")
+                                print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                                print(f"[DEBUG] File: {file_name}")
+                                print(f"[DEBUG] Batch ID: {batch_id}")
+                                print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                                if len(line) > 500:
+                                    print(f"[DEBUG] Line length: {len(line)} characters")
+                                # Continue processing other lines instead of failing completely
+                                continue
                     
                     if not batch_results:
                         print(f"No results found for batch {batch_id} ({file_name})")
@@ -883,6 +989,7 @@ class BatchService:
                         batch_results,
                         side_collection=side_collection,
                         context_map=context_map,
+                        output_directory=output_directory,
                     )
 
                     main_output, side_output_data = self._separate_side_output(processed_data)
@@ -913,7 +1020,13 @@ class BatchService:
                     print(f"✅ Processed {file_name} → {output_file_path}")
                     
                 except Exception as e:
-                    print(f"Could not process batch results for {file_name} (batch {batch_id}): {e}")
+                    error_msg = f"Could not process batch results for {file_name} (batch {batch_id}): {e}"
+                    print(f"[ERROR] {error_msg}")
+                    print(f"[DEBUG] Batch ID: {batch_id}")
+                    print(f"[DEBUG] File name: {file_name}")
+                    print(f"[DEBUG] Output directory: {output_directory}")
+                    if 'json.JSONDecodeError' in str(type(e)):
+                        print(f"[DEBUG] This appears to be a JSON parsing error. Check the batch results file for malformed JSON.")
                     continue
             
             if not processed_files:

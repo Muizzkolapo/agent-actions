@@ -118,9 +118,9 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
         # Save source for each row in data_chunk- this is where we generate source for batch
         for row in data_chunk:
-            custom_id = row.get("target_id")
-            if custom_id:
-                src_text = {custom_id: row}
+            source_guid = row.get("source_guid")
+            if source_guid:
+                src_text = {source_guid: row}
                 batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
