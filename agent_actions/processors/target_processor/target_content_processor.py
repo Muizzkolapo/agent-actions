@@ -40,7 +40,10 @@ class TargetContentProcessor(IContentProcessor):
         Async version: process a list of data items in parallel using asyncio.
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return []
         try:
             source_data = self.source_loader.load_source_data(file_path)
@@ -75,7 +78,10 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return [] # Return empty list to signify batch submission
 
         try:
@@ -115,7 +121,11 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                # Separate main and side outputs for passthrough data
+                return self.data_processor.separate_side_output(result['data'])
             return [], [] # Return empty lists for main and side output
 
         try:
@@ -150,7 +160,10 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return []
 
         try:

@@ -18,6 +18,64 @@ from agent_actions.core.tooling import execute_user_defined_function
 import uuid
 
 class BatchService:
+    def _create_passthrough_data(self, data, agent_config, output_directory):
+        """
+        Create passthrough data structure when no batch tasks are submitted.
+        This preserves all original data with appropriate metadata.
+        """
+        
+        # Extract node index from output directory (e.g., "node_0_summary")
+        node_idx = None
+        if output_directory:
+            import re
+            match = re.search(r'node_(\d+)_(\w+)', str(output_directory))
+            if match:
+                node_idx = int(match.group(1))
+        
+        processed_data = []
+        
+        for row in data:
+            # Always use target_id as the identifier; if missing, generate a new UUID and assign it
+            target_id = row.get("target_id")
+            if not target_id:
+                target_id = str(uuid.uuid4())
+                row["target_id"] = target_id
+            
+            # Create a passthrough item that preserves all original data
+            passthrough_item = row.copy()
+            original_source_guid = row.get("source_guid", target_id)
+            
+            # Ensure required fields are set
+            if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+                passthrough_item['target_id'] = target_id
+            if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+                passthrough_item['source_guid'] = original_source_guid
+            
+            # Add node_id and lineage tracking for consistency
+            if node_idx is not None:
+                item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                passthrough_item["node_id"] = item_node_id
+                
+                # Get lineage from original row
+                original_lineage = row.get("lineage", [])
+                if isinstance(original_lineage, list):
+                    filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                    passthrough_item["lineage"] = filtered_lineage + [item_node_id]
+                else:
+                    passthrough_item["lineage"] = [item_node_id]
+            
+            # Add metadata to indicate this was skipped by conditional
+            passthrough_item["metadata"] = {
+                "skipped_by_conditional": True,
+                "agent_type": "passthrough",
+                "reason": "conditional_clause_failed"
+            }
+            
+            processed_data.append(passthrough_item)
+        
+        # Return a special marker indicating this is passthrough data
+        return {"type": "passthrough", "data": processed_data, "output_directory": output_directory}
+
     def _save_task_source(self, src_text, file_path, base_directory, output_directory):
         """
         Save or merge a single task's source data into the appropriate file in the source directory.
@@ -216,8 +274,9 @@ class BatchService:
         
         tasks = self.prepare_batch_tasks_from_data(agent_config, data)
         if not tasks:
-            print("No batch tasks to submit.")
-            return None
+            print("No batch tasks to submit. All items filtered out by conditional clause.")
+            # Return passthrough data when no tasks are created
+            return self._create_passthrough_data(data, agent_config, output_directory)
 
         # Create batch directory in the node-specific output directory if provided
         if output_directory:
