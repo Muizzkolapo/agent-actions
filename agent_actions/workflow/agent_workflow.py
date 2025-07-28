@@ -165,9 +165,16 @@ class AgentWorkflow:
             else:
                 return None, 'in_progress'
         elif registry_status == 'no_batches':
-            # No batch registry found - this means the agent didn't submit any batch jobs
-            self.console.print(f"[yellow]No batch jobs found for {agent_name}[/yellow]")
-            return None, 'failed'
+            # No batch registry found - check if passthrough data was processed instead
+            passthrough_marker = Path(output_directory) / ".passthrough_processed"
+            if passthrough_marker.exists():
+                # Found passthrough marker - this indicates successful conditional filtering with passthrough processing
+                self.console.print(f"[green]All items filtered by conditional clause - passthrough data processed for {agent_name}[/green]")
+                return str(output_directory), 'completed'
+            else:
+                # No batch registry and no passthrough marker - this means the agent didn't submit any batch jobs
+                self.console.print(f"[yellow]No batch jobs found for {agent_name}[/yellow]")
+                return None, 'failed'
         else:
             return None, 'failed'
 
@@ -175,9 +182,12 @@ class AgentWorkflow:
         """Process all completed batch jobs in the registry together as one dataset."""
         try:
             # Use the new combined processing method
-            self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+            processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+            if not processed_files:
+                raise RuntimeError("No batch results were successfully processed")
         except Exception as e:
-            self.console.print(f"[yellow]Warning: Could not process batch results: {e}[/yellow]")
+            self.console.print(f"[red]Error: Could not process batch results: {e}[/red]")
+            raise  # Re-raise to stop the workflow instead of continuing with bad data
 
     def run(self):
         try:
@@ -243,10 +253,21 @@ class AgentWorkflow:
                     
                     # Check if batch registry exists to confirm batch jobs were submitted
                     registry_file = Path(node_output_dir) / "batch" / ".batch_registry.json"
+                    passthrough_marker = Path(node_output_dir) / ".passthrough_processed"
+                    
                     if registry_file.exists():
                         self._update_status(agent_name, 'batch_submitted')
                         self.console.print(f"\n[yellow]Batch jobs submitted for '{agent_name}'. Run 'agent run' again to check status.[/yellow]")
                         self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SUBMITTED[/yellow] [bold]{agent_name}[/bold] (batch) in {duration:.2f}s")
+                    elif passthrough_marker.exists():
+                        # Found passthrough marker - this indicates successful conditional filtering with passthrough processing
+                        self._update_status(agent_name, 'completed')
+                        self.previous_agent_type = agent_name
+                        self.ephemeral_directories.append({'output_folder': str(node_output_dir), 'ephemeral': agent_config.get('ephemeral', False)})
+                        workflow_complete = True
+                        self.console.print(f"\n[green]All items filtered by conditional clause - passthrough data processed for '{agent_name}'.[/green]")
+                        self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                        continue
                     else:
                         self._update_status(agent_name, 'failed')
                         self.console.print(f"\n[red]Agent '{agent_name}' was configured for batch mode, but no batch jobs were found after execution.[/red]")

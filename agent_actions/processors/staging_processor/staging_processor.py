@@ -61,16 +61,11 @@ class StagingProcessor:
                 context_data
             )
 
-            # Step 5: Apply remove_collection transformations
-            prepared_context = ContextPreprocessor.prepare_context(
-                enriched_data, self.agent_config
-            )
-
-            # Step 6: Run the agent through the shared utility
+            # Step 5: Run the agent through the shared utility
             response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
-                prepared_context,
+                enriched_data,
                 formatted_prompt,
                 tools_path=self.agent_config.get("tools", {}).get("path"),
             )
@@ -87,9 +82,13 @@ class StagingProcessor:
                     response, enriched_data, source_guid, self.agent_config
                 )
             else:
-                transformed_response = DataTransformer.transform_structure(
-                    [{source_guid: response}]
-                )
+                # When conditional fails, preserve the original structure
+                # Don't use transform_structure as it breaks down the data
+                transformed_response = [{
+                    "source_guid": source_guid,
+                    "content": response,  # This is the original context data
+                    "target_id": str(uuid.uuid4())
+                }]
 
             # Step 8b: Add lineage tracking (using node_id only)
             idx = self.agent_config.get('idx', 0)

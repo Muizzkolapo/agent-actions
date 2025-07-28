@@ -14,9 +14,68 @@ from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
 from agent_actions.processors.common.utils import apply_remove_collection
+from agent_actions.core.tooling import execute_user_defined_function
 import uuid
 
 class BatchService:
+    def _create_passthrough_data(self, data, agent_config, output_directory):
+        """
+        Create passthrough data structure when no batch tasks are submitted.
+        This preserves all original data with appropriate metadata.
+        """
+        
+        # Extract node index from output directory (e.g., "node_0_summary")
+        node_idx = None
+        if output_directory:
+            import re
+            match = re.search(r'node_(\d+)_(\w+)', str(output_directory))
+            if match:
+                node_idx = int(match.group(1))
+        
+        processed_data = []
+        
+        for row in data:
+            # Always use target_id as the identifier; if missing, generate a new UUID and assign it
+            target_id = row.get("target_id")
+            if not target_id:
+                target_id = str(uuid.uuid4())
+                row["target_id"] = target_id
+            
+            # Create a passthrough item that preserves all original data
+            passthrough_item = row.copy()
+            original_source_guid = row.get("source_guid", target_id)
+            
+            # Ensure required fields are set
+            if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+                passthrough_item['target_id'] = target_id
+            if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+                passthrough_item['source_guid'] = original_source_guid
+            
+            # Add node_id and lineage tracking for consistency
+            if node_idx is not None:
+                item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                passthrough_item["node_id"] = item_node_id
+                
+                # Get lineage from original row
+                original_lineage = row.get("lineage", [])
+                if isinstance(original_lineage, list):
+                    filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                    passthrough_item["lineage"] = filtered_lineage + [item_node_id]
+                else:
+                    passthrough_item["lineage"] = [item_node_id]
+            
+            # Add metadata to indicate this was skipped by conditional
+            passthrough_item["metadata"] = {
+                "skipped_by_conditional": True,
+                "agent_type": "passthrough",
+                "reason": "conditional_clause_failed"
+            }
+            
+            processed_data.append(passthrough_item)
+        
+        # Return a special marker indicating this is passthrough data
+        return {"type": "passthrough", "data": processed_data, "output_directory": output_directory}
+
     def _save_task_source(self, src_text, file_path, base_directory, output_directory):
         """
         Save or merge a single task's source data into the appropriate file in the source directory.
@@ -151,6 +210,10 @@ class BatchService:
         self.context_map = {}
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         tasks = []
+        
+        # Check for conditional clause
+        conditional_clause = agent_config.get("conditional_clause", "").lower()
+        
         for row in data:
             # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
             custom_id = row.get("target_id")
@@ -161,6 +224,14 @@ class BatchService:
             # Store the full row to preserve source_guid and other metadata
             self.context_map[custom_id] = row
 
+            # Skip processing if conditional clause is present and evaluates to False
+            if conditional_clause and not execute_user_defined_function(
+                conditional_clause, row
+            ):
+                # Store the original row without processing for conditional failures
+                continue
+
+            # Apply remove_collection only for rows that pass the conditional check
             processed_row = apply_remove_collection(row, agent_config)
 
             formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
@@ -203,8 +274,9 @@ class BatchService:
         
         tasks = self.prepare_batch_tasks_from_data(agent_config, data)
         if not tasks:
-            print("No batch tasks to submit.")
-            return None
+            print("No batch tasks to submit. All items filtered out by conditional clause.")
+            # Return passthrough data when no tasks are created
+            return self._create_passthrough_data(data, agent_config, output_directory)
 
         # Create batch directory in the node-specific output directory if provided
         if output_directory:
@@ -497,7 +569,27 @@ class BatchService:
             batch_job = self.client.batches.retrieve(batch_id)
             if batch_job.status == 'completed':
                 result_file_id = batch_job.output_file_id
-                result = self.client.files.content(result_file_id).content
+                
+                # Add retry logic for file retrieval
+                max_retries = 3
+                retry_delay = 2  # seconds
+                last_error = None
+                
+                for attempt in range(max_retries):
+                    try:
+                        result = self.client.files.content(result_file_id).content
+                        # Validate that we got content
+                        if not result or len(result) == 0:
+                            raise ValueError("Retrieved empty content from batch results")
+                        break
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries - 1:
+                            print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
+                            import time
+                            time.sleep(retry_delay)
+                        else:
+                            raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
                 
                 output_path = Path(output_dir)
                 output_path.mkdir(exist_ok=True)
@@ -536,13 +628,42 @@ class BatchService:
                 
             result_file_id = batch_job.output_file_id
             #this is where we load the file for the processng
-            result_content = self.client.files.content(result_file_id).content
             
-            # Parse batch results
+            # Add retry logic for file retrieval
+            max_retries = 3
+            retry_delay = 2
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    result_content = self.client.files.content(result_file_id).content
+                    if not result_content or len(result_content) == 0:
+                        raise ValueError("Retrieved empty content from batch results")
+                    break
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
+                        import time
+                        time.sleep(retry_delay)
+                    else:
+                        raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
+            
+            # Parse batch results with error handling
             batch_results = []
-            for line in result_content.decode('utf-8').strip().split('\n'):
+            lines = result_content.decode('utf-8').strip().split('\n')
+            for line_num, line in enumerate(lines, 1):
                 if line.strip():
-                    batch_results.append(json.loads(line))
+                    try:
+                        batch_results.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                        if len(line) > 500:
+                            print(f"[DEBUG] Line length: {len(line)} characters")
+                        # Continue processing other lines instead of failing completely
+                        continue
             
             batch_dir = Path(output_directory) / "batch"
             context_map, side_collection = self._load_context_map(batch_dir)
@@ -552,6 +673,7 @@ class BatchService:
                 batch_results,
                 side_collection=side_collection,
                 context_map=context_map,
+                output_directory=output_directory,
             )
 
             main_output, side_output_data = self._separate_side_output(processed_data)
@@ -574,13 +696,16 @@ class BatchService:
         except Exception as e:
             raise RuntimeError(f"Error processing batch results to workflow output: {e}")
 
-    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None):
         """
         Convert batch API results to the workflow's expected format.
         Extracts content and preserves metadata, matching non-batch agent output format.
         
         Args:
             batch_results: List of batch API result objects
+            side_collection: List of side collection fields
+            context_map: Map of custom_id to original row data
+            output_directory: Output directory path to extract node information
             
         Returns:
             List of processed data in workflow format
@@ -588,6 +713,18 @@ class BatchService:
         processed_data = []
         context_map = context_map or {}
         side_collection = side_collection or []
+        
+        # Extract node index from output directory (e.g., "node_0_summary")
+        node_idx = None
+        if output_directory:
+            import re
+            match = re.search(r'node_(\d+)_(\w+)', str(output_directory))
+            if match:
+                node_idx = int(match.group(1))
+        
+        # Track which custom_ids were processed by the batch API
+        processed_custom_ids = set()
+        
         #muizzchange this is the transformed data we use for the output
         # This is where we transform the data to what we want which matches usual agent actions flow 
         
@@ -640,7 +777,30 @@ class BatchService:
                                         "system_fingerprint"
                                     ),
                                 }
+                                
+                                # Add node_id and lineage tracking
+                                if node_idx is not None:
+                                    # Generate a unique node_id for each item
+                                    item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                                    itm["node_id"] = item_node_id
+                                    
+                                    # Get lineage from original row
+                                    original_lineage = original_row.get("lineage", [])
+                                    if isinstance(original_lineage, list):
+                                        # Filter to keep only node_* entries and add current node
+                                        filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                                        itm["lineage"] = filtered_lineage + [item_node_id]
+                                    else:
+                                        itm["lineage"] = [item_node_id]
+                                
+                                # Ensure target_id and source_guid are set
+                                if 'target_id' not in itm or not itm['target_id']:
+                                    itm['target_id'] = original_row.get('target_id', str(uuid.uuid4()))
+                                if 'source_guid' not in itm or not itm['source_guid']:
+                                    itm['source_guid'] = original_source_guid
+                                    
                             processed_data.extend(structured_items)
+                            processed_custom_ids.add(custom_id)
                             
                         except json.JSONDecodeError:
                             # Get the original source_guid for error cases too
@@ -658,6 +818,7 @@ class BatchService:
                                 }
                             }
                             processed_data.append(error_item)
+                            processed_custom_ids.add(custom_id)
             else:
                 # Handle error cases where 'response' or 'body' is missing
                 original_row = context_map.get(custom_id, {})
@@ -669,10 +830,48 @@ class BatchService:
                     "raw_result": result
                 }
                 processed_data.append(error_item)
+                processed_custom_ids.add(custom_id)
         #===end here===#
         
+        # Process records that were filtered out by conditional clause
+        # These are in context_map but not in batch_results
+        for custom_id, original_row in context_map.items():
+            if custom_id not in processed_custom_ids:
+                # This record was skipped due to conditional clause
+                # Pass it through unmodified to maintain the full data flow
+                original_source_guid = original_row.get("source_guid", custom_id)
+                
+                # Create a passthrough item that preserves all original data
+                passthrough_item = original_row.copy()
+                
+                # Ensure required fields are set
+                if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+                    passthrough_item['target_id'] = custom_id
+                if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+                    passthrough_item['source_guid'] = original_source_guid
+                
+                # Add node_id and lineage tracking for consistency
+                if node_idx is not None:
+                    item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                    passthrough_item["node_id"] = item_node_id
+                    
+                    # Get lineage from original row
+                    original_lineage = original_row.get("lineage", [])
+                    if isinstance(original_lineage, list):
+                        filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                        passthrough_item["lineage"] = filtered_lineage + [item_node_id]
+                    else:
+                        passthrough_item["lineage"] = [item_node_id]
+                
+                # Add metadata to indicate this was skipped by conditional
+                passthrough_item["metadata"] = {
+                    "skipped_by_conditional": True,
+                    "agent_type": "passthrough"
+                }
+                
+                processed_data.append(passthrough_item)
+        
         return processed_data
-
 
     def check_and_process_completed_batches(self, output_directory: str, base_directory: str):
         """
@@ -746,12 +945,22 @@ class BatchService:
                 result_content = self.client.files.content(result_file_id).content.decode('utf-8')
                 
             
-            # Parse batch results
+            # Parse batch results with error handling
             #muizz change this is where we get the outcpme of the run like the result from the model
             batch_results = []
-            for line in result_content.strip().split('\n'):
+            lines = result_content.strip().split('\n')
+            for line_num, line in enumerate(lines, 1):
                 if line.strip():
-                    batch_results.append(json.loads(line))
+                    try:
+                        batch_results.append(json.loads(line))
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                        if len(line) > 500:
+                            print(f"[DEBUG] Line length: {len(line)} characters")
+                        # Continue processing other lines instead of failing completely
+                        continue
             
             print(f"Parsed {len(batch_results)} batch results")
             
@@ -762,6 +971,7 @@ class BatchService:
                 batch_results,
                 side_collection=side_collection,
                 context_map=context_map,
+                output_directory=output_directory,
             )
 
             print(f"Processed {len(processed_data)} items into workflow format")
@@ -855,9 +1065,21 @@ class BatchService:
                     
                     # Parse batch results for this specific file
                     batch_results = []
-                    for line in result_content.strip().split('\\n'):
+                    lines = result_content.strip().split('\n')
+                    for line_num, line in enumerate(lines, 1):
                         if line.strip():
-                            batch_results.append(json.loads(line))
+                            try:
+                                batch_results.append(json.loads(line))
+                            except json.JSONDecodeError as e:
+                                print(f"[ERROR] JSON parsing error on line {line_num} for {file_name}: {e}")
+                                print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
+                                print(f"[DEBUG] File: {file_name}")
+                                print(f"[DEBUG] Batch ID: {batch_id}")
+                                print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
+                                if len(line) > 500:
+                                    print(f"[DEBUG] Line length: {len(line)} characters")
+                                # Continue processing other lines instead of failing completely
+                                continue
                     
                     if not batch_results:
                         print(f"No results found for batch {batch_id} ({file_name})")
@@ -870,6 +1092,7 @@ class BatchService:
                         batch_results,
                         side_collection=side_collection,
                         context_map=context_map,
+                        output_directory=output_directory,
                     )
 
                     main_output, side_output_data = self._separate_side_output(processed_data)
@@ -900,7 +1123,13 @@ class BatchService:
                     print(f"✅ Processed {file_name} → {output_file_path}")
                     
                 except Exception as e:
-                    print(f"Could not process batch results for {file_name} (batch {batch_id}): {e}")
+                    error_msg = f"Could not process batch results for {file_name} (batch {batch_id}): {e}"
+                    print(f"[ERROR] {error_msg}")
+                    print(f"[DEBUG] Batch ID: {batch_id}")
+                    print(f"[DEBUG] File name: {file_name}")
+                    print(f"[DEBUG] Output directory: {output_directory}")
+                    if 'json.JSONDecodeError' in str(type(e)):
+                        print(f"[DEBUG] This appears to be a JSON parsing error. Check the batch results file for malformed JSON.")
                     continue
             
             if not processed_files:

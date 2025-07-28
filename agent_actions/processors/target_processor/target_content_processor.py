@@ -40,7 +40,10 @@ class TargetContentProcessor(IContentProcessor):
         Async version: process a list of data items in parallel using asyncio.
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return []
         try:
             source_data = self.source_loader.load_source_data(file_path)
@@ -75,7 +78,10 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return [] # Return empty list to signify batch submission
 
         try:
@@ -115,7 +121,11 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                # Separate main and side outputs for passthrough data
+                return self.data_processor.separate_side_output(result['data'])
             return [], [] # Return empty lists for main and side output
 
         try:
@@ -150,7 +160,10 @@ class TargetContentProcessor(IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
             return []
 
         try:
@@ -190,26 +203,39 @@ class TargetContentProcessor(IContentProcessor):
 
             if executed:
                 processed = self.data_processor.process_item(contents, generated_data, source_guid)
+                
+                # Common processing for executed path
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
+                for obj in processed:
+                    if 'target_id' not in obj or not obj['target_id']:
+                        obj['target_id'] = str(uuid.uuid4())
+                    if 'source_guid' not in obj or not obj['source_guid']:
+                        obj['source_guid'] = source_guid
+                    obj['node_id'] = node_id
+                    # Add lineage tracking
+                    if 'lineage' in item and isinstance(item['lineage'], list):
+                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
+                        obj['lineage'] = filtered_lineage + [node_id]
+                    else:
+                        obj['lineage'] = [node_id]
             else:
-                # When conditional clause is False, generated_data is the original context
-                # We need to wrap it in the expected format for transform_structure
-                wrapped_data = [generated_data] if not isinstance(generated_data, list) else generated_data
-                processed = self.data_processor.process_item(contents, wrapped_data, source_guid)
-            
-            # Common processing for both executed and non-executed paths
-            node_id = f"node_{self.idx}_{uuid.uuid4()}"
-            for obj in processed:
-                if 'target_id' not in obj or not obj['target_id']:
-                    obj['target_id'] = str(uuid.uuid4())
-                if 'source_guid' not in obj or not obj['source_guid']:
-                    obj['source_guid'] = source_guid
-                obj['node_id'] = node_id
-                # Add lineage tracking
+                # When conditional clause is False, return the original data unchanged
+                # Create a single item with the original content structure
+                node_id = f"node_{self.idx}_{uuid.uuid4()}"
+                lineage = []
                 if 'lineage' in item and isinstance(item['lineage'], list):
                     filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
-                    obj['lineage'] = filtered_lineage + [node_id]
+                    lineage = filtered_lineage + [node_id]
                 else:
-                    obj['lineage'] = [node_id]
+                    lineage = [node_id]
+                    
+                processed = [{
+                    'source_guid': source_guid,
+                    'content': generated_data,  # This is the original context
+                    'target_id': str(uuid.uuid4()),
+                    'node_id': node_id,
+                    'lineage': lineage
+                }]
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

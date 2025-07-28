@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 from agent_actions.handlers.file_reader import FileReader
+from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
@@ -55,18 +56,32 @@ class TargetGenerator:
             file_reader = FileReader(file_path)
             data = file_reader.read()
             file_name = Path(file_path).name
-            batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data, output_directory)
+            result = batch_service.submit_batch_job_from_data(agent_config, file_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
-            placeholder = {
-                "batch_job_id": batch_id,
-                "status": "submitted",
-                "agent": agent_name
-            }
-            with open(output_file_path, 'w') as f:
-                json.dump(placeholder, f)
-            return str(output_file_path)
+            
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                # Write passthrough data directly to output
+                file_writer = FileWriter(str(output_file_path))
+                file_writer.write_target(result['data'])
+                
+                # Create a marker file to indicate this was passthrough processing
+                passthrough_marker = output_file_path.parent / ".passthrough_processed"
+                passthrough_marker.touch()
+                
+                return str(output_file_path)
+            else:
+                # Create batch placeholder as before
+                placeholder = {
+                    "batch_job_id": result,
+                    "status": "submitted",
+                    "agent": agent_name
+                }
+                with open(output_file_path, 'w') as f:
+                    json.dump(placeholder, f)
+                return str(output_file_path)
 
         generator = TargetGenerator(agent_config, agent_name, idx)
         return generator.process(file_path, base_directory, output_directory)

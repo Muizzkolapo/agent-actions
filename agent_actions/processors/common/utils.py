@@ -39,10 +39,13 @@ def run_dynamic_agent(
     ):
         return context, False
 
+    # Apply remove_collection only after conditional check passes
+    processed_context = apply_remove_collection(context, agent_config)
+
     response = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
-        context,
+        processed_context,
         formatted_prompt,
         tools_path=tools_path,
         tool_args=tool_args,

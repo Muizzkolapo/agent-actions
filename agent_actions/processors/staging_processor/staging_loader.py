@@ -115,25 +115,40 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 row['target_id'] = str(uuid.uuid4())
         batch_service = BatchService()
         file_name = Path(file_path).name
-        vendor_batch_id = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
-        # Save source for each row in data_chunk- this is where we generate source for batch
-        for row in data_chunk:
-            custom_id = row.get("target_id")
-            if custom_id:
-                src_text = {custom_id: row}
-                batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
+        result = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
+        
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
-        placeholder = {
-            "batch_job_id": local_batch_id,
-            "vendor_batch_id": vendor_batch_id,
-            "status": "submitted",
-            "agent": agent_name
-        }
-        with open(output_file_path, 'w') as f:
-            json.dump(placeholder, f)
-        return
+        
+        # Handle passthrough data when no batch is submitted
+        if isinstance(result, dict) and result.get('type') == 'passthrough':
+            # Write passthrough data directly to output
+            file_writer = FileWriter(str(output_file_path))
+            file_writer.write_target(result['data'])
+            
+            # Create a marker file to indicate this was passthrough processing
+            passthrough_marker = output_file_path.parent / ".passthrough_processed"
+            passthrough_marker.touch()
+            
+            return
+        else:
+            # Save source for each row in data_chunk- this is where we generate source for batch
+            for row in data_chunk:
+                source_guid = row.get("source_guid")
+                if source_guid:
+                    src_text = {source_guid: row}
+                    batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
+                    
+            placeholder = {
+                "batch_job_id": local_batch_id,
+                "vendor_batch_id": result,
+                "status": "submitted",
+                "agent": agent_name
+            }
+            with open(output_file_path, 'w') as f:
+                json.dump(placeholder, f)
+            return
     # Non-batch mode: original behavior (calls agent/LLM for each chunk/row)
     # Save source for each row in data_chunk - this is where we generate source for non-batch
     data_chunk, src_text = [], []
