@@ -228,3 +228,67 @@ These comprehensive changes ensure:
 - Proper data lineage tracking throughout the pipeline
 - Clear error messages for debugging
 - Prevention of cascading failures in multi-agent workflows
+
+## Additional Fix: Conditional Clause Records in Batch Mode
+
+### 8. Fixed Missing Records for Conditional Clause Filtering
+**File**: `agent_actions/services/batch_service.py`
+
+Fixed an issue where records filtered out by conditional clauses in batch mode were not passed to downstream agents, causing "no batch jobs were found after execution" errors.
+
+Modified `_convert_batch_results_to_workflow_format` to include passthrough handling for filtered records:
+
+```python
+# Track which custom_ids were processed by the batch API
+processed_custom_ids = set()
+
+# Process batch results (existing code)
+for result in batch_results:
+    # ... process normally and add to processed_custom_ids ...
+    processed_custom_ids.add(custom_id)
+
+# Process records that were filtered out by conditional clause
+# These are in context_map but not in batch_results
+for custom_id, original_row in context_map.items():
+    if custom_id not in processed_custom_ids:
+        # This record was skipped due to conditional clause
+        # Pass it through unmodified to maintain the full data flow
+        original_source_guid = original_row.get("source_guid", custom_id)
+        
+        # Create a passthrough item that preserves all original data
+        passthrough_item = original_row.copy()
+        
+        # Ensure required fields are set
+        if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+            passthrough_item['target_id'] = custom_id
+        if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+            passthrough_item['source_guid'] = original_source_guid
+        
+        # Add node_id and lineage tracking for consistency
+        if node_idx is not None:
+            item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+            passthrough_item["node_id"] = item_node_id
+            
+            # Get lineage from original row
+            original_lineage = original_row.get("lineage", [])
+            if isinstance(original_lineage, list):
+                filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
+                passthrough_item["lineage"] = filtered_lineage + [item_node_id]
+            else:
+                passthrough_item["lineage"] = [item_node_id]
+        
+        # Add metadata to indicate this was skipped by conditional
+        passthrough_item["metadata"] = {
+            "skipped_by_conditional": True,
+            "agent_type": "passthrough"
+        }
+        
+        processed_data.append(passthrough_item)
+```
+
+This fix ensures that:
+- All records from upstream agents are passed to downstream agents, even if filtered by conditional clauses
+- Records that don't meet conditional criteria are passed through with their original data intact
+- Proper lineage tracking is maintained for all records
+- Downstream agents receive the complete dataset and can apply their own conditional logic
+- Prevents "no batch jobs found" errors when all records are filtered by a conditional clause
