@@ -814,7 +814,6 @@ class BatchService:
         
         return processed_data
 
-
     def check_and_process_completed_batches(self, output_directory: str, base_directory: str):
         """
         Check for completed batch jobs and process their results into workflow output.

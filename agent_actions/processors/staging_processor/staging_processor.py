@@ -82,9 +82,13 @@ class StagingProcessor:
                     response, enriched_data, source_guid, self.agent_config
                 )
             else:
-                transformed_response = DataTransformer.transform_structure(
-                    [{source_guid: response}]
-                )
+                # When conditional fails, preserve the original structure
+                # Don't use transform_structure as it breaks down the data
+                transformed_response = [{
+                    "source_guid": source_guid,
+                    "content": response,  # This is the original context data
+                    "target_id": str(uuid.uuid4())
+                }]
 
             # Step 8b: Add lineage tracking (using node_id only)
             idx = self.agent_config.get('idx', 0)
