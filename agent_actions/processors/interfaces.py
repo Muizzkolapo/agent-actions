@@ -1,7 +1,26 @@
 """Common interfaces for processors."""
-from typing import List, Dict, Optional, Any
+from abc import ABC, abstractmethod
+from typing import List, Dict, Optional, Any, Tuple
 
-class IDataLoader:
+
+# Base interfaces
+class ILoader(ABC):
+    """Base interface for all loaders."""
+    pass
+
+
+class IProcessor(ABC):
+    """Base interface for all processors."""
+    pass
+
+
+class IGenerator(ABC):
+    """Base interface for all generators."""
+    pass
+
+
+# Loader interfaces
+class IDataLoader(ILoader):
     """Interface for data loading operations."""
     
     def load_data(self, file_path: str) -> List[Dict[str, Any]]:
@@ -16,7 +35,8 @@ class IDataLoader:
         """
         pass
 
-class ISourceDataLoader:
+
+class ISourceDataLoader(ILoader):
     """Interface for source data loading operations."""
     
     def load_source_data(self, file_path: str) -> List[Dict]:
@@ -53,4 +73,40 @@ class ISourceDataLoader:
         Returns:
             Optional[Any]: Loaded content or None if not found
         """
+        pass
+
+
+# Processor interfaces
+class IContentProcessor(IProcessor):
+    """Interface for content processors."""
+
+    @abstractmethod
+    def process(self, data: List[Dict], file_path: str) -> List[Dict]:
+        """Process a list of data items."""
+        pass
+
+    @abstractmethod
+    def process_for_side_output(self, data: List[Dict], file_path: str) -> Tuple[List[Dict], List[Dict]]:
+        """Process data and separate into main and side outputs."""
+        pass
+
+
+class IDataProcessor(IProcessor):
+    """Interface for data processing."""
+
+    @abstractmethod
+    def process_item(self, contents: Dict, generated_data: List[Dict], source_guid: str) -> List[Dict]:
+        """Process a single data item."""
+        pass
+
+
+# Generator interfaces
+class IDataGenerator(IGenerator):
+    """Interface for data generation."""
+
+    @abstractmethod
+    def create_agent_with_data(
+        self, contents: Dict, source_content: Optional[Any] = None
+    ) -> Tuple[List[Dict], bool]:
+        """Create an agent with the provided data and return results."""
         pass 

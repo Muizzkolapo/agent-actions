@@ -10,7 +10,7 @@ from agent_actions.processors.prompt_processor.sample_enricher import SampleEnri
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
-from .interfaces import IDataGenerator
+from ..interfaces import IDataGenerator
 
 
 class DataGenerator(IDataGenerator):
