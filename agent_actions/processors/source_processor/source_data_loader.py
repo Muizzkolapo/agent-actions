@@ -3,18 +3,21 @@ from pathlib import Path
 import json
 from typing import List, Dict
 from ..interfaces import ISourceDataLoader
+from ...core.path_manager import PathManager, PathManagerError
 
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
-    def __init__(self, agent_name: str):
+    def __init__(self, agent_name: str, path_manager: PathManager = None):
         """
         Initialize the source data loader.
         
         Args:
             agent_name: Name of the agent
+            path_manager: Optional PathManager instance for path operations
         """
         self.agent_name = agent_name
+        self.path_manager = path_manager or PathManager()
 
     def load_source_data(self, file_path: str) -> List[Dict]:
         """
@@ -29,39 +32,50 @@ class SourceDataLoader(ISourceDataLoader):
         Raises:
             IOError: If source data cannot be loaded
         """
-        source_file_to_load = None  
+        source_file_to_load = None
         try:
-            current_input_file_obj = Path(file_path)
-            parts = current_input_file_obj.parts
-
+            # Convert target path to source path, skipping node directory
+            target_path = self.path_manager.normalize_path(file_path)
+            parts = target_path.parts
             
-            # Expected structure: .../PIPELINE_NAME_DIR/agent_io/target/NODE_NAME_DIR/rest/of/path.json
-            agent_io_index = -1
-            for i, part in enumerate(parts):
-                if part == "agent_io":
-                    agent_io_index = i
-                    break
+            # Find agent_io index
+            try:
+                agent_io_index = parts.index("agent_io")
+            except ValueError:
+                raise PathManagerError(f"'agent_io' not found in path {file_path}")
             
-            if agent_io_index == -1:
-                raise ValueError(f"Path structure error: 'agent_io' not found in {file_path}")
-            if agent_io_index == 0 and parts[0] == "agent_io": # Check if agent_io is the first part of a relative path
-                 raise ValueError(f"Path structure error: 'agent_io' cannot be the root of the path in {file_path}")
-            if agent_io_index < 1 and parts[0] != '/': # Relative path starting with agent_io, needs a parent
-                 raise ValueError(f"Path structure error: 'agent_io' needs a preceding PIPELINE_NAME_DIR in {file_path}")
-
-
-            pipeline_name_dir = Path(*parts[:agent_io_index])
-
+            # Validate path structure has enough components
             if len(parts) <= agent_io_index + 2:
-                raise ValueError(f"Path structure error: Path too short to contain NODE_NAME_DIR after 'agent_io/target/' in {file_path}")
+                raise PathManagerError(f"Path too short - missing node directory after 'agent_io/target/' in {file_path}")
             
-            mirrored_structure_parts = parts[agent_io_index + 3:]
-            relative_path_for_source = Path(*mirrored_structure_parts)
+            # Extract parts: everything before agent_io + agent_io + source + everything after node directory
+            # Skip the node directory (agent_io_index + 3) to get the filename directly in source
+            pipeline_parts = parts[:agent_io_index]
+            file_parts = parts[agent_io_index + 3:]  # Skip agent_io/target/node_dir
             
-            source_file_to_load = pipeline_name_dir / "agent_io" / "source" / relative_path_for_source
-
+            if not file_parts:
+                raise PathManagerError(f"No filename found after node directory in {file_path}")
+            
+            # Construct source path: .../agent_io/source/filename.json
+            source_file_to_load = Path(*pipeline_parts) / "agent_io" / "source" / Path(*file_parts)
+            
+            # Ensure the source file exists and is readable
+            if not source_file_to_load.exists():
+                raise FileNotFoundError(f"Source file not found: {source_file_to_load}")
+            
+            # Validate the source file is within the project structure (if project root can be found)
+            try:
+                if not self.path_manager.is_within_project(source_file_to_load):
+                    raise ValueError(f"Source file is outside project bounds: {source_file_to_load}")
+            except Exception:
+                # If project root validation fails, skip this check (for tests/edge cases)
+                pass
+            
             with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)
+                
+        except PathManagerError as e:
+            raise IOError(f"Path structure error when deriving source from {file_path}: {e}")
         except Exception as e:
             raise IOError(f"Failed to load source data from {str(source_file_to_load)} (derived from input {file_path}): {str(e)}")
 

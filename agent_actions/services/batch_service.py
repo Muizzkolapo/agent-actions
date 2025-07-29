@@ -15,6 +15,11 @@ from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
 from agent_actions.processors.common.utils import apply_remove_collection
 from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.utils.path_utils import (
+    ensure_directory_exists,
+    create_side_output_directory,
+    resolve_absolute_path
+)
 import uuid
 
 class BatchService:
@@ -90,7 +95,7 @@ class BatchService:
         base_path = Path(base_directory).parent
         source_path = base_path / "source"
         output_src_path = source_path / relative_path.with_suffix('.json')
-        output_src_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_directory_exists(output_src_path, is_file=True)
         print(f"[DEBUG] Saving source for file_path: {file_path}")
         print(f"[DEBUG] Output source path: {output_src_path}")
         print(f"[DEBUG] Custom ID: {list(src_text.keys())[0]}")
@@ -135,7 +140,7 @@ class BatchService:
     @staticmethod
     def _save_side_output(data, file_path):
         """Persist side output data, merging with existing content if present."""
-        file_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_directory_exists(file_path, is_file=True)
 
         existing = []
         if file_path.exists():
@@ -160,7 +165,7 @@ class BatchService:
     def _resolve_tools_path(self, agent_config):
         path = agent_config.get('tools', {}).get('path')
         if path:
-            return str(Path(path).resolve())
+            return str(resolve_absolute_path(path))
 
         project_root = AgentManager.find_project_root(Path.cwd())
         if not project_root:
@@ -175,9 +180,9 @@ class BatchService:
                 default_cfg = yaml.safe_load(f)
             tool_path = default_cfg.get('tool_path')
             if isinstance(tool_path, list):
-                return str(Path(project_root / tool_path[0]).resolve()) if tool_path else None
+                return str(resolve_absolute_path(project_root / tool_path[0])) if tool_path else None
             if tool_path:
-                return str(Path(project_root / tool_path).resolve())
+                return str(resolve_absolute_path(project_root / tool_path))
         except Exception:
             return None
 
@@ -285,7 +290,7 @@ class BatchService:
             # Fallback to global batch directory
             batch_dir = Path.cwd() / "batch"
         
-        batch_dir.mkdir(parents=True, exist_ok=True)
+        ensure_directory_exists(batch_dir)
         
         file_name = f"{Path(batch_name).stem}_batch_input.jsonl"
         file_path = batch_dir / file_name
@@ -314,7 +319,7 @@ class BatchService:
         """Save batch job ID to batch registry."""
         if output_directory:
             local_batch_dir = Path(output_directory) / "batch"
-            local_batch_dir.mkdir(parents=True, exist_ok=True)
+            ensure_directory_exists(local_batch_dir)
             registry_file = local_batch_dir / ".batch_registry.json"
             
             # Load existing registry
@@ -339,11 +344,11 @@ class BatchService:
                 json.dump(registry, f, indent=2)
         
         # Save to global batch directory (for backward compatibility)
-        #global_batch_dir = Path.cwd() / "batch"
-        #global_batch_dir.mkdir(exist_ok=True)
-        #global_job_id_file = global_batch_dir / ".last_batch_id"
-        #with open(global_job_id_file, 'w') as f:
-        #    f.write(batch_id)
+        global_batch_dir = Path.cwd() / "batch"
+        ensure_directory_exists(global_batch_dir)
+        global_job_id_file = global_batch_dir / ".last_batch_id"
+        with open(global_job_id_file, 'w') as f:
+            f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
@@ -351,7 +356,7 @@ class BatchService:
             batch_dir = Path(output_directory) / "batch"
         else:
             batch_dir = Path.cwd() / "batch"
-        batch_dir.mkdir(parents=True, exist_ok=True)
+        ensure_directory_exists(batch_dir)
         path = batch_dir / f"{Path(batch_name).stem}_context_map.json"
         payload = {
             "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
@@ -592,7 +597,7 @@ class BatchService:
                             raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
                 
                 output_path = Path(output_dir)
-                output_path.mkdir(exist_ok=True)
+                ensure_directory_exists(output_path)
                 
                 # Use original file name if provided (like batch1.json -> batch1_results.jsonl)
                 if file_path:
@@ -681,13 +686,13 @@ class BatchService:
             # Save to workflow output directory structure
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
-            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_directory_exists(output_file_path, is_file=True)
             
             file_writer = FileWriter(str(output_file_path))
             file_writer.write_target(main_output)
 
             if side_output_data:
-                side_output_dir = Path(output_directory).parent / 'side_output'
+                side_output_dir = create_side_output_directory(output_directory)
                 side_output_file_path = side_output_dir / relative_path.name
                 self._save_side_output(side_output_data, side_output_file_path)
 
@@ -995,13 +1000,13 @@ class BatchService:
             else:
                 output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
             
-            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            ensure_directory_exists(output_file_path, is_file=True)
             
             file_writer = FileWriter(str(output_file_path))
             file_writer.write_target(main_output)
 
             if side_output_data:
-                side_output_dir = Path(output_directory).parent / "side_output"
+                side_output_dir = create_side_output_directory(output_directory)
                 if original_file_name:
                     side_output_file = side_output_dir / f"{original_file_name}.json"
                 else:
@@ -1105,14 +1110,14 @@ class BatchService:
                         # Fallback to batch_id naming
                         output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
                     
-                    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    ensure_directory_exists(output_file_path, is_file=True)
                     
                     # Write results for this specific file
                     file_writer = FileWriter(str(output_file_path))
                     file_writer.write_target(main_output)
 
                     if side_output_data:
-                        side_output_dir = Path(output_directory).parent / "side_output"
+                        side_output_dir = create_side_output_directory(output_directory)
                         if file_name and file_name != 'default':
                             side_output_file = side_output_dir / f"{Path(file_name).stem}.json"
                         else:
