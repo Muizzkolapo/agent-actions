@@ -5,7 +5,7 @@ import uuid
 from agent_actions.services.batch_service import BatchService
 from agent_actions.transformers.data_transformer import DataTransformer
 
-from .interfaces import IContentProcessor
+from ..interfaces import IContentProcessor
 from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
 from .data_generator import DataGenerator
 from .data_processor import DataProcessor
