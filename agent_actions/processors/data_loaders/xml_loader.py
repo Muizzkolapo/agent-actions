@@ -1,11 +1,11 @@
 """XML content loader implementation."""
 import logging
-from typing import Any, Dict, Optional
-from agent_actions.models.config_types import AgentEntryDict
 import xml.etree.ElementTree as ET
+from typing import Any, Dict, Optional
 
+from agent_actions.models.config_types import AgentEntryDict
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
-from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
+from agent_actions.processors.exceptions import DataParseError, FileLoadError, TransformationError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -39,19 +39,38 @@ class XmlLoader(BaseLoader[ET.Element]):
             elif content:
                 content_str = content
             else:
-                raise ValueError("Either file_path or content must be provided for XML processing.")
+                self.handle_validation_error(
+                    ValueError("Either file_path or content must be provided"),
+                    "XML input",
+                    file_path=file_path
+                )
 
             root = ET.fromstring(content_str)
             return root
         except ET.ParseError as e:
-            self.handle_processing_error(e, f"parsing XML from {file_path or 'content string'}")
-            raise AgentActionsError(f"Invalid XML data in {file_path or 'content string'}: {e}") from e
-        except IOError as e: # From self.load_file
-            self.handle_processing_error(e, f"reading XML file {file_path}")
-            raise AgentActionsError(f"Could not read XML file {file_path}: {e}") from e
+            # Extract line/column info if available
+            position_info = {}
+            if hasattr(e, 'position'):
+                position_info['line_number'] = e.position[0]
+                position_info['column_number'] = e.position[1]
+            
+            self.handle_processing_error(
+                e,
+                f"Parsing XML from {file_path or 'content string'}",
+                DataParseError,
+                file_path=file_path,
+                **position_info
+            )
+        except FileLoadError:
+            # Already handled by base loader
+            raise
         except Exception as e:
-            self.handle_processing_error(e, "processing XML input")
-            raise AgentActionsError(f"Failed to process XML input from {file_path or 'content string'}: {e}") from e
+            self.handle_processing_error(
+                e,
+                "Processing XML content",
+                DataParseError,
+                file_path=file_path
+            )
         
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
         """Process an XML element into a dictionary.
@@ -75,8 +94,12 @@ class XmlLoader(BaseLoader[ET.Element]):
                 
             return result
         except Exception as e:
-            self.handle_processing_error(e, f"processing XML element: {element.tag}")
-            raise
+            self.handle_transformation_error(
+                e,
+                "XML element",
+                "dictionary",
+                element_tag=element.tag if hasattr(element, 'tag') else 'unknown'
+            )
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

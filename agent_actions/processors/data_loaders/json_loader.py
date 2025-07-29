@@ -1,12 +1,11 @@
 """JSON content loader implementation."""
+import json
 import logging
 from typing import Any, Dict, List, Optional, Union
+
 from agent_actions.models.config_types import AgentEntryDict
-
-
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
-from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
-import json
+from agent_actions.processors.exceptions import DataParseError, FileLoadError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -42,16 +41,30 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
             elif content:
                 return json.loads(content)
             else:
-                raise ValueError("Either file_path or content must be provided for JSON processing.")
+                self.handle_validation_error(
+                    ValueError("Either file_path or content must be provided"),
+                    "JSON input",
+                    file_path=file_path
+                )
         except json.JSONDecodeError as e:
-            self.handle_processing_error(e, f"decoding JSON from {file_path or 'content string'}")
-            raise AgentActionsError(f"Invalid JSON data in {file_path or 'content string'}: {e}") from e
-        except IOError as e: # From self.load_file
-            self.handle_processing_error(e, f"reading JSON file {file_path}")
-            raise AgentActionsError(f"Could not read JSON file {file_path}: {e}") from e
+            self.handle_processing_error(
+                e,
+                f"Parsing JSON from {file_path or 'content string'}",
+                DataParseError,
+                file_path=file_path,
+                line_number=e.lineno if hasattr(e, 'lineno') else None,
+                column_number=e.colno if hasattr(e, 'colno') else None
+            )
+        except FileLoadError:
+            # Already handled by base loader
+            raise
         except Exception as e:
-            self.handle_processing_error(e, "processing JSON file")
-            raise AgentActionsError(f"Failed to process JSON from {file_path or 'content string'}: {e}") from e
+            self.handle_processing_error(
+                e,
+                "Processing JSON content",
+                DataParseError,
+                file_path=file_path
+            )
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

@@ -1,10 +1,10 @@
 """Text content loader implementation."""
 import logging
-from typing import Any, Dict, Optional
-from agent_actions.models.config_types import AgentEntryDict
+from typing import Any, Optional
 
+from agent_actions.models.config_types import AgentEntryDict
 from agent_actions.processors.data_loaders.base_loader import BaseLoader
-from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
+from agent_actions.processors.exceptions import FileLoadError
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -36,15 +36,22 @@ class TextLoader(BaseLoader[str]):
             if file_path:
                 return self.load_file(file_path)
             elif content:
-                return content
+                return str(content)
             else:
-                raise ValueError("Either file_path or content must be provided for text processing.")
-        except IOError as e: # From self.load_file
-            self.handle_processing_error(e, f"reading text file {file_path}")
-            raise AgentActionsError(f"Could not read text file {file_path}: {e}") from e
+                self.handle_validation_error(
+                    ValueError("Either file_path or content must be provided"),
+                    "text input",
+                    file_path=file_path
+                )
+        except FileLoadError:
+            # Already handled by base loader
+            raise
         except Exception as e:
-            self.handle_processing_error(e, "processing text input")
-            raise AgentActionsError(f"Failed to process text input from {file_path or 'content string'}: {e}") from e
+            self.handle_processing_error(
+                e,
+                "Processing text content",
+                file_path=file_path
+            )
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

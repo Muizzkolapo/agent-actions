@@ -4,11 +4,13 @@ from typing import Dict, List
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
 from agent_actions.processors.common.utils import transform_with_side_collection
+from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.processors.exceptions import TransformationError
 
 from ..interfaces import IDataProcessor
 
 
-class DataProcessor(IDataProcessor):
+class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     """Handles post-processing of generated data (Single Responsibility)."""
 
     def __init__(self, agent_config: Dict):
@@ -51,7 +53,14 @@ class DataProcessor(IDataProcessor):
                 idx,
             )
         except Exception as e:
-            raise ValueError(f"Failed to process item: {str(e)}")
+            self.handle_processing_error(
+                e,
+                "Processing generated data item",
+                TransformationError,
+                source_guid=source_guid,
+                item_index=idx,
+                item_count=len(generated_data) if isinstance(generated_data, list) else 1
+            )
 
     def separate_side_output(self, processed_items: List[Dict]) -> tuple[List[Dict], List[Dict]]:
         """
