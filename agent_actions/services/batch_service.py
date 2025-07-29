@@ -339,11 +339,11 @@ class BatchService:
                 json.dump(registry, f, indent=2)
         
         # Save to global batch directory (for backward compatibility)
-        global_batch_dir = Path.cwd() / "batch"
-        global_batch_dir.mkdir(exist_ok=True)
-        global_job_id_file = global_batch_dir / ".last_batch_id"
-        with open(global_job_id_file, 'w') as f:
-            f.write(batch_id)
+        #global_batch_dir = Path.cwd() / "batch"
+        #global_batch_dir.mkdir(exist_ok=True)
+        #global_job_id_file = global_batch_dir / ".last_batch_id"
+        #with open(global_job_id_file, 'w') as f:
+        #    f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
