@@ -10,10 +10,12 @@ from agent_actions.processors.prompt_processor.sample_enricher import SampleEnri
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
-from ..interfaces import IDataGenerator
+from ..interfaces import IGenerator
+from ...core.dependency_injection import registry
 
 
-class DataGenerator(IDataGenerator):
+@registry.register_generator("data_generator")
+class DataGenerator(IGenerator):
     """Handles agent creation and data generation (Single Responsibility)."""
 
     def __init__(self, agent_config: AgentEntryDict, agent_name: str):

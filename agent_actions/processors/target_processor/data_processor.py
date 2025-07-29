@@ -8,8 +8,10 @@ from agent_actions.processors.common.error_handling import ProcessorErrorHandler
 from agent_actions.processors.exceptions import TransformationError
 
 from ..interfaces import IDataProcessor
+from ...core.dependency_injection import registry
 
 
+@registry.register_processor("data_processor")
 class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     """Handles post-processing of generated data (Single Responsibility)."""
 

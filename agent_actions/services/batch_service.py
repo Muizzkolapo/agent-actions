@@ -22,6 +22,9 @@ from agent_actions.utils.path_utils import (
 )
 import uuid
 
+from ..core.dependency_injection import registry
+
+@registry.register_service("batch_service")
 class BatchService:
     def _create_passthrough_data(self, data, agent_config, output_directory):
         """

@@ -2,22 +2,24 @@
 from pathlib import Path
 import json
 from typing import List, Dict
-from ..interfaces import ISourceDataLoader
+from ..interfaces import IDataLoader
 from ...core.path_manager import PathManager, PathManagerError
+from ...core.dependency_injection import registry
 
-class SourceDataLoader(ISourceDataLoader):
+@registry.register_loader("source_data")
+class SourceDataLoader(IDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
-    def __init__(self, agent_name: str, path_manager: PathManager = None):
+    def __init__(self, agent_name: str, path_manager: PathManager):
         """
         Initialize the source data loader.
         
         Args:
             agent_name: Name of the agent
-            path_manager: Optional PathManager instance for path operations
+            path_manager: PathManager instance for path operations
         """
         self.agent_name = agent_name
-        self.path_manager = path_manager or PathManager()
+        self.path_manager = path_manager
 
     def load_source_data(self, file_path: str) -> List[Dict]:
         """

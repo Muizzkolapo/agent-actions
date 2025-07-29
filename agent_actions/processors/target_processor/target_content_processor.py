@@ -2,38 +2,65 @@
 from typing import Dict, List, Tuple
 import json
 import uuid
-from agent_actions.services.batch_service import BatchService
+import asyncio
 from agent_actions.transformers.data_transformer import DataTransformer
 
-from ..interfaces import IContentProcessor
-from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
-from .data_generator import DataGenerator
-from .data_processor import DataProcessor
+from ..interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
+from agent_actions.services.batch_service import BatchService
+from ...core.dependency_injection import registry
 
-
-import asyncio  # For async processing
-
+@registry.register_processor("target_content")
 class TargetContentProcessor(IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
-    def __init__(self, agent_config: Dict, agent_name: str, idx: int):
+    def __init__(self, 
+                 agent_config: Dict, 
+                 agent_name: str, 
+                 idx: int,
+                 source_loader: IDataLoader = None,
+                 data_generator: IGenerator = None,
+                 data_processor: IDataProcessor = None,
+                 batch_service: BatchService = None):
         """
-        Initialize the target content processor.
+        Initialize the target content processor with injected dependencies.
         
         Args:
             agent_config: Configuration for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
+            source_loader: Injected data loader service
+            data_generator: Injected data generator service
+            data_processor: Injected data processor service
+            batch_service: Injected batch service
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.idx = idx
         
-        # Initialize component services
-        self.source_loader = SourceDataLoader(agent_name)
-        self.data_generator = DataGenerator(agent_config, agent_name)
-        self.data_processor = DataProcessor(agent_config)
-        self.batch_service = BatchService()
+        # Store injected dependencies or create defaults for backward compatibility
+        if source_loader is None:
+            from ..source_processor.source_data_loader import SourceDataLoader
+            from agent_actions.core.path_manager import PathManager
+            self.source_loader = SourceDataLoader(agent_name, PathManager())
+        else:
+            self.source_loader = source_loader
+            
+        if data_generator is None:
+            from .data_generator import DataGenerator
+            self.data_generator = DataGenerator(agent_config, agent_name)
+        else:
+            self.data_generator = data_generator
+            
+        if data_processor is None:
+            from .data_processor import DataProcessor
+            self.data_processor = DataProcessor(agent_config)
+        else:
+            self.data_processor = data_processor
+            
+        if batch_service is None:
+            self.batch_service = BatchService()
+        else:
+            self.batch_service = batch_service
 
     async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """

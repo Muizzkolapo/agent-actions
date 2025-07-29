@@ -7,8 +7,9 @@ from agent_actions.core.agent_strategies import (
     InitialStrategy,
     TerminalStrategy,
     IntermediateStrategy,
-    AgentStrategy  # assuming AgentStrategy is the base class for all strategies
+    AgentStrategy
 )
+from .dependency_injection import ProcessorFactory
 
 
 class AgentRunner:
@@ -19,18 +20,31 @@ class AgentRunner:
     intermediate, or terminal) for each agent in the workflow sequence.
     """
 
-    def __init__(self, use_tools: bool) -> None:
+    def __init__(self, use_tools: bool, processor_factory: Optional[ProcessorFactory] = None) -> None:
         """
         Initialize the AgentRunner with strategy configurations.
 
         Args:
             use_tools (bool): Flag indicating whether to use tools during agent execution.
+            processor_factory (Optional[ProcessorFactory]): Factory for creating processors with DI.
         """
         self.use_tools: bool = use_tools
+        self.processor_factory = processor_factory
+        
+        # Try to get processor factory from bootstrap if not provided
+        if processor_factory is None:
+            try:
+                from ..bootstrap import get_application_container
+                container = get_application_container()
+                self.processor_factory = container.get_processor_factory()
+            except:
+                # If DI is not available, strategies will work without processor factory
+                pass
+        
         self.strategies: Dict[str, AgentStrategy] = {
-            'initial': InitialStrategy(),
-            'terminal': TerminalStrategy(),
-            'intermediate': IntermediateStrategy()
+            'initial': InitialStrategy(self.processor_factory),
+            'terminal': TerminalStrategy(self.processor_factory),
+            'intermediate': IntermediateStrategy(self.processor_factory)
         }
 
     def get_agent_folder(self, agent_name: str) -> str:
