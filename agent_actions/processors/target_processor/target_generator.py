@@ -1,6 +1,7 @@
 """Module for target data generation based on configuration."""
 from pathlib import Path
 import json
+from typing import Optional
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.processors.target_processor import TargetContentProcessor
@@ -8,6 +9,7 @@ from .output_handler import OutputHandler
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 from agent_actions.constants import MODEL_VENDOR_KEY
 from agent_actions.services.batch_service import BatchService
+from ...core.dependency_injection import ProcessorFactory
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -17,7 +19,7 @@ SOURCE_FOLDER = 'source'
 class TargetGenerator:
     """Responsible for generating target data from input files based on configuration."""
     
-    def __init__(self, agent_config, agent_name, idx):
+    def __init__(self, agent_config, agent_name, idx, processor_factory: Optional[ProcessorFactory] = None):
         """
         Initialize the target generator.
         
@@ -25,6 +27,7 @@ class TargetGenerator:
             agent_config: Configuration dictionary for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
+            processor_factory: Optional factory for creating processors with DI
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
@@ -32,7 +35,24 @@ class TargetGenerator:
         self.model_vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
-        self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
+        
+        # Use processor factory if available, otherwise fallback to direct instantiation
+        if processor_factory:
+            # Use the application container's method to handle complex dependencies
+            try:
+                from ...bootstrap import get_application_container
+                app_container = get_application_container()
+                self.content_processor = app_container.create_target_content_processor(
+                    agent_config=agent_config,
+                    agent_name=agent_name,
+                    idx=idx
+                )
+            except:
+                # Fallback to direct instantiation
+                self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
+        else:
+            self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
+        
         self.output_handler = OutputHandler()
     
     @staticmethod
@@ -86,9 +106,9 @@ class TargetGenerator:
         generator = TargetGenerator(agent_config, agent_name, idx)
         return generator.process(file_path, base_directory, output_directory)
     
-    async def process(self, file_path, base_directory, output_directory):
+    def process(self, file_path, base_directory, output_directory):
         """
-        Async: Process input file and generate output.
+        Process input file and generate output.
         
         Args:
             file_path: Path to the input JSON file
@@ -103,7 +123,7 @@ class TargetGenerator:
             data = self._read_input_data(file_path)
             
             # Process according to configuration
-            await self._process_by_strategy(data, file_path, base_directory, output_directory)
+            self._process_by_strategy(data, file_path, base_directory, output_directory)
             
             # Return the output file path for compatibility
             relative_path = Path(file_path).relative_to(base_directory)
@@ -119,7 +139,7 @@ class TargetGenerator:
         file_reader = FileReader(file_path)
         return file_reader.read()
     
-    async def _process_by_strategy(self, data, file_path, base_directory, output_directory):
+    def _process_by_strategy(self, data, file_path, base_directory, output_directory):
         """Select and apply the appropriate processing strategy based on configuration. Async for record granularity."""
         # Tool vendor with record granularity and side output
         if self.model_vendor == TOOL_VENDOR and self.granularity == 'record' and self.side_output_enabled:
@@ -136,5 +156,5 @@ class TargetGenerator:
         
         # Record granularity (default)
         elif self.granularity == 'record':
-            output = await self.content_processor.process_async(data, file_path, output_directory)
+            output = self.content_processor.process(data, file_path, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)

@@ -6,10 +6,11 @@ and generating outputs based on the agent's position in a workflow.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import asyncio
 from agent_actions.processors.staging_processor.staging_loader import generate_staging
 from agent_actions.processors.target_processor.target_generator import TargetGenerator
+from .dependency_injection import ProcessorFactory
 
 class AgentStrategy(ABC):
     """
@@ -17,6 +18,15 @@ class AgentStrategy(ABC):
     
     Defines the interface that all agent strategies must implement.
     """
+    
+    def __init__(self, processor_factory: Optional[ProcessorFactory] = None):
+        """
+        Initialize the strategy with optional processor factory.
+        
+        Args:
+            processor_factory: Optional factory for creating processors with DI
+        """
+        self.processor_factory = processor_factory
 
     @abstractmethod
     def execute(
@@ -25,7 +35,8 @@ class AgentStrategy(ABC):
         agent_name: str,
         file_path: str,
         base_directory: str,
-        output_directory: str
+        output_directory: str,
+        idx: int
     ) -> str:
         """
         Execute the strategy for a specific agent and file.
@@ -36,6 +47,7 @@ class AgentStrategy(ABC):
             file_path: Path to the file being processed.
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
+            idx: Index of the config being processed.
             
         Returns:
             Path to the generated output file.
@@ -60,7 +72,13 @@ class AgentStrategy(ABC):
         Returns:
             Path to the generated output file.
         """
-        result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory, idx)
+        # Create TargetGenerator with processor factory if available
+        if self.processor_factory:
+            generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory)
+            return generator.process(file_path, base_directory, output_directory)
+        else:
+            # Fallback to static method for backward compatibility
+            result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory, idx)
         if asyncio.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()
