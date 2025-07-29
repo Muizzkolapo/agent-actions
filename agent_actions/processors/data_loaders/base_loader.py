@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar, Generic
 from agent_actions.models.config_types import AgentEntryDict
+from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.processors.exceptions import FileLoadError
 
 __version__ = "0.1.0"
 
@@ -13,7 +15,7 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class BaseLoader(ABC, Generic[T]):
+class BaseLoader(ProcessorErrorHandlerMixin, ABC, Generic[T]):
     """Abstract base class for all content loaders."""
     
     def __init__(self, agent_config: AgentEntryDict, agent_name: str):
@@ -28,13 +30,16 @@ class BaseLoader(ABC, Generic[T]):
         self.logger = logging.getLogger(__name__)
 
     def load_file(self, file_path: str) -> str:
-        """Safely load a file's content."""
-        try:
+        """Safely load a file's content with retry logic."""
+        @self.with_retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
+        def _load_file():
             with open(file_path, "r", encoding="utf-8") as f:
                 return f.read()
+        
+        try:
+            return _load_file()
         except Exception as e:
-            self.handle_processing_error(e, f"Loading file: {file_path}")
-            raise
+            self.handle_file_error(e, "read", file_path)
         
     @abstractmethod
     def process(
@@ -58,14 +63,4 @@ class BaseLoader(ABC, Generic[T]):
         """Return True if this loader can handle the given file extension."""
         pass
         
-    def handle_processing_error(self, 
-                               error: Exception, 
-                               error_context: str) -> None:
-        """Handle processing errors consistently.
-        
-        Args:
-            error: The exception that occurred
-            error_context: Context about where the error occurred
-        """
-        logger.error(f"Error in {error_context}: {str(error)}")
-        # In a production system, we might want to notify monitoring systems or log to a central service
+    # Error handling is now provided by ProcessorErrorHandlerMixin

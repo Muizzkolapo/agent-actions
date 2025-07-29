@@ -2,8 +2,9 @@
 
 import uuid
 import json
-from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import run_dynamic_agent
+from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.processors.exceptions import ProcessingError
 from agent_actions.core.utils import Utils
 
 from ..prompt_processor.sample_enricher import SampleEnricher
@@ -15,7 +16,7 @@ from agent_actions.processors.source_processor.source_path_manager import (
 )
 
 
-class StagingProcessor:
+class StagingProcessor(ProcessorErrorHandlerMixin):
     """Orchestrates the prompt processing workflow (Open/Closed principle)."""
 
     def __init__(self, agent_config, agent_name):
@@ -114,5 +115,11 @@ class StagingProcessor:
             return transformed_response, src_text
 
         except Exception as e:
-            # Propagate exceptions instead of swallowing them
-            raise RuntimeError(f"Error in staging_dynamic_creator: {str(e)}") from e
+            self.handle_processing_error(
+                e,
+                "Creating dynamic agent for prompt processing",
+                ProcessingError,
+                source_path=source_path,
+                has_formatted_prompt=formatted_prompt is not None,
+                context_type=type(context_data).__name__
+            )
