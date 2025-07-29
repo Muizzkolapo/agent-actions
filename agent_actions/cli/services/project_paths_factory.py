@@ -15,7 +15,9 @@ from agent_actions.cli.exceptions import (
     ValidationError,
     FileNotFoundError
 )
-from agent_actions.cli.validators.path_validator import PathValidator  # Add this import
+from agent_actions.cli.validators.path_validator import PathValidator
+from agent_actions.core.path_manager import PathManager, PathType
+from agent_actions.utils.path_utils import resolve_absolute_path
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,10 @@ class ProjectPathsFactory:
     
     # List of directories that should be created if they don't exist
     AUTO_CREATE_DIRECTORIES = ['prompt_dir', 'rendered_workflows_dir', 'io_dir']
+    
+    def __init__(self, path_manager: PathManager = None):
+        """Initialize factory with optional PathManager."""
+        self.path_manager = path_manager or PathManager()
 
     @staticmethod
     def get_agent_paths(agent_name: str) -> Tuple[Path, Path, Path]:
@@ -109,15 +115,25 @@ class ProjectPathsFactory:
         """
         logger.debug(f"Creating project paths for agent: {agent_name}")
         
+        # Create instance to access PathManager
+        factory = cls()
+        
         try:
-            # Create all paths
-            current_dir = Path.cwd()
-            prompt_dir = current_dir / "prompt_store"
+            # Use PathManager for standard paths where possible
+            project_root = factory.path_manager.get_project_root()
+            
+            # Get standard paths using PathManager
+            prompt_dir = factory.path_manager.get_standard_path(PathType.PROMPT_STORE)
+            schema_dir = factory.path_manager.get_standard_path(PathType.SCHEMA)
+            template_dir = factory.path_manager.get_standard_path(PathType.TEMPLATES)
+            rendered_workflows_dir = factory.path_manager.get_standard_path(PathType.RENDERED_WORKFLOWS)
+            
+            # Get agent-specific paths (fallback to FileHandler for compatibility)
             agent_config_dir, io_dir, _ = cls.get_agent_paths(agent_name)
-            schema_dir = current_dir / 'schema'
-            default_config_path = current_dir / 'agent_actions.yml'
-            template_dir = current_dir / "templates" 
-            rendered_workflows_dir = current_dir / "rendered_workflows"
+            
+            # Use PathManager for project root and config
+            current_dir = resolve_absolute_path(project_root)
+            default_config_path = project_root / 'agent_actions.yml'
             
             paths = ProjectPaths(
                 current_dir=current_dir,
@@ -130,14 +146,21 @@ class ProjectPathsFactory:
                 rendered_workflows_dir=rendered_workflows_dir
             )
             
-            # Validate required directories
+            # Validate required directories using PathManager
             path_validator = PathValidator()
             for dir_name in cls.REQUIRED_DIRECTORIES:
-                path_validator.validate(getattr(paths, dir_name), dir_name)
+                path = getattr(paths, dir_name)
+                # Use PathManager for validation when possible
+                if dir_name == 'schema_dir':
+                    factory.path_manager.validate_standard_path(PathType.SCHEMA, path)
+                path_validator.validate(path, dir_name)
             
-            # Create auto-create directories if they don't exist
+            # Create auto-create directories if they don't exist using PathManager
             for dir_name in cls.AUTO_CREATE_DIRECTORIES:
-                path_validator.validate(getattr(paths, dir_name), dir_name)
+                path = getattr(paths, dir_name)
+                # Ensure directories exist using PathManager
+                factory.path_manager.ensure_path_exists(path)
+                path_validator.validate(path, dir_name)
             
             # Validate default config file
             path_validator.validate(paths.default_config_path, "Default config")
