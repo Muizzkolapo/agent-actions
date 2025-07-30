@@ -12,13 +12,13 @@ from typing import Dict, Any, List
 
 from agent_actions.core.dependency_injection import DependencyContainer, ProcessorFactory, registry
 from agent_actions.core.application_container import ApplicationContainer
-from agent_actions.processors.interfaces import (
+from agent_actions.common.interfaces.interfaces import (
     IDataLoader, IDataProcessor, IGenerator, IContentProcessor,
     IBatchProcessor, IOutputHandler
 )
 from agent_actions.services.batch_service import BatchService
 from agent_actions.core.path_manager import PathManager
-from agent_actions.utils.service_logger import Logger
+from agent_actions.cli.utils.service_logger import ServiceLogger
 
 
 @pytest.fixture

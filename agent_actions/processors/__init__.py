@@ -15,7 +15,7 @@ from .exceptions import (
     SerializationError
 )
 
-from .common import ProcessorErrorHandlerMixin
+from agent_actions.common.utils.error_handling import ProcessorErrorHandlerMixin
 
 __all__ = [
     # Base exceptions

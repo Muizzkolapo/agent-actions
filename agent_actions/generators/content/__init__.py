@@ -1,11 +1,15 @@
-"""Content generator package initialization."""
+"""Content generators package - handles content generation logic."""
 
 from importlib import import_module
 from typing import Any
 
-__all__ = ["ContentGenerator"]
+__all__ = ["ContentGenerator", "DataGenerator", "TargetGenerator"]
 
-_module_map = {"ContentGenerator": ".content_generator"}
+_module_map = {
+    "ContentGenerator": ".content_generator",
+    "DataGenerator": ".data_generator", 
+    "TargetGenerator": ".target_generator"
+}
 
 
 def __getattr__(name: str) -> Any:  # pragma: no cover - thin wrapper

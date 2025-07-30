@@ -5,8 +5,8 @@ import pytest
 from typing import List, Dict
 from unittest.mock import Mock, AsyncMock
 
-from agent_actions.processors.interfaces import ProcessingMode
-from agent_actions.processors.base_async_processor import BaseAsyncProcessor, ProcessingContext
+from agent_actions.common.interfaces.interfaces import ProcessingMode
+from agent_actions.common.interfaces.base_async_processor import BaseAsyncProcessor, ProcessingContext
 
 
 class MockAsyncProcessor(BaseAsyncProcessor):

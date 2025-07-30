@@ -3,7 +3,7 @@ import logging
 from typing import Any, Optional
 
 from agent_actions.models.config_types import AgentEntryDict
-from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.loaders.data_loaders.base_loader import BaseLoader
 from agent_actions.processors.exceptions import FileLoadError
 
 # Configure logger

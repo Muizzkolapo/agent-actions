@@ -3,8 +3,8 @@
 from typing import Any, Dict, List, Optional
 import logging
 
-from agent_actions.transformers.data_transformer import DataTransformer
-from agent_actions.transformers.pure_transformers import PureDataTransformer
+from agent_actions.common.transformers.data_transformer import DataTransformer
+from agent_actions.common.transformers.pure_transformers import PureDataTransformer
 from .pipeline import Pipeline
 from .stages import TransformationStage, ValidationStage, EnrichmentStage
 from .interfaces import PipelineContext

@@ -1,0 +1,1 @@
+"""Common package - shared utilities and interfaces."""

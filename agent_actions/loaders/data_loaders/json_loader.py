@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from agent_actions.models.config_types import AgentEntryDict
-from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.loaders.data_loaders.base_loader import BaseLoader
 from agent_actions.processors.exceptions import DataParseError, FileLoadError
 
 # Configure logger

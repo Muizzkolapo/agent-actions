@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from agent_actions.models.config_types import AgentEntryDict
 import csv
 
-from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.loaders.data_loaders.base_loader import BaseLoader
 from agent_actions.cli.exceptions import AgentActionsError # Or a more specific DataLoaderError
 
 # Configure logger

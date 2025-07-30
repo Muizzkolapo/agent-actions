@@ -2,11 +2,11 @@
 import logging
 
 # Import from our new modular structure
-from agent_actions.processors.data_loaders.text_loader import TextLoader
-from agent_actions.processors.data_loaders.json_loader import JsonLoader
-from agent_actions.processors.data_loaders.tabular_loader import TabularLoader
-from agent_actions.processors.data_loaders.xml_loader import XmlLoader
-from agent_actions.processors.content_generators.content_generator import ContentGenerator
+from agent_actions.loaders.data_loaders.text_loader import TextLoader
+from agent_actions.loaders.data_loaders.json_loader import JsonLoader
+from agent_actions.loaders.data_loaders.tabular_loader import TabularLoader
+from agent_actions.loaders.data_loaders.xml_loader import XmlLoader
+from agent_actions.generators.content.content_generator import ContentGenerator
 
 # Configure logger
 logger = logging.getLogger(__name__)

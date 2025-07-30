@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
 
 from agent_actions.models.config_types import AgentEntryDict
-from agent_actions.processors.data_loaders.base_loader import BaseLoader
+from agent_actions.loaders.data_loaders.base_loader import BaseLoader
 from agent_actions.processors.exceptions import DataParseError, FileLoadError, TransformationError
 
 # Configure logger

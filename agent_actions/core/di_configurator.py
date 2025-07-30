@@ -7,7 +7,7 @@ based on configuration settings.
 
 from typing import Dict, Any
 from .dependency_injection import DependencyContainer, ProcessorFactory, registry
-from ..processors.interfaces import (
+from ..common.interfaces.interfaces import (
     IDataLoader, IDataProcessor, IGenerator, IContentProcessor
 )
 

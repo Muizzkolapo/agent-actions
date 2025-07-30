@@ -4,9 +4,9 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, TypeVar, Generic, List
 from agent_actions.models.config_types import AgentEntryDict
-from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.common.utils.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import FileLoadError
-from ..interfaces import IDataLoader, ProcessingMode
+from agent_actions.common.interfaces.interfaces import IDataLoader, ProcessingMode
 
 __version__ = "0.1.0"
 

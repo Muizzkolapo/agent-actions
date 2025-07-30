@@ -11,7 +11,7 @@ import uuid
 import json
 from typing import Dict, List, Any, Optional, Union
 
-from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
 
 

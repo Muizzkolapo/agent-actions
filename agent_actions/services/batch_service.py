@@ -5,22 +5,22 @@ import yaml
 from agent_actions.handlers.agent_handlers import AgentManager
 from openai import OpenAI
 from agent_actions.handlers.config_handler import ConfigManager
-from agent_actions.processors.data_loaders.batch_data_loader import BatchDataLoader
+from agent_actions.loaders.data_loaders.batch_data_loader import BatchDataLoader
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
+from agent_actions.processors.content.prompt_utils import PromptUtils
 from agent_actions.handlers.schema_handler import SchemaLoader
 from agent_actions.models.schema_change import compile_unified_schema
 from agent_actions.handlers.file_writer import FileWriter
-from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
-from agent_actions.processors.common.utils import apply_remove_collection
+from agent_actions.common.utils.utils import apply_remove_collection
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.utils.path_utils import (
     ensure_directory_exists,
     create_side_output_directory,
     resolve_absolute_path
 )
-from agent_actions.processors.common.processor_utils import ProcessorUtils
+from agent_actions.common.utils.processor_utils import ProcessorUtils
 
 from ..core.dependency_injection import registry
 

@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 from typing import List, Dict, Any
-from ..interfaces import IDataLoader, ProcessingMode
+from agent_actions.common.interfaces.interfaces import IDataLoader, ProcessingMode
 
 class BatchDataLoader(IDataLoader):
     """Loads data for batch processing from a specified file path."""
