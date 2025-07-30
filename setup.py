@@ -22,7 +22,12 @@ setup(
         'dev': [
             'pytest',
             'pylint',
-            'pytest-cov'
+            'pytest-cov',
+            'mypy',
+            'types-PyYAML',
+            'pandas-stubs',
+            'types-requests',
+            'types-beautifulsoup4'
         ],
     },
     entry_points={

@@ -24,6 +24,59 @@ sentence-transformers = "^2.2.2"
 numpy= "^1.26.4" 
 jsonschema= "^4.23.0"  
 
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pylint = "^2.17.0"
+pytest-cov = "^4.1.0"
+mypy = "^1.8.0"
+types-PyYAML = "^6.0.12"
+pandas-stubs = "^2.0.3"
+types-requests = "^2.31.0"
+types-beautifulsoup4 = "^4.12.0"
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+incremental = true
+namespace_packages = true
+
+# Gradual adoption - start with errors only
+[[tool.mypy.overrides]]
+module = "agent_actions.*"
+ignore_errors = false
+warn_unused_ignores = false
+
+# External library stubs
+[[tool.mypy.overrides]]
+module = [
+    "tiktoken.*",
+    "sentence_transformers.*",
+    "google.generativeai.*",
+    "google.api_core.*",
+    "openai.*",
+    "pypdf2.*",
+    "docx.*",
+    "networkx.*"
+]
+ignore_missing_imports = true
+
+# Vendor modules - ignore complex API typing for now
+[[tool.mypy.overrides]]
+module = "agent_actions.vendors.*"
+ignore_errors = true
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

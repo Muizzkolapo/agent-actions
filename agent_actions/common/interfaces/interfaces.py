@@ -1,7 +1,12 @@
 """Common interfaces for processors."""
 from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Any, Tuple
+from typing import List, Dict, Optional, Any, Tuple, TypeVar, Generic
 from enum import Enum
+
+# Generic type variables for interfaces
+T = TypeVar('T')
+DataT = TypeVar('DataT', bound=Dict[str, Any])
+ContentT = TypeVar('ContentT')
 
 
 class ProcessingMode(Enum):
@@ -42,11 +47,15 @@ class IGenerator(IAsyncCapable):
 
 
 # Loader interfaces
-class IDataLoader(ILoader):
-    """Interface for data loading operations."""
+class IDataLoader(ILoader, Generic[T]):
+    """Interface for data loading operations.
+    
+    Type parameter T represents the type of data returned by load_data.
+    Default is List[Dict[str, Any]] for backward compatibility.
+    """
     
     @abstractmethod
-    def load_data(self, file_path: str) -> List[Dict[str, Any]]:
+    def load_data(self, file_path: str) -> T:
         """
         Loads data from the given file path.
 
@@ -58,7 +67,7 @@ class IDataLoader(ILoader):
         """
         pass
 
-    async def load_data_async(self, file_path: str) -> List[Dict[str, Any]]:
+    async def load_data_async(self, file_path: str) -> T:
         """
         Async version of load_data. Default implementation uses sync version.
         
@@ -155,15 +164,18 @@ class ISourceDataLoader(ILoader):
 
 
 # Processor interfaces
-class IContentProcessor(IProcessor):
-    """Interface for content processors."""
+class IContentProcessor(IProcessor, Generic[DataT]):
+    """Interface for content processors.
+    
+    Type parameter DataT represents the type of data items being processed.
+    """
 
     @abstractmethod
-    def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
+    def process(self, data: List[DataT], file_path: str, output_directory: Optional[str] = None) -> List[DataT]:
         """Process a list of data items."""
         pass
 
-    async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
+    async def process_async(self, data: List[DataT], file_path: str, output_directory: Optional[str] = None) -> List[DataT]:
         """
         Async version of process. Default implementation uses sync version.
         
@@ -179,11 +191,11 @@ class IContentProcessor(IProcessor):
         return await asyncio.to_thread(self.process, data, file_path, output_directory)
 
     @abstractmethod
-    def process_for_side_output(self, data: List[Dict], file_path: str) -> Tuple[List[Dict], List[Dict]]:
+    def process_for_side_output(self, data: List[DataT], file_path: str) -> Tuple[List[DataT], List[DataT]]:
         """Process data and separate into main and side outputs."""
         pass
 
-    async def process_for_side_output_async(self, data: List[Dict], file_path: str) -> Tuple[List[Dict], List[Dict]]:
+    async def process_for_side_output_async(self, data: List[DataT], file_path: str) -> Tuple[List[DataT], List[DataT]]:
         """
         Async version of process_for_side_output. Default implementation uses sync version.
         
