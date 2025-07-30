@@ -1,11 +1,11 @@
 """Module for orchestrating prompt processing workflow."""
 
-import uuid
 import json
 from agent_actions.processors.common.utils import run_dynamic_agent
 from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import ProcessingError
 from agent_actions.core.utils import Utils
+from agent_actions.processors.common.processor_utils import ProcessorUtils
 
 from ..prompt_processor.sample_enricher import SampleEnricher
 from ..prompt_processor.prompt_formatter import PromptFormatter
@@ -74,8 +74,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             # Step 7: Generate source_guid if not available
             if not source_guid:
                 # Use deterministic generation based on content to ensure consistency
-                content_for_hash = json.dumps(enriched_data, sort_keys=True) if enriched_data else str(context_data)
-                source_guid = str(uuid.uuid5(uuid.NAMESPACE_OID, content_for_hash))
+                source_guid = ProcessorUtils.generate_deterministic_source_guid(enriched_data or context_data)
 
             # Step 8: Transform response
             if executed:
@@ -85,21 +84,16 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             else:
                 # When conditional fails, preserve the original structure
                 # Don't use transform_structure as it breaks down the data
-                transformed_response = [{
-                    "source_guid": source_guid,
-                    "content": response,  # This is the original context data
-                    "target_id": str(uuid.uuid4())
-                }]
+                transformed_response = [ProcessorUtils.create_processed_item(
+                    source_guid=source_guid,
+                    content=response  # This is the original context data
+                )]
 
             # Step 8b: Add lineage tracking (using node_id only)
             idx = self.agent_config.get('idx', 0)
-            for node in transformed_response:
-                node_id = f"node_{idx}_{Utils.generate_id()}"
-                node["node_id"] = node_id
-                if isinstance(context_data, dict) and "lineage" in context_data:
-                    node["lineage"] = context_data["lineage"] + [node_id]
-                else:
-                    node["lineage"] = [node_id]
+            for i, node in enumerate(transformed_response):
+                node_id = ProcessorUtils.generate_node_id(idx)
+                transformed_response[i] = ProcessorUtils.add_context_lineage_tracking(node, context_data, node_id)
 
 
             # Step 9: Prepare source text

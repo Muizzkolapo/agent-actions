@@ -1,13 +1,12 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple
-import json
-import uuid
 import asyncio
 from agent_actions.transformers.data_transformer import DataTransformer
 
 from ..interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
 from agent_actions.services.batch_service import BatchService
 from ...core.dependency_injection import registry
+from ..common.processor_utils import ProcessorUtils
 
 @registry.register_processor("target_content")
 class TargetContentProcessor(IContentProcessor):
@@ -232,37 +231,23 @@ class TargetContentProcessor(IContentProcessor):
                 processed = self.data_processor.process_item(contents, generated_data, source_guid)
                 
                 # Common processing for executed path
-                node_id = f"node_{self.idx}_{uuid.uuid4()}"
-                for obj in processed:
-                    if 'target_id' not in obj or not obj['target_id']:
-                        obj['target_id'] = str(uuid.uuid4())
-                    if 'source_guid' not in obj or not obj['source_guid']:
-                        obj['source_guid'] = source_guid
-                    obj['node_id'] = node_id
-                    # Add lineage tracking
-                    if 'lineage' in item and isinstance(item['lineage'], list):
-                        filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
-                        obj['lineage'] = filtered_lineage + [node_id]
-                    else:
-                        obj['lineage'] = [node_id]
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                for i, obj in enumerate(processed):
+                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    processed[i] = obj
             else:
                 # When conditional clause is False, return the original data unchanged
                 # Create a single item with the original content structure
-                node_id = f"node_{self.idx}_{uuid.uuid4()}"
-                lineage = []
-                if 'lineage' in item and isinstance(item['lineage'], list):
-                    filtered_lineage = [nid for nid in item['lineage'] if isinstance(nid, str) and nid.startswith('node_')]
-                    lineage = filtered_lineage + [node_id]
-                else:
-                    lineage = [node_id]
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                lineage = ProcessorUtils.build_lineage(item, node_id)
                     
-                processed = [{
-                    'source_guid': source_guid,
-                    'content': generated_data,  # This is the original context
-                    'target_id': str(uuid.uuid4()),
-                    'node_id': node_id,
-                    'lineage': lineage
-                }]
+                processed = [ProcessorUtils.create_processed_item(
+                    source_guid=source_guid,
+                    content=generated_data,  # This is the original context
+                    node_id=node_id,
+                    lineage=lineage
+                )]
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

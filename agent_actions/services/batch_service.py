@@ -20,7 +20,7 @@ from agent_actions.utils.path_utils import (
     create_side_output_directory,
     resolve_absolute_path
 )
-import uuid
+from agent_actions.processors.common.processor_utils import ProcessorUtils
 
 from ..core.dependency_injection import registry
 
@@ -46,7 +46,7 @@ class BatchService:
             # Always use target_id as the identifier; if missing, generate a new UUID and assign it
             target_id = row.get("target_id")
             if not target_id:
-                target_id = str(uuid.uuid4())
+                target_id = ProcessorUtils.generate_target_id()
                 row["target_id"] = target_id
             
             # Create a passthrough item that preserves all original data
@@ -61,16 +61,11 @@ class BatchService:
             
             # Add node_id and lineage tracking for consistency
             if node_idx is not None:
-                item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                item_node_id = ProcessorUtils.generate_node_id(node_idx)
                 passthrough_item["node_id"] = item_node_id
                 
-                # Get lineage from original row
-                original_lineage = row.get("lineage", [])
-                if isinstance(original_lineage, list):
-                    filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
-                    passthrough_item["lineage"] = filtered_lineage + [item_node_id]
-                else:
-                    passthrough_item["lineage"] = [item_node_id]
+                # Use ProcessorUtils for lineage tracking
+                passthrough_item["lineage"] = ProcessorUtils.build_lineage(row, item_node_id)
             
             # Add metadata to indicate this was skipped by conditional
             passthrough_item["metadata"] = {
@@ -226,7 +221,7 @@ class BatchService:
             # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
             custom_id = row.get("target_id")
             if not custom_id:
-                custom_id = str(uuid.uuid4())
+                custom_id = ProcessorUtils.generate_target_id()
                 row["target_id"] = custom_id
 
             # Store the full row to preserve source_guid and other metadata
@@ -789,21 +784,15 @@ class BatchService:
                                 # Add node_id and lineage tracking
                                 if node_idx is not None:
                                     # Generate a unique node_id for each item
-                                    item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                                    item_node_id = ProcessorUtils.generate_node_id(node_idx)
                                     itm["node_id"] = item_node_id
                                     
-                                    # Get lineage from original row
-                                    original_lineage = original_row.get("lineage", [])
-                                    if isinstance(original_lineage, list):
-                                        # Filter to keep only node_* entries and add current node
-                                        filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
-                                        itm["lineage"] = filtered_lineage + [item_node_id]
-                                    else:
-                                        itm["lineage"] = [item_node_id]
+                                    # Use ProcessorUtils for lineage tracking
+                                    itm["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
                                 
                                 # Ensure target_id and source_guid are set
                                 if 'target_id' not in itm or not itm['target_id']:
-                                    itm['target_id'] = original_row.get('target_id', str(uuid.uuid4()))
+                                    itm['target_id'] = original_row.get('target_id', ProcessorUtils.generate_target_id())
                                 if 'source_guid' not in itm or not itm['source_guid']:
                                     itm['source_guid'] = original_source_guid
                                     
@@ -860,16 +849,11 @@ class BatchService:
                 
                 # Add node_id and lineage tracking for consistency
                 if node_idx is not None:
-                    item_node_id = f"node_{node_idx}_{uuid.uuid4()}"
+                    item_node_id = ProcessorUtils.generate_node_id(node_idx)
                     passthrough_item["node_id"] = item_node_id
                     
-                    # Get lineage from original row
-                    original_lineage = original_row.get("lineage", [])
-                    if isinstance(original_lineage, list):
-                        filtered_lineage = [nid for nid in original_lineage if isinstance(nid, str) and nid.startswith('node_')]
-                        passthrough_item["lineage"] = filtered_lineage + [item_node_id]
-                    else:
-                        passthrough_item["lineage"] = [item_node_id]
+                    # Use ProcessorUtils for lineage tracking
+                    passthrough_item["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
                 
                 # Add metadata to indicate this was skipped by conditional
                 passthrough_item["metadata"] = {

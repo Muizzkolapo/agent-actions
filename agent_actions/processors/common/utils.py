@@ -1,20 +1,17 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
-import uuid
 from typing import Any, Dict, Optional
 
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.models import agent_builder
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
+from .processor_utils import ProcessorUtils
 
 
 def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
     """Apply ``remove_collection`` transformations consistently."""
-    remove_collection = agent_config.get("remove_collection", [])
-    if remove_collection and isinstance(contents, dict):
-        return DataTransformer.remove_schema_objects(contents, remove_collection)
-    return contents
+    return ProcessorUtils.apply_remove_collection(contents, agent_config)
 
 
 def run_dynamic_agent(
@@ -62,25 +59,7 @@ def transform_with_side_collection(
     idx: int = 0,
 ) -> list:
     """Apply ``side_collection`` logic to generated data consistently."""
-    side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
-
-    if side_collection:
-        updated = [
-            DataTransformer.update_schema_objects(context_data, item, side_collection)
-            for item in data
-        ]
-        output = DataTransformer.transform_structure([{source_guid: updated}])
-    else:
-        # Always apply transform_structure to ensure consistent output format
-        output = DataTransformer.transform_structure([{source_guid: data}])
-    
-    # Patch: Ensure every output object has target_id, source_guid, node_id
-    for obj in output:
-        if 'target_id' not in obj or not obj['target_id']:
-            obj['target_id'] = str(uuid.uuid4())
-        if 'source_guid' not in obj or not obj['source_guid']:
-            obj['source_guid'] = source_guid
-        if 'node_id' not in obj or not obj['node_id']:
-            obj['node_id'] = f"node_{idx}_{uuid.uuid4()}"
-    return output
+    return ProcessorUtils.transform_with_side_collection(
+        data, context_data, source_guid, agent_config, idx
+    )
 
