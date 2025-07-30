@@ -1,8 +1,8 @@
 """Module for processing and combining output files."""
 from pathlib import Path
 from typing import List, Dict, Optional
-from agent_actions.processors.output_processor.directory_handler import DirectoryCombiner
-from agent_actions.processors.output_processor.file_handler import FileHandler
+from agent_actions.generators.output.directory_handler import DirectoryCombiner
+from agent_actions.generators.output.file_handler import FileHandler
 
 
 class OutputProcessor:

@@ -1,11 +1,11 @@
 """Module for orchestrating prompt processing workflow."""
 
 import json
-from agent_actions.processors.common.utils import run_dynamic_agent
-from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.common.utils.utils import run_dynamic_agent
+from agent_actions.common.utils.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import ProcessingError
 from agent_actions.core.utils import Utils
-from agent_actions.processors.common.processor_utils import ProcessorUtils
+from agent_actions.common.utils.processor_utils import ProcessorUtils
 
 from ..prompt_processor.sample_enricher import SampleEnricher
 from ..prompt_processor.prompt_formatter import PromptFormatter

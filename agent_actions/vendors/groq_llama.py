@@ -1,9 +1,9 @@
 import json
 from groq import Groq  # Assuming this is the official Groq API Python package
-from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.common.transformers.string_transformer import StringProcessor
 from textwrap import dedent
 from agent_actions.cli.exceptions import VendorAPIError
-from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.vendors.base_vendor import BaseVendorHandler
 from agent_actions.constants import MODEL_NAME_KEY
 

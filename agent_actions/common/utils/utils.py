@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.models import agent_builder
-from agent_actions.transformers.data_transformer import DataTransformer
+from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
 from .processor_utils import ProcessorUtils
 

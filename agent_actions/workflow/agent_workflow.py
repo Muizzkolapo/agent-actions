@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
-from agent_actions.processors.output_processor.output_processor import OutputProcessor
+from agent_actions.generators.output.output_processor import OutputProcessor
 from agent_actions.services.batch_service import BatchService
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 

@@ -23,7 +23,7 @@ from agent_actions.processors.pipeline.examples import (
     create_data_processing_pipeline,
     create_agent_response_pipeline
 )
-from agent_actions.transformers.pure_transformers import PureDataTransformer
+from agent_actions.common.transformers.pure_transformers import PureDataTransformer
 
 
 class TestPipeline:

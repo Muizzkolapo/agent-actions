@@ -1,7 +1,7 @@
 import cohere
 import json
 from textwrap import dedent
-from agent_actions.transformers.string_transformer import StringProcessor
+from agent_actions.common.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler
 from agent_actions.constants import MODEL_NAME_KEY
 
