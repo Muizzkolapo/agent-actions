@@ -10,7 +10,7 @@ from agent_actions.processors.prompt_processor.sample_enricher import SampleEnri
 from agent_actions.transformers.data_transformer import DataTransformer
 from agent_actions.processors.common.utils import apply_remove_collection, run_dynamic_agent
 
-from ..interfaces import IGenerator
+from ..interfaces import IGenerator, ProcessingMode
 from ...core.dependency_injection import registry
 
 
@@ -28,6 +28,14 @@ class DataGenerator(IGenerator):
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+    
+    def supports_async(self) -> bool:
+        """Return True as this generator supports async operations."""
+        return True
+    
+    def get_processing_mode(self) -> ProcessingMode:
+        """Return AUTO processing mode to let system choose."""
+        return ProcessingMode.AUTO
 
     def create_agent_with_data(
         self,

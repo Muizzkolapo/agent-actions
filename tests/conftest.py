@@ -17,7 +17,7 @@ from agent_actions.processors.interfaces import (
     IBatchProcessor, IOutputHandler
 )
 from agent_actions.services.batch_service import BatchService
-from agent_actions.path.path_manager import PathManager
+from agent_actions.core.path_manager import PathManager
 from agent_actions.utils.service_logger import Logger
 
 
@@ -185,7 +185,7 @@ def integration_container(test_config):
     from agent_actions.processors.target_processor.data_processor import DataProcessor
     from agent_actions.processors.target_processor.data_generator import DataGenerator
     from agent_actions.services.batch_service import BatchService
-    from agent_actions.path.path_manager import PathManager
+    from agent_actions.core.path_manager import PathManager
     from agent_actions.utils.service_logger import Logger
     
     container.register_transient(IDataLoader, SourceDataLoader)
