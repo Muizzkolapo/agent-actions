@@ -37,15 +37,18 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
         try:
             if file_path:
                 content_str = self.load_file(file_path)
-                return json.loads(content_str)
+                parsed_data: Union[Dict[str, Any], List[Dict[str, Any]]] = json.loads(content_str)
+                return parsed_data
             elif content:
-                return json.loads(content)
+                parsed_data = json.loads(content)
+                return parsed_data
             else:
                 self.handle_validation_error(
                     ValueError("Either file_path or content must be provided"),
                     "JSON input",
                     file_path=file_path
                 )
+                raise ValueError("Either file_path or content must be provided")
         except json.JSONDecodeError as e:
             self.handle_processing_error(
                 e,
@@ -65,6 +68,7 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
                 DataParseError,
                 file_path=file_path
             )
+            raise  # Re-raise since handle_processing_error may not always raise
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

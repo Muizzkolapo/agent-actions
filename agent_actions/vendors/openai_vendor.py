@@ -1,6 +1,9 @@
 import json
 from textwrap import dedent
+from typing import Any, Dict, List, Optional, Union
+
 from openai import OpenAI
+from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
 from agent_actions.common.transformers.string_transformer import StringProcessor
 from agent_actions.vendors.base_vendor import BaseVendorHandler
 from agent_actions.constants import MODEL_NAME_KEY
@@ -8,12 +11,14 @@ from agent_actions.constants import MODEL_NAME_KEY
 
 class OpenAIHandler(BaseVendorHandler):
     @staticmethod
-    def call_json(api_key, agent_config, prompt_config, context_data, schema):
+    def call_json(api_key: Optional[str], agent_config: Dict[str, Any], 
+                  prompt_config: Dict[str, Any], context_data: Dict[str, Any], 
+                  schema: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
         client = OpenAI(api_key=api_key)
 
-        model_name = agent_config[MODEL_NAME_KEY]
+        model_name: str = agent_config[MODEL_NAME_KEY]
 
-        context_data_str = StringProcessor.process_as_string(context_data)
+        context_data_str: str = StringProcessor.process_as_string(context_data)
 
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
@@ -23,7 +28,7 @@ class OpenAIHandler(BaseVendorHandler):
             RULES: ALWAYS READ INPUT AS STRING
         """
 
-        messages = [
+        messages: List[ChatCompletionSystemMessageParam] = [
             {
                 "role": "system",
                 "content": dedent(prompt)
@@ -40,25 +45,28 @@ class OpenAIHandler(BaseVendorHandler):
         )
 
         response_message = response.choices[0].message
-        response_content = response_message.content
-        response_data = json.loads(response_content)
-        response_list = response_data if isinstance(response_data, list) else [response_data]
+        response_content: Optional[str] = response_message.content
+        if response_content is None:
+            raise ValueError("Empty response content from OpenAI API")
+        response_data: Union[Dict[str, Any], List[Dict[str, Any]]] = json.loads(response_content)
+        response_list: List[Dict[str, Any]] = response_data if isinstance(response_data, list) else [response_data]
         return response_list
 
     @staticmethod
-    def call_non_json(api_key, agent_config, prompt_config, context_data):
+    def call_non_json(api_key: Optional[str], agent_config: Dict[str, Any], 
+                      prompt_config: Dict[str, Any], context_data: Dict[str, Any]) -> List[Dict[str, str]]:
         client = OpenAI(api_key=api_key)
 
-        model_name = agent_config[MODEL_NAME_KEY]
+        model_name: str = agent_config[MODEL_NAME_KEY]
 
-        context_data_str = StringProcessor.process_as_string(context_data)
+        context_data_str: str = StringProcessor.process_as_string(context_data)
 
         prompt = f"""
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
             <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
         """
 
-        messages = [
+        messages: List[ChatCompletionUserMessageParam] = [
             {
                 "role": "user",
                 "content": dedent(prompt)
@@ -71,8 +79,11 @@ class OpenAIHandler(BaseVendorHandler):
         )
 
         response_message = response.choices[0].message
-        output_field = agent_config.get("output_field", "raw_response")
-        response_content = {output_field: response_message.content}
+        output_field: str = agent_config.get("output_field", "raw_response")
+        content: Optional[str] = response_message.content
+        if content is None:
+            raise ValueError("Empty response content from OpenAI API")
+        response_content: Dict[str, str] = {output_field: content}
 
         return [response_content]
 
