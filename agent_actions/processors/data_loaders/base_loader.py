@@ -1,10 +1,12 @@
 """Base class for content loaders."""
+import asyncio
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar, Generic
+from typing import Any, Dict, Optional, TypeVar, Generic, List
 from agent_actions.models.config_types import AgentEntryDict
 from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import FileLoadError
+from ..interfaces import IDataLoader, ProcessingMode
 
 __version__ = "0.1.0"
 
@@ -15,8 +17,8 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
-class BaseLoader(ProcessorErrorHandlerMixin, ABC, Generic[T]):
-    """Abstract base class for all content loaders."""
+class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
+    """Abstract base class for all content loaders with async support."""
     
     def __init__(self, agent_config: AgentEntryDict, agent_name: str):
         """Initialize with agent configuration and name.
@@ -28,6 +30,14 @@ class BaseLoader(ProcessorErrorHandlerMixin, ABC, Generic[T]):
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.logger = logging.getLogger(__name__)
+    
+    def supports_async(self) -> bool:
+        """Return True if this loader supports async operations."""
+        return True
+    
+    def get_processing_mode(self) -> ProcessingMode:
+        """Return AUTO processing mode to let system choose."""
+        return ProcessingMode.AUTO
 
     def load_file(self, file_path: str) -> str:
         """Safely load a file's content with retry logic."""
@@ -38,6 +48,20 @@ class BaseLoader(ProcessorErrorHandlerMixin, ABC, Generic[T]):
         
         try:
             return _load_file()
+        except Exception as e:
+            self.handle_file_error(e, "read", file_path)
+    
+    async def load_file_async(self, file_path: str) -> str:
+        """Safely load a file's content asynchronously with retry logic."""
+        try:
+            # Try to use aiofiles for true async I/O
+            try:
+                import aiofiles
+                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                    return await f.read()
+            except ImportError:
+                # Fallback to thread-based async
+                return await asyncio.to_thread(self.load_file, file_path)
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
         
@@ -57,10 +81,35 @@ class BaseLoader(ProcessorErrorHandlerMixin, ABC, Generic[T]):
             Parsed content such as a string, dictionary, or list depending on loader type.
         """
         pass
+    
+    async def process_async(
+        self,
+        content: Any,
+        file_path: Optional[str] = None
+    ) -> T:
+        """Async version of process method.
+        
+        Args:
+            content: Raw content provided directly (optional if file_path is provided).
+            file_path: Path to the file to load content from.
+
+        Returns:
+            Parsed content such as a string, dictionary, or list depending on loader type.
+        """
+        # Default implementation uses thread-based async for backward compatibility
+        return await asyncio.to_thread(self.process, content, file_path)
+    
+    def load_data(self, file_path: str) -> List:
+        """Implementation of IDataLoader interface."""
+        content = self.load_file(file_path)
+        return self.process(content, file_path)
+    
+    async def load_data_async(self, file_path: str) -> List:
+        """Async implementation of IDataLoader interface."""
+        content = await self.load_file_async(file_path)
+        return await self.process_async(content, file_path)
 
     @abstractmethod
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if this loader can handle the given file extension."""
         pass
-        
-    # Error handling is now provided by ProcessorErrorHandlerMixin

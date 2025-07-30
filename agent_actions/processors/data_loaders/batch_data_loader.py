@@ -1,10 +1,18 @@
 from pathlib import Path
 import json
 from typing import List, Dict, Any
-from ..interfaces import IDataLoader
+from ..interfaces import IDataLoader, ProcessingMode
 
 class BatchDataLoader(IDataLoader):
     """Loads data for batch processing from a specified file path."""
+
+    def supports_async(self) -> bool:
+        """Return True as this loader supports async operations."""
+        return True
+    
+    def get_processing_mode(self) -> ProcessingMode:
+        """Return AUTO processing mode to let system choose."""
+        return ProcessingMode.AUTO
 
     def load_data(self, file_path: str) -> List[Dict[str, Any]]:
         """

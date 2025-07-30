@@ -1,15 +1,16 @@
 """Module for processing target content with specialized components."""
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 import asyncio
 from agent_actions.transformers.data_transformer import DataTransformer
 
-from ..interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
+from ..interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator, ProcessingMode
 from agent_actions.services.batch_service import BatchService
 from ...core.dependency_injection import registry
 from ..common.processor_utils import ProcessorUtils
+from ..base_async_processor import BaseAsyncProcessor
 
 @registry.register_processor("target_content")
-class TargetContentProcessor(IContentProcessor):
+class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
     def __init__(self, 
@@ -19,7 +20,8 @@ class TargetContentProcessor(IContentProcessor):
                  source_loader: IDataLoader = None,
                  data_generator: IGenerator = None,
                  data_processor: IDataProcessor = None,
-                 batch_service: BatchService = None):
+                 batch_service: BatchService = None,
+                 concurrency_limit: Optional[int] = None):
         """
         Initialize the target content processor with injected dependencies.
         
@@ -31,7 +33,10 @@ class TargetContentProcessor(IContentProcessor):
             data_generator: Injected data generator service
             data_processor: Injected data processor service
             batch_service: Injected batch service
+            concurrency_limit: Maximum number of concurrent operations
         """
+        # Initialize base async processor
+        super().__init__(concurrency_limit)
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.idx = idx
@@ -63,28 +68,36 @@ class TargetContentProcessor(IContentProcessor):
 
     async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
-        Async version: process a list of data items in parallel using asyncio.
+        Async version: process a list of data items in parallel using proper async patterns.
         """
         if self.agent_config.get('run_mode') == 'batch':
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # TODO: Make batch service async in future iteration
+            result = await asyncio.to_thread(
+                self.batch_service.submit_batch_job_from_data, 
+                self.agent_config, self.agent_name, data, output_directory
+            )
             # Handle passthrough data when no batch is submitted
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
             return []
+        
         try:
-            source_data = self.source_loader.load_source_data(file_path)
-            async def process_one(item):
-                try:
-                    # _process_single_item is sync, so run in thread
-                    return await asyncio.to_thread(self._process_single_item, item, source_data)
-                except Exception as e:
-                    source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
-            results = await asyncio.gather(*(process_one(item) for item in data))
+            # Load source data asynchronously
+            source_data = await self._load_source_data_async(file_path)
+            
+            # Process items in parallel with proper async patterns
+            results = await self.process_items_parallel(
+                data, 
+                self._process_single_item_async, 
+                source_data
+            )
+            
+            # Flatten results
             processed_data = []
             for result in results:
                 processed_data.extend(result)
             return processed_data
+            
         except Exception as e:
             raise RuntimeError(f"Failed to process content: {str(e)}")
 
@@ -199,13 +212,99 @@ class TargetContentProcessor(IContentProcessor):
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")
 
+    async def _load_source_data_async(self, file_path: str) -> List[Dict]:
+        """
+        Load source data asynchronously.
+        
+        Args:
+            file_path: Path to the file containing processed data
+            
+        Returns:
+            List of source data items
+        """
+        # Check if source loader supports async
+        if hasattr(self.source_loader, 'load_source_data_async'):
+            return await self.source_loader.load_source_data_async(file_path)
+        else:
+            # Fallback to thread-based async for backward compatibility
+            return await asyncio.to_thread(self.source_loader.load_source_data, file_path)
+    
+    async def _process_single_item_async(
+        self, 
+        item: Dict, 
+        source_data: List[Dict]
+    ) -> List[Dict]:
+        """
+        Process a single data item asynchronously using proper async patterns.
+        
+        Args:
+            item: Data item to process
+            source_data: Source data for reference
+            
+        Returns:
+            Processed data item
+            
+        Raises:
+            ValueError: If item processing fails
+        """
+        try:
+            contents, source_guid = item['content'], item['source_guid']
+            
+            # Get corresponding source content (this is CPU-bound, can be sync)
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            
+            # Generate data asynchronously if supported
+            if hasattr(self.data_generator, 'create_agent_with_data_async'):
+                generated_data, executed = await self.data_generator.create_agent_with_data_async(
+                    contents, source_content
+                )
+            else:
+                # Fallback for backward compatibility
+                generated_data, executed = await asyncio.to_thread(
+                    self.data_generator.create_agent_with_data, contents, source_content
+                )
+
+            if executed:
+                # Process data asynchronously if supported
+                if hasattr(self.data_processor, 'process_item_async'):
+                    processed = await self.data_processor.process_item_async(
+                        contents, generated_data, source_guid
+                    )
+                else:
+                    # Fallback for backward compatibility
+                    processed = await asyncio.to_thread(
+                        self.data_processor.process_item, contents, generated_data, source_guid
+                    )
+                
+                # Common processing for executed path (CPU-bound operations)
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                for i, obj in enumerate(processed):
+                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    processed[i] = obj
+            else:
+                # When conditional clause is False, return the original data unchanged
+                # Create a single item with the original content structure
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                lineage = ProcessorUtils.build_lineage(item, node_id)
+                    
+                processed = [ProcessorUtils.create_processed_item(
+                    source_guid=source_guid,
+                    content=generated_data,  # This is the original context
+                    node_id=node_id,
+                    lineage=lineage
+                )]
+            return processed
+        except Exception as e:
+            raise ValueError(f"Failed to process item: {str(e)}")
+    
     def _process_single_item(
         self, 
         item: Dict, 
         source_data: List[Dict]
     ) -> List[Dict]:
         """
-        Process a single data item.
+        Process a single data item synchronously (kept for backward compatibility).
         
         Args:
             item: Data item to process

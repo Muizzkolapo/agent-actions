@@ -7,7 +7,7 @@ from agent_actions.processors.common.utils import transform_with_side_collection
 from agent_actions.processors.common.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import TransformationError
 
-from ..interfaces import IDataProcessor
+from ..interfaces import IDataProcessor, ProcessingMode
 from ...core.dependency_injection import registry
 
 
@@ -23,6 +23,14 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
             agent_config: Configuration for the agent
         """
         self.agent_config = agent_config
+    
+    def supports_async(self) -> bool:
+        """Return True as this processor supports async operations."""
+        return True
+    
+    def get_processing_mode(self) -> ProcessingMode:
+        """Return AUTO processing mode to let system choose."""
+        return ProcessingMode.AUTO
 
     def process_item(
         self, 
