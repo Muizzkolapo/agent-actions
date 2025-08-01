@@ -4,9 +4,9 @@ This document explains how the batch processing feature works in the Agent Actio
 
 ## Overview
 
-The batch processing feature allows you to run agent actions on large datasets asynchronously using the OpenAI Batch API. This is useful for tasks such as data enrichment, content generation, and sentiment analysis where you need to process thousands of items cost-effectively.
+The batch processing feature allows you to run agent actions on large datasets asynchronously using multiple provider APIs (OpenAI, Gemini, Anthropic). This is useful for tasks such as data enrichment, content generation, and sentiment analysis where you need to process thousands of items cost-effectively.
 
-The batch processing workflow is seamlessly integrated into the main `run` command and workflow system. When agents are configured for batch processing, the system automatically handles job submission, status checking, and result processing into the same directory structure as regular workflows.
+The batch processing workflow is seamlessly integrated into the main `run` command and workflow system. When agents are configured for batch processing, the system automatically handles job submission, status checking, and result processing using a **registry-based tracking system** that maintains file-to-batch job mappings within each workflow's directory structure.
 
 ## Architecture Overview
 
@@ -14,9 +14,9 @@ The batch processing workflow is seamlessly integrated into the main `run` comma
 
 1. **BatchService** (`agent_actions/services/batch_service.py`)
    - Core batch processing logic
-   - OpenAI Batch API integration
+   - Multi-provider batch API integration (OpenAI, Gemini, Anthropic)
    - Result processing and transformation
-   - Registry management for multi-file processing
+   - Registry-based tracking system for multi-file processing
 
 2. **AgentWorkflow** (`agent_actions/workflow/agent_workflow.py`)
    - Workflow orchestration
@@ -24,31 +24,34 @@ The batch processing workflow is seamlessly integrated into the main `run` comma
    - State management integration
 
 3. **Batch Registry** (`.batch_registry.json`)
-   - Tracks multiple batch jobs per agent
-   - Maintains file-to-batch mapping
-   - Stores job status and timestamps
+   - **Primary tracking system** - no global files used
+   - Tracks multiple batch jobs per agent within workflow directory
+   - Maintains file-to-batch mapping with full isolation
+   - Stores job status, timestamps, and provider information
 
 4. **Agent Status** (`.agent_status.json`)
    - Tracks overall agent completion state
-   - No longer stores individual batch IDs
+   - **No batch ID storage** - all tracking delegated to registry system
 
 ## Multi-File Processing Architecture
 
 ### Registry-Based Tracking System
 
-The system now supports processing multiple files per agent using a registry-based approach:
+The system uses **exclusively registry-based tracking** with no global files. Each workflow maintains its own isolated batch registry:
 
 ```json
 {
   "file1.json": {
     "batch_id": "batch_123",
     "status": "completed",
-    "timestamp": "2024-01-15T10:30:00"
+    "timestamp": "2024-01-15T10:30:00",
+    "provider": "openai"
   },
   "file2.json": {
     "batch_id": "batch_456", 
     "status": "in_progress",
-    "timestamp": "2024-01-15T10:31:00"
+    "timestamp": "2024-01-15T10:31:00",
+    "provider": "anthropic"
   }
 }
 ```
@@ -69,6 +72,7 @@ To use batch processing, configure your agent with `run_mode: batch` and ensure 
 my_batch_agent:
   - agent_type: my_agent
     run_mode: batch
+    model_vendor: "openai"          # Unified provider field
     model_name: "gpt-4o-mini"
     schema_name: "my_output_schema"
     prompt: "Process the following content: {content}"
@@ -78,8 +82,9 @@ my_batch_agent:
 ### Required Configuration Fields
 
 - `run_mode: batch` - Enables batch processing mode
+- `model_vendor` - Provider to use: `"openai"`, `"gemini"`, or `"anthropic"`
 - `schema_name` - References a schema file for structured JSON output
-- `model_name` - OpenAI model to use (batch API compatible models)
+- `model_name` - Model to use (must be batch API compatible for the provider)
 - `prompt` - Template with placeholders for data processing
 
 ## Workflow Integration
@@ -137,33 +142,34 @@ my_agent/
 │   │   └── node_2_final_agent/     # Final processing
 │   └── source/                     # Source content tracking
 ├── agent_config/
-└── batch/                          # Legacy batch job files
-    ├── batch_agent_batch_input.jsonl
-    └── .last_batch_id
+└── batch/                          # Legacy files (deprecated - registry system preferred)
+    └── batch_agent_batch_input.jsonl
 ```
 
 ## Key Code Touchpoints for Future Improvements
 
 ### 1. BatchService Class (`agent_actions/services/batch_service.py`)
 
-#### Key Methods:
-- `_save_batch_job_id()` - Lines 241-272: Registry creation and management
-- `_get_batch_registry_status()` - Lines 322-370: Overall status checking
-- `_are_all_batch_jobs_completed()` - Lines 304-350: Individual job completion checking
-- `process_all_batch_results_to_workflow_output()` - Lines 801-908: Multi-file processing with file-to-file mapping
+#### Key Registry Methods:
+- `_save_batch_job_id()` - Registry creation and management (no global files)
+- `_get_batch_registry_status()` - Overall status checking from registry
+- `_get_batch_job_id_for_file()` - File-specific batch ID lookup
+- `_update_batch_registry_status()` - Status updates within registry
+- `process_all_batch_results_to_workflow_output()` - Multi-file processing with file-to-file mapping
 
 #### Future Improvement Areas:
 - **Retry Logic**: Add retry mechanisms for failed batch jobs
 - **Partial Processing**: Handle scenarios where some jobs fail but others succeed
 - **Performance**: Optimize API calls when checking multiple batch statuses
-- **Cleanup**: Add methods to clean up old batch files and registries
+- **Multi-Provider Optimization**: Batch status checks across different providers
+- **Registry Maintenance**: Add methods to clean up old registries and orphaned jobs
 
 ### 2. AgentWorkflow Class (`agent_actions/workflow/agent_workflow.py`)
 
 #### Key Methods:
-- `_handle_batch_agent()` - Lines 145-172: Registry-based status checking
-- `_process_all_batch_results()` - Lines 174-180: Simplified processing call
-- `_update_status()` - Lines 139-143: Removed batch_id tracking
+- `_handle_batch_agent()` - Registry-based status checking (no global file dependencies)
+- `_process_all_batch_results()` - Simplified processing call using registry
+- `_update_status()` - Status management without batch_id tracking
 
 #### Future Improvement Areas:
 - **Progress Reporting**: Add detailed progress reporting for multi-file processing
@@ -173,22 +179,24 @@ my_agent/
 
 ### 3. Batch Registry System
 
-#### Registry Structure:
+#### Registry Structure (Per-Workflow Isolation):
 ```json
 {
   "file_name": {
     "batch_id": "string",
     "status": "submitted|in_progress|completed|failed", 
-    "timestamp": "ISO_timestamp"
+    "timestamp": "ISO_timestamp",
+    "provider": "openai|gemini|anthropic"
   }
 }
 ```
 
 #### Future Improvement Areas:
-- **Metadata**: Add more metadata like file size, processing time, error details
-- **Versioning**: Add registry format versioning for backward compatibility
-- **Compression**: Compress large registry files
-- **Backup**: Implement registry backup and recovery mechanisms
+- **Enhanced Metadata**: Add file size, processing time, error details, retry counts
+- **Registry Versioning**: Add format versioning for backward compatibility
+- **Performance**: Compress large registry files, optimize concurrent access
+- **Cross-Provider**: Support mixed provider workflows within single registry
+- **Backup & Recovery**: Implement registry backup and recovery mechanisms
 
 ### 4. Data Transformation Pipeline
 
@@ -235,18 +243,22 @@ agent-actions clean -a my_workflow
 
 #### `batch status`
 
-Check the status of batch jobs (uses backward compatibility method).
+Check the status of batch jobs (uses registry-based lookup when no batch-id provided).
 
 ```bash
 agent-actions batch status --batch-id batch_123
+# or auto-detect from registry:
+agent-actions batch status
 ```
 
 #### `batch retrieve`
 
-Retrieve batch results (uses backward compatibility method).
+Retrieve batch results (uses registry-based lookup when no batch-id provided).
 
 ```bash
 agent-actions batch retrieve --batch-id batch_123 --output-dir ./results
+# or auto-detect from registry:
+agent-actions batch retrieve --output-dir ./results
 ```
 
 ## Best Practices
@@ -295,24 +307,29 @@ staging/
 
 ### 4. Batch Job Monitoring
 
-Monitor batch job progress using the `status` command:
+Monitor batch job progress using the `status` command (all tracking via registry):
 
 ```bash
-# Check status periodically
+# Check workflow status (includes registry-based batch status)
 agent-actions status -a my_workflow
 
-# Continue workflow when ready by running the run command again
+# Continue workflow when ready
 agent-actions run -a my_workflow
+
+# Check specific batch job status
+agent-actions batch status --batch-id batch_123
 ```
 
 ### 5. Error Handling
 
-The system handles common batch processing issues:
+The registry-based system provides robust error handling:
 
-- **Invalid JSON responses** are captured with error metadata
-- **Failed batch items** are logged but don't stop processing
-- **Failed batch jobs** will be marked as `failed` in the registry
+- **Invalid JSON responses** are captured with error metadata in registry
+- **Failed batch items** are logged with full context in registry
+- **Failed batch jobs** are marked as `failed` with provider info in registry
 - **Partial failures** allow successful jobs to continue processing
+- **Registry corruption** is detected and can be recovered
+- **Cross-provider errors** are handled independently per job
 
 ## Integration with Existing Workflows
 
@@ -325,27 +342,30 @@ Batch processing works seamlessly with existing agent workflows:
 
 ## Cost Optimization
 
-Batch processing provides significant cost savings:
+Batch processing provides significant cost savings across all providers:
 
-- **50% cost reduction** compared to real-time API calls
-- **Efficient processing** of large datasets
-- **Automatic job management** reduces manual oversight
-- **Structured output** ensures consistent data quality
+- **50% cost reduction** compared to real-time API calls (OpenAI, Gemini, Anthropic)
+- **Efficient processing** of large datasets with provider optimization
+- **Registry-based tracking** eliminates duplicate job submissions
+- **Multi-provider support** allows cost-optimal provider selection
+- **Structured output** ensures consistent data quality across providers
 
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Schema not found**: Ensure schema files exist in the schema directory
-2. **Batch job failed**: Check OpenAI API limits and model availability. Run `agent status` to see the failed state.
+2. **Batch job failed**: Check API limits and model availability for your provider. Run `agent status` to see the failed state.
 3. **Directory not found**: Ensure agent directory structure exists
 4. **Registry corruption**: Delete `.batch_registry.json` and restart the workflow
 5. **Partial processing**: Check individual batch job statuses in the registry
+6. **Provider mismatch**: Verify `model_vendor` matches the intended provider
+7. **Legacy global files**: Remove any old `.last_batch_id` files - registry system is primary
 
 ### Debug Commands
 
 ```bash
-# Check workflow status
+# Check workflow status (registry-based)
 agent-actions status -a my_workflow
 
 # Verify schema loading
@@ -354,39 +374,44 @@ agent-actions render -a my_workflow  # Check schema references
 # Check workflow structure
 ls -la my_agent/agent_io/target/
 
-# Inspect batch registry
+# Inspect batch registry (primary tracking system)
 cat my_agent/agent_io/target/node_X_batch_agent/batch/.batch_registry.json
 
 # Check individual batch results
 ls -la my_agent/agent_io/target/node_X_batch_agent/batch/batch_*_results.jsonl
+
+# Verify no legacy global files exist
+ls -la batch/.last_batch_id 2>/dev/null || echo "✅ No legacy global files"
 ```
 
 ## Future Development Areas
 
 ### High Priority
-1. **Retry Mechanisms**: Implement automatic retry for failed batch jobs
-2. **Progress Tracking**: Add detailed progress reporting for multi-file processing
-3. **Performance Optimization**: Optimize API calls and result processing
-4. **Error Recovery**: Better handling of partial failures and recovery scenarios
+1. **Retry Mechanisms**: Implement automatic retry for failed batch jobs across providers
+2. **Progress Tracking**: Add detailed progress reporting for multi-file, multi-provider processing
+3. **Performance Optimization**: Optimize API calls and result processing per provider
+4. **Cross-Provider Management**: Advanced scheduling and load balancing across providers
 
 ### Medium Priority
-1. **Parallel Processing**: Process multiple completed batch jobs in parallel
+1. **Parallel Processing**: Process multiple completed batch jobs in parallel across providers
 2. **Streaming Results**: Handle very large result sets efficiently
-3. **Metrics and Monitoring**: Add comprehensive metrics and monitoring
-4. **Notification System**: Add webhook or email notifications for batch completion
+3. **Provider Analytics**: Add comprehensive metrics and monitoring per provider
+4. **Smart Notifications**: Add webhook or email notifications with provider-specific insights
 
 ### Low Priority
 1. **Registry Backup**: Implement registry backup and recovery mechanisms
 2. **Compression**: Compress large registry and result files
-3. **Versioning**: Add registry format versioning for backward compatibility
-4. **Cleanup Tools**: Add tools to clean up old batch files and registries
+3. **Registry Versioning**: Add registry format versioning for backward compatibility
+4. **Maintenance Tools**: Add tools to clean up old registries and migrate legacy global files
 
 ## Contributing
 
 When making changes to the batch processing system:
 
 1. **Test with multiple files**: Always test with multiple input files to ensure file-to-file mapping works
-2. **Check registry integrity**: Ensure registry updates are atomic and don't corrupt existing data
-3. **Backward compatibility**: Maintain compatibility with existing workflows and CLI commands
-4. **Error handling**: Add proper error handling and logging for debugging
-5. **Documentation**: Update this documentation with any architectural changes
+2. **Registry integrity**: Ensure registry updates are atomic and don't corrupt existing data
+3. **Provider compatibility**: Test across all supported providers (OpenAI, Gemini, Anthropic)
+4. **No global dependencies**: Never add global file dependencies - use registry system only
+5. **Cross-provider isolation**: Ensure different provider jobs don't interfere with each other
+6. **Error handling**: Add proper error handling and logging for debugging
+7. **Documentation**: Update this documentation with any architectural changes

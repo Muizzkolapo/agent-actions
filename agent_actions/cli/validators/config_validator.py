@@ -194,6 +194,31 @@ class ConfigValidator(BaseValidator):
                     "This key should be removed for this agent configuration as file‑level tools process content wholesale, "
                     "and remove_collection is for modifying record‑level context."
                 )
+        
+        # -------------------------- batch mode validation -------------------------------
+        run_mode = str(entry_ci.get("run_mode", "")).lower()
+        if run_mode == "batch":
+            # Validate model_vendor is compatible with batch processing
+            valid_batch_vendors = {"openai", "gemini", "anthropic"}
+            if model_vendor and model_vendor not in valid_batch_vendors:
+                if model_vendor == "tool":
+                    self.add_error(
+                        f"{desc} 'tool' vendor does not support batch processing. "
+                        f"Use one of: {', '.join(sorted(valid_batch_vendors))} for batch mode."
+                    )
+                else:
+                    self.add_error(
+                        f"{desc} model_vendor '{model_vendor}' is not supported for batch processing. "
+                        f"Supported batch providers: {', '.join(sorted(valid_batch_vendors))}"
+                    )
+            
+            # Check for deprecated batch_provider field
+            batch_provider = entry_ci.get("batch_provider")
+            if batch_provider and not model_vendor:
+                self.add_warning(
+                    f"{desc} 'batch_provider' is deprecated. Use 'model_vendor' instead. "
+                    f"Found: batch_provider='{batch_provider}'"
+                )
 
         # -------------------------- unknown keys (CI) --------------------------------
         all_known_keys = self._REQUIRED_AGENT_KEYS | self._OPTIONAL_AGENT_KEYS

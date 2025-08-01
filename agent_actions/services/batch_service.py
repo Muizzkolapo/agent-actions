@@ -2,8 +2,8 @@ import json
 import sys
 from pathlib import Path
 import yaml
+from typing import Optional, Dict, Any, List
 from agent_actions.handlers.agent_handlers import AgentManager
-from openai import OpenAI
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.loaders.data_loaders.batch_data_loader import BatchDataLoader
 from agent_actions.handlers.prompt_handler import PromptLoader
@@ -23,6 +23,9 @@ from agent_actions.utils.path_utils import (
 from agent_actions.common.utils.processor_utils import ProcessorUtils
 
 from ..core.dependency_injection import registry
+from ..providers.base import BatchProvider, BatchTask, BatchResult
+from ..providers.openai_provider import OpenAIBatchProvider
+from ..providers.factory import BatchProviderFactory
 
 @registry.register_service("batch_service")
 class BatchService:
@@ -117,12 +120,63 @@ class BatchService:
     # Class variable to control force batch behavior
     force_batch = False
     
-    def __init__(self):
+    def __init__(self, provider: Optional[BatchProvider] = None):
         self.data_loader = BatchDataLoader()
-        self.client = OpenAI()
+        self.provider = provider or OpenAIBatchProvider()
         self.context_map = {}
         self.side_collection = []
+        # Cache providers by type to avoid recreating them
+        self._provider_cache = {}
 
+    def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
+        """
+        Get the appropriate provider based on agent configuration.
+        
+        Args:
+            agent_config: Agent configuration dictionary
+            
+        Returns:
+            BatchProvider instance for the specified provider type
+        """
+        # Get provider type from config - prioritize model_vendor, fallback to batch_provider for backward compatibility
+        provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
+        
+        # Log deprecation warning if using batch_provider without model_vendor
+        if agent_config.get('batch_provider') and not agent_config.get('model_vendor'):
+            print(f"⚠️ DEPRECATION WARNING: 'batch_provider' is deprecated. Use 'model_vendor' instead. Found: batch_provider='{agent_config.get('batch_provider')}'")
+        
+        # Handle special case: 'tool' vendor doesn't support batch processing
+        if provider_type == 'tool':
+            raise ValueError("'tool' vendor does not support batch processing. Use 'openai', 'gemini', or 'anthropic' for batch mode.")
+        
+        # Check cache first
+        if provider_type in self._provider_cache:
+            return self._provider_cache[provider_type]
+        
+        # Create new provider instance
+        try:
+            # Extract provider-specific config if needed
+            provider_config = {}
+            if provider_type == 'gemini' and agent_config.get('google_api_key'):
+                provider_config['api_key'] = agent_config['google_api_key']
+            elif provider_type == 'openai' and agent_config.get('openai_api_key'):
+                provider_config['api_key'] = agent_config['openai_api_key']
+            
+            provider = BatchProviderFactory.create_provider(provider_type, provider_config)
+            
+            # Validate that the provider supports the requested model
+            is_valid, error_msg = provider.validate_config(agent_config)
+            if not is_valid:
+                raise ValueError(error_msg)
+            
+            # Cache the provider
+            self._provider_cache[provider_type] = provider
+            
+            return provider
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to create batch provider '{provider_type}': {e}")
+    
     @staticmethod
     def _separate_side_output(items):
         """Split processed items into main and side output collections."""
@@ -186,17 +240,23 @@ class BatchService:
 
         return None
 
-    def _prepare_schema(self, agent_config):
+    def _prepare_schema(self, agent_config, provider=None):
         """Load and prepare schema from config"""
         schema_name = agent_config.get(SCHEMA_NAME_KEY)
         if not schema_name:
             return None
         
         base_schema = SchemaLoader.load_schema(schema_name)
-        return compile_unified_schema(base_schema, 'openai')
+        # Use provider to compile schema to its specific format
+        if provider is None:
+            provider = self.provider
+        return provider.compile_schema(base_schema)
 
     def prepare_batch_tasks_from_data(self, agent_config, data):
-        schema = self._prepare_schema(agent_config)
+        # Get the appropriate provider for this agent configuration
+        provider = self._get_provider_for_config(agent_config)
+        
+        schema = self._prepare_schema(agent_config, provider)
         if not schema:
             raise ValueError("Schema is required for batch processing")
             
@@ -212,10 +272,12 @@ class BatchService:
 
         self.context_map = {}
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
-        tasks = []
         
         # Check for conditional clause
         conditional_clause = agent_config.get("conditional_clause", "").lower()
+        
+        # Prepare data for the provider
+        prepared_data = []
         
         for row in data:
             # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
@@ -245,24 +307,22 @@ class BatchService:
                 agent_config=agent_config
             )
             
-            task = {
-                    # Unique ID to match results back to the original input
-                    "custom_id": custom_id,
-                    "method": "POST",
-                    "url": "/v1/chat/completions",
-                    "body": {
-                        "model": agent_config.get('model_name', 'gpt-4.1-mini'),
-                        "response_format": {
-                            "type": "json_schema",
-                            "json_schema": schema
-                        },
-                        "messages": [
-                            {"role": "system", "content": formatted_prompt},
-                            {"role": "user", "content":  json.dumps(cleaned_row)}
-                        ],
-                    }
-                }
-            tasks.append(task)
+            # Create a prepared data item with all necessary info
+            prepared_item = {
+                "target_id": custom_id,
+                "content": cleaned_row,
+                "prompt": formatted_prompt
+            }
+            prepared_data.append(prepared_item)
+        
+        # Let the provider handle its own task format
+        # Update agent_config to include the formatted prompt and compiled schema
+        provider_config = agent_config.copy()
+        provider_config["compiled_schema"] = schema
+        
+        # Use provider to prepare tasks
+        tasks = provider.prepare_tasks(prepared_data, provider_config)
+        
         return tasks
 
     def submit_batch_job_from_data(self, agent_config, batch_name, data, output_directory=None, force=False):
@@ -281,39 +341,22 @@ class BatchService:
             # Return passthrough data when no tasks are created
             return self._create_passthrough_data(data, agent_config, output_directory)
 
-        # Create batch directory in the node-specific output directory if provided
-        if output_directory:
-            batch_dir = Path(output_directory) / "batch"
-        else:
-            # Fallback to global batch directory
-            batch_dir = Path.cwd() / "batch"
-        
-        ensure_directory_exists(batch_dir)
-        
-        file_name = f"{Path(batch_name).stem}_batch_input.jsonl"
-        file_path = batch_dir / file_name
-
-        with open(file_path, 'w') as file:
-            for obj in tasks:
-                file.write(json.dumps(obj) + '\n')
-
-        print(f"Batch file created at: {file_path}")
+        # Save context map before submitting
         self._save_context_map(self.context_map, agent_config, output_directory, batch_name)
 
         try:
-            batch_file = self.client.files.create(file=open(file_path, "rb"), purpose="batch")
-            batch_job = self.client.batches.create(
-                input_file_id=batch_file.id,
-                endpoint="/v1/chat/completions",
-                completion_window="24h"
-            )
-            print(f"Batch job created with ID: {batch_job.id}")
-            self._save_batch_job_id(batch_job.id, output_directory, batch_name)
-            return batch_job.id
+            # Get the appropriate provider for this agent configuration
+            provider = self._get_provider_for_config(agent_config)
+            provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
+            
+            # Use provider to submit the batch
+            batch_id = provider.submit_batch(tasks, batch_name, output_directory)
+            self._save_batch_job_id(batch_id, output_directory, batch_name, provider_type)
+            return batch_id
         except Exception as e:
             raise RuntimeError(f"Error submitting batch job: {e}")
 
-    def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None):
+    def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None, provider_type: str = None):
         """Save batch job ID to batch registry."""
         if output_directory:
             local_batch_dir = Path(output_directory) / "batch"
@@ -334,19 +377,14 @@ class BatchService:
             registry[file_name or 'default'] = {
                 'batch_id': batch_id,
                 'status': 'submitted',
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'provider': provider_type or 'openai'  # Store provider type
             }
             
             # Save updated registry
             with open(registry_file, 'w') as f:
                 json.dump(registry, f, indent=2)
         
-        # Save to global batch directory (for backward compatibility)
-        global_batch_dir = Path.cwd() / "batch"
-        ensure_directory_exists(global_batch_dir)
-        global_job_id_file = global_batch_dir / ".last_batch_id"
-        with open(global_job_id_file, 'w') as f:
-            f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
@@ -392,11 +430,6 @@ class BatchService:
                 except json.JSONDecodeError:
                     pass
         
-        # Fall back to global directory for backward compatibility
-        global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
-        if global_job_id_file.exists():
-            with open(global_job_id_file, 'r') as f:
-                return f.read().strip()
         return None
 
     def _update_batch_registry_status(self, output_directory: str, file_name: str, batch_id: str, status: str):
@@ -443,7 +476,7 @@ class BatchService:
                     continue
                     
                 try:
-                    actual_status = self.check_status(batch_id)
+                    actual_status = self.check_status(batch_id, str(output_directory))
                     # Update registry with actual status
                     if actual_status != entry.get('status'):
                         entry['status'] = actual_status
@@ -491,7 +524,7 @@ class BatchService:
                     continue
                     
                 try:
-                    actual_status = self.check_status(batch_id)
+                    actual_status = self.check_status(batch_id, str(output_directory))
                     if actual_status == 'completed':
                         completed_count += 1
                     elif actual_status in ['failed', 'cancelled']:
@@ -530,11 +563,6 @@ class BatchService:
                 except json.JSONDecodeError:
                     pass
         
-        # Fall back to global directory
-        global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
-        if global_job_id_file.exists():
-            with open(global_job_id_file, 'r') as f:
-                return f.read().strip()
         return None
     
     def _check_for_existing_batch_job(self, output_directory: str = None, file_name: str = None):
@@ -544,7 +572,7 @@ class BatchService:
             return None
         
         try:
-            status = self.check_status(batch_id)
+            status = self.check_status(batch_id, output_directory)
             # Update registry with current status
             if output_directory and file_name:
                 self._update_batch_registry_status(output_directory, file_name, batch_id, status)
@@ -558,10 +586,44 @@ class BatchService:
             # If we can't check status, assume we can proceed
             return None
 
-    def check_status(self, batch_id: str):
+    def _get_provider_for_batch_id(self, batch_id: str, output_directory: str = None) -> BatchProvider:
+        """
+        Get the provider that was used for a specific batch ID.
+        
+        Args:
+            batch_id: The batch job ID
+            output_directory: Output directory to look for registry
+            
+        Returns:
+            BatchProvider instance
+        """
+        # First check the registry if we have output directory
+        if output_directory:
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if registry_file.exists():
+                try:
+                    with open(registry_file, 'r') as f:
+                        registry = json.load(f)
+                    
+                    # Look for the batch ID in registry entries
+                    for entry in registry.values():
+                        if entry.get('batch_id') == batch_id:
+                            provider_type = entry.get('provider', 'openai')
+                            if provider_type in self._provider_cache:
+                                return self._provider_cache[provider_type]
+                            else:
+                                # Create provider if not cached
+                                return BatchProviderFactory.create_provider(provider_type)
+                except Exception:
+                    pass
+        
+        # Fallback to default provider
+        return self.provider
+    
+    def check_status(self, batch_id: str, output_directory: str = None):
         try:
-            batch_job = self.client.batches.retrieve(batch_id)
-            return batch_job.status
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
+            return provider.check_status(batch_id)
         except Exception as e:
             raise RuntimeError(f"Error checking batch status: {e}")
 
@@ -569,47 +631,45 @@ class BatchService:
     # Muizzchange
     def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
         try:
-            batch_job = self.client.batches.retrieve(batch_id)
-            if batch_job.status == 'completed':
-                result_file_id = batch_job.output_file_id
-                
-                # Add retry logic for file retrieval
-                max_retries = 3
-                retry_delay = 2  # seconds
-                last_error = None
-                
-                for attempt in range(max_retries):
-                    try:
-                        result = self.client.files.content(result_file_id).content
-                        # Validate that we got content
-                        if not result or len(result) == 0:
-                            raise ValueError("Retrieved empty content from batch results")
-                        break
-                    except Exception as e:
-                        last_error = e
-                        if attempt < max_retries - 1:
-                            print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
-                            import time
-                            time.sleep(retry_delay)
-                        else:
-                            raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
-                
-                output_path = Path(output_dir)
-                ensure_directory_exists(output_path)
-                
-                # Use original file name if provided (like batch1.json -> batch1_results.jsonl)
-                if file_path:
-                    original_file_name = Path(file_path).stem  # Gets 'batch1' from 'batch1.json'
-                    result_file_name = output_path / f"{original_file_name}_results.jsonl"
-                else:
-                    # Fallback to batch_id naming
-                    result_file_name = output_path / f"{batch_id}_results.jsonl"
-                
-                with open(result_file_name, 'wb') as file:
-                    file.write(result)
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_dir)
+            
+            # Use provider to get results
+            batch_results = provider.retrieve_results(batch_id, output_dir)
+            
+            # The provider already saves raw results, but we need to maintain
+            # compatibility with the existing interface that returns a file path
+            output_path = Path(output_dir)
+            
+            # Use original file name if provided (like batch1.json -> batch1_results.jsonl)
+            if file_path:
+                original_file_name = Path(file_path).stem  # Gets 'batch1' from 'batch1.json'
+                result_file_name = output_path / f"{original_file_name}_results.jsonl"
+            else:
+                # Fallback to batch_id naming
+                result_file_name = output_path / f"{batch_id}_results.jsonl"
+            
+            # Check if provider already saved the file
+            if result_file_name.exists():
                 return result_file_name
             else:
-                return f"Batch job is not completed yet. Status: {batch_job.status}"
+                # If not, we can save the transformed results for compatibility
+                ensure_directory_exists(output_path)
+                with open(result_file_name, 'w') as f:
+                    for result in batch_results:
+                        # Convert BatchResult back to a format similar to OpenAI's raw format
+                        # for backward compatibility
+                        raw_format = {
+                            "custom_id": result.custom_id,
+                            "response": {
+                                "body": {
+                                    "choices": [{"message": {"content": json.dumps(result.content)}}],
+                                    "usage": result.usage
+                                }
+                            }
+                        }
+                        f.write(json.dumps(raw_format) + '\n')
+                return result_file_name
         except Exception as e:
             raise RuntimeError(f"Error retrieving batch results: {e}")
 
@@ -624,49 +684,16 @@ class BatchService:
             file_path: The original file path being processed
         """
         try:
-            # Retrieve batch results
-            batch_job = self.client.batches.retrieve(batch_id)
-            if batch_job.status != 'completed':
-                raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
-                
-            result_file_id = batch_job.output_file_id
-            #this is where we load the file for the processng
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
             
-            # Add retry logic for file retrieval
-            max_retries = 3
-            retry_delay = 2
-            last_error = None
+            # Check status first
+            status = provider.check_status(batch_id)
+            if status != 'completed':
+                raise ValueError(f"Batch job {batch_id} is not completed. Status: {status}")
             
-            for attempt in range(max_retries):
-                try:
-                    result_content = self.client.files.content(result_file_id).content
-                    if not result_content or len(result_content) == 0:
-                        raise ValueError("Retrieved empty content from batch results")
-                    break
-                except Exception as e:
-                    last_error = e
-                    if attempt < max_retries - 1:
-                        print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
-                        import time
-                        time.sleep(retry_delay)
-                    else:
-                        raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
-            
-            # Parse batch results with error handling
-            batch_results = []
-            lines = result_content.decode('utf-8').strip().split('\n')
-            for line_num, line in enumerate(lines, 1):
-                if line.strip():
-                    try:
-                        batch_results.append(json.loads(line))
-                    except json.JSONDecodeError as e:
-                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
-                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
-                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
-                        if len(line) > 500:
-                            print(f"[DEBUG] Line length: {len(line)} characters")
-                        # Continue processing other lines instead of failing completely
-                        continue
+            # Use provider to get results - already transformed to BatchResult format
+            batch_results = provider.retrieve_results(batch_id, output_directory)
             
             batch_dir = Path(output_directory) / "batch"
             context_map, side_collection = self._load_context_map(batch_dir)
@@ -701,11 +728,11 @@ class BatchService:
 
     def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None):
         """
-        Convert batch API results to the workflow's expected format.
-        Extracts content and preserves metadata, matching non-batch agent output format.
+        Convert batch provider results to the workflow's expected format.
+        Works with standardized BatchResult objects from any provider.
         
         Args:
-            batch_results: List of batch API result objects
+            batch_results: List of BatchResult objects from provider
             side_collection: List of side collection fields
             context_map: Map of custom_id to original row data
             output_directory: Output directory path to extract node information
@@ -732,99 +759,80 @@ class BatchService:
         # This is where we transform the data to what we want which matches usual agent actions flow 
         
         #===start here===#
-        for result in batch_results:
-            # The 'response' key contains the main data, including the body
-            response_data = result.get('response')
-            custom_id = result.get('custom_id')
+        for batch_result in batch_results:
+            # Now working with standardized BatchResult objects from any provider
+            custom_id = batch_result.custom_id
+            
+            if batch_result.success and batch_result.content is not None:
+                try:
+                    # Content is already parsed by the provider
+                    generated_obj = batch_result.content
+                    
+                    # Normalize to a list for consistent processing
+                    generated_list = DataTransformer.ensure_list(generated_obj)
 
-            if response_data and response_data.get('body'):
-                response_body = response_data['body']
-                
-                # Extract the generated content
-                if 'choices' in response_body and response_body['choices']:
-                    choice = response_body['choices'][0]
-                    if 'message' in choice and 'content' in choice['message']:
-                        content = choice['message']['content']
+                    # Get the original source_guid from the stored row
+                    original_row = context_map.get(custom_id, {})
+                    original_source_guid = original_row.get("source_guid", custom_id)
+
+                    if side_collection and custom_id in context_map:
+                        original_content = original_row.get("content", original_row)
+                        generated_list = [
+                            DataTransformer.update_schema_objects(original_content, item, side_collection)
+                            if isinstance(item, dict) else item
+                            for item in generated_list
+                        ]
+
+                    # Use the original source_guid instead of custom_id
+                    structured_items = DataTransformer.transform_structure(
+                        [{original_source_guid: generated_list}]
+                    )
+
+                    for itm in structured_items:
+                        # Use metadata from BatchResult
+                        itm["metadata"] = batch_result.metadata or {}
                         
-                        try:
-                            # Parse JSON content from the response
-                            generated_obj = json.loads(content)
-
-                            # Normalize to a list for consistent processing
-                            generated_list = DataTransformer.ensure_list(generated_obj)
-
-                            # Get the original source_guid from the stored row
-                            original_row = context_map.get(custom_id, {})
-                            original_source_guid = original_row.get("source_guid", custom_id)
-
-                            if side_collection and custom_id in context_map:
-                                original_content = original_row.get("content", original_row)
-                                generated_list = [
-                                    DataTransformer.update_schema_objects(original_content, item, side_collection)
-                                    if isinstance(item, dict) else item
-                                    for item in generated_list
-                                ]
-
-                            # Use the original source_guid instead of custom_id
-                            structured_items = DataTransformer.transform_structure(
-                                [{original_source_guid: generated_list}]
-                            )
-
-                            for itm in structured_items:
-                                itm["metadata"] = {
-                                    "model": response_body.get("model"),
-                                    "usage": response_body.get("usage"),
-                                    "finish_reason": choice.get("finish_reason"),
-                                    "created": response_body.get("created"),
-                                    "system_fingerprint": response_body.get(
-                                        "system_fingerprint"
-                                    ),
-                                }
-                                
-                                # Add node_id and lineage tracking
-                                if node_idx is not None:
-                                    # Generate a unique node_id for each item
-                                    item_node_id = ProcessorUtils.generate_node_id(node_idx)
-                                    itm["node_id"] = item_node_id
-                                    
-                                    # Use ProcessorUtils for lineage tracking
-                                    itm["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
-                                
-                                # Ensure target_id and source_guid are set
-                                if 'target_id' not in itm or not itm['target_id']:
-                                    itm['target_id'] = original_row.get('target_id', ProcessorUtils.generate_target_id())
-                                if 'source_guid' not in itm or not itm['source_guid']:
-                                    itm['source_guid'] = original_source_guid
-                                    
-                            processed_data.extend(structured_items)
-                            processed_custom_ids.add(custom_id)
+                        # Add node_id and lineage tracking
+                        if node_idx is not None:
+                            # Generate a unique node_id for each item
+                            item_node_id = ProcessorUtils.generate_node_id(node_idx)
+                            itm["node_id"] = item_node_id
                             
-                        except json.JSONDecodeError:
-                            # Get the original source_guid for error cases too
-                            original_row = context_map.get(custom_id, {})
-                            original_source_guid = original_row.get("source_guid", custom_id)
+                            # Use ProcessorUtils for lineage tracking
+                            itm["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
+                        
+                        # Ensure target_id and source_guid are set
+                        if 'target_id' not in itm or not itm['target_id']:
+                            itm['target_id'] = original_row.get('target_id', ProcessorUtils.generate_target_id())
+                        if 'source_guid' not in itm or not itm['source_guid']:
+                            itm['source_guid'] = original_source_guid
                             
-                            # If not valid JSON, wrap in error structure
-                            error_item = {
-                                "source_guid": original_source_guid,
-                                "error": "Invalid JSON response",
-                                "raw_content": content,
-                                "metadata": {
-                                    "model": response_body.get('model'),
-                                    "finish_reason": choice.get('finish_reason', 'error')
-                                }
-                            }
-                            processed_data.append(error_item)
-                            processed_custom_ids.add(custom_id)
+                    processed_data.extend(structured_items)
+                    processed_custom_ids.add(custom_id)
+                    
+                except Exception as e:
+                    # Get the original source_guid for error cases too
+                    original_row = context_map.get(custom_id, {})
+                    original_source_guid = original_row.get("source_guid", custom_id)
+                    
+                    # If processing fails, wrap in error structure
+                    error_item = {
+                        "source_guid": original_source_guid,
+                        "error": f"Processing error: {str(e)}",
+                        "raw_content": batch_result.content,
+                        "metadata": batch_result.metadata or {}
+                    }
+                    processed_data.append(error_item)
+                    processed_custom_ids.add(custom_id)
             else:
-                # Handle error cases where 'response' or 'body' is missing
+                # Handle error cases from BatchResult
                 original_row = context_map.get(custom_id, {})
                 original_source_guid = original_row.get("source_guid", custom_id or 'unknown')
                 
                 error_item = {
                     "source_guid": original_source_guid,
-                    "error": "Batch processing failed or missing response body",
-                    "raw_result": result
+                    "error": batch_result.error or "Batch processing failed",
+                    "metadata": batch_result.metadata or {}
                 }
                 processed_data.append(error_item)
                 processed_custom_ids.add(custom_id)
@@ -894,7 +902,7 @@ class BatchService:
                     batch_id = placeholder_data['batch_job_id']
                     
                     # Check if batch is completed
-                    if self.check_status(batch_id) == 'completed':
+                    if self.check_status(batch_id, str(output_directory)) == 'completed':
                         # Process the batch results
                         original_file_path = placeholder_file
                         processed_file = self.process_batch_results_to_workflow_output(
@@ -917,45 +925,15 @@ class BatchService:
         Uses the locally saved results file from retrieve_results.
         """
         try:
-            # First, check if results were already saved locally by retrieve_results
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
+            
+            # Use provider to get results - already transformed to BatchResult format
+            batch_results = provider.retrieve_results(batch_id, output_directory)
+            
+            print(f"Retrieved {len(batch_results)} batch results")
+            
             batch_dir = Path(output_directory) / "batch"
-            local_results_file = batch_dir / f"{batch_id}_results.jsonl"
-            
-            if local_results_file.exists():
-                # Use the locally saved results
-                print(f"Using locally saved results from: {local_results_file}")
-                with open(local_results_file, 'r') as f:
-                    result_content = f.read()
-            else:
-                # Fallback to API retrieval if local file doesn't exist
-                print(f"Local results file not found, retrieving from API...")
-                batch_job = self.client.batches.retrieve(batch_id)
-                if batch_job.status != 'completed':
-                    raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
-                    
-                result_file_id = batch_job.output_file_id
-                result_content = self.client.files.content(result_file_id).content.decode('utf-8')
-                
-            
-            # Parse batch results with error handling
-            #muizz change this is where we get the outcpme of the run like the result from the model
-            batch_results = []
-            lines = result_content.strip().split('\n')
-            for line_num, line in enumerate(lines, 1):
-                if line.strip():
-                    try:
-                        batch_results.append(json.loads(line))
-                    except json.JSONDecodeError as e:
-                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
-                        print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
-                        print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
-                        if len(line) > 500:
-                            print(f"[DEBUG] Line length: {len(line)} characters")
-                        # Continue processing other lines instead of failing completely
-                        continue
-            
-            print(f"Parsed {len(batch_results)} batch results")
-            
             context_map, side_collection = self._load_context_map(batch_dir)
 
             # Process results into workflow format
@@ -1034,7 +1012,7 @@ class BatchService:
                     
                 # Check if batch is completed
                 try:
-                    batch_status = self.check_status(batch_id)
+                    batch_status = self.check_status(batch_id, str(output_directory))
                     if batch_status != 'completed':
                         print(f"Batch {batch_id} for {file_name} is not completed: {batch_status}")
                         continue
@@ -1044,34 +1022,11 @@ class BatchService:
                 
                 # Get batch results for this specific file
                 try:
-                    local_results_file = batch_dir / f"{batch_id}_results.jsonl"
+                    # Get the appropriate provider for this batch ID
+                    provider = self._get_provider_for_batch_id(batch_id, output_directory)
                     
-                    if local_results_file.exists():
-                        with open(local_results_file, 'r') as f:
-                            result_content = f.read()
-                    else:
-                        # Fallback to API retrieval
-                        batch_job = self.client.batches.retrieve(batch_id)
-                        result_file_id = batch_job.output_file_id
-                        result_content = self.client.files.content(result_file_id).content.decode('utf-8')
-                    
-                    # Parse batch results for this specific file
-                    batch_results = []
-                    lines = result_content.strip().split('\n')
-                    for line_num, line in enumerate(lines, 1):
-                        if line.strip():
-                            try:
-                                batch_results.append(json.loads(line))
-                            except json.JSONDecodeError as e:
-                                print(f"[ERROR] JSON parsing error on line {line_num} for {file_name}: {e}")
-                                print(f"[DEBUG] Line position: character {e.pos if hasattr(e, 'pos') else 'unknown'}")
-                                print(f"[DEBUG] File: {file_name}")
-                                print(f"[DEBUG] Batch ID: {batch_id}")
-                                print(f"[DEBUG] Problematic content (first 500 chars): {line[:500]}...")
-                                if len(line) > 500:
-                                    print(f"[DEBUG] Line length: {len(line)} characters")
-                                # Continue processing other lines instead of failing completely
-                                continue
+                    # Use provider to get results - already transformed to BatchResult format
+                    batch_results = provider.retrieve_results(batch_id, output_directory)
                     
                     if not batch_results:
                         print(f"No results found for batch {batch_id} ({file_name})")
