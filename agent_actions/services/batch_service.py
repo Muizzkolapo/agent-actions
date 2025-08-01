@@ -385,12 +385,6 @@ class BatchService:
             with open(registry_file, 'w') as f:
                 json.dump(registry, f, indent=2)
         
-        # Save to global batch directory (for backward compatibility)
-        #global_batch_dir = Path.cwd() / "batch"
-        #ensure_directory_exists(global_batch_dir)
-        #global_job_id_file = global_batch_dir / ".last_batch_id"
-        #with open(global_job_id_file, 'w') as f:
-        #    f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
@@ -436,11 +430,6 @@ class BatchService:
                 except json.JSONDecodeError:
                     pass
         
-        # Fall back to global directory for backward compatibility
-        global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
-        if global_job_id_file.exists():
-            with open(global_job_id_file, 'r') as f:
-                return f.read().strip()
         return None
 
     def _update_batch_registry_status(self, output_directory: str, file_name: str, batch_id: str, status: str):
@@ -574,11 +563,6 @@ class BatchService:
                 except json.JSONDecodeError:
                     pass
         
-        # Fall back to global directory
-        global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
-        if global_job_id_file.exists():
-            with open(global_job_id_file, 'r') as f:
-                return f.read().strip()
         return None
     
     def _check_for_existing_batch_job(self, output_directory: str = None, file_name: str = None):

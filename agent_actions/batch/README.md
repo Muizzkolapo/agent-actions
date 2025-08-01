@@ -137,9 +137,8 @@ my_agent/
 │   │   └── node_2_final_agent/     # Final processing
 │   └── source/                     # Source content tracking
 ├── agent_config/
-└── batch/                          # Legacy batch job files
-    ├── batch_agent_batch_input.jsonl
-    └── .last_batch_id
+└── batch/                          # Legacy batch job files (deprecated)
+    └── batch_agent_batch_input.jsonl
 ```
 
 ## Key Code Touchpoints for Future Improvements
