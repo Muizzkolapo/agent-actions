@@ -87,26 +87,23 @@ class AnthropicBatchProvider(BatchProvider):
             }
         }
         """
-        messages = []
-        
-        # Add system message if prompt exists
-        if batch_task.prompt:
-            messages.append({
-                "role": "system", 
-                "content": batch_task.prompt
-            })
-        
-        # Add user content
-        messages.append({
-            "role": "user",
-            "content": batch_task.user_content
-        })
+        # Anthropic expects system message as top-level parameter, not in messages array
+        messages = [
+            {
+                "role": "user",
+                "content": batch_task.user_content
+            }
+        ]
         
         params = {
             "model": batch_task.model_config.get("model_name", "claude-3-5-sonnet-20241022"),
             "max_tokens": batch_task.model_config.get("max_tokens", 1024),
             "messages": messages
         }
+        
+        # Add system message as top-level parameter if prompt exists
+        if batch_task.prompt:
+            params["system"] = batch_task.prompt
         
         # Add optional parameters from model_config
         if "temperature" in batch_task.model_config:

@@ -1,49 +1,21 @@
-# Batch processing
+# Anthropic Batch Provider Documentation
 
-Batch processing is a powerful approach for handling large volumes of requests efficiently. Instead of processing requests one at a time with immediate responses, batch processing allows you to submit multiple requests together for asynchronous processing. This pattern is particularly useful when:
+## Overview
 
-* You need to process large volumes of data
-* Immediate responses are not required
-* You want to optimize for cost efficiency
-* You're running large-scale evaluations or analyses
+The Anthropic Batch Provider integrates with Anthropic's Message Batches API to enable efficient batch processing of Claude model requests within the agent-actions framework. This provider supports all Claude models available through the Message Batches API.
 
-The Message Batches API is our first implementation of this pattern.
+## Features
 
-***
+- **Direct HTTP Submission**: No file upload required - requests are submitted directly via HTTP
+- **Streaming Results**: Real-time retrieval of batch results as they become available
+- **Prompt Caching**: Optional support for Anthropic's prompt caching feature
+- **System Message Arrays**: Support for complex prompt structures with system messages
+- **Real-time Status Checking**: Monitor batch progress with detailed status information
+- **Structured Output**: Guided structured output through natural language prompting
 
-# Message Batches API
+## Supported Models
 
-The Message Batches API is a powerful, cost-effective way to asynchronously process large volumes of [Messages](/en/api/messages) requests. This approach is well-suited to tasks that do not require immediate responses, with most batches finishing in less than 1 hour while reducing costs by 50% and increasing throughput.
-
-You can [explore the API reference directly](/en/api/creating-message-batches), in addition to this guide.
-
-## How the Message Batches API works
-
-When you send a request to the Message Batches API:
-
-1. The system creates a new Message Batch with the provided Messages requests.
-2. The batch is then processed asynchronously, with each request handled independently.
-3. You can poll for the status of the batch and retrieve results when processing has ended for all requests.
-
-This is especially useful for bulk operations that don't require immediate results, such as:
-
-* Large-scale evaluations: Process thousands of test cases efficiently.
-* Content moderation: Analyze large volumes of user-generated content asynchronously.
-* Data analysis: Generate insights or summaries for large datasets.
-* Bulk content generation: Create large amounts of text for various purposes (e.g., product descriptions, article summaries).
-
-### Batch limitations
-
-* A Message Batch is limited to either 100,000 Message requests or 256 MB in size, whichever is reached first.
-* We process each batch as fast as possible, with most batches completing within 1 hour. You will be able to access batch results when all messages have completed or after 24 hours, whichever comes first. Batches will expire if processing does not complete within 24 hours.
-* Batch results are available for 29 days after creation. After that, you may still view the Batch, but its results will no longer be available for download.
-* Batches are scoped to a [Workspace](https://console.anthropic.com/settings/workspaces). You may view all batches—and their results—that were created within the Workspace that your API key belongs to.
-* Rate limits apply to both Batches API HTTP requests and the number of requests within a batch waiting to be processed. See [Message Batches API rate limits](/en/api/rate-limits#message-batches-api). Additionally, we may slow down processing based on current demand and your request volume. In that case, you may see more requests expiring after 24 hours.
-* Due to high throughput and concurrent processing, batches may go slightly over your Workspace's configured [spend limit](https://console.anthropic.com/settings/limits).
-
-### Supported models
-
-The Message Batches API currently supports:
+The Anthropic provider supports the following Claude models for batch processing:
 
 * Claude Opus 4 (`claude-opus-4-20250514`)
 * Claude Sonnet 4 (`claude-sonnet-4-20250514`)
@@ -53,745 +25,368 @@ The Message Batches API currently supports:
 * Claude Haiku 3 (`claude-3-haiku-20240307`)
 * Claude Opus 3 (`claude-3-opus-20240229`)
 
-### What can be batched
+## Configuration
 
-Any request that you can make to the Messages API can be included in a batch. This includes:
+### Agent Configuration
 
-* Vision
-* Tool use
-* System messages
-* Multi-turn conversations
-* Any beta features
+Configure an agent to use the Anthropic batch provider:
 
-Since each request in the batch is processed independently, you can mix different types of requests within a single batch.
-
-<Tip>
-  Since batches can take longer than 5 minutes to process, consider using the [1-hour cache duration](/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration) with prompt caching for better cache hit rates when processing batches with shared context.
-</Tip>
-
-***
-
-## Pricing
-
-The Batches API offers significant cost savings. All usage is charged at 50% of the standard API prices.
-
-| Model             | Batch input    | Batch output   |
-| ----------------- | -------------- | -------------- |
-| Claude Opus 4     | \$7.50 / MTok  | \$37.50 / MTok |
-| Claude Sonnet 4   | \$1.50 / MTok  | \$7.50 / MTok  |
-| Claude Sonnet 3.7 | \$1.50 / MTok  | \$7.50 / MTok  |
-| Claude Sonnet 3.5 | \$1.50 / MTok  | \$7.50 / MTok  |
-| Claude Haiku 3.5  | \$0.40 / MTok  | \$2 / MTok     |
-| Claude Opus 3     | \$7.50 / MTok  | \$37.50 / MTok |
-| Claude Haiku 3    | \$0.125 / MTok | \$0.625 / MTok |
-
-***
-
-## How to use the Message Batches API
-
-### Prepare and create your batch
-
-A Message Batch is composed of a list of requests to create a Message. The shape of an individual request is comprised of:
-
-* A unique `custom_id` for identifying the Messages request
-* A `params` object with the standard [Messages API](/en/api/messages) parameters
-
-You can [create a batch](/en/api/creating-message-batches) by passing this list into the `requests` parameter:
-
-<CodeGroup>
-  ```bash Shell
-  curl https://api.anthropic.com/v1/messages/batches \
-       --header "x-api-key: $ANTHROPIC_API_KEY" \
-       --header "anthropic-version: 2023-06-01" \
-       --header "content-type: application/json" \
-       --data \
-  '{
-      "requests": [
-          {
-              "custom_id": "my-first-request",
-              "params": {
-                  "model": "claude-opus-4-20250514",
-                  "max_tokens": 1024,
-                  "messages": [
-                      {"role": "user", "content": "Hello, world"}
-                  ]
-              }
-          },
-          {
-              "custom_id": "my-second-request",
-              "params": {
-                  "model": "claude-opus-4-20250514",
-                  "max_tokens": 1024,
-                  "messages": [
-                      {"role": "user", "content": "Hi again, friend"}
-                  ]
-              }
-          }
-      ]
-  }'
-  ```
-
-  ```python Python
-  import anthropic
-  from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
-  from anthropic.types.messages.batch_create_params import Request
-
-  client = anthropic.Anthropic()
-
-  message_batch = client.messages.batches.create(
-      requests=[
-          Request(
-              custom_id="my-first-request",
-              params=MessageCreateParamsNonStreaming(
-                  model="claude-opus-4-20250514",
-                  max_tokens=1024,
-                  messages=[{
-                      "role": "user",
-                      "content": "Hello, world",
-                  }]
-              )
-          ),
-          Request(
-              custom_id="my-second-request",
-              params=MessageCreateParamsNonStreaming(
-                  model="claude-opus-4-20250514",
-                  max_tokens=1024,
-                  messages=[{
-                      "role": "user",
-                      "content": "Hi again, friend",
-                  }]
-              )
-          )
-      ]
-  )
-
-  print(message_batch)
-  ```
-
-  ```TypeScript TypeScript
-  import Anthropic from '@anthropic-ai/sdk';
-
-  const anthropic = new Anthropic();
-
-  const messageBatch = await anthropic.messages.batches.create({
-    requests: [{
-      custom_id: "my-first-request",
-      params: {
-        model: "claude-opus-4-20250514",
-        max_tokens: 1024,
-        messages: [
-          {"role": "user", "content": "Hello, world"}
-        ]
-      }
-    }, {
-      custom_id: "my-second-request",
-      params: {
-        model: "claude-opus-4-20250514",
-        max_tokens: 1024,
-        messages: [
-          {"role": "user", "content": "Hi again, friend"}
-        ]
-      }
-    }]
-  });
-
-  console.log(messageBatch)
-  ```
-
-  ```java Java
-  import com.anthropic.client.AnthropicClient;
-  import com.anthropic.client.okhttp.AnthropicOkHttpClient;
-  import com.anthropic.models.messages.Model;
-  import com.anthropic.models.messages.batches.*;
-
-  public class BatchExample {
-      public static void main(String[] args) {
-          AnthropicClient client = AnthropicOkHttpClient.fromEnv();
-
-          BatchCreateParams params = BatchCreateParams.builder()
-              .addRequest(BatchCreateParams.Request.builder()
-                  .customId("my-first-request")
-                  .params(BatchCreateParams.Request.Params.builder()
-                      .model(Model.CLAUDE_OPUS_4_0)
-                      .maxTokens(1024)
-                      .addUserMessage("Hello, world")
-                      .build())
-                  .build())
-              .addRequest(BatchCreateParams.Request.builder()
-                  .customId("my-second-request")
-                  .params(BatchCreateParams.Request.Params.builder()
-                      .model(Model.CLAUDE_OPUS_4_0)
-                      .maxTokens(1024)
-                      .addUserMessage("Hi again, friend")
-                      .build())
-                  .build())
-              .build();
-
-          MessageBatch messageBatch = client.messages().batches().create(params);
-
-          System.out.println(messageBatch);
-      }
-  }
-  ```
-</CodeGroup>
-
-In this example, two separate requests are batched together for asynchronous processing. Each request has a unique `custom_id` and contains the standard parameters you'd use for a Messages API call.
-
-<Tip>
-  **Test your batch requests with the Messages API**
-
-  Validation of the `params` object for each message request is performed asynchronously, and validation errors are returned when processing of the entire batch has ended. You can ensure that you are building your input correctly by verifying your request shape with the [Messages API](/en/api/messages) first.
-</Tip>
-
-When a batch is first created, the response will have a processing status of `in_progress`.
-
-```JSON JSON
+```json
 {
-  "id": "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
-  "type": "message_batch",
-  "processing_status": "in_progress",
-  "request_counts": {
-    "processing": 2,
-    "succeeded": 0,
-    "errored": 0,
-    "canceled": 0,
-    "expired": 0
-  },
-  "ended_at": null,
-  "created_at": "2024-09-24T18:37:24.100435Z",
-  "expires_at": "2024-09-25T18:37:24.100435Z",
-  "cancel_initiated_at": null,
-  "results_url": null
+  "agent_name": "my_anthropic_agent",
+  "batch_provider": "anthropic",
+  "model_name": "claude-3-5-sonnet-20241022",
+  "temperature": 0.1,
+  "max_tokens": 1024,
+  "anthropic_version": "2023-06-01",
+  "enable_prompt_caching": false,
+  "prompt": "Your system prompt here..."
 }
 ```
 
-### Tracking your batch
+### Configuration Fields
 
-The Message Batch's `processing_status` field indicates the stage of processing the batch is in. It starts as `in_progress`, then updates to `ended` once all the requests in the batch have finished processing, and results are ready. You can monitor the state of your batch by visiting the [Console](https://console.anthropic.com/settings/workspaces/default/batches), or using the [retrieval endpoint](/en/api/retrieving-message-batches):
+- **batch_provider**: Must be set to `"anthropic"`
+- **model_name**: Claude model to use (see supported models above)
+- **anthropic_version**: API version header (optional, defaults to "2023-06-01")
+- **enable_prompt_caching**: Enable prompt caching feature (optional, defaults to false)
 
-<CodeGroup>
-  ```bash Shell
-  curl https://api.anthropic.com/v1/messages/batches/msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d \
-   --header "x-api-key: $ANTHROPIC_API_KEY" \
-   --header "anthropic-version: 2023-06-01" \
-   | sed -E 's/.*"id":"([^"]+)".*"processing_status":"([^"]+)".*/Batch \1 processing status is \2/'
-  ```
+### Environment Variables
 
-  ```python Python
-  import anthropic
+Set your Anthropic API key as an environment variable:
 
-  client = anthropic.Anthropic()
-
-  message_batch = client.messages.batches.retrieve(
-      "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
-  )
-  print(f"Batch {message_batch.id} processing status is {message_batch.processing_status}")
-  ```
-
-  ```TypeScript TypeScript
-  import Anthropic from '@anthropic-ai/sdk';
-
-  const anthropic = new Anthropic();
-
-  const messageBatch = await anthropic.messages.batches.retrieve(
-    "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
-  );
-  console.log(`Batch ${messageBatch.id} processing status is ${messageBatch.processing_status}`);
-  ```
-
-  ```java Java
-  import com.anthropic.client.AnthropicClient;
-  import com.anthropic.client.okhttp.AnthropicOkHttpClient;
-  import com.anthropic.models.messages.batches.*;
-
-  public class BatchRetrieveExample {
-      public static void main(String[] args) {
-          AnthropicClient client = AnthropicOkHttpClient.fromEnv();
-
-          MessageBatch messageBatch = client.messages().batches().retrieve(
-                  BatchRetrieveParams.builder()
-                          .messageBatchId("msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d")
-                          .build()
-          );
-          System.out.printf("Batch %s processing status is %s%n",
-                  messageBatch.id(), messageBatch.processingStatus());
-      }
-  }
-  ```
-</CodeGroup>
-
-You can [poll](/en/api/messages-batch-examples#polling-for-message-batch-completion) this endpoint to know when processing has ended.
-
-### Retrieving batch results
-
-Once batch processing has ended, each Messages request in the batch will have a result. There are 4 result types:
-
-| Result Type | Description                                                                                                                                                                 |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `succeeded` | Request was successful. Includes the message result.                                                                                                                        |
-| `errored`   | Request encountered an error and a message was not created. Possible errors include invalid requests and internal server errors. You will not be billed for these requests. |
-| `canceled`  | User canceled the batch before this request could be sent to the model. You will not be billed for these requests.                                                          |
-| `expired`   | Batch reached its 24 hour expiration before this request could be sent to the model. You will not be billed for these requests.                                             |
-
-You will see an overview of your results with the batch's `request_counts`, which shows how many requests reached each of these four states.
-
-Results of the batch are available for download at the `results_url` property on the Message Batch, and if the organization permission allows, in the Console. Because of the potentially large size of the results, it's recommended to [stream results](/en/api/retrieving-message-batch-results) back rather than download them all at once.
-
-<CodeGroup>
-  ```bash Shell
-  #!/bin/sh
-  curl "https://api.anthropic.com/v1/messages/batches/msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d" \
-    --header "anthropic-version: 2023-06-01" \
-    --header "x-api-key: $ANTHROPIC_API_KEY" \
-    | grep -o '"results_url":[[:space:]]*"[^"]*"' \
-    | cut -d'"' -f4 \
-    | while read -r url; do
-      curl -s "$url" \
-        --header "anthropic-version: 2023-06-01" \
-        --header "x-api-key: $ANTHROPIC_API_KEY" \
-        | sed 's/}{/}\n{/g' \
-        | while IFS= read -r line
-      do
-        result_type=$(echo "$line" | sed -n 's/.*"result":[[:space:]]*{[[:space:]]*"type":[[:space:]]*"\([^"]*\)".*/\1/p')
-        custom_id=$(echo "$line" | sed -n 's/.*"custom_id":[[:space:]]*"\([^"]*\)".*/\1/p')
-        error_type=$(echo "$line" | sed -n 's/.*"error":[[:space:]]*{[[:space:]]*"type":[[:space:]]*"\([^"]*\)".*/\1/p')
-
-        case "$result_type" in
-          "succeeded")
-            echo "Success! $custom_id"
-            ;;
-          "errored")
-            if [ "$error_type" = "invalid_request" ]; then
-              # Request body must be fixed before re-sending request
-              echo "Validation error: $custom_id"
-            else
-              # Request can be retried directly
-              echo "Server error: $custom_id"
-            fi
-            ;;
-          "expired")
-            echo "Expired: $line"
-            ;;
-        esac
-      done
-    done
-
-  ```
-
-  ```python Python
-  import anthropic
-
-  client = anthropic.Anthropic()
-
-  # Stream results file in memory-efficient chunks, processing one at a time
-  for result in client.messages.batches.results(
-      "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d",
-  ):
-      match result.result.type:
-          case "succeeded":
-              print(f"Success! {result.custom_id}")
-          case "errored":
-              if result.result.error.type == "invalid_request":
-                  # Request body must be fixed before re-sending request
-                  print(f"Validation error {result.custom_id}")
-              else:
-                  # Request can be retried directly
-                  print(f"Server error {result.custom_id}")
-          case "expired":
-              print(f"Request expired {result.custom_id}")
-  ```
-
-  ```TypeScript TypeScript
-  import Anthropic from '@anthropic-ai/sdk';
-
-  const anthropic = new Anthropic();
-
-  // Stream results file in memory-efficient chunks, processing one at a time
-  for await (const result of await anthropic.messages.batches.results(
-      "msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d"
-  )) {
-    switch (result.result.type) {
-      case 'succeeded':
-        console.log(`Success! ${result.custom_id}`);
-        break;
-      case 'errored':
-        if (result.result.error.type == "invalid_request") {
-          // Request body must be fixed before re-sending request
-          console.log(`Validation error: ${result.custom_id}`);
-        } else {
-          // Request can be retried directly
-          console.log(`Server error: ${result.custom_id}`);
-        }
-        break;
-      case 'expired':
-        console.log(`Request expired: ${result.custom_id}`);
-        break;
-    }
-  }
-  ```
-
-  ```java Java
-  import com.anthropic.client.AnthropicClient;
-  import com.anthropic.client.okhttp.AnthropicOkHttpClient;
-  import com.anthropic.core.http.StreamResponse;
-  import com.anthropic.models.messages.batches.MessageBatchIndividualResponse;
-  import com.anthropic.models.messages.batches.BatchResultsParams;
-
-  public class BatchResultsExample {
-
-      public static void main(String[] args) {
-          AnthropicClient client = AnthropicOkHttpClient.fromEnv();
-
-          // Stream results file in memory-efficient chunks, processing one at a time
-          try (StreamResponse<MessageBatchIndividualResponse> streamResponse = client.messages()
-                  .batches()
-                  .resultsStreaming(
-                          BatchResultsParams.builder()
-                                  .messageBatchId("msgbatch_01HkcTjaV5uDC8jWR4ZsDV8d")
-                                  .build())) {
-
-              streamResponse.stream().forEach(result -> {
-                  if (result.result().isSucceeded()) {
-                      System.out.println("Success! " + result.customId());
-                  } else if (result.result().isErrored()) {
-                      if (result.result().asErrored().error().error().isInvalidRequestError()) {
-                          // Request body must be fixed before re-sending request
-                          System.out.println("Validation error: " + result.customId());
-                      } else {
-                          // Request can be retried directly
-                          System.out.println("Server error: " + result.customId());
-                      }
-                  } else if (result.result().isExpired()) {
-                      System.out.println("Request expired: " + result.customId());
-                  }
-              });
-          }
-      }
-  }
-  ```
-</CodeGroup>
-
-The results will be in `.jsonl` format, where each line is a valid JSON object representing the result of a single request in the Message Batch. For each streamed result, you can do something different depending on its `custom_id` and result type. Here is an example set of results:
-
-```JSON .jsonl file
-{"custom_id":"my-second-request","result":{"type":"succeeded","message":{"id":"msg_014VwiXbi91y3JMjcpyGBHX5","type":"message","role":"assistant","model":"claude-opus-4-20250514","content":[{"type":"text","text":"Hello again! It's nice to see you. How can I assist you today? Is there anything specific you'd like to chat about or any questions you have?"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":11,"output_tokens":36}}}}
-{"custom_id":"my-first-request","result":{"type":"succeeded","message":{"id":"msg_01FqfsLoHwgeFbguDgpz48m7","type":"message","role":"assistant","model":"claude-opus-4-20250514","content":[{"type":"text","text":"Hello! How can I assist you today? Feel free to ask me any questions or let me know if there's anything you'd like to chat about."}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":10,"output_tokens":34}}}}
+```bash
+export ANTHROPIC_API_KEY="your_anthropic_api_key_here"
 ```
 
-If your result has an error, its `result.error` will be set to our standard [error shape](https://docs.anthropic.com/en/api/errors#error-shapes).
+Alternatively, you can pass the API key directly in the configuration:
 
-<Tip>
-  **Batch results may not match input order**
+```json
+{
+  "api_key": "your_anthropic_api_key_here"
+}
+```
 
-  Batch results can be returned in any order, and may not match the ordering of requests when the batch was created. In the above example, the result for the second batch request is returned before the first. To correctly match results with their corresponding requests, always use the `custom_id` field.
-</Tip>
+## API Format Differences
 
-### Using prompt caching with Message Batches
+### Input Format
 
-The Message Batches API supports prompt caching, allowing you to potentially reduce costs and processing time for batch requests. The pricing discounts from prompt caching and Message Batches can stack, providing even greater cost savings when both features are used together. However, since batch requests are processed asynchronously and concurrently, cache hits are provided on a best-effort basis. Users typically experience cache hit rates ranging from 30% to 98%, depending on their traffic patterns.
+The Anthropic provider transforms our standard format to Anthropic's Message Batches API format:
 
-To maximize the likelihood of cache hits in your batch requests:
-
-1. Include identical `cache_control` blocks in every Message request within your batch
-2. Maintain a steady stream of requests to prevent cache entries from expiring after their 5-minute lifetime
-3. Structure your requests to share as much cached content as possible
-
-Example of implementing prompt caching in a batch:
-
-<CodeGroup>
-  ```bash Shell
-  curl https://api.anthropic.com/v1/messages/batches \
-       --header "x-api-key: $ANTHROPIC_API_KEY" \
-       --header "anthropic-version: 2023-06-01" \
-       --header "content-type: application/json" \
-       --data \
-  '{
-      "requests": [
-          {
-              "custom_id": "my-first-request",
-              "params": {
-                  "model": "claude-opus-4-20250514",
-                  "max_tokens": 1024,
-                  "system": [
-                      {
-                          "type": "text",
-                          "text": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-                      },
-                      {
-                          "type": "text",
-                          "text": "<the entire contents of Pride and Prejudice>",
-                          "cache_control": {"type": "ephemeral"}
-                      }
-                  ],
-                  "messages": [
-                      {"role": "user", "content": "Analyze the major themes in Pride and Prejudice."}
-                  ]
-              }
-          },
-          {
-              "custom_id": "my-second-request",
-              "params": {
-                  "model": "claude-opus-4-20250514",
-                  "max_tokens": 1024,
-                  "system": [
-                      {
-                          "type": "text",
-                          "text": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-                      },
-                      {
-                          "type": "text",
-                          "text": "<the entire contents of Pride and Prejudice>",
-                          "cache_control": {"type": "ephemeral"}
-                      }
-                  ],
-                  "messages": [
-                      {"role": "user", "content": "Write a summary of Pride and Prejudice."}
-                  ]
-              }
-          }
-      ]
-  }'
-  ```
-
-  ```python Python
-  import anthropic
-  from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
-  from anthropic.types.messages.batch_create_params import Request
-
-  client = anthropic.Anthropic()
-
-  message_batch = client.messages.batches.create(
-      requests=[
-          Request(
-              custom_id="my-first-request",
-              params=MessageCreateParamsNonStreaming(
-                  model="claude-opus-4-20250514",
-                  max_tokens=1024,
-                  system=[
-                      {
-                          "type": "text",
-                          "text": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-                      },
-                      {
-                          "type": "text",
-                          "text": "<the entire contents of Pride and Prejudice>",
-                          "cache_control": {"type": "ephemeral"}
-                      }
-                  ],
-                  messages=[{
-                      "role": "user",
-                      "content": "Analyze the major themes in Pride and Prejudice."
-                  }]
-              )
-          ),
-          Request(
-              custom_id="my-second-request",
-              params=MessageCreateParamsNonStreaming(
-                  model="claude-opus-4-20250514",
-                  max_tokens=1024,
-                  system=[
-                      {
-                          "type": "text",
-                          "text": "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-                      },
-                      {
-                          "type": "text",
-                          "text": "<the entire contents of Pride and Prejudice>",
-                          "cache_control": {"type": "ephemeral"}
-                      }
-                  ],
-                  messages=[{
-                      "role": "user",
-                      "content": "Write a summary of Pride and Prejudice."
-                  }]
-              )
-          )
-      ]
-  )
-  ```
-
-  ```typescript TypeScript
-  import Anthropic from '@anthropic-ai/sdk';
-
-  const anthropic = new Anthropic();
-
-  const messageBatch = await anthropic.messages.batches.create({
-    requests: [{
-      custom_id: "my-first-request",
-      params: {
-        model: "claude-opus-4-20250514",
-        max_tokens: 1024,
-        system: [
-          {
-            type: "text",
-            text: "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-          },
-          {
-            type: "text",
-            text: "<the entire contents of Pride and Prejudice>",
-            cache_control: {type: "ephemeral"}
-          }
-        ],
-        messages: [
-          {"role": "user", "content": "Analyze the major themes in Pride and Prejudice."}
-        ]
-      }
-    }, {
-      custom_id: "my-second-request",
-      params: {
-        model: "claude-opus-4-20250514",
-        max_tokens: 1024,
-        system: [
-          {
-            type: "text",
-            text: "You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n"
-          },
-          {
-            type: "text",
-            text: "<the entire contents of Pride and Prejudice>",
-            cache_control: {type: "ephemeral"}
-          }
-        ],
-        messages: [
-          {"role": "user", "content": "Write a summary of Pride and Prejudice."}
-        ]
-      }
-    }]
-  });
-  ```
-
-  ```java Java
-  import java.util.List;
-
-  import com.anthropic.client.AnthropicClient;
-  import com.anthropic.client.okhttp.AnthropicOkHttpClient;
-  import com.anthropic.models.messages.CacheControlEphemeral;
-  import com.anthropic.models.messages.Model;
-  import com.anthropic.models.messages.TextBlockParam;
-  import com.anthropic.models.messages.batches.*;
-
-  public class BatchExample {
-
-      public static void main(String[] args) {
-          AnthropicClient client = AnthropicOkHttpClient.fromEnv();
-
-          BatchCreateParams createParams = BatchCreateParams.builder()
-                  .addRequest(BatchCreateParams.Request.builder()
-                          .customId("my-first-request")
-                          .params(BatchCreateParams.Request.Params.builder()
-                                  .model(Model.CLAUDE_OPUS_4_0)
-                                  .maxTokens(1024)
-                                  .systemOfTextBlockParams(List.of(
-                                          TextBlockParam.builder()
-                                                  .text("You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n")
-                                                  .build(),
-                                          TextBlockParam.builder()
-                                                  .text("<the entire contents of Pride and Prejudice>")
-                                                  .cacheControl(CacheControlEphemeral.builder().build())
-                                                  .build()
-                                  ))
-                                  .addUserMessage("Analyze the major themes in Pride and Prejudice.")
-                                  .build())
-                          .build())
-                  .addRequest(BatchCreateParams.Request.builder()
-                          .customId("my-second-request")
-                          .params(BatchCreateParams.Request.Params.builder()
-                                  .model(Model.CLAUDE_OPUS_4_0)
-                                  .maxTokens(1024)
-                                  .systemOfTextBlockParams(List.of(
-                                          TextBlockParam.builder()
-                                                  .text("You are an AI assistant tasked with analyzing literary works. Your goal is to provide insightful commentary on themes, characters, and writing style.\n")
-                                                  .build(),
-                                          TextBlockParam.builder()
-                                                  .text("<the entire contents of Pride and Prejudice>")
-                                                  .cacheControl(CacheControlEphemeral.builder().build())
-                                                  .build()
-                                  ))
-                                  .addUserMessage("Write a summary of Pride and Prejudice.")
-                                  .build())
-                          .build())
-                  .build();
-
-          MessageBatch messageBatch = client.messages().batches().create(createParams);
-      }
+**Agent-Actions Format:**
+```json
+{
+  "target_id": "request_123",
+  "content": {
+    "user_input": "Process this data...",
+    "context": "Additional context"
   }
-  ```
-</CodeGroup>
+}
+```
 
-In this example, both requests in the batch include identical system messages and the full text of Pride and Prejudice marked with `cache_control` to increase the likelihood of cache hits.
+**Anthropic API Format:**
+```json
+{
+  "custom_id": "request_123",
+  "params": {
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Your system prompt here..."
+      },
+      {
+        "role": "user",
+        "content": "{\"user_input\": \"Process this data...\", \"context\": \"Additional context\"}"
+      }
+    ]
+  }
+}
+```
 
-### Best practices for effective batching
+### Output Format
 
-To get the most out of the Batches API:
+**Anthropic API Response:**
+```json
+{
+  "custom_id": "request_123",
+  "result": {
+    "type": "succeeded",
+    "message": {
+      "content": [{"type": "text", "text": "Response content"}],
+      "role": "assistant",
+      "model": "claude-3-5-sonnet-20241022",
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 150,
+        "output_tokens": 75
+      }
+    }
+  }
+}
+```
 
-* Monitor batch processing status regularly and implement appropriate retry logic for failed requests.
-* Use meaningful `custom_id` values to easily match results with requests, since order is not guaranteed.
-* Consider breaking very large datasets into multiple batches for better manageability.
-* Dry run a single request shape with the Messages API to avoid validation errors.
+**Transformed to BatchResult:**
+```python
+BatchResult(
+    custom_id="request_123",
+    content="Response content",  # or parsed JSON if structured
+    success=True,
+    error=None,
+    metadata={
+        "model": "claude-3-5-sonnet-20241022",
+        "stop_reason": "end_turn",
+        "anthropic_version": "2023-06-01",
+        "result_type": "succeeded"
+    },
+    usage={
+        "input_tokens": 150,
+        "output_tokens": 75
+    }
+)
+```
 
-### Troubleshooting common issues
+## Usage Examples
 
-If experiencing unexpected behavior:
+### Basic Batch Processing
 
-* Verify that the total batch request size doesn't exceed 256 MB. If the request size is too large, you may get a 413 `request_too_large` error.
-* Check that you're using [supported models](#supported-models) for all requests in the batch.
-* Ensure each request in the batch has a unique `custom_id`.
-* Ensure that it has been less than 29 days since batch `created_at` (not processing `ended_at`) time. If over 29 days have passed, results will no longer be viewable.
-* Confirm that the batch has not been canceled.
+```python
+from agent_actions.providers.factory import BatchProviderFactory
+from agent_actions.providers.base import BatchTask
+import os
 
-Note that the failure of one request in a batch does not affect the processing of other requests.
+# Set up API key
+os.environ["ANTHROPIC_API_KEY"] = "your_api_key"
 
-***
+# Create provider
+provider = BatchProviderFactory.create_provider("anthropic")
 
-## Batch storage and privacy
+# Prepare data
+data = [
+    {
+        "target_id": "task_1",
+        "content": {"text": "Analyze this sentiment: I love this product!"}
+    },
+    {
+        "target_id": "task_2", 
+        "content": {"text": "Analyze this sentiment: This is terrible."}
+    }
+]
 
-* **Workspace isolation**: Batches are isolated within the Workspace they are created in. They can only be accessed by API keys associated with that Workspace, or users with permission to view Workspace batches in the Console.
+# Agent configuration
+agent_config = {
+    "model_name": "claude-3-5-sonnet-20241022",
+    "prompt": "Analyze the sentiment of the following text and respond with 'positive', 'negative', or 'neutral':",
+    "temperature": 0.1,
+    "max_tokens": 50
+}
 
-* **Result availability**: Batch results are available for 29 days after the batch is created, allowing ample time for retrieval and processing.
+# Submit batch
+tasks = provider.prepare_tasks(data, agent_config)
+batch_id = provider.submit_batch(tasks, "sentiment_analysis_batch")
 
-***
+# Monitor status
+status = provider.check_status(batch_id)
+print(f"Batch status: {status}")
 
-## FAQ
+# Retrieve results when completed
+if status == "completed":
+    results = provider.retrieve_results(batch_id)
+    for result in results:
+        print(f"ID: {result.custom_id}, Result: {result.content}")
+```
 
-<AccordionGroup>
-  <Accordion title="How long does it take for a batch to process?">
-    Batches may take up to 24 hours for processing, but many will finish sooner. Actual processing time depends on the size of the batch, current demand, and your request volume. It is possible for a batch to expire and not complete within 24 hours.
-  </Accordion>
+### With Prompt Caching
 
-  <Accordion title="Is the Batches API available for all models?">
-    See [above](#supported-models) for the list of supported models.
-  </Accordion>
+```python
+# Enable prompt caching for large system prompts
+config = {
+    "enable_prompt_caching": True,
+    "anthropic_version": "2023-06-01"
+}
 
-  <Accordion title="Can I use the Message Batches API with other API features?">
-    Yes, the Message Batches API supports all features available in the Messages API, including beta features. However, streaming is not supported for batch requests.
-  </Accordion>
+provider = BatchProviderFactory.create_provider("anthropic", config)
+```
 
-  <Accordion title="How does the Message Batches API affect pricing?">
-    The Message Batches API offers a 50% discount on all usage compared to standard API prices. This applies to input tokens, output tokens, and any special tokens. For more on pricing, visit our [pricing page](https://www.anthropic.com/pricing#anthropic-api).
-  </Accordion>
+### Structured Output
 
-  <Accordion title="Can I update a batch after it's been submitted?">
-    No, once a batch has been submitted, it cannot be modified. If you need to make changes, you should cancel the current batch and submit a new one. Note that cancellation may not take immediate effect.
-  </Accordion>
+```python
+agent_config = {
+    "model_name": "claude-3-5-sonnet-20241022",
+    "prompt": """Analyze the following text and respond with a JSON object containing:
+    - sentiment: "positive", "negative", or "neutral"
+    - confidence: a number between 0 and 1
+    - key_phrases: array of important phrases""",
+    "temperature": 0.1,
+    "max_tokens": 200
+}
+```
 
-  <Accordion title="Are there Message Batches API rate limits and do they interact with the Messages API rate limits?">
-    The Message Batches API has HTTP requests-based rate limits in addition to limits on the number of requests in need of processing. See [Message Batches API rate limits](/en/api/rate-limits#message-batches-api). Usage of the Batches API does not affect rate limits in the Messages API.
-  </Accordion>
+## Error Handling
 
-  <Accordion title="How do I handle errors in my batch requests?">
-    When you retrieve the results, each request will have a `result` field indicating whether it `succeeded`, `errored`, was `canceled`, or `expired`. For `errored` results, additional error information will be provided. View the error response object in the [API reference](/en/api/creating-message-batches).
-  </Accordion>
+### Common Errors
 
-  <Accordion title="How does the Message Batches API handle privacy and data separation?">
-    The Message Batches API is designed with strong privacy and data separation measures:
+1. **Authentication Error**: Invalid API key
+```python
+# Error: "Anthropic authentication failed: Invalid API key"
+# Solution: Check your ANTHROPIC_API_KEY environment variable
+```
 
-    1. Batches and their results are isolated within the Workspace in which they were created. This means they can only be accessed by API keys from that same Workspace.
-    2. Each request within a batch is processed independently, with no data leakage between requests.
-    3. Results are only available for a limited time (29 days), and follow our [data retention policy](https://support.anthropic.com/en/articles/7996866-how-long-do-you-store-personal-data).
-    4. Downloading batch results in the Console can be disabled on the organization-level or on a per-workspace basis.
-  </Accordion>
+2. **Model Not Supported**: Using unsupported model
+```python
+# Error: "Model 'gpt-4' is not supported by Anthropic batch processing"
+# Solution: Use a supported Claude model
+```
 
-  <Accordion title="Can I use prompt caching in the Message Batches API?">
-    Yes, it is possible to use prompt caching with Message Batches API. However, because asynchronous batch requests can be processed concurrently and in any order, cache hits are provided on a best-effort basis.
-  </Accordion>
-</AccordionGroup>
+3. **API Rate Limits**: Too many requests
+```python
+# Error: "Anthropic API error during batch submission: Rate limit exceeded"
+# Solution: Implement retry logic or reduce batch size
+```
+
+### Error Response Format
+
+Failed batch items return structured error information:
+
+```python
+BatchResult(
+    custom_id="failed_task",
+    content=None,
+    success=False,
+    error="Input too long: maximum context length exceeded",
+    metadata={
+        "result_type": "failed",
+        "error_info": {"type": "input_too_long", "message": "..."}
+    }
+)
+```
+
+## Status Monitoring
+
+### Status Values
+
+- `in_progress`: Batch is being processed
+- `completed`: All tasks completed successfully
+- `failed`: Batch processing failed
+- `cancelled`: Batch was cancelled
+
+### Polling Example
+
+```python
+import time
+
+def wait_for_completion(provider, batch_id, max_wait=3600):
+    """Wait for batch completion with timeout."""
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait:
+        status = provider.check_status(batch_id)
+        print(f"Status: {status}")
+        
+        if status == "completed":
+            return provider.retrieve_results(batch_id)
+        elif status in ["failed", "cancelled"]:
+            raise RuntimeError(f"Batch {batch_id} {status}")
+        
+        time.sleep(30)  # Check every 30 seconds
+    
+    raise TimeoutError(f"Batch {batch_id} did not complete within {max_wait} seconds")
+```
+
+## Best Practices
+
+### 1. Batch Size Optimization
+- Start with smaller batches (50-100 tasks) to test your configuration
+- Gradually increase batch size based on your use case
+- Monitor for rate limits and adjust accordingly
+
+### 2. Prompt Design
+- Use clear, specific prompts for consistent results
+- For structured output, provide detailed format instructions
+- Test prompts with individual requests before batching
+
+### 3. Error Recovery
+- Always check batch status before retrieving results
+- Implement retry logic for failed submissions
+- Handle partial failures gracefully
+
+### 4. Resource Management
+- Store batch IDs for long-running jobs
+- Clean up output files periodically
+- Monitor API usage and costs
+
+## Integration with Existing Workflows
+
+The Anthropic provider seamlessly integrates with existing agent-actions workflows:
+
+```python
+# In your existing batch service code
+batch_service = BatchService()
+
+# The service will automatically use Anthropic if configured
+results = batch_service.run_batch_on_data(
+    data=your_data,
+    agent_config={
+        "batch_provider": "anthropic",  # This enables Anthropic
+        "model_name": "claude-3-5-sonnet-20241022",
+        # ... other config
+    }
+)
+```
+
+## Troubleshooting
+
+### Installation Issues
+```bash
+# Ensure anthropic package is installed
+pip install anthropic>=0.30.0
+
+# Verify installation
+python -c "import anthropic; print('Anthropic installed successfully')"
+```
+
+### API Key Issues
+```bash
+# Test API key
+export ANTHROPIC_API_KEY="your_key"
+python -c "
+import anthropic
+client = anthropic.Anthropic()
+print('API key valid')
+"
+```
+
+### Debug Mode
+Enable debug logging to troubleshoot issues:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+# Provider will now output detailed debug information
+```
+
+## Cost Considerations
+
+- Anthropic charges based on input and output tokens
+- Batch processing may have different pricing than real-time API calls
+- Use `max_tokens` to control output length and costs
+- Monitor usage through the Anthropic console
+
+## Migration from Other Providers
+
+When migrating from OpenAI or other providers:
+
+1. **Update agent configuration**: Change `batch_provider` to `"anthropic"`
+2. **Model names**: Update to Claude model names
+3. **Prompt adjustments**: Claude may interpret prompts differently
+4. **Output format**: Review and adjust result parsing if needed
+
+## Support and Resources
+
+- [Anthropic Message Batches API Documentation](https://docs.anthropic.com/en/docs/build-with-claude/message-batches)
+- [Claude Model Documentation](https://docs.anthropic.com/en/docs/models-overview)
+- [Anthropic Console](https://console.anthropic.com/)
+
+

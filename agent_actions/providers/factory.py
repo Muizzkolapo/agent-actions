@@ -9,6 +9,13 @@ from .base import BatchProvider
 from .openai_provider import OpenAIBatchProvider
 from .gemini_provider import GeminiBatchProvider
 
+# Import Anthropic provider with graceful fallback
+try:
+    from .anthropic_provider import AnthropicBatchProvider
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    ANTHROPIC_AVAILABLE = False
+
 
 class BatchProviderFactory:
     """
@@ -52,13 +59,42 @@ class BatchProviderFactory:
             except ImportError as e:
                 raise ValueError(f"Gemini provider not available: {e}")
             
+        elif provider_type == "anthropic":
+            if not ANTHROPIC_AVAILABLE:
+                raise ValueError(
+                    "Anthropic provider not available. Install with: pip install anthropic"
+                )
+            
+            # Get API key from config or environment
+            api_key = config.get("api_key") or os.getenv("CLAUDE_API_KEY")
+            
+            # Get Anthropic-specific config options
+            anthropic_version = config.get("anthropic_version")
+            enable_prompt_caching = config.get("enable_prompt_caching", False)
+            
+            try:
+                return AnthropicBatchProvider(
+                    api_key=api_key,
+                    version=anthropic_version,
+                    enable_prompt_caching=enable_prompt_caching
+                )
+            except ImportError as e:
+                raise ValueError(f"Anthropic provider not available: {e}")
+            
         else:
+            supported_providers = ["openai", "gemini"]
+            if ANTHROPIC_AVAILABLE:
+                supported_providers.append("anthropic")
+            
             raise ValueError(
                 f"Unknown provider type: {provider_type}. "
-                f"Supported providers: openai, gemini"
+                f"Supported providers: {', '.join(supported_providers)}"
             )
     
     @staticmethod
     def get_supported_providers() -> list[str]:
         """Get list of supported provider types."""
-        return ["openai", "gemini"]
+        providers = ["openai", "gemini"]
+        if ANTHROPIC_AVAILABLE:
+            providers.append("anthropic")
+        return providers

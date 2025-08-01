@@ -19,7 +19,10 @@ class AgentEntryDict(TypedDict, total=False):
     conditional_clause: Optional[str]
     ephemeral: Optional[bool]
     add_dispatch: Optional[bool]
-    batch_provider: Optional[str]  # Provider for batch processing: "openai" or "gemini"
+    batch_provider: Optional[str]  # Provider for batch processing: "openai", "gemini", or "anthropic"
+    # Anthropic-specific configuration options
+    anthropic_version: Optional[str]  # API version header for Anthropic requests (e.g., "2023-06-01")
+    enable_prompt_caching: Optional[bool]  # Enable Anthropic's prompt caching feature for improved performance
 
 # Alias for the list of agent entries under a pipeline name
 AgentConfigList = List[AgentEntryDict]
