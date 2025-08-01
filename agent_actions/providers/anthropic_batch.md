@@ -34,7 +34,7 @@ Configure an agent to use the Anthropic batch provider:
 ```json
 {
   "agent_name": "my_anthropic_agent",
-  "batch_provider": "anthropic",
+  "model_vendor": "anthropic",
   "model_name": "claude-3-5-sonnet-20241022",
   "temperature": 0.1,
   "max_tokens": 1024,
@@ -46,8 +46,10 @@ Configure an agent to use the Anthropic batch provider:
 
 ### Configuration Fields
 
-- **batch_provider**: Must be set to `"anthropic"`
+- **model_vendor**: Must be set to `"anthropic"` (replaces deprecated `batch_provider`)
 - **model_name**: Claude model to use (see supported models above)
+
+> **Note**: The `batch_provider` field is deprecated. Use `model_vendor` for unified provider configuration.
 - **anthropic_version**: API version header (optional, defaults to "2023-06-01")
 - **enable_prompt_caching**: Enable prompt caching feature (optional, defaults to false)
 
@@ -328,7 +330,7 @@ batch_service = BatchService()
 results = batch_service.run_batch_on_data(
     data=your_data,
     agent_config={
-        "batch_provider": "anthropic",  # This enables Anthropic
+        "model_vendor": "anthropic",  # Unified provider field
         "model_name": "claude-3-5-sonnet-20241022",
         # ... other config
     }
@@ -378,10 +380,11 @@ logging.basicConfig(level=logging.DEBUG)
 
 When migrating from OpenAI or other providers:
 
-1. **Update agent configuration**: Change `batch_provider` to `"anthropic"`
-2. **Model names**: Update to Claude model names
-3. **Prompt adjustments**: Claude may interpret prompts differently
-4. **Output format**: Review and adjust result parsing if needed
+1. **Update agent configuration**: Change `model_vendor` to `"anthropic"` (unified field)
+2. **Remove legacy fields**: Remove `batch_provider` if present (deprecated)
+3. **Model names**: Update to Claude model names
+4. **Prompt adjustments**: Claude may interpret prompts differently
+5. **Output format**: Review and adjust result parsing if needed
 
 ## Support and Resources
 

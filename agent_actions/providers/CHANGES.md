@@ -185,25 +185,81 @@ Different providers have different input/output formats, but we intercept and tr
 - **Migration path documented** with clear before/after examples
 - **Backward compatibility** assured during transition period
 
+## What Was Done (Phase 5 - Legacy File System Cleanup)
+
+### 1. Removed Global Batch File Dependencies
+- **Eliminated `.last_batch_id` Files**:
+  - Removed creation of global `{cwd}/batch/.last_batch_id` files
+  - Removed fallback reads from global files in `_get_batch_job_id_for_file()`
+  - Removed fallback reads from global files in `_get_last_batch_job_id()`
+  - Cleaned up commented legacy code
+
+- **Registry-Only Tracking**:
+  ```python
+  # Before: Mixed global + registry approach
+  global_job_id_file = Path.cwd() / "batch" / ".last_batch_id"
+  if global_job_id_file.exists():
+      with open(global_job_id_file, 'r') as f:
+          return f.read().strip()
+  
+  # After: Registry-only approach  
+  registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+  # All tracking through registry - no global files
+  ```
+
+- **Documentation Updates**:
+  - Updated batch README.md to emphasize registry-based system
+  - Removed references to legacy global file system
+  - Added multi-provider context to all examples
+  
+### 2. Enhanced Batch Architecture
+- **Per-Workflow Isolation**: Each workflow maintains its own batch registry
+- **No Global State**: Eliminated cross-workflow interference via global files  
+- **Provider Tracking**: Registry now includes provider information per job
+- **Better Debugging**: Clear separation between workflow-specific and legacy approaches
+
+### 3. Backward Compatibility Maintained
+- **CLI Commands Work**: `batch status` and `batch retrieve` still function
+- **Registry Fallback**: `_get_last_batch_job_id()` uses registry for auto-detection
+- **Existing Workflows**: No disruption to current batch processing workflows
+
 ## Configuration Migration
 
-### Before (Redundant)
+### Provider Consolidation (Before/After)
 ```yaml
+# Before (Redundant)
 agents:
   - agent_type: classifier
     model_vendor: "openai"      # ← Redundant
     batch_provider: "openai"    # ← Redundant  
     model_name: "gpt-4o-mini"
     run_mode: batch
-```
 
-### After (Clean)
-```yaml
+# After (Clean)
 agents:
   - agent_type: classifier
     model_vendor: "openai"      # ← Single source of truth
     model_name: "gpt-4o-mini"
     run_mode: batch
+```
+
+### Batch Tracking System (Before/After)
+```bash
+# Before (Global Files + Registry)
+project/
+├── batch/
+│   └── .last_batch_id          # ← Global tracking file
+└── workflows/
+    └── my_workflow/
+        └── batch/
+            └── .batch_registry.json
+
+# After (Registry-Only)  
+project/
+└── workflows/
+    └── my_workflow/
+        └── batch/
+            └── .batch_registry.json    # ← Only tracking system
 ```
 
 ## What Comes Next
@@ -277,23 +333,24 @@ No changes needed - BatchService defaults to OpenAI provider for backward compat
 ### For New Providers
 1. Implement the `BatchProvider` interface
 2. Add provider to the factory
-3. Update agent configuration with `batch_provider: your_provider`
+3. Update agent configuration with `model_vendor: your_provider`
 4. Test with existing workflows
 
 ## Implementation Summary
 
-### Current Status (Phase 3 Complete)
-The batch processing system now supports three major providers through a clean abstraction layer:
+### Current Status (Phase 5 Complete)
+The batch processing system now supports three major providers through a clean, registry-based architecture:
 
 - ✅ **OpenAI Batch Provider**: Original implementation with JSON mode support
 - ✅ **Gemini Batch Provider**: Fully implemented and tested
 - ✅ **Anthropic Batch Provider**: Complete with tool-based JSON mode
 - ✅ **Provider Factory**: Dynamic provider instantiation for all three
-- ✅ **BatchService Integration**: Multi-provider support with proper tracking
+- ✅ **BatchService Integration**: Multi-provider support with registry-only tracking
 - ✅ **Configuration System**: Unified `model_vendor` field (deprecated `batch_provider`)
 - ✅ **JSON Mode Support**: Structured output for all providers
+- ✅ **Registry-Based Tracking**: No global file dependencies, per-workflow isolation
 - ✅ **Error Handling**: Graceful dependency management and debugging
-- ✅ **Documentation**: Complete usage and migration guides
+- ✅ **Documentation**: Complete usage, migration, and architecture guides
 
 ### Usage
 Users can now specify different providers per agent with structured output:

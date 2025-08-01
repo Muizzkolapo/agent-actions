@@ -13,18 +13,20 @@ The Gemini Batch Provider allows you to process large volumes of data using Goog
 
 ## Configuration
 
-To use the Gemini provider, add `batch_provider: gemini` to your agent configuration:
+To use the Gemini provider, set `model_vendor: gemini` in your agent configuration:
 
 ```yaml
 agents:
   - agent_type: enrichment
     name: content_enricher
     model_name: gemini-2.5-flash
-    batch_provider: gemini  # Use Gemini instead of OpenAI
+    model_vendor: gemini  # Unified provider field
     run_mode: batch
     prompt: $enrich_content
     schema_name: enriched_content
 ```
+
+> **Note**: The `batch_provider` field is deprecated. Use `model_vendor` instead for unified provider configuration.
 
 ## Installation
 
@@ -48,7 +50,7 @@ Alternatively, you can specify it in the agent configuration:
 agents:
   - agent_type: enrichment
     google_api_key: your-api-key-here  # Not recommended for production
-    batch_provider: gemini
+    model_vendor: gemini
     # ... other config
 ```
 
@@ -72,7 +74,7 @@ agents:
   - agent_type: analyzer
     name: gemini_analyzer
     model_name: gemini-2.5-flash
-    batch_provider: gemini
+    model_vendor: gemini
     run_mode: batch
     prompt: |
       Analyze the following data and extract key insights:
@@ -110,7 +112,7 @@ agent-actions batch --batch_continue data_enrichment
 
 To migrate existing workflows from OpenAI to Gemini:
 
-1. Add `batch_provider: gemini` to your agent configuration
+1. Add `model_vendor: gemini` to your agent configuration
 2. Update `model_name` to a supported Gemini model
 3. Ensure your prompts work well with Gemini (they're generally compatible)
 4. Set up Google API authentication
@@ -155,12 +157,12 @@ workflow: multi_provider_pipeline
 agents:
   - agent_type: classifier
     model_name: gpt-4o-mini
-    batch_provider: openai  # Use OpenAI for classification
+    model_vendor: openai  # Use OpenAI for classification
     run_mode: batch
     
   - agent_type: enrichment
     model_name: gemini-2.5-flash
-    batch_provider: gemini  # Use Gemini for enrichment
+    model_vendor: gemini  # Use Gemini for enrichment
     run_mode: batch
     dependencies: [classifier]
 ```
