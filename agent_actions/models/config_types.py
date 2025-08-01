@@ -19,6 +19,7 @@ class AgentEntryDict(TypedDict, total=False):
     conditional_clause: Optional[str]
     ephemeral: Optional[bool]
     add_dispatch: Optional[bool]
+    batch_provider: Optional[str]  # Provider for batch processing: "openai" or "gemini"
 
 # Alias for the list of agent entries under a pipeline name
 AgentConfigList = List[AgentEntryDict]

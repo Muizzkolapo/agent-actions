@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 import yaml
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.loaders.data_loaders.batch_data_loader import BatchDataLoader
@@ -25,6 +25,7 @@ from agent_actions.common.utils.processor_utils import ProcessorUtils
 from ..core.dependency_injection import registry
 from ..providers.base import BatchProvider, BatchTask, BatchResult
 from ..providers.openai_provider import OpenAIBatchProvider
+from ..providers.factory import BatchProviderFactory
 
 @registry.register_service("batch_service")
 class BatchService:
@@ -124,7 +125,50 @@ class BatchService:
         self.provider = provider or OpenAIBatchProvider()
         self.context_map = {}
         self.side_collection = []
+        # Cache providers by type to avoid recreating them
+        self._provider_cache = {}
 
+    def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
+        """
+        Get the appropriate provider based on agent configuration.
+        
+        Args:
+            agent_config: Agent configuration dictionary
+            
+        Returns:
+            BatchProvider instance for the specified provider type
+        """
+        # Get provider type from config, default to 'openai' for backward compatibility
+        provider_type = agent_config.get('batch_provider', 'openai').lower()
+        
+        # Check cache first
+        if provider_type in self._provider_cache:
+            return self._provider_cache[provider_type]
+        
+        # Create new provider instance
+        try:
+            # Extract provider-specific config if needed
+            provider_config = {}
+            if provider_type == 'gemini' and agent_config.get('google_api_key'):
+                provider_config['api_key'] = agent_config['google_api_key']
+            elif provider_type == 'openai' and agent_config.get('openai_api_key'):
+                provider_config['api_key'] = agent_config['openai_api_key']
+            
+            provider = BatchProviderFactory.create_provider(provider_type, provider_config)
+            
+            # Validate that the provider supports the requested model
+            is_valid, error_msg = provider.validate_config(agent_config)
+            if not is_valid:
+                raise ValueError(error_msg)
+            
+            # Cache the provider
+            self._provider_cache[provider_type] = provider
+            
+            return provider
+            
+        except Exception as e:
+            raise RuntimeError(f"Failed to create batch provider '{provider_type}': {e}")
+    
     @staticmethod
     def _separate_side_output(items):
         """Split processed items into main and side output collections."""
@@ -188,7 +232,7 @@ class BatchService:
 
         return None
 
-    def _prepare_schema(self, agent_config):
+    def _prepare_schema(self, agent_config, provider=None):
         """Load and prepare schema from config"""
         schema_name = agent_config.get(SCHEMA_NAME_KEY)
         if not schema_name:
@@ -196,10 +240,15 @@ class BatchService:
         
         base_schema = SchemaLoader.load_schema(schema_name)
         # Use provider to compile schema to its specific format
-        return self.provider.compile_schema(base_schema)
+        if provider is None:
+            provider = self.provider
+        return provider.compile_schema(base_schema)
 
     def prepare_batch_tasks_from_data(self, agent_config, data):
-        schema = self._prepare_schema(agent_config)
+        # Get the appropriate provider for this agent configuration
+        provider = self._get_provider_for_config(agent_config)
+        
+        schema = self._prepare_schema(agent_config, provider)
         if not schema:
             raise ValueError("Schema is required for batch processing")
             
@@ -264,7 +313,7 @@ class BatchService:
         provider_config["compiled_schema"] = schema
         
         # Use provider to prepare tasks
-        tasks = self.provider.prepare_tasks(prepared_data, provider_config)
+        tasks = provider.prepare_tasks(prepared_data, provider_config)
         
         return tasks
 
@@ -288,14 +337,18 @@ class BatchService:
         self._save_context_map(self.context_map, agent_config, output_directory, batch_name)
 
         try:
+            # Get the appropriate provider for this agent configuration
+            provider = self._get_provider_for_config(agent_config)
+            provider_type = agent_config.get('batch_provider', 'openai').lower()
+            
             # Use provider to submit the batch
-            batch_id = self.provider.submit_batch(tasks, batch_name, output_directory)
-            self._save_batch_job_id(batch_id, output_directory, batch_name)
+            batch_id = provider.submit_batch(tasks, batch_name, output_directory)
+            self._save_batch_job_id(batch_id, output_directory, batch_name, provider_type)
             return batch_id
         except Exception as e:
             raise RuntimeError(f"Error submitting batch job: {e}")
 
-    def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None):
+    def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None, provider_type: str = None):
         """Save batch job ID to batch registry."""
         if output_directory:
             local_batch_dir = Path(output_directory) / "batch"
@@ -316,7 +369,8 @@ class BatchService:
             registry[file_name or 'default'] = {
                 'batch_id': batch_id,
                 'status': 'submitted',
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'provider': provider_type or 'openai'  # Store provider type
             }
             
             # Save updated registry
@@ -425,7 +479,7 @@ class BatchService:
                     continue
                     
                 try:
-                    actual_status = self.check_status(batch_id)
+                    actual_status = self.check_status(batch_id, str(output_directory))
                     # Update registry with actual status
                     if actual_status != entry.get('status'):
                         entry['status'] = actual_status
@@ -473,7 +527,7 @@ class BatchService:
                     continue
                     
                 try:
-                    actual_status = self.check_status(batch_id)
+                    actual_status = self.check_status(batch_id, str(output_directory))
                     if actual_status == 'completed':
                         completed_count += 1
                     elif actual_status in ['failed', 'cancelled']:
@@ -526,7 +580,7 @@ class BatchService:
             return None
         
         try:
-            status = self.check_status(batch_id)
+            status = self.check_status(batch_id, output_directory)
             # Update registry with current status
             if output_directory and file_name:
                 self._update_batch_registry_status(output_directory, file_name, batch_id, status)
@@ -540,9 +594,44 @@ class BatchService:
             # If we can't check status, assume we can proceed
             return None
 
-    def check_status(self, batch_id: str):
+    def _get_provider_for_batch_id(self, batch_id: str, output_directory: str = None) -> BatchProvider:
+        """
+        Get the provider that was used for a specific batch ID.
+        
+        Args:
+            batch_id: The batch job ID
+            output_directory: Output directory to look for registry
+            
+        Returns:
+            BatchProvider instance
+        """
+        # First check the registry if we have output directory
+        if output_directory:
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if registry_file.exists():
+                try:
+                    with open(registry_file, 'r') as f:
+                        registry = json.load(f)
+                    
+                    # Look for the batch ID in registry entries
+                    for entry in registry.values():
+                        if entry.get('batch_id') == batch_id:
+                            provider_type = entry.get('provider', 'openai')
+                            if provider_type in self._provider_cache:
+                                return self._provider_cache[provider_type]
+                            else:
+                                # Create provider if not cached
+                                return BatchProviderFactory.create_provider(provider_type)
+                except Exception:
+                    pass
+        
+        # Fallback to default provider
+        return self.provider
+    
+    def check_status(self, batch_id: str, output_directory: str = None):
         try:
-            return self.provider.check_status(batch_id)
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
+            return provider.check_status(batch_id)
         except Exception as e:
             raise RuntimeError(f"Error checking batch status: {e}")
 
@@ -550,8 +639,11 @@ class BatchService:
     # Muizzchange
     def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
         try:
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_dir)
+            
             # Use provider to get results
-            batch_results = self.provider.retrieve_results(batch_id, output_dir)
+            batch_results = provider.retrieve_results(batch_id, output_dir)
             
             # The provider already saves raw results, but we need to maintain
             # compatibility with the existing interface that returns a file path
@@ -600,13 +692,16 @@ class BatchService:
             file_path: The original file path being processed
         """
         try:
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
+            
             # Check status first
-            status = self.provider.check_status(batch_id)
+            status = provider.check_status(batch_id)
             if status != 'completed':
                 raise ValueError(f"Batch job {batch_id} is not completed. Status: {status}")
             
             # Use provider to get results - already transformed to BatchResult format
-            batch_results = self.provider.retrieve_results(batch_id, output_directory)
+            batch_results = provider.retrieve_results(batch_id, output_directory)
             
             batch_dir = Path(output_directory) / "batch"
             context_map, side_collection = self._load_context_map(batch_dir)
@@ -815,7 +910,7 @@ class BatchService:
                     batch_id = placeholder_data['batch_job_id']
                     
                     # Check if batch is completed
-                    if self.check_status(batch_id) == 'completed':
+                    if self.check_status(batch_id, str(output_directory)) == 'completed':
                         # Process the batch results
                         original_file_path = placeholder_file
                         processed_file = self.process_batch_results_to_workflow_output(
@@ -838,8 +933,11 @@ class BatchService:
         Uses the locally saved results file from retrieve_results.
         """
         try:
+            # Get the appropriate provider for this batch ID
+            provider = self._get_provider_for_batch_id(batch_id, output_directory)
+            
             # Use provider to get results - already transformed to BatchResult format
-            batch_results = self.provider.retrieve_results(batch_id, output_directory)
+            batch_results = provider.retrieve_results(batch_id, output_directory)
             
             print(f"Retrieved {len(batch_results)} batch results")
             
@@ -922,7 +1020,7 @@ class BatchService:
                     
                 # Check if batch is completed
                 try:
-                    batch_status = self.check_status(batch_id)
+                    batch_status = self.check_status(batch_id, str(output_directory))
                     if batch_status != 'completed':
                         print(f"Batch {batch_id} for {file_name} is not completed: {batch_status}")
                         continue
@@ -932,8 +1030,11 @@ class BatchService:
                 
                 # Get batch results for this specific file
                 try:
+                    # Get the appropriate provider for this batch ID
+                    provider = self._get_provider_for_batch_id(batch_id, output_directory)
+                    
                     # Use provider to get results - already transformed to BatchResult format
-                    batch_results = self.provider.retrieve_results(batch_id, output_directory)
+                    batch_results = provider.retrieve_results(batch_id, output_directory)
                     
                     if not batch_results:
                         print(f"No results found for batch {batch_id} ({file_name})")
