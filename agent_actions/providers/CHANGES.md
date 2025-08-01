@@ -73,7 +73,8 @@ Different providers have different input/output formats, but we intercept and tr
   - Added `_get_provider_for_batch_id()` method to retrieve correct provider for existing jobs
 
 ### 5. Configuration System Updates
-- **Added `batch_provider` field** to `AgentEntryDict` configuration type
+- **Consolidated provider configuration** - now uses `model_vendor` field for both regular and batch processing
+- **Deprecated `batch_provider` field** - maintained for backward compatibility with deprecation warnings
 - **Updated project dependencies** to include `google-genai` package
 - **Environment variable support** for API keys (GOOGLE_API_KEY, OPENAI_API_KEY)
 
@@ -152,6 +153,59 @@ Different providers have different input/output formats, but we intercept and tr
 - **Response Parsing**: Tracks whether structured or text responses are received
 - **Error Diagnostics**: Clear messages for troubleshooting schema issues
 
+## What Was Done (Phase 4 - Configuration Consolidation)
+
+### 1. Consolidated Provider Configuration Fields
+- **Unified `model_vendor` Field**: 
+  - Consolidated `model_vendor` and `batch_provider` fields to eliminate redundancy
+  - `model_vendor` now controls both regular and batch processing provider selection
+  - Supports all provider types: `"openai"`, `"gemini"`, `"anthropic"`, `"groq"`, `"tool"`
+
+- **Backward Compatibility**: 
+  ```python
+  # BatchService now prioritizes model_vendor, falls back to batch_provider
+  provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai'))
+  
+  # Deprecation warning logged when batch_provider is used without model_vendor
+  if agent_config.get('batch_provider') and not agent_config.get('model_vendor'):
+      print("⚠️ DEPRECATION WARNING: 'batch_provider' is deprecated. Use 'model_vendor' instead.")
+  ```
+
+- **Enhanced Validation**:
+  - Added validation to prevent `'tool'` vendor from being used in batch mode
+  - Clear error messages guide users to valid batch providers
+
+### 2. Configuration Type Updates
+- **Removed `batch_provider` field** from `AgentEntryDict` configuration type
+- **Enhanced `model_vendor` documentation** to reflect its expanded role
+- **Maintained all Anthropic-specific fields** (`anthropic_version`, `enable_prompt_caching`)
+
+### 3. Documentation Updates
+- **Updated all examples** to use `model_vendor` instead of `batch_provider`
+- **Migration path documented** with clear before/after examples
+- **Backward compatibility** assured during transition period
+
+## Configuration Migration
+
+### Before (Redundant)
+```yaml
+agents:
+  - agent_type: classifier
+    model_vendor: "openai"      # ← Redundant
+    batch_provider: "openai"    # ← Redundant  
+    model_name: "gpt-4o-mini"
+    run_mode: batch
+```
+
+### After (Clean)
+```yaml
+agents:
+  - agent_type: classifier
+    model_vendor: "openai"      # ← Single source of truth
+    model_name: "gpt-4o-mini"
+    run_mode: batch
+```
+
 ## What Comes Next
 
 ### 1. Additional Providers
@@ -178,19 +232,19 @@ Configuration example:
 batch_agent_1:
   - agent_type: enrichment
     run_mode: batch
-    batch_provider: openai
+    model_vendor: openai
     model_name: "gpt-4o-mini"
     
 batch_agent_2:
   - agent_type: classification
     run_mode: batch
-    batch_provider: anthropic  # Different provider
+    model_vendor: anthropic  # Different provider
     model_name: "claude-3-haiku"
     
 batch_agent_3:
   - agent_type: summarization
     run_mode: batch
-    batch_provider: openai
+    model_vendor: openai
     model_name: "gpt-3.5-turbo"
 ```
 
@@ -236,7 +290,7 @@ The batch processing system now supports three major providers through a clean a
 - ✅ **Anthropic Batch Provider**: Complete with tool-based JSON mode
 - ✅ **Provider Factory**: Dynamic provider instantiation for all three
 - ✅ **BatchService Integration**: Multi-provider support with proper tracking
-- ✅ **Configuration System**: `batch_provider` field support
+- ✅ **Configuration System**: Unified `model_vendor` field (deprecated `batch_provider`)
 - ✅ **JSON Mode Support**: Structured output for all providers
 - ✅ **Error Handling**: Graceful dependency management and debugging
 - ✅ **Documentation**: Complete usage and migration guides
@@ -249,14 +303,14 @@ workflow: multi_provider_example
 agents:
   - agent_type: classifier
     model_name: gpt-4o-mini
-    batch_provider: openai
+    model_vendor: openai
     run_mode: batch
     json_mode: true
     schema_name: ClassificationSchema
     
   - agent_type: enrichment  
     model_name: gemini-2.5-flash
-    batch_provider: gemini
+    model_vendor: gemini
     run_mode: batch
     json_mode: true
     schema_name: EnrichmentSchema
@@ -264,7 +318,7 @@ agents:
     
   - agent_type: analyzer
     model_name: claude-3-5-sonnet-20241022
-    batch_provider: anthropic
+    model_vendor: anthropic
     run_mode: batch
     json_mode: true
     schema_name: AnalysisSchema

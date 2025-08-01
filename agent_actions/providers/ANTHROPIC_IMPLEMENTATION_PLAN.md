@@ -467,7 +467,7 @@ agents:
   - agent_type: analysis
     name: claude_analyzer
     model_name: claude-sonnet-4-20250514
-    batch_provider: anthropic
+    model_vendor: anthropic
     run_mode: batch
     prompt: $analyze_data
     schema_name: analysis_results
@@ -481,7 +481,7 @@ agents:
   - agent_type: literary_analysis
     name: claude_literature
     model_name: claude-opus-4-20250514
-    batch_provider: anthropic
+    model_vendor: anthropic
     run_mode: batch
     prompt: $literary_analysis_with_large_context
     enable_prompt_caching: true  # Enable caching for large prompts
@@ -495,19 +495,19 @@ workflow: comprehensive_analysis
 agents:
   - agent_type: initial_classification
     model_name: gpt-4o-mini
-    batch_provider: openai
+    model_vendor: openai
     run_mode: batch
     
   - agent_type: deep_analysis
     model_name: claude-opus-4-20250514
-    batch_provider: anthropic
+    model_vendor: anthropic
     run_mode: batch
     dependencies: [initial_classification]
     enable_prompt_caching: true
     
   - agent_type: final_summary
     model_name: gemini-2.5-flash
-    batch_provider: gemini
+    model_vendor: gemini
     run_mode: batch
     dependencies: [deep_analysis]
 ```
@@ -595,7 +595,7 @@ Create `ANTHROPIC_BATCH.md` with:
 ## 10. Success Criteria
 
 ### 10.1 Functional Requirements
-- ✅ Users can specify `batch_provider: anthropic` in configuration
+- ✅ Users can specify `model_vendor: anthropic` in configuration (replaces deprecated `batch_provider`)
 - ✅ All BatchProvider interface methods implemented correctly
 - ✅ Compatible with existing BatchService architecture
 - ✅ Proper error handling and status reporting

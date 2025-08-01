@@ -1,1 +1,0 @@
-{"custom_id":"315ffbbf-3034-45bf-8a0e-dfc4b9cdd064","result":{"type":"errored","error":{"type":"error","error":{"details":null,"type":"invalid_request_error","message":"messages: Unexpected role \"system\". The Messages API accepts a top-level `system` parameter, not \"system\" as an input message role."}}}}

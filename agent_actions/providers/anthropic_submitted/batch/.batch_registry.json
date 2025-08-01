@@ -1,8 +1,0 @@
-{
-  "demo.json": {
-    "batch_id": "msgbatch_01D4vJECqwdBZacR8paz9KDo",
-    "status": "submitted",
-    "timestamp": "2025-08-01T10:40:09.857751",
-    "provider": "anthropic"
-  }
-}

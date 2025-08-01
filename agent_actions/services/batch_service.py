@@ -138,8 +138,16 @@ class BatchService:
         Returns:
             BatchProvider instance for the specified provider type
         """
-        # Get provider type from config, default to 'openai' for backward compatibility
-        provider_type = agent_config.get('batch_provider', 'openai').lower()
+        # Get provider type from config - prioritize model_vendor, fallback to batch_provider for backward compatibility
+        provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
+        
+        # Log deprecation warning if using batch_provider without model_vendor
+        if agent_config.get('batch_provider') and not agent_config.get('model_vendor'):
+            print(f"⚠️ DEPRECATION WARNING: 'batch_provider' is deprecated. Use 'model_vendor' instead. Found: batch_provider='{agent_config.get('batch_provider')}'")
+        
+        # Handle special case: 'tool' vendor doesn't support batch processing
+        if provider_type == 'tool':
+            raise ValueError("'tool' vendor does not support batch processing. Use 'openai', 'gemini', or 'anthropic' for batch mode.")
         
         # Check cache first
         if provider_type in self._provider_cache:
@@ -339,7 +347,7 @@ class BatchService:
         try:
             # Get the appropriate provider for this agent configuration
             provider = self._get_provider_for_config(agent_config)
-            provider_type = agent_config.get('batch_provider', 'openai').lower()
+            provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
             
             # Use provider to submit the batch
             batch_id = provider.submit_batch(tasks, batch_name, output_directory)
@@ -378,11 +386,11 @@ class BatchService:
                 json.dump(registry, f, indent=2)
         
         # Save to global batch directory (for backward compatibility)
-        global_batch_dir = Path.cwd() / "batch"
-        ensure_directory_exists(global_batch_dir)
-        global_job_id_file = global_batch_dir / ".last_batch_id"
-        with open(global_job_id_file, 'w') as f:
-            f.write(batch_id)
+        #global_batch_dir = Path.cwd() / "batch"
+        #ensure_directory_exists(global_batch_dir)
+        #global_job_id_file = global_batch_dir / ".last_batch_id"
+        #with open(global_job_id_file, 'w') as f:
+        #    f.write(batch_id)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
         """Persist original context data for side_collection processing."""
