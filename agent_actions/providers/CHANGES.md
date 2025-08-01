@@ -391,6 +391,40 @@ Each provider handles structured output differently:
 
 All providers return consistent `BatchResult` objects with structured content.
 
+## What Was Done (Phase 6 - Anthropic Tool Use Fix)
+
+### 1. Fixed Tool Use Response Parsing
+- **Issue**: Tool use responses with non-standard names (e.g., 'quiz') were being converted to string representations like `"ToolUseBlock(id='...', input={...})"`
+- **Root Cause**: The parser only accepted tools with names ending in '_response' or exactly matching 'json_response'
+- **Fix**: Removed restrictive tool name checking to accept ALL tool use blocks
+
+### 2. Implementation Changes
+- **Updated Tool Name Matching** (`anthropic_provider.py`, lines 207-219):
+  ```python
+  # Before: Only accepted tools ending with '_response'
+  if tool_name and ('_response' in tool_name or tool_name == 'json_response'):
+  
+  # After: Accept any tool use block
+  if hasattr(content_block, 'input'):
+      tool_use_content = content_block.input
+  ```
+
+- **Improved Fallback Handling** (lines 249-280):
+  - Added detection for uncaught ToolUseBlock objects
+  - Class name checking as last resort
+  - Proper extraction of input data from any ToolUseBlock
+
+- **Enhanced Debug Logging** (lines 236-248):
+  - Log content type and structure
+  - Show dictionary keys for debugging
+  - Track JSON parsing success/failure
+
+### 3. Results
+- Tool use blocks with ANY name are now properly parsed
+- Structured data is correctly extracted from tool inputs
+- No more string representations of SDK objects in responses
+- Maintains backward compatibility with existing '_response' tools
+
 ## Future Considerations
 
 ### Performance Optimizations

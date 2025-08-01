@@ -206,21 +206,17 @@ class AnthropicBatchProvider(BatchProvider):
                     # Handle tool use blocks
                     if hasattr(content_block, 'type') and content_block.type == 'tool_use':
                         tool_name = getattr(content_block, 'name', '')
-                        # Check for any tool ending with '_response' (our generated tools)
-                        if tool_name and ('_response' in tool_name or tool_name == 'json_response'):
-                            # Extract tool input as structured JSON
-                            if hasattr(content_block, 'input'):
-                                tool_use_content = content_block.input
-                                if hasattr(tool_use_content, 'model_dump'):
-                                    tool_use_content = tool_use_content.model_dump()
-                                print(f"🔧 Found tool use: {tool_name}")
+                        # Extract tool input from ANY tool use block (not just _response ones)
+                        if hasattr(content_block, 'input'):
+                            tool_use_content = content_block.input
+                            if hasattr(tool_use_content, 'model_dump'):
+                                tool_use_content = tool_use_content.model_dump()
+                            print(f"🔧 Found tool use: {tool_name}")
                     elif isinstance(content_block, dict) and content_block.get('type') == 'tool_use':
                         tool_name = content_block.get('name', '')
-                        # Check for any tool ending with '_response' (our generated tools)
-                        if tool_name and ('_response' in tool_name or tool_name == 'json_response'):
-                            # Extract tool input as structured JSON  
-                            tool_use_content = content_block.get('input', {})
-                            print(f"🔧 Found tool use: {tool_name}")
+                        # Extract tool input from ANY tool use block (not just _response ones)
+                        tool_use_content = content_block.get('input', {})
+                        print(f"🔧 Found tool use: {tool_name}")
                     
                     # Handle text blocks
                     elif hasattr(content_block, 'type') and content_block.type == 'text':
@@ -237,29 +233,55 @@ class AnthropicBatchProvider(BatchProvider):
                 
                 # Prioritize tool use content for structured responses
                 if tool_use_content is not None:
-                    print(f"✅ Extracted structured JSON from tool use: {tool_use_content}")
+                    print(f"✅ Extracted structured JSON from tool use")
+                    print(f"   Tool content type: {type(tool_use_content)}")
+                    print(f"   Tool content keys: {list(tool_use_content.keys()) if isinstance(tool_use_content, dict) else 'N/A'}")
                     content = tool_use_content
                 elif text_content is not None:
-                    print(f"📝 Got text response (no tool use): {text_content[:100]}...")
+                    print(f"📝 Got text response (no tool use): {text_content[:100] if len(text_content) > 100 else text_content}...")
                     # Try to parse text as JSON if it looks like structured output
                     try:
                         content = json.loads(text_content)
+                        print(f"   Successfully parsed text as JSON")
                     except json.JSONDecodeError:
                         content = text_content
+                        print(f"   Keeping as plain text")
                 else:
                     # Fallback to first content block
                     content_item = content_list[0]
-                    if hasattr(content_item, 'text'):
+                    
+                    # Check if this is a ToolUseBlock that wasn't caught above
+                    if hasattr(content_item, 'type') and hasattr(content_item, 'input'):
+                        if content_item.type == 'tool_use':
+                            print(f"⚠️ Found uncaught tool use block: {getattr(content_item, 'name', 'unknown')}")
+                            content = content_item.input
+                            if hasattr(content, 'model_dump'):
+                                content = content.model_dump()
+                    elif hasattr(content_item, 'text'):
                         content_str = content_item.text
+                        try:
+                            content = json.loads(content_str)
+                        except json.JSONDecodeError:
+                            content = content_str
                     elif isinstance(content_item, dict) and 'text' in content_item:
                         content_str = content_item['text']
+                        try:
+                            content = json.loads(content_str)
+                        except json.JSONDecodeError:
+                            content = content_str
                     else:
-                        content_str = str(content_item)
-                    
-                    try:
-                        content = json.loads(content_str)
-                    except json.JSONDecodeError:
-                        content = content_str
+                        # Last resort - check if it's a ToolUseBlock by class name
+                        class_name = content_item.__class__.__name__ if hasattr(content_item, '__class__') else ''
+                        if 'ToolUseBlock' in class_name:
+                            print(f"⚠️ Found ToolUseBlock via class name check")
+                            if hasattr(content_item, 'input'):
+                                content = content_item.input
+                                if hasattr(content, 'model_dump'):
+                                    content = content.model_dump()
+                            else:
+                                content = str(content_item)
+                        else:
+                            content = str(content_item)
             else:
                 content = content_list
             
