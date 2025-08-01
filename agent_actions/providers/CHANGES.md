@@ -89,23 +89,76 @@ Different providers have different input/output formats, but we intercept and tr
 - Migration guide from OpenAI to Gemini
 - Examples of multi-provider workflows
 
+## What Was Done (Phase 3)
+
+### 1. Implemented Anthropic Batch Provider
+- **Anthropic Implementation** (`anthropic_provider.py`):
+  - Full implementation of `BatchProvider` interface for Anthropic's Message Batches API
+  - Handles format transformations:
+    - Input: `BatchTask` → Anthropic's Message Batches format with "custom_id" and "params"
+    - Output: Anthropic's batch response → flat `BatchResult`
+  - Supports all Claude models available for batch processing
+  - **Direct HTTP Submission**: No file upload required
+  - **Streaming Results**: Real-time result retrieval
+  - **Prompt Caching**: Optional cost optimization feature
+
+### 2. Fixed Critical Implementation Issues
+- **System Message Format Fix**:
+  - Fixed incorrect system message placement in messages array
+  - Anthropic requires system messages as top-level `system` parameter
+  - Resolved `invalid_request_error` that was causing all batches to fail
+  
+- **Mock Implementation Removal**:
+  - Replaced all mock/placeholder code with real Anthropic API calls
+  - Updated `submit_batch()`, `check_status()`, and `retrieve_results()` methods
+  - Fixed the "Mock retrieval of Anthropic batch results" error
+
+### 3. Implemented JSON Mode for Structured Output
+- **Tool-Based JSON Mode**:
+  ```python
+  # Anthropic doesn't have OpenAI-style JSON mode
+  # Instead uses tool use to force structured output
+  tools = [{
+      "name": "json_response",
+      "description": "Provide structured JSON output",
+      "input_schema": {your_schema}
+  }]
+  ```
+  
+- **Schema Integration**:
+  - Added `_create_json_tool_from_schema()` method
+  - Converts JSON schemas to Anthropic tool definitions
+  - Forces Claude to respond with structured JSON via tool use
+  
+- **Enhanced Response Parsing**:
+  - Updated `parse_provider_response()` to handle tool use responses
+  - Prioritizes structured tool output over text parsing
+  - Maintains backward compatibility for non-structured requests
+
+### 4. Fixed Schema Format Handling
+- **BatchService Integration Issue**:
+  - BatchService was passing schema as: `[{'name': 'SchemaName', 'input_schema': {...}}]`
+  - Provider expected: `{'type': 'object', 'properties': {...}}`
+  - Added support for both formats with automatic detection
+  
+- **Dynamic Tool Naming**:
+  - Tool names generated from schema names: `QuestionTypeSchema` → `questiontype_response`
+  - Proper tool choice configuration: `{"type": "tool", "name": tool_name}`
+  - Enhanced response parsing to handle dynamic tool names
+
+### 5. Added Comprehensive Debug Logging
+- **Schema Processing**: Shows which format is detected and processed
+- **Tool Creation**: Confirms tools are created with correct properties
+- **Response Parsing**: Tracks whether structured or text responses are received
+- **Error Diagnostics**: Clear messages for troubleshooting schema issues
+
 ## What Comes Next
 
 ### 1. Additional Providers
 Create new providers by implementing the `BatchProvider` interface:
-- **Anthropic Claude Batch API** (when available)
 - **AWS Bedrock Batch Inference**
 - **Custom Internal APIs**
-
-Example structure:
-```python
-class AnthropicBatchProvider(BatchProvider):
-    def format_task_for_provider(self, batch_task, schema):
-        # Transform to Anthropic's format
-        
-    def parse_provider_response(self, raw_response):
-        # Transform from Anthropic's format to BatchResult
-```
+- **Azure OpenAI Batch API**
 
 ### 2. Enhanced Multi-Provider Workflows
 Now that the provider factory is implemented, focus on advanced multi-provider features:
@@ -175,18 +228,21 @@ No changes needed - BatchService defaults to OpenAI provider for backward compat
 
 ## Implementation Summary
 
-### Current Status (Phase 2 Complete)
-The batch processing system now supports multiple providers through a clean abstraction layer:
+### Current Status (Phase 3 Complete)
+The batch processing system now supports three major providers through a clean abstraction layer:
 
+- ✅ **OpenAI Batch Provider**: Original implementation with JSON mode support
 - ✅ **Gemini Batch Provider**: Fully implemented and tested
-- ✅ **Provider Factory**: Dynamic provider instantiation
+- ✅ **Anthropic Batch Provider**: Complete with tool-based JSON mode
+- ✅ **Provider Factory**: Dynamic provider instantiation for all three
 - ✅ **BatchService Integration**: Multi-provider support with proper tracking
 - ✅ **Configuration System**: `batch_provider` field support
-- ✅ **Error Handling**: Graceful dependency management
+- ✅ **JSON Mode Support**: Structured output for all providers
+- ✅ **Error Handling**: Graceful dependency management and debugging
 - ✅ **Documentation**: Complete usage and migration guides
 
 ### Usage
-Users can now specify different providers per agent:
+Users can now specify different providers per agent with structured output:
 
 ```yaml
 workflow: multi_provider_example
@@ -195,13 +251,34 @@ agents:
     model_name: gpt-4o-mini
     batch_provider: openai
     run_mode: batch
+    json_mode: true
+    schema_name: ClassificationSchema
     
   - agent_type: enrichment  
     model_name: gemini-2.5-flash
     batch_provider: gemini
     run_mode: batch
+    json_mode: true
+    schema_name: EnrichmentSchema
     dependencies: [classifier]
+    
+  - agent_type: analyzer
+    model_name: claude-3-5-sonnet-20241022
+    batch_provider: anthropic
+    run_mode: batch
+    json_mode: true
+    schema_name: AnalysisSchema
+    dependencies: [enrichment]
 ```
+
+### JSON Mode Implementation
+Each provider handles structured output differently:
+
+- **OpenAI**: Native `response_format: {"type": "json_object"}` 
+- **Gemini**: Schema-guided generation with format instructions
+- **Anthropic**: Tool use system with `tools` and `tool_choice` parameters
+
+All providers return consistent `BatchResult` objects with structured content.
 
 ## Future Considerations
 

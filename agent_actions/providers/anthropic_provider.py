@@ -109,6 +109,20 @@ class AnthropicBatchProvider(BatchProvider):
         if "temperature" in batch_task.model_config:
             params["temperature"] = batch_task.model_config["temperature"]
             
+        # Add tools for structured JSON output if schema is provided
+        if schema:
+            tools = self._create_json_tool_from_schema(schema)
+            if tools:
+                tool_name = tools[0]["name"]  # Get the actual tool name
+                params["tools"] = tools
+                params["tool_choice"] = {"type": "tool", "name": tool_name}
+                print(f"🛠️ Added tools for structured JSON output: {len(tools)} tools")
+                print(f"🎯 Tool choice set to: {tool_name}")
+            else:
+                print("⚠️ Schema provided but no tools created")
+        else:
+            print("ℹ️ No schema provided - using regular text mode")
+        
         # Add Anthropic-specific options
         if self.enable_prompt_caching:
             # Add prompt caching if enabled
@@ -176,7 +190,7 @@ class AnthropicBatchProvider(BatchProvider):
             # Handle successful results
             message = getattr(result, 'message', None) or result.get('message', {})
             
-            # Extract content from message
+            # Extract content from message - handle both text and tool use responses
             content = None
             if hasattr(message, 'content'):
                 content_list = message.content
@@ -184,20 +198,68 @@ class AnthropicBatchProvider(BatchProvider):
                 content_list = message.get('content', [])
             
             if content_list and isinstance(content_list, list):
-                # Anthropic returns content as a list of content blocks
-                content_item = content_list[0]
-                if hasattr(content_item, 'text'):
-                    content_str = content_item.text
-                elif isinstance(content_item, dict) and 'text' in content_item:
-                    content_str = content_item['text']
-                else:
-                    content_str = str(content_item)
+                # Check for tool use response first
+                tool_use_content = None
+                text_content = None
                 
-                # Try to parse as JSON if it looks like structured output
-                try:
-                    content = json.loads(content_str)
-                except json.JSONDecodeError:
-                    content = content_str
+                for content_block in content_list:
+                    # Handle tool use blocks
+                    if hasattr(content_block, 'type') and content_block.type == 'tool_use':
+                        tool_name = getattr(content_block, 'name', '')
+                        # Check for any tool ending with '_response' (our generated tools)
+                        if tool_name and ('_response' in tool_name or tool_name == 'json_response'):
+                            # Extract tool input as structured JSON
+                            if hasattr(content_block, 'input'):
+                                tool_use_content = content_block.input
+                                if hasattr(tool_use_content, 'model_dump'):
+                                    tool_use_content = tool_use_content.model_dump()
+                                print(f"🔧 Found tool use: {tool_name}")
+                    elif isinstance(content_block, dict) and content_block.get('type') == 'tool_use':
+                        tool_name = content_block.get('name', '')
+                        # Check for any tool ending with '_response' (our generated tools)
+                        if tool_name and ('_response' in tool_name or tool_name == 'json_response'):
+                            # Extract tool input as structured JSON  
+                            tool_use_content = content_block.get('input', {})
+                            print(f"🔧 Found tool use: {tool_name}")
+                    
+                    # Handle text blocks
+                    elif hasattr(content_block, 'type') and content_block.type == 'text':
+                        if hasattr(content_block, 'text'):
+                            text_content = content_block.text
+                    elif isinstance(content_block, dict) and content_block.get('type') == 'text':
+                        text_content = content_block.get('text', '')
+                    
+                    # Legacy handling for simple content blocks
+                    elif hasattr(content_block, 'text'):
+                        text_content = content_block.text
+                    elif isinstance(content_block, dict) and 'text' in content_block:
+                        text_content = content_block['text']
+                
+                # Prioritize tool use content for structured responses
+                if tool_use_content is not None:
+                    print(f"✅ Extracted structured JSON from tool use: {tool_use_content}")
+                    content = tool_use_content
+                elif text_content is not None:
+                    print(f"📝 Got text response (no tool use): {text_content[:100]}...")
+                    # Try to parse text as JSON if it looks like structured output
+                    try:
+                        content = json.loads(text_content)
+                    except json.JSONDecodeError:
+                        content = text_content
+                else:
+                    # Fallback to first content block
+                    content_item = content_list[0]
+                    if hasattr(content_item, 'text'):
+                        content_str = content_item.text
+                    elif isinstance(content_item, dict) and 'text' in content_item:
+                        content_str = content_item['text']
+                    else:
+                        content_str = str(content_item)
+                    
+                    try:
+                        content = json.loads(content_str)
+                    except json.JSONDecodeError:
+                        content = content_str
             else:
                 content = content_list
             
@@ -253,6 +315,16 @@ class AnthropicBatchProvider(BatchProvider):
             # This would normally load from schema files
             # For now, we'll assume it's passed in the config
             schema = agent_config.get("compiled_schema")
+        
+        # Also check for compiled_schema directly (BatchService passes it this way)
+        if not schema and agent_config.get("compiled_schema"):
+            schema = agent_config.get("compiled_schema")
+            
+        # Debug logging for schema
+        if schema:
+            print(f"🔧 Anthropic provider using schema: {schema}")
+        else:
+            print("ℹ️ Anthropic provider: No schema found, using regular text mode")
         
         for row in data:
             # Create BatchTask from row data
@@ -436,26 +508,107 @@ class AnthropicBatchProvider(BatchProvider):
             print(f"❌ {error_msg}")
             raise RuntimeError(error_msg)
     
+    def _create_json_tool_from_schema(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Create an Anthropic tool definition from a JSON schema to force structured output.
+        
+        Args:
+            schema: JSON schema dictionary or list of schema objects from BatchService
+            
+        Returns:
+            List containing tool definition for structured JSON response
+        """
+        actual_schema = None
+        tool_name = "json_response"
+        schema_description = "Provide a structured JSON response"
+        
+        # Handle list format from BatchService: [{'name': 'SchemaName', 'input_schema': {...}}]
+        if isinstance(schema, list) and len(schema) > 0:
+            schema_obj = schema[0]  # Take the first schema object
+            if isinstance(schema_obj, dict):
+                actual_schema = schema_obj.get('input_schema', {})
+                tool_name = schema_obj.get('name', 'json_response').lower().replace('schema', '_response')
+                schema_description = schema_obj.get('description', schema_description)
+                print(f"🔧 Processing schema from list format: {schema_obj.get('name', 'Unknown')}")
+        
+        # Handle direct schema dict format: {'type': 'object', 'properties': {...}}
+        elif isinstance(schema, dict) and ('properties' in schema or 'type' in schema):
+            actual_schema = schema
+            schema_description = schema.get('description', schema_description)
+            print(f"🔧 Processing direct schema format")
+        
+        else:
+            print(f"⚠️ Unsupported schema format: {type(schema)} - {schema}")
+            return []
+        
+        if not actual_schema:
+            print(f"⚠️ No valid schema found in: {schema}")
+            return []
+        
+        # Extract properties and required fields from the actual schema
+        properties = actual_schema.get('properties', {})
+        required = actual_schema.get('required', [])
+        
+        if not properties:
+            print(f"⚠️ No properties found in schema: {actual_schema}")
+            # If no properties, create a simple JSON response tool
+            tool_schema = {
+                "type": "object",
+                "properties": {
+                    "response": {
+                        "type": "string", 
+                        "description": "The response content"
+                    }
+                },
+                "required": ["response"]
+            }
+        else:
+            # Use the provided schema as the tool input schema
+            tool_schema = {
+                "type": "object",
+                "properties": properties,
+                "required": required
+            }
+            print(f"✅ Created tool schema with properties: {list(properties.keys())}")
+        
+        tool_definition = {
+            "name": tool_name,
+            "description": f"Provide structured JSON output: {schema_description}",
+            "input_schema": tool_schema
+        }
+        
+        print(f"🛠️ Created tool definition: {tool_definition['name']}")
+        return [tool_definition]
+    
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Compile schema to Anthropic's format.
+        Compile schema to Anthropic's format using tool definitions for structured output.
         
-        Anthropic doesn't use strict JSON schema validation like OpenAI.
-        Instead, we convert the schema to natural language instructions
-        that can be included in the prompt to guide structured output.
+        Anthropic uses tool use to enforce structured JSON output rather than 
+        OpenAI-style JSON mode. This method returns the schema as-is for use
+        with our tool-based structured output approach.
         """
         try:
+            # Try to use the unified schema compiler if available
             return compile_unified_schema(schema_dict, 'anthropic')
         except Exception:
-            # Fallback: convert schema to natural language description
-            if isinstance(schema_dict, dict) and 'properties' in schema_dict:
-                description = "Please respond with a JSON object containing the following fields:\n"
-                for field, field_info in schema_dict['properties'].items():
-                    field_type = field_info.get('type', 'any')
-                    field_desc = field_info.get('description', '')
-                    description += f"- {field} ({field_type}): {field_desc}\n"
-                return {"description": description, "original_schema": schema_dict}
-            return schema_dict
+            # Return the schema as-is for tool use - our _create_json_tool_from_schema
+            # method will handle the conversion to tool format
+            if isinstance(schema_dict, dict):
+                return schema_dict
+            
+            # Fallback: create a simple schema structure
+            return {
+                "type": "object",
+                "properties": {
+                    "response": {
+                        "type": "string",
+                        "description": "The response content"
+                    }
+                },
+                "required": ["response"],
+                "description": "Structured response"
+            }
     
     def get_supported_models(self) -> List[str]:
         """List of Anthropic models that support batch processing."""
