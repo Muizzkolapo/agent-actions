@@ -12,6 +12,7 @@ from agent_actions.constants import (
     API_KEY_KEY,
     PROMPT_KEY,
     SCHEMA_NAME_KEY,
+    SCHEMA_KEY,
     CHUNK_CONFIG_KEY,
     SIDE_COLLECTION_KEY,
 )
@@ -47,6 +48,7 @@ class ConfigValidator(BaseValidator):
         API_KEY_KEY,
         PROMPT_KEY,
         SCHEMA_NAME_KEY,
+        SCHEMA_KEY,
         "tools",
         CHUNK_CONFIG_KEY,
         "use_few_shot_samples",
@@ -253,6 +255,42 @@ class ConfigValidator(BaseValidator):
             self.add_error(
                 f"{desc} 'output_field' can only be used when 'json_mode' is false."
             )
+        
+        # -------------------------- inline schema validation --------------------------
+        if SCHEMA_KEY in entry_ci:
+            inline_schema = entry_ci[SCHEMA_KEY]
+            if not isinstance(inline_schema, dict):
+                self.add_error(f"{desc} 'schema' must be a dictionary with field names as keys and types as values.")
+            else:
+                # Validate that all values are valid types
+                valid_types = {"string", "number", "integer", "boolean", "array", "object"}
+                valid_array_types = {"array[string]", "array[number]", "array[integer]", "array[boolean]", "array[object]"}
+                
+                for field_name, field_type in inline_schema.items():
+                    if not isinstance(field_name, str):
+                        self.add_error(f"{desc} 'schema' keys must be strings, found {type(field_name).__name__}.")
+                        continue
+                    
+                    if not isinstance(field_type, str):
+                        self.add_error(f"{desc} 'schema' value for field '{field_name}' must be a string type, found {type(field_type).__name__}.")
+                        continue
+                    
+                    # Remove ! suffix if present (for required fields)
+                    base_type = field_type.rstrip("!")
+                    
+                    # Check if it's a valid type
+                    if base_type not in valid_types and base_type not in valid_array_types:
+                        self.add_error(
+                            f"{desc} 'schema' field '{field_name}' has invalid type '{base_type}'. "
+                            f"Valid types are: {', '.join(sorted(valid_types | valid_array_types))}"
+                        )
+                
+                # Check for conflicts with schema_name
+                if SCHEMA_NAME_KEY in entry_ci:
+                    self.add_warning(
+                        f"{desc} has both 'schema' and 'schema_name' defined. "
+                        "The inline 'schema' will take precedence over 'schema_name'."
+                    )
 
     # -----------------------------------------------------------------------------------------
     # LIST VALIDATION (delegates to CI single‑entry)
