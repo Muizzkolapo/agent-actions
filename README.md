@@ -354,8 +354,67 @@ fields:
 }
 ```
 
+## Inline Schema Definition
+
+You can now define schemas directly in your agent configuration using a simple dictionary format, without creating separate schema files:
+
+```yaml
+- agent_type: my_agent
+  model_vendor: "openai"
+  model_name: "gpt-4"
+  schema: {
+    "question": "string!",      # Required string field (! suffix)
+    "options": "array[string]", # Array of strings
+    "score": "number",          # Number field
+    "is_correct": "boolean"     # Boolean field
+  }
+```
+
+### Inline Schema Format:
+- **Keys**: Field names in your output
+- **Values**: Data types with optional modifiers
+  - Basic types: `"string"`, `"number"`, `"integer"`, `"boolean"`, `"object"`, `"array"`
+  - Required fields: Add `!` suffix (e.g., `"string!"`)
+  - Typed arrays: `"array[type]"` (e.g., `"array[number]"`, `"array[boolean]"`)
+  - Default array: `"array"` defaults to `"array[string]"`
+
+### Example Usage:
+```python
+# Simple schema
+schema: {"name": "string", "age": "number"}
+
+# With required fields
+schema: {"id": "string!", "email": "string!", "optional": "string"}
+
+# With arrays
+schema: {
+  "tags": "array",           # array of strings (default)
+  "scores": "array[number]", # array of numbers
+  "items": "array[object]"   # array of objects
+}
+```
+
+The inline schema is automatically converted to the appropriate format for your model vendor (OpenAI, Anthropic, Gemini, etc.).
+
+### Schema Precedence:
+When both `schema` (inline) and `schema_name` (file reference) are present in an agent configuration:
+1. The inline `schema` takes precedence and will be used
+2. The `schema_name` will be ignored
+3. A warning will be issued during validation to alert you of the conflict
+
+```yaml
+# Example with both inline and file reference
+- agent_type: my_agent
+  schema_name: "external_schema"  # This will be ignored
+  schema: {                       # This will be used
+    "field1": "string",
+    "field2": "number"
+  }
+```
+
 ## Summary
 - **Unified Schema Format:** Define your schema in YAML/JSON using `name` and `fields`.
+- **Inline Schema Format:** Define schemas directly in agent config as simple key-value dictionaries.
 - **Field Attributes:** Use `id`, `type`, `required`, `items`, `enum`, `validators`, and `mappings` to specify field details.
 - **Standard JSON Schema Terms:** Leverage JSON Schema keywords such as `type`, `properties`, `required`, `additionalProperties`, `items`, and `enum` to create robust validation rules.
 - **Compilation Process:** Your unified schema is processed by our tool into a target-specific JSON Schema, ensuring compatibility with different model vendors like OpenAI or Anthropic.

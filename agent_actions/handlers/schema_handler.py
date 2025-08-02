@@ -103,3 +103,59 @@ class SchemaLoader:
                 print(f"Schema file missing: {missing_files[0]}")
             else:
                 print(f"Multiple schema files missing: {', '.join(missing_files)}")
+    
+    @staticmethod
+    def construct_schema_from_dict(schema_dict: dict) -> dict:
+        """
+        Construct a unified schema from a simple key-value dictionary.
+        
+        Args:
+            schema_dict (dict): Simple dictionary where keys are field names 
+                               and values are data types (e.g., {"name": "string", "age": "number"})
+        
+        Returns:
+            dict: A unified schema in the standard format
+        """
+        fields = []
+        
+        for field_name, field_type in schema_dict.items():
+            # Check if field is required (indicated by ! suffix)
+            is_required = field_type.endswith("!")
+            if is_required:
+                field_type = field_type[:-1]  # Remove the ! suffix
+            
+            # Handle array types with specific item types
+            if field_type.startswith("array[") and field_type.endswith("]"):
+                # Extract item type from array[type] format
+                item_type = field_type[6:-1]  # Remove "array[" and "]"
+                field_def = {
+                    "id": field_name,
+                    "type": "array",
+                    "items": {"type": item_type},
+                    "required": is_required
+                }
+            elif field_type == "array":
+                # Default array with string items
+                field_def = {
+                    "id": field_name,
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "required": is_required
+                }
+            else:
+                # Simple types: string, number, integer, boolean, object
+                field_def = {
+                    "id": field_name,
+                    "type": field_type,
+                    "required": is_required
+                }
+            
+            fields.append(field_def)
+        
+        # Construct the unified schema
+        unified_schema = {
+            "name": "InlineSchema",
+            "fields": fields
+        }
+        
+        return unified_schema

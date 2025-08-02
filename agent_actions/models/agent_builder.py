@@ -21,6 +21,7 @@ from agent_actions.constants import (
     MODEL_VENDOR_KEY,
     PROMPT_KEY,
     SCHEMA_NAME_KEY,
+    SCHEMA_KEY,
 )
 
 
@@ -150,6 +151,15 @@ def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str, contex
 
 
 def _prepare_schema(agent_config: Dict[str, Any], model_vendor: str) -> Optional[Dict[str, Any]]:
+    # Check for inline schema first
+    inline_schema = agent_config.get(SCHEMA_KEY) if model_vendor != 'tool' else None
+    if inline_schema:
+        # Construct unified schema from the inline dictionary
+        base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+        return (compile_unified_schema(base_schema, model_vendor)
+                if model_vendor in SCHEMA_COMPILATION_VENDORS else base_schema)
+    
+    # Fall back to schema_name if no inline schema
     schema_name = agent_config.get(SCHEMA_NAME_KEY) if model_vendor != 'tool' else None
     if not schema_name:
         return None

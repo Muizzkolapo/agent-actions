@@ -12,7 +12,7 @@ from agent_actions.handlers.schema_handler import SchemaLoader
 from agent_actions.models.schema_change import compile_unified_schema
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.common.transformers.data_transformer import DataTransformer
-from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SIDE_COLLECTION_KEY
+from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, SIDE_COLLECTION_KEY
 from agent_actions.common.utils.utils import apply_remove_collection
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.utils.path_utils import (
@@ -242,11 +242,18 @@ class BatchService:
 
     def _prepare_schema(self, agent_config, provider=None):
         """Load and prepare schema from config"""
-        schema_name = agent_config.get(SCHEMA_NAME_KEY)
-        if not schema_name:
-            return None
+        # Check for inline schema first
+        inline_schema = agent_config.get(SCHEMA_KEY)
+        if inline_schema:
+            # Construct unified schema from the inline dictionary
+            base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+        else:
+            # Fall back to schema_name if no inline schema
+            schema_name = agent_config.get(SCHEMA_NAME_KEY)
+            if not schema_name:
+                return None
+            base_schema = SchemaLoader.load_schema(schema_name)
         
-        base_schema = SchemaLoader.load_schema(schema_name)
         # Use provider to compile schema to its specific format
         if provider is None:
             provider = self.provider
