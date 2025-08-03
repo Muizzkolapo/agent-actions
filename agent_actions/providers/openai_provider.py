@@ -156,11 +156,8 @@ class OpenAIBatchProvider(BatchProvider):
         tasks = []
         
         # Get schema if configured
-        schema = None
-        if agent_config.get("schema_name"):
-            # This would normally load from schema files
-            # For now, we'll assume it's passed in the config
-            schema = agent_config.get("compiled_schema")
+        # The batch service already compiles and passes the schema as "compiled_schema"
+        schema = agent_config.get("compiled_schema")
         
         for row in data:
             # Create BatchTask from row data
