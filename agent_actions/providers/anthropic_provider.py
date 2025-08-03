@@ -332,15 +332,8 @@ class AnthropicBatchProvider(BatchProvider):
         tasks = []
         
         # Get schema if configured
-        schema = None
-        if agent_config.get("schema_name"):
-            # This would normally load from schema files
-            # For now, we'll assume it's passed in the config
-            schema = agent_config.get("compiled_schema")
-        
-        # Also check for compiled_schema directly (BatchService passes it this way)
-        if not schema and agent_config.get("compiled_schema"):
-            schema = agent_config.get("compiled_schema")
+        # The batch service already compiles and passes the schema as "compiled_schema"
+        schema = agent_config.get("compiled_schema")
             
         # Debug logging for schema
         if schema:
