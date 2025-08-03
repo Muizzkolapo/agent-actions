@@ -79,11 +79,10 @@ class GeminiBatchProvider(BatchProvider):
         if "max_tokens" in batch_task.model_config:
             generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
         
-        # TODO: Add schema support when Gemini supports structured output
-        # For now, we can include schema instructions in the prompt if needed
+        # Add native schema support for structured output
         if schema:
-            schema_instruction = f"\n\nPlease respond with JSON that matches this schema:\n{json.dumps(schema, indent=2)}"
-            combined_text += schema_instruction
+            request["response_schema"] = schema
+            request["response_mime_type"] = "application/json"
         
         request = {
             "contents": [{
@@ -162,7 +161,7 @@ class GeminiBatchProvider(BatchProvider):
                 except json.JSONDecodeError:
                     content = text_content
                 
-                # TODO: Handle multimodal responses (images)
+                # Note: Multimodal responses (images) could be handled here in the future
                 # if parts[0].get("inlineData"):
                 #     # Handle image data
         
@@ -382,11 +381,9 @@ class GeminiBatchProvider(BatchProvider):
         """
         Compile schema to Gemini's format.
         
-        Note: Gemini may not support structured output with schemas yet.
-        For now, we'll return the schema as-is and include it in the prompt.
+        Gemini uses response_schema with responseJsonSchema format.
         """
-        # TODO: Update this when Gemini adds native schema support
-        # For now, just return the schema unchanged
+        # Gemini expects the schema directly in OpenAPI/JSON Schema format
         return schema_dict
     
     def get_supported_models(self) -> List[str]:
@@ -400,9 +397,8 @@ class GeminiBatchProvider(BatchProvider):
         ]
     
     def supports_schema_validation(self) -> bool:
-        """Gemini doesn't currently support native schema validation."""
-        # TODO: Update when Gemini adds schema support
-        return False
+        """Gemini supports native schema validation via response_schema."""
+        return True
     
     def validate_config(self, agent_config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
