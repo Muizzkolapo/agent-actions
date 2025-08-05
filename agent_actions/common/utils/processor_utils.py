@@ -223,6 +223,11 @@ class ProcessorUtils:
         Returns:
             Transformed data list
         """
+        # Ensure data is a list for consistent processing
+        if not isinstance(data, list):
+            # If data is a string or other type, wrap it in a list
+            data = [data] if data is not None else []
+        
         side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
 
         if side_collection:

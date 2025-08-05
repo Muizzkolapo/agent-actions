@@ -392,9 +392,68 @@ schema: {
   "scores": "array[number]", # array of numbers
   "items": "array[object]"   # array of objects
 }
+
+# With complex objects in arrays
+schema: {
+  "excerpt": "array[object:{'option': 'string'}]",                    # array of objects with properties
+  "questions": "array[object:{'id': 'string!', 'text': 'string!'}]", # array with required fields
+  "results": "array[object:{'score': 'number', 'passed': 'boolean'}]" # multiple properties
+}
 ```
 
 The inline schema is automatically converted to the appropriate format for your model vendor (OpenAI, Anthropic, Gemini, etc.).
+
+### Complex Object Schemas
+
+For arrays containing objects with specific properties, use the `array[object:{'prop': 'type'}]` syntax:
+
+#### Basic Complex Object
+```yaml
+schema: {
+  "excerpt": "array[object:{'option': 'string'}]"
+}
+```
+
+This creates an array where each item is an object with an `option` property of type `string`.
+
+#### Complex Object with Required Fields
+```yaml
+schema: {
+  "questions": "array[object:{'id': 'string!', 'text': 'string!', 'optional': 'string'}]"
+}
+```
+
+Fields marked with `!` are required. In this example, `id` and `text` are required, while `optional` is not.
+
+#### Multiple Properties
+```yaml
+schema: {
+  "results": "array[object:{'score': 'number', 'passed': 'boolean', 'notes': 'string'}]"
+}
+```
+
+#### ExcerptJustification Example
+```yaml
+# Agent configuration
+prompt: "Extract relevant excerpts and justify your selections"
+model: "claude-3-sonnet"
+schema: {
+  "excerpt": "array[object:{'option': 'string'}]"
+}
+```
+
+This generates a unified schema equivalent to:
+```yaml
+name: ExcerptJustification
+fields:
+  - id: excerpt
+    type: array
+    items:
+      type: object
+      properties:
+        option:
+          type: string
+```
 
 ### Schema Precedence:
 When both `schema` (inline) and `schema_name` (file reference) are present in an agent configuration:
