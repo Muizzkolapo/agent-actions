@@ -20,6 +20,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
     """Orchestrates the prompt processing workflow (Open/Closed principle)."""
 
     def __init__(self, agent_config, agent_name):
+        super().__init__()
         self.agent_config = agent_config
         self.agent_name = agent_name
 
