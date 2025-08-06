@@ -128,12 +128,26 @@ class SchemaLoader:
             if field_type.startswith("array[") and field_type.endswith("]"):
                 # Extract item type from array[type] format
                 item_type = field_type[6:-1]  # Remove "array[" and "]"
-                field_def = {
-                    "id": field_name,
-                    "type": "array",
-                    "items": {"type": item_type},
-                    "required": is_required
-                }
+                
+                # Handle complex object notation: array[object:{'prop': 'type'}]
+                if item_type.startswith("object:"):
+                    # Parse the object properties from the notation
+                    properties_str = item_type[7:]  # Remove "object:"
+                    items_def = SchemaLoader._parse_object_properties(properties_str)
+                    field_def = {
+                        "id": field_name,
+                        "type": "array",
+                        "items": items_def,
+                        "required": is_required
+                    }
+                else:
+                    # Simple item type
+                    field_def = {
+                        "id": field_name,
+                        "type": "array",
+                        "items": {"type": item_type},
+                        "required": is_required
+                    }
             elif field_type == "array":
                 # Default array with string items
                 field_def = {
@@ -159,3 +173,56 @@ class SchemaLoader:
         }
         
         return unified_schema
+    
+    @staticmethod
+    def _parse_object_properties(properties_str: str) -> dict:
+        """
+        Parse object properties from string notation like "{'prop': 'type'}"
+        
+        Args:
+            properties_str (str): String representation of object properties
+            
+        Returns:
+            dict: Object schema with type and properties
+        """
+        import ast
+        import json
+        
+        try:
+            # Handle both single quotes and double quotes in the string
+            properties_str = properties_str.strip()
+            
+            # Try to parse as Python literal (handles single quotes)
+            try:
+                properties_dict = ast.literal_eval(properties_str)
+            except (ValueError, SyntaxError):
+                # Try parsing as JSON (handles double quotes)
+                properties_dict = json.loads(properties_str)
+            
+            # Convert to unified schema format
+            schema_properties = {}
+            required_fields = []
+            
+            for prop_name, prop_type in properties_dict.items():
+                # Check if field is required (indicated by ! suffix)
+                is_required = prop_type.endswith("!")
+                if is_required:
+                    prop_type = prop_type[:-1]  # Remove the ! suffix
+                    required_fields.append(prop_name)
+                
+                schema_properties[prop_name] = {"type": prop_type}
+            
+            object_schema = {
+                "type": "object",
+                "properties": schema_properties
+            }
+            
+            if required_fields:
+                object_schema["required"] = required_fields
+                
+            return object_schema
+            
+        except (ValueError, SyntaxError, json.JSONDecodeError) as e:
+            # If parsing fails, return a basic object type
+            print(f"Warning: Could not parse object properties '{properties_str}': {e}")
+            return {"type": "object"}

@@ -278,11 +278,11 @@ class ConfigValidator(BaseValidator):
                     # Remove ! suffix if present (for required fields)
                     base_type = field_type.rstrip("!")
                     
-                    # Check if it's a valid type
-                    if base_type not in valid_types and base_type not in valid_array_types:
+                    # Check if it's a valid type (including complex object notation)
+                    if not self._is_valid_schema_type(base_type, valid_types, valid_array_types):
                         self.add_error(
                             f"{desc} 'schema' field '{field_name}' has invalid type '{base_type}'. "
-                            f"Valid types are: {', '.join(sorted(valid_types | valid_array_types))}"
+                            f"Valid types are: {', '.join(sorted(valid_types | valid_array_types))} or array[object:{{'prop': 'type'}}]"
                         )
                 
                 # Check for conflicts with schema_name
@@ -291,6 +291,69 @@ class ConfigValidator(BaseValidator):
                         f"{desc} has both 'schema' and 'schema_name' defined. "
                         "The inline 'schema' will take precedence over 'schema_name'."
                     )
+
+    def _is_valid_schema_type(self, type_str: str, valid_types: set, valid_array_types: set) -> bool:
+        """
+        Check if a schema type string is valid, including complex object notation.
+        
+        Args:
+            type_str: The type string to validate
+            valid_types: Set of valid basic types
+            valid_array_types: Set of valid array types
+            
+        Returns:
+            bool: True if the type is valid, False otherwise
+        """
+        # Check basic types first
+        if type_str in valid_types or type_str in valid_array_types:
+            return True
+        
+        # Check for complex object notation: array[object:{'prop': 'type'}]
+        if type_str.startswith("array[object:") and type_str.endswith("]"):
+            # Extract the object properties part
+            properties_part = type_str[13:-1]  # Remove "array[object:" and "]"
+            
+            # Try to validate the properties syntax
+            import ast
+            import json
+            
+            try:
+                # Try to parse as JSON first (more common in config files), then Python literal
+                try:
+                    properties_dict = json.loads(properties_part)
+                except (ValueError, json.JSONDecodeError):
+                    properties_dict = ast.literal_eval(properties_part)
+                
+                # Validate that it's a dict and all values are valid types
+                if isinstance(properties_dict, dict):
+                    for prop_name, prop_type in properties_dict.items():
+                        if not isinstance(prop_name, str):
+                            return False
+                        
+                        # Ensure prop_type is a string and remove ! suffix for required field check
+                        if not isinstance(prop_type, str):
+                            return False
+                        
+                        # Handle escaped characters and remove trailing ! if present
+                        cleaned_type = prop_type.replace("\\", "")  # Remove backslashes first
+                        if cleaned_type.endswith("!"):
+                            base_prop_type = cleaned_type[:-1]
+                        else:
+                            base_prop_type = cleaned_type
+                        
+                        # Check if property type is valid
+                        valid_prop_types = {"string", "number", "integer", "boolean", "object"}
+                        if base_prop_type not in valid_prop_types:
+                            return False
+                    
+                    return True
+                else:
+                    return False
+                
+            except (ValueError, SyntaxError, json.JSONDecodeError):
+                return False
+        
+        return False
 
     # -----------------------------------------------------------------------------------------
     # LIST VALIDATION (delegates to CI single‑entry)

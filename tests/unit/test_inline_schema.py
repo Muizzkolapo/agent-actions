@@ -153,3 +153,73 @@ class TestInlineSchema:
         assert fields_by_id["bool_field"]["type"] == "boolean"
         assert fields_by_id["obj_field"]["type"] == "object"
         assert fields_by_id["arr_field"]["type"] == "array"
+    
+    def test_complex_object_in_array(self):
+        """Test array with complex object properties."""
+        inline_dict = {
+            "excerpt": "array[object:{'option': 'string'}]"
+        }
+        
+        result = SchemaLoader.construct_schema_from_dict(inline_dict)
+        
+        assert len(result["fields"]) == 1
+        field = result["fields"][0]
+        
+        assert field["id"] == "excerpt"
+        assert field["type"] == "array" 
+        assert field["items"]["type"] == "object"
+        assert "properties" in field["items"]
+        assert field["items"]["properties"]["option"]["type"] == "string"
+    
+    def test_complex_object_with_required_fields(self):
+        """Test array with complex object containing required fields."""
+        inline_dict = {
+            "data": "array[object:{'id': 'string!', 'name': 'string', 'score': 'number!'}]"
+        }
+        
+        result = SchemaLoader.construct_schema_from_dict(inline_dict)
+        
+        field = result["fields"][0]
+        items = field["items"]
+        
+        assert items["type"] == "object"
+        assert items["properties"]["id"]["type"] == "string"
+        assert items["properties"]["name"]["type"] == "string"
+        assert items["properties"]["score"]["type"] == "number"
+        assert "required" in items
+        assert "id" in items["required"]
+        assert "score" in items["required"]
+        assert "name" not in items["required"]
+    
+    def test_excerpt_justification_schema(self):
+        """Test the specific ExcerptJustification schema."""
+        inline_dict = {
+            "excerpt": "array[object:{'option': 'string'}]"
+        }
+        
+        result = SchemaLoader.construct_schema_from_dict(inline_dict)
+        
+        # Change name to ExcerptJustification for this specific case
+        result["name"] = "ExcerptJustification"
+        
+        assert result["name"] == "ExcerptJustification"
+        assert len(result["fields"]) == 1
+        
+        excerpt_field = result["fields"][0]
+        assert excerpt_field["id"] == "excerpt"
+        assert excerpt_field["type"] == "array"
+        assert excerpt_field["items"]["type"] == "object"
+        assert excerpt_field["items"]["properties"]["option"]["type"] == "string"
+    
+    def test_invalid_object_properties(self):
+        """Test handling of invalid object property syntax."""
+        inline_dict = {
+            "bad_syntax": "array[object:{invalid syntax}]"
+        }
+        
+        result = SchemaLoader.construct_schema_from_dict(inline_dict)
+        
+        field = result["fields"][0]
+        # Should fallback to basic object type when parsing fails
+        assert field["items"]["type"] == "object"
+        assert "properties" not in field["items"]

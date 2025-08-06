@@ -24,6 +24,16 @@ class DataTransformer:
         """
         try:
             updated_data = copy.deepcopy(data_new)
+            
+            # If data_new is not a dictionary, return it as-is or convert appropriately
+            if not isinstance(updated_data, dict):
+                # For non-dict data, return a dictionary wrapper or the original data
+                if isinstance(updated_data, str):
+                    # Convert string to a basic structure that can be processed
+                    updated_data = {"content": updated_data}
+                else:
+                    # For other types, return as-is since we can't meaningfully update schema
+                    return updated_data
 
             for key in keys_to_update:
                 if key in data_old:

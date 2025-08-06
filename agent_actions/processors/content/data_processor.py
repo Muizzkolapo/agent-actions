@@ -1,4 +1,5 @@
 """Module for processing generated data."""
+import logging
 from typing import Dict, List
 
 from agent_actions.common.transformers.data_transformer import DataTransformer
@@ -22,6 +23,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
         Args:
             agent_config: Configuration for the agent
         """
+        super().__init__()
         self.agent_config = agent_config
     
     def supports_async(self) -> bool:
