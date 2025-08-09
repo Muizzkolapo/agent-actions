@@ -2,12 +2,15 @@
 from pathlib import Path
 from agent_actions.models import agent_builder
 from agent_actions.common.transformers.string_transformer import Tokenizer
-from agent_actions.processors.staging_processor.staging_content import StagingContentLoader
+from agent_actions.processors.staging_processor.staging_content import (
+    StagingContentLoader,
+)
 from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.constants import CHUNK_CONFIG_KEY
 from agent_actions.services.batch_service import BatchService
 from agent_actions.cli.exceptions import AgentActionsError
+from agent_actions.utils import FieldAnalyzer, FieldChunker
 import json
 import uuid
 
@@ -60,8 +63,82 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 parsed = json.loads(content)
             except Exception:
                 parsed = content  # fallback if already parsed
-            # Add batch_id and batch_uuid to each row if it's a list
-            if isinstance(parsed, list):
+            chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
+            field_chunking_config = chunk_config.get('field_chunking', {})
+            if field_chunking_config.get('enabled') and isinstance(parsed, list):
+                field_chunker = FieldChunker(chunk_config)
+                field_analyzer = FieldAnalyzer(chunk_config)
+                data_chunk = []
+                for idx, row in enumerate(parsed):
+                    analysis = field_analyzer.analyze_record(row)
+                    if analysis.requires_chunking:
+                        chunked_records = field_chunker.chunk_record(row, analysis)
+                        for chunk_idx, chunk_record in enumerate(chunked_records):
+                            chunk_record.update({
+                                "batch_id": local_batch_id,
+                                "batch_uuid": f"{local_batch_id}_{idx}_{chunk_idx}",
+                                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(chunk_record, sort_keys=True))),
+                                "target_id": str(uuid.uuid4()),
+                                "node_id": node_id,
+                            })
+                            data_chunk.append(chunk_record)
+                    else:
+                        row.update({
+                            "batch_id": local_batch_id,
+                            "batch_uuid": f"{local_batch_id}_{idx}",
+                            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                            "target_id": str(uuid.uuid4()),
+                            "node_id": node_id,
+                        })
+                        data_chunk.append(row)
+            else:
+                # Add batch_id and batch_uuid to each row if it's a list
+                if isinstance(parsed, list):
+                    data_chunk = [
+                        {
+                            **row,
+                            "batch_id": local_batch_id,
+                            "batch_uuid": f"{local_batch_id}_{idx}",
+                            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                            "target_id": str(uuid.uuid4()),
+                            "node_id": node_id,
+                        }
+                        for idx, row in enumerate(parsed)
+                    ]
+                else:
+                    data_chunk = [{"content": parsed, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}]
+            src_text = []
+        elif file_type in ('.csv', '.xlsx'):
+            rows = content_processor.tabular_loader.process(content)
+            chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
+            field_chunking_config = chunk_config.get('field_chunking', {})
+            if field_chunking_config.get('enabled'):
+                field_chunker = FieldChunker(chunk_config)
+                field_analyzer = FieldAnalyzer(chunk_config)
+                data_chunk = []
+                for idx, row in enumerate(rows):
+                    analysis = field_analyzer.analyze_record(row)
+                    if analysis.requires_chunking:
+                        chunked_records = field_chunker.chunk_record(row, analysis)
+                        for chunk_idx, chunk_record in enumerate(chunked_records):
+                            chunk_record.update({
+                                "batch_id": local_batch_id,
+                                "batch_uuid": f"{local_batch_id}_{idx}_{chunk_idx}",
+                                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(chunk_record, sort_keys=True))),
+                                "target_id": str(uuid.uuid4()),
+                                "node_id": node_id,
+                            })
+                            data_chunk.append(chunk_record)
+                    else:
+                        row.update({
+                            "batch_id": local_batch_id,
+                            "batch_uuid": f"{local_batch_id}_{idx}",
+                            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                            "target_id": str(uuid.uuid4()),
+                            "node_id": node_id,
+                        })
+                        data_chunk.append(row)
+            else:
                 data_chunk = [
                     {
                         **row,
@@ -69,26 +146,10 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                         "batch_uuid": f"{local_batch_id}_{idx}",
                         "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
                         "target_id": str(uuid.uuid4()),
-                        "node_id": node_id
+                        "node_id": node_id,
                     }
-                    for idx, row in enumerate(parsed)
+                    for idx, row in enumerate(rows)
                 ]
-            else:
-                data_chunk = [{"content": parsed, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}]
-            src_text = []
-        elif file_type in ('.csv', '.xlsx'):
-            rows = content_processor.tabular_loader.process(content)
-            data_chunk = [
-                {
-                    **row,
-                    "batch_id": local_batch_id,
-                    "batch_uuid": f"{local_batch_id}_{idx}",
-                    "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
-                    "target_id": str(uuid.uuid4()),
-                    "node_id": node_id
-                }
-                for idx, row in enumerate(rows)
-            ]
             src_text = []
         elif file_type == '.xml':
             rows = content_processor.xml_loader.process(content)

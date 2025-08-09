@@ -5,20 +5,42 @@ This module provides test fixtures that support the DI architecture,
 making it easy to test components in isolation with mocked dependencies.
 """
 
+import logging
+import sys
+import types
 import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
-from typing import Dict, Any, List
+from unittest.mock import Mock
+from typing import Any, Dict, List
 
-from agent_actions.core.dependency_injection import DependencyContainer, ProcessorFactory, registry
+# Provide a minimal stub for the optional 'ollama' dependency if it's missing
+if "ollama" not in sys.modules:  # pragma: no cover - testing utility
+    class _DummyClient:
+        def __init__(self, host=None):
+            pass
+
+        def chat(self, *args, **kwargs):
+            class _Resp:
+                message = type("msg", (), {"content": "{}"})()
+
+            return _Resp()
+
+    sys.modules["ollama"] = types.SimpleNamespace(Client=_DummyClient)
+
+from agent_actions.core.dependency_injection import (
+    DependencyContainer,
+    ProcessorFactory,
+    registry,
+)
 from agent_actions.core.application_container import ApplicationContainer
 from agent_actions.common.interfaces.interfaces import (
-    IDataLoader, IDataProcessor, IGenerator, IContentProcessor,
-    IBatchProcessor, IOutputHandler
+    IDataLoader,
+    IDataProcessor,
+    IGenerator,
+    IOutputHandler,
 )
 from agent_actions.services.batch_service import BatchService
 from agent_actions.core.path_manager import PathManager
-from agent_actions.cli.utils.service_logger import ServiceLogger
 
 
 @pytest.fixture
@@ -96,7 +118,7 @@ def mock_path_manager():
 @pytest.fixture
 def mock_logger():
     """Create a mock logger."""
-    logger = Mock(spec=Logger)
+    logger = Mock(spec=logging.Logger)
     return logger
 
 
@@ -112,7 +134,7 @@ def test_container(mock_data_loader, mock_data_processor, mock_data_generator,
     container.register_instance(IGenerator, mock_data_generator)
     container.register_instance(BatchService, mock_batch_service)
     container.register_instance(PathManager, mock_path_manager)
-    container.register_instance(Logger, mock_logger)
+    container.register_instance(logging.Logger, mock_logger)
     
     # Register additional mocks
     container.register_instance(IOutputHandler, Mock(spec=IOutputHandler))
@@ -186,14 +208,14 @@ def integration_container(test_config):
     from agent_actions.processors.target_processor.data_generator import DataGenerator
     from agent_actions.services.batch_service import BatchService
     from agent_actions.core.path_manager import PathManager
-    from agent_actions.utils.service_logger import Logger
+    from logging import Logger, getLogger
     
     container.register_transient(IDataLoader, SourceDataLoader)
     container.register_transient(IDataProcessor, DataProcessor)
     container.register_transient(IGenerator, DataGenerator)
     container.register_singleton(BatchService, BatchService)
     container.register_singleton(PathManager, PathManager)
-    container.register_singleton(Logger, Logger)
+    container.register_singleton(Logger, getLogger("agent_actions"))
     
     return container
 
