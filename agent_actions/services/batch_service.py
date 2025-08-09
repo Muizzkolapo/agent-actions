@@ -296,15 +296,24 @@ class BatchService:
             # Store the full row to preserve source_guid and other metadata
             self.context_map[custom_id] = row
 
+            # Extract the actual content from wrapped structure for processing
+            # This ensures dispatch functions receive the same data structure as online mode
+            if 'source_guid' in row and 'content' in row:
+                # Wrapped structure - extract the content
+                row_content = row['content']
+            else:
+                # Already unwrapped or different structure
+                row_content = row
+
             # Skip processing if conditional clause is present and evaluates to False
             if conditional_clause and not execute_user_defined_function(
-                conditional_clause, row
+                conditional_clause, row_content
             ):
                 # Store the original row without processing for conditional failures
                 continue
 
             # Apply remove_collection only for rows that pass the conditional check
-            processed_row = apply_remove_collection(row, agent_config)
+            processed_row = apply_remove_collection(row_content, agent_config)
 
             formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
