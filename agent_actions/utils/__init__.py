@@ -29,7 +29,7 @@ from .path_utils import (
     SIDE_OUTPUT_DIR_NAME,
 )
 
-from .field_chunking import FieldAnalyzer, FieldChunker, FieldAnalysisResult
+from .field_chunking import FieldAnalyzer, FieldChunker, FieldAnalysisResult, FieldChunkingValidationError, FieldChunkingError
 
 __all__ = [
     "ensure_directory_exists",
@@ -51,6 +51,8 @@ __all__ = [
     "COMMON_EXTENSIONS",
     "SIDE_OUTPUT_DIR_NAME",
     "FieldAnalyzer",
-    "FieldAnalysisResult",
+    "FieldAnalysisResult", 
     "FieldChunker",
+    "FieldChunkingValidationError",
+    "FieldChunkingError",
 ]

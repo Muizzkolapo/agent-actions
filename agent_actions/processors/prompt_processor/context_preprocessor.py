@@ -34,6 +34,14 @@ class ContextPreprocessor:
         if isinstance(context_data, dict) and "source_guid" in context_data and "content" in context_data:
             return context_data["source_guid"], context_data["content"]
         
+        # Handle chunked records: records with source_guid + chunk_info but no dedicated content field
+        if isinstance(context_data, dict) and "source_guid" in context_data and "chunk_info" in context_data:
+            # For chunked records, the entire record IS the content
+            # Remove internal metadata fields and keep the actual data
+            content_data = {k: v for k, v in context_data.items() 
+                          if k not in ["source_guid", "target_id", "record_index", "chunk_index"]}
+            return context_data["source_guid"], content_data
+        
         # Handle direct source_guid in dict: {"source_guid": "..."}
         if isinstance(context_data, dict) and "source_guid" in context_data:
             return context_data["source_guid"], context_data
