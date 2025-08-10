@@ -113,9 +113,9 @@ class DataGenerator(IGenerator):
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
 
-        source_loaded_prompt = PromptUtils.replace_guid_placeholder(
+        source_loaded_prompt = PromptUtils.replace_source_context_placeholder(
             raw_prompt,
-            str(source_content)
+            source_content
         )
         prompt, cleaned_contents = PromptUtils.replace_placeholders(source_loaded_prompt, contents)
         return prompt, cleaned_contents

@@ -23,6 +23,7 @@ class ContextPreprocessor:
     def extract_guid_and_content(context_data):
         """
         Extract source_guid and content from context data if available.
+        Handles nested chunked record format: {"uuid": {"source_guid": "...", ...}}
         
         Parameters:
             context_data: Data to extract from
@@ -30,34 +31,14 @@ class ContextPreprocessor:
         Returns:
             Tuple of (source_guid, content) where source_guid may be None
         """
-        # Handle standard format: {"source_guid": "...", "content": "..."}
-        if isinstance(context_data, dict) and "source_guid" in context_data and "content" in context_data:
-            return context_data["source_guid"], context_data["content"]
-        
-        # Handle chunked records: records with source_guid + chunk_info but no dedicated content field
-        if isinstance(context_data, dict) and "source_guid" in context_data and "chunk_info" in context_data:
-            # For chunked records, the entire record IS the content
-            # Remove internal metadata fields and keep the actual data
-            content_data = {k: v for k, v in context_data.items() 
-                          if k not in ["source_guid", "target_id", "record_index", "chunk_index"]}
-            return context_data["source_guid"], content_data
-        
-        # Handle direct source_guid in dict: {"source_guid": "..."}
-        if isinstance(context_data, dict) and "source_guid" in context_data:
-            return context_data["source_guid"], context_data
-        
-        # Handle nested structures like: [{"uuid": {"source_guid": "...", ...}}]
-        if isinstance(context_data, list):
-            for item in context_data:
-                if isinstance(item, dict):
-                    for _, value in item.items():
-                        if isinstance(value, dict) and "source_guid" in value:
-                            return value["source_guid"], context_data
-        
         # Handle nested dict structures: {"uuid": {"source_guid": "...", ...}}
         if isinstance(context_data, dict):
             for _, value in context_data.items():
                 if isinstance(value, dict) and "source_guid" in value:
-                    return value["source_guid"], context_data
+                    # For nested chunked records, filter out metadata and return inner record
+                    content_data = {k: v for k, v in value.items() 
+                                  if k not in ["source_guid", "target_id", "record_index", "chunk_index"]}
+                    return value["source_guid"], content_data
         
+        # If no nested structure found, return None and original data
         return None, context_data
