@@ -228,16 +228,40 @@ class ProcessorUtils:
             # If data is a string or other type, wrap it in a list
             data = [data] if data is not None else []
         
+        # Check if data already has the correct structure
+        # (i.e., list of dicts with 'source_guid' and 'content' keys)
+        already_structured = (
+            len(data) > 0 and
+            all(
+                isinstance(item, dict) and 
+                'source_guid' in item and 
+                'content' in item 
+                for item in data
+            )
+        )
+        
         side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
 
-        if side_collection:
-            updated = [
-                DataTransformer.update_schema_objects(context_data, item, side_collection)
-                for item in data
-            ]
+        if already_structured and not side_collection:
+            # Data already has correct structure, just ensure required fields
+            output = data
+        elif side_collection:
+            # Apply side_collection logic
+            if already_structured:
+                # Extract content from structured data for side_collection processing
+                contents = [item['content'] for item in data]
+                updated = [
+                    DataTransformer.update_schema_objects(context_data, content, side_collection)
+                    for content in contents
+                ]
+            else:
+                updated = [
+                    DataTransformer.update_schema_objects(context_data, item, side_collection)
+                    for item in data
+                ]
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
-            # Always apply transform_structure to ensure consistent output format
+            # Apply transform_structure to ensure consistent output format
             output = DataTransformer.transform_structure([{source_guid: data}])
         
         # Ensure every output object has required fields

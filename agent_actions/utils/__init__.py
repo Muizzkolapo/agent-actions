@@ -29,6 +29,8 @@ from .path_utils import (
     SIDE_OUTPUT_DIR_NAME,
 )
 
+from .field_chunking import FieldAnalyzer, FieldChunker, FieldAnalysisResult, FieldChunkingValidationError, FieldChunkingError
+
 __all__ = [
     "ensure_directory_exists",
     "create_side_output_directory", 
@@ -46,6 +48,11 @@ __all__ = [
     "mkdir_with_parents",
     "get_absolute_path",
     "DEFAULT_MARKER_FILE",
-    "COMMON_EXTENSIONS", 
+    "COMMON_EXTENSIONS",
     "SIDE_OUTPUT_DIR_NAME",
+    "FieldAnalyzer",
+    "FieldAnalysisResult", 
+    "FieldChunker",
+    "FieldChunkingValidationError",
+    "FieldChunkingError",
 ]

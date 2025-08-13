@@ -97,15 +97,25 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
                 transformed_response[i] = ProcessorUtils.add_context_lineage_tracking(node, context_data, node_id)
 
 
-            # Step 9: Prepare source text
-            if (
-                source_path is not None
-                and isinstance(context_data, dict)
-                and "source_guid" in context_data
-            ):
-                src_text = [{source_guid: formatted_prompt}]
+            # Step 9: Prepare source text - save original data as array format with chunk_info
+            if source_guid:
+                # If enriched_data has chunk_info, it's a chunk - keep chunk_info for tracking
+                if isinstance(enriched_data, dict) and "chunk_info" in enriched_data:
+                    # Create original-style data by removing processing metadata but keep chunk_info
+                    original_data = {k: v for k, v in enriched_data.items() 
+                                   if k not in ["target_id", "record_index", "chunk_index"]}
+                    # Ensure source_guid is included in the data
+                    original_data["source_guid"] = source_guid
+                    src_text = [original_data]
+                else:
+                    # Use enriched_data as-is if it's not chunked, ensure source_guid is included
+                    data_to_save = enriched_data or context_data
+                    if isinstance(data_to_save, dict):
+                        data_to_save = data_to_save.copy()
+                        data_to_save["source_guid"] = source_guid
+                    src_text = [data_to_save]
             else:
-                src_text = [{source_guid: context_data}]
+                src_text = []
 
             return transformed_response, src_text
 

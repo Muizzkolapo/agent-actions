@@ -1,6 +1,7 @@
 """Module for String Processing Functions"""
 
 import re
+import json
 import textwrap
 from agent_actions.common.transformers.string_transformer import StringProcessor
 from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
@@ -78,13 +79,13 @@ class PromptUtils:
 
 
     @staticmethod
-    def replace_guid_placeholder(data, source_guid):
+    def replace_source_context_placeholder(data, source_content):
         """
-        Replace the placeholder 'return_collection{{source_context}}' with the specified source_guid in a string.
+        Replace the placeholder 'source_context{{...}}' with source content or selected fields.
 
         Parameters:
             data (str): The string to process.
-            source_guid (str): The source_guid to replace the placeholder with.
+            source_content (Any): The full source content (can be dict, list, or any JSON-serializable object).
 
         Returns:
             str: The updated string with the placeholder replaced.
@@ -92,14 +93,51 @@ class PromptUtils:
         if not isinstance(data, str):
             return data
 
+        def replace_func(match):
+            # Extract content between {{ }}
+            field_spec = match.group(1).strip()
+            
+            # If empty, return full source content as JSON string
+            if not field_spec:
+                if isinstance(source_content, str):
+                    return source_content
+                return json.dumps(source_content, indent=2) if source_content else ""
+            
+            # Parse field selection (e.g., ['page_content'] or ['page_content', 'title'])
+            try:
+                # Safely evaluate the field list
+                import ast
+                fields = ast.literal_eval(field_spec)
+                if not isinstance(fields, list):
+                    # If not a list, treat as single field
+                    fields = [field_spec.strip("'\"")]
+                
+                # Extract specified fields from source_content
+                if isinstance(source_content, dict):
+                    result = {}
+                    for field in fields:
+                        if field in source_content:
+                            result[field] = source_content[field]
+                    return json.dumps(result, indent=2) if result else ""
+                else:
+                    # If source_content is not a dict, return it as is
+                    return json.dumps(source_content, indent=2) if source_content else ""
+                    
+            except (ValueError, SyntaxError):
+                # If parsing fails, return empty string
+                return ""
+
+        # Replace source_context{{...}} pattern
         replaced_data = re.sub(
-            r'return_collection\{\{source_context\}\}',
-            lambda _: source_guid,
+            r'source_context\{\{(.*?)\}\}',
+            replace_func,
             data,
-            flags=re.IGNORECASE,
+            flags=re.IGNORECASE | re.DOTALL,
         )
+        
         cleaned_content = textwrap.dedent(replaced_data).strip()
         return cleaned_content
+    
 
     @staticmethod
     def inject_function_outputs_into_prompt(prompt_config,

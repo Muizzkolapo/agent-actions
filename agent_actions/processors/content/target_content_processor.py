@@ -208,6 +208,21 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = data[0]['content'], data[0]['source_guid']
             generated_data, _ = self.data_generator.create_agent_with_data(data)
+            
+            # For tool vendor with file granularity, return generated_data directly
+            # to match the bypass behavior in agent_builder.py
+            model_vendor = self.agent_config.get('model_vendor', '').lower()
+            granularity = self.agent_config.get('granularity', 'record').lower()
+            
+            if model_vendor == 'tool' and granularity == 'file':
+                # File-level tools should bypass the normal processing pipeline
+                # If generated_data is already a list, return it directly
+                # If it's a single item, wrap it in a list
+                if isinstance(generated_data, list):
+                    return generated_data
+                else:
+                    return [generated_data]
+            
             return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
             raise RuntimeError(f"Failed to process at file level: {str(e)}")

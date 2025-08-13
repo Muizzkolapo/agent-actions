@@ -166,15 +166,22 @@ class DataTransformer:
     def get_content_by_source_guid(data, source_guid):
         """
         Retrieve the content associated with a specific source_guid from a list of dictionaries.
+        Supports both old format (GUID as key) and new format (GUID as field).
 
         Parameters:
-            data (list of dict): The list containing dictionaries with GUIDs as keys.
+            data (list of dict): The list containing dictionaries with GUIDs as keys or fields.
             source_guid (str): The source_guid to search for.
 
         Returns:
             str: The content associated with the source_guid.
         """
         for item in data:
+            # Check old format (GUID as key)
             if source_guid in item:
                 return item[source_guid]
+            # Check new format (GUID as field)
+            elif isinstance(item, dict) and item.get("source_guid") == source_guid:
+                # Return the item without the source_guid field for clean content
+                clean_item = {k: v for k, v in item.items() if k != "source_guid"}
+                return clean_item
         raise KeyError(f"source_guid not found: {source_guid}")

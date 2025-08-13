@@ -97,11 +97,27 @@ class SourcePathManager:
                 
             with open(source_path, 'r') as file:
                 source_data = json.load(file)
-                if isinstance(context_data, dict) and "source_guid" in context_data:
-                    source_guid = context_data["source_guid"]
+                
+                # Extract source_guid from context_data (handle nested structure)
+                source_guid = None
+                if isinstance(context_data, dict):
+                    # Check top level first
+                    if "source_guid" in context_data:
+                        source_guid = context_data["source_guid"]
+                    else:
+                        # Check nested structure
+                        for _, value in context_data.items():
+                            if isinstance(value, dict) and "source_guid" in value:
+                                source_guid = value["source_guid"]
+                                break
+                
+                if source_guid:
+                    # Look for the source_guid in the source data array
                     for item in source_data:
-                        if source_guid in item:
-                            return item[source_guid]
+                        if isinstance(item, dict) and item.get("source_guid") == source_guid:
+                            # Return the item without the source_guid field for clean content
+                            clean_item = {k: v for k, v in item.items() if k != "source_guid"}
+                            return clean_item
             return None
         except Exception as e:
             raise IOError(f"Failed to load or create source content: {str(e)}")
@@ -130,11 +146,14 @@ class SourcePathManager:
             else:
                 source_data = []
                 
-            # Update or append content
-            content_entry = {source_guid: content}
+            # Update or append content in array format
+            content_entry = content.copy() if isinstance(content, dict) else content
+            if isinstance(content_entry, dict):
+                content_entry["source_guid"] = source_guid
+            
             updated = False
             for i, item in enumerate(source_data):
-                if source_guid in item:
+                if isinstance(item, dict) and item.get("source_guid") == source_guid:
                     source_data[i] = content_entry
                     updated = True
                     break
