@@ -9,6 +9,12 @@ from typing import Dict, Any, Optional
 from .dependency_injection import DependencyContainer, ProcessorFactory, registry
 from .di_configurator import DIConfigurator, ConfigurationProfile
 from .agent_runner import AgentRunner
+from ..common.interfaces.interfaces import (
+    IDataLoader,
+    IDataProcessor,
+    IGenerator,
+    ISourceDataLoader,
+)
 
 
 class ApplicationContainer:
@@ -70,18 +76,31 @@ class ApplicationContainer:
         Returns:
             TargetContentProcessor instance with injected dependencies.
         """
-        # Create dependencies that need runtime parameters
-        source_loader = self.processor_factory.create_source_data_loader(agent_name)
-        
-        # Create other dependencies with their required parameters
         from ..processors.target_processor.data_generator import DataGenerator
         from ..processors.target_processor.data_processor import DataProcessor
         from ..services.batch_service import BatchService
-        
-        data_generator = DataGenerator(agent_config, agent_name)
-        data_processor = DataProcessor(agent_config)
+
+        # Use mocked dependencies when available
+        try:
+            source_loader = self.container.get(ISourceDataLoader)
+        except Exception:
+            try:
+                source_loader = self.container.get(IDataLoader)
+            except Exception:
+                source_loader = self.processor_factory.create_source_data_loader(agent_name)
+
+        try:
+            data_generator = self.container.get(IGenerator)
+        except Exception:
+            data_generator = DataGenerator(agent_config, agent_name)
+
+        try:
+            data_processor = self.container.get(IDataProcessor)
+        except Exception:
+            data_processor = DataProcessor(agent_config)
+
         batch_service = self.container.get(BatchService)
-        
+
         # Create the processor with explicit dependencies
         return self.processor_factory.create_processor(
             "target_content",
@@ -91,7 +110,7 @@ class ApplicationContainer:
             source_loader=source_loader,
             data_generator=data_generator,
             data_processor=data_processor,
-            batch_service=batch_service
+            batch_service=batch_service,
         )
     
     @classmethod
@@ -151,7 +170,11 @@ class ApplicationContainer:
         
         # Check if key services can be resolved
         try:
-            from ..processors.interfaces import IDataLoader, IDataProcessor, IGenerator
+            from ..common.interfaces.interfaces import (
+                IDataLoader,
+                IDataProcessor,
+                IGenerator,
+            )
             from ..services.batch_service import BatchService
             
             # Try to resolve key services

@@ -65,10 +65,25 @@ def create_dynamic_agent(
     tool_args: Optional[Dict[str, Any]] = None,
     source_content: Optional[Any] = None  # Add source_content parameter
 ) -> List[Any]:
+    """Build and execute a prompt against the selected vendor.
+
+    If the agent configuration specifies response interceptors, the request
+    will be executed through the interceptor pipeline which can validate and
+    reprompt on failure.
     """
-    Build and execute a prompt against the selected vendor, returning
-    the model’s response(s) as a list.
-    """
+    interceptor_configs = agent_config.get("interceptors", [])
+    if interceptor_configs:
+        return _execute_with_interceptors(
+            agent_config,
+            udf,
+            context_data_str,
+            formatted_prompt,
+            tools_path,
+            tool_args,
+            source_content,
+            interceptor_configs,
+        )
+
     # ----- prompt selection / templating ----------------------------------
     prompt_config_base = _prepare_prompt(agent_config, formatted_prompt)
     if not tools_path:
@@ -208,5 +223,131 @@ def _invoke_vendor_handler(
     # Normalise single-element responses
     if model_vendor in SINGLE_RESPONSE_VENDORS:
         return [response_data]
+
+    return response_data
+
+
+def _execute_with_interceptors(
+    agent_config: Dict[str, Any],
+    udf: Any,
+    context_data_str: Union[str, Dict],
+    formatted_prompt: Optional[str],
+    tools_path: Optional[str],
+    tool_args: Optional[Dict[str, Any]],
+    source_content: Optional[Any],
+    interceptor_configs: List[Dict[str, Any]],
+) -> List[Any]:
+    """Execute the agent with validation and reprompt interceptors."""
+
+    from ..interceptors.factory import InterceptorFactory
+    from ..interceptors.reprompt_interceptor import RepromptInterceptor
+
+    # Separate reprompt interceptor from others
+    non_reprompt_configs: List[Dict[str, Any]] = [
+        cfg for cfg in interceptor_configs if cfg.get("type") != "reprompt"
+    ]
+    reprompt_cfg = next(
+        (cfg for cfg in interceptor_configs if cfg.get("type") == "reprompt"),
+        None,
+    )
+
+    interceptors = InterceptorFactory.build_chain(non_reprompt_configs)
+    reprompt_interceptor: RepromptInterceptor | None = (
+        InterceptorFactory.create_interceptor(reprompt_cfg) if reprompt_cfg else None
+    )
+
+    execution_context: Dict[str, Any] = {
+        "prompt": formatted_prompt or agent_config.get("prompt", ""),
+        "original_prompt": formatted_prompt or agent_config.get("prompt", ""),
+        "attempt": 0,
+        "agent_config": agent_config,
+        "history": [],
+    }
+
+    max_attempts = 3
+    if reprompt_cfg:
+        max_attempts = reprompt_cfg.get("config", {}).get("max_attempts", 3)
+
+    while execution_context["attempt"] < max_attempts:
+        # Generate improved prompt if previous validation failed
+        if reprompt_interceptor and execution_context.get("validation_error"):
+            reprompt_result = reprompt_interceptor.intercept(None, execution_context)
+            if reprompt_result.metadata and reprompt_result.metadata.get(
+                "max_attempts_reached"
+            ):
+                return execution_context.get("failed_response", [])
+            if reprompt_result.retry_context:
+                execution_context.update(reprompt_result.retry_context)
+            # Clear validation error before next attempt
+            execution_context.pop("validation_error", None)
+            execution_context.pop("validator_name", None)
+            execution_context.pop("validator_args", None)
+            execution_context.pop("failed_response", None)
+
+        current_prompt = execution_context.get("prompt")
+
+        prompt_config_base = _prepare_prompt(agent_config, current_prompt)
+        if not tools_path:
+            tools_path = agent_config.get("tools", {}).get("path")
+        if tools_path and tools_path not in sys.path:
+            sys.path.insert(0, tools_path)
+
+        model_vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
+        is_tool = model_vendor == "tool"
+
+        context_data: Union[str, Dict] = (
+            context_data_str
+            if is_tool
+            else (
+                json.dumps(context_data_str, ensure_ascii=False)
+                if not isinstance(context_data_str, str)
+                else context_data_str
+            )
+        )
+
+        prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
+            prompt_config_base,
+            tools_path,
+            context_data
+            if isinstance(context_data, str)
+            else json.dumps(context_data, ensure_ascii=False),
+            agent_config=agent_config,
+        )
+
+        _debug_print_prompt(
+            agent_config,
+            prompt_config,
+            context_data
+            if isinstance(context_data, str)
+            else json.dumps(context_data, ensure_ascii=False),
+        )
+
+        schema = _prepare_schema(agent_config, model_vendor)
+        granularity = agent_config.get("granularity", "record").lower()
+
+        response_data = _invoke_vendor_handler(
+            model_vendor,
+            agent_config,
+            prompt_config,
+            context_data,
+            schema,
+            granularity,
+            current_prompt,
+            tool_args,
+            source_content,
+        )
+
+        if captured_results:
+            for item in response_data:
+                if isinstance(item, dict):
+                    item.update(captured_results)
+
+        result = interceptors.process(response_data, execution_context)
+
+        if result.retry_context:
+            execution_context.update(result.retry_context)
+            continue
+
+        return result.modified_response or response_data
 
     return response_data

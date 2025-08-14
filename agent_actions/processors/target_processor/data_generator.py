@@ -67,6 +67,10 @@ class DataGenerator(IGenerator):
             
             tool_args = self.agent_config.get('tool_args', {})
 
+            # If no model vendor is configured, return passthrough data
+            if not self.agent_config.get('model_vendor'):
+                return ([{'content': contents}], False)
+
             # Create and run the agent through the shared utility
             response, executed = run_dynamic_agent(
                 self.agent_config,

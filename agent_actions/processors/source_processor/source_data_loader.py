@@ -10,16 +10,16 @@ from ...core.dependency_injection import registry
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
-    def __init__(self, agent_name: str, path_manager: PathManager):
+    def __init__(self, agent_name: str, path_manager: PathManager | None = None):
         """
         Initialize the source data loader.
-        
+
         Args:
             agent_name: Name of the agent
-            path_manager: PathManager instance for path operations
+            path_manager: Optional PathManager instance for path operations
         """
         self.agent_name = agent_name
-        self.path_manager = path_manager
+        self.path_manager = path_manager or PathManager()
     
     def supports_async(self) -> bool:
         """Return True as this loader supports async operations."""
@@ -47,24 +47,27 @@ class SourceDataLoader(ISourceDataLoader):
             # Convert target path to source path, skipping node directory
             target_path = self.path_manager.normalize_path(file_path)
             parts = target_path.parts
-            
-            # Find agent_io index
+
+            # Find agent_io/target structure
             try:
                 agent_io_index = parts.index("agent_io")
+                if len(parts) <= agent_io_index + 1 or parts[agent_io_index + 1] != "target":
+                    raise ValueError
             except ValueError:
                 raise PathManagerError(f"'agent_io' not found in path {file_path}")
-            
-            # Validate path structure has enough components
-            if len(parts) <= agent_io_index + 2:
-                raise PathManagerError(f"Path too short - missing node directory after 'agent_io/target/' in {file_path}")
-            
-            # Extract parts: everything before agent_io + agent_io + source + everything after node directory
-            # Skip the node directory (agent_io_index + 3) to get the filename directly in source
-            pipeline_parts = parts[:agent_io_index]
-            file_parts = parts[agent_io_index + 3:]  # Skip agent_io/target/node_dir
-            
+
+            # Validate path structure has node directory and filename
+            node_part = parts[agent_io_index + 2] if len(parts) > agent_io_index + 2 else None
+            if node_part is None or Path(node_part).suffix:
+                raise PathManagerError(
+                    f"Path too short - missing node directory after 'agent_io/target/' in {file_path}"
+                )
+            file_parts = parts[agent_io_index + 3:]
             if not file_parts:
                 raise PathManagerError(f"No filename found after node directory in {file_path}")
+
+            # Extract parts: everything before agent_io + agent_io + source + everything after node directory
+            pipeline_parts = parts[:agent_io_index]
             
             # Construct source path: .../agent_io/source/filename.json
             source_file_to_load = Path(*pipeline_parts) / "agent_io" / "source" / Path(*file_parts)
@@ -75,11 +78,13 @@ class SourceDataLoader(ISourceDataLoader):
             
             # Validate the source file is within the project structure (if project root can be found)
             try:
-                if not self.path_manager.is_within_project(source_file_to_load):
-                    raise ValueError(f"Source file is outside project bounds: {source_file_to_load}")
+                within_project = self.path_manager.is_within_project(source_file_to_load)
             except Exception:
-                # If project root validation fails, skip this check (for tests/edge cases)
-                pass
+                within_project = True
+            if not within_project:
+                raise ValueError(
+                    f"Source file is outside project bounds: {source_file_to_load}"
+                )
             
             with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)

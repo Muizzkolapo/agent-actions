@@ -8,7 +8,11 @@ based on configuration settings.
 from typing import Dict, Any
 from .dependency_injection import DependencyContainer, ProcessorFactory, registry
 from ..common.interfaces.interfaces import (
-    IDataLoader, IDataProcessor, IGenerator, IContentProcessor
+    IDataLoader,
+    IDataProcessor,
+    IGenerator,
+    IContentProcessor,
+    ISourceDataLoader,
 )
 
 
@@ -64,7 +68,7 @@ class DIConfigurator:
     @staticmethod
     def _register_utilities(container: DependencyContainer, config: Dict[str, Any]):
         """Register utility services."""
-        from ..transformers.data_transformer import DataTransformer
+        from ..common.transformers.data_transformer import DataTransformer
         from ..handlers.prompt_handler import PromptLoader
         from ..processors.prompt_processor.sample_enricher import SampleEnricher
         
@@ -82,18 +86,36 @@ class DIConfigurator:
     def configure_for_testing() -> DependencyContainer:
         """Configure container for testing with mocks."""
         from unittest.mock import Mock
-        
+
         container = DependencyContainer()
-        
-        # Register mocks for testing
-        container.register_instance(IDataLoader, Mock(spec=IDataLoader))
-        container.register_instance(IDataProcessor, Mock(spec=IDataProcessor))
-        container.register_instance(IGenerator, Mock(spec=IGenerator))
-        
+
+        # Register mocks for testing with basic behavior
+        mock_loader = Mock()
+        mock_loader.load_source_data.return_value = [
+            {'source_guid': 'test-guid-1', 'content': 'test content 1'},
+            {'source_guid': 'test-guid-2', 'content': 'test content 2'},
+        ]
+        container.register_instance(ISourceDataLoader, mock_loader)
+        container.register_instance(IDataLoader, mock_loader)
+
+        def processor_factory():
+            m = Mock()
+            m.process_item.return_value = []
+            m.separate_side_output.return_value = ([], [])
+            return m
+
+        def generator_factory():
+            m = Mock()
+            m.create_agent_with_data.return_value = ([], True)
+            return m
+
+        container.register_factory(IDataProcessor, processor_factory)
+        container.register_factory(IGenerator, generator_factory)
+
         # Mock core services
         from .path_manager import PathManager
         from ..services.batch_service import BatchService
-        
+
         container.register_instance(PathManager, Mock(spec=PathManager))
         container.register_instance(BatchService, Mock(spec=BatchService))
         

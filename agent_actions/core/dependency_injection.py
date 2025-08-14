@@ -96,16 +96,22 @@ class DependencyContainer:
         
         init_kwargs = {}
         for param_name, param in signature.parameters.items():
-            if param_name == 'self':
+            if param_name == 'self' or param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            ):
+                # Skip self, *args and **kwargs
                 continue
-                
+
             param_type = type_hints.get(param_name)
             if param_type and self.has(param_type):
                 init_kwargs[param_name] = self.get(param_type)
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                raise ValueError(f"Cannot resolve dependency '{param_name}' for {cls.__name__}")
+                raise ValueError(
+                    f"Cannot resolve dependency '{param_name}' for {cls.__name__}"
+                )
         
         return cls(**init_kwargs)
 
@@ -195,24 +201,24 @@ class ProcessorFactory:
         self.container = container
         self.registry = registry
     
-    def create_processor(self, name: str, **kwargs) -> Any:
+    def create_processor(self, processor_name: str, **kwargs) -> Any:
         """Create a processor instance with injected dependencies."""
-        processor_cls = self.registry.get_processor(name)
+        processor_cls = self.registry.get_processor(processor_name)
         return self._create_with_dependencies(processor_cls, **kwargs)
-    
-    def create_loader(self, name: str, **kwargs) -> Any:
+
+    def create_loader(self, loader_name: str, **kwargs) -> Any:
         """Create a loader instance with injected dependencies."""
-        loader_cls = self.registry.get_loader(name)
+        loader_cls = self.registry.get_loader(loader_name)
         return self._create_with_dependencies(loader_cls, **kwargs)
-    
-    def create_generator(self, name: str, **kwargs) -> Any:
+
+    def create_generator(self, generator_name: str, **kwargs) -> Any:
         """Create a generator instance with injected dependencies."""
-        generator_cls = self.registry.get_generator(name)
+        generator_cls = self.registry.get_generator(generator_name)
         return self._create_with_dependencies(generator_cls, **kwargs)
-    
-    def create_service(self, name: str, **kwargs) -> Any:
+
+    def create_service(self, service_name: str, **kwargs) -> Any:
         """Create a service instance with injected dependencies."""
-        service_cls = self.registry.get_service(name)
+        service_cls = self.registry.get_service(service_name)
         return self._create_with_dependencies(service_cls, **kwargs)
     
     def _create_with_dependencies(self, cls: Type, **override_kwargs) -> Any:

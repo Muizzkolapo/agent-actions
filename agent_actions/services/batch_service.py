@@ -122,7 +122,7 @@ class BatchService:
     
     def __init__(self, provider: Optional[BatchProvider] = None):
         self.data_loader = BatchDataLoader()
-        self.provider = provider or OpenAIBatchProvider()
+        self.provider = provider
         self.context_map = {}
         self.side_collection = []
         # Cache providers by type to avoid recreating them
