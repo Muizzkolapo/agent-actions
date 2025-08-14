@@ -25,7 +25,10 @@ class InterceptorFactory:
 
         interceptor_class = cls._interceptor_types[interceptor_type]
         interceptor = interceptor_class()
-        interceptor.configure(config.get("config", {}))
+        # Pass the entire config except 'type'
+        config_copy = config.copy()
+        config_copy.pop("type", None)
+        interceptor.configure(config_copy)
         return interceptor
 
     @classmethod
