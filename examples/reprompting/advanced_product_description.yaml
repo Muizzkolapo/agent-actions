@@ -1,0 +1,61 @@
+# Advanced Example: Multi-Validation Product Description
+# This example shows multiple validation criteria and template-based reprompting
+
+agents:
+  - agent_type: ProductDescriptionWriter
+    model_vendor: "anthropic"
+    model_name: "claude-3-sonnet"
+    prompt: "Write a compelling product description for a smartphone"
+    
+    interceptors:
+      # Multiple validation interceptors can be chained
+      
+      # 1. Check character count is within range
+      - type: validation
+        config:
+          validator: "char_count"
+          validator_args:
+            min_chars: 100
+            max_chars: 300
+          on_failure: retry
+          
+      # 2. Ensure required keywords are present
+      - type: validation
+        config:
+          validator: "contains_keywords"
+          validator_args:
+            required_keywords: ["features", "benefits", "price", "warranty"]
+          on_failure: retry
+          
+      # 3. Reprompt with template-based strategy
+      - type: reprompt
+        config:
+          strategy: "template"
+          max_attempts: 3
+          templates:
+            # Template for character count failures
+            "too short": |
+              {original_prompt}
+              
+              IMPORTANT: The description must be between {min_chars} and {max_chars} characters.
+              Current length is too short. Add more detail about the product's specifications,
+              unique selling points, and customer benefits.
+            
+            "too long": |
+              {original_prompt}
+              
+              IMPORTANT: The description must be between {min_chars} and {max_chars} characters.
+              Current length is too long. Be more concise while keeping the key information.
+            
+            # Template for missing keywords
+            "missing required keywords": |
+              {original_prompt}
+              
+              CRITICAL REQUIREMENTS: You MUST include ALL of these elements:
+              - Product features and specifications
+              - Customer benefits and value proposition  
+              - Pricing information
+              - Warranty details
+              
+              Keywords that must appear: {required_keywords}
+              Make sure each keyword is naturally integrated into the description.

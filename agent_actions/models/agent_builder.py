@@ -266,9 +266,15 @@ def _execute_with_interceptors(
 
     max_attempts = 3
     if reprompt_cfg:
-        max_attempts = reprompt_cfg.get("config", {}).get("max_attempts", 3)
+        # Check both flat structure and nested config structure
+        max_attempts = reprompt_cfg.get("max_attempts") or reprompt_cfg.get("config", {}).get("max_attempts", 3)
 
-    while execution_context["attempt"] < max_attempts:
+    safety_counter = 0  # Add safety counter to prevent infinite loops
+    while execution_context["attempt"] < max_attempts and safety_counter < 10:
+        safety_counter += 1
+        print(f"🔄 RETRY LOOP: attempt={execution_context['attempt']}, safety_counter={safety_counter}")
+        print(f"   validation_error present: {bool(execution_context.get('validation_error'))}")
+        
         # Generate improved prompt if previous validation failed
         if reprompt_interceptor and execution_context.get("validation_error"):
             reprompt_result = reprompt_interceptor.intercept(None, execution_context)
@@ -342,12 +348,20 @@ def _execute_with_interceptors(
                 if isinstance(item, dict):
                     item.update(captured_results)
 
+        print(f"   Processing response through interceptors...")
+        print(f"   Response data type: {type(response_data)}")
+        print(f"   Response preview: {str(response_data)[:200]}")
+        
         result = interceptors.process(response_data, execution_context)
 
+        print(f"   Interceptor result: retry_context={bool(result.retry_context)}")
         if result.retry_context:
+            print(f"   Retry context keys: {list(result.retry_context.keys())}")
             execution_context.update(result.retry_context)
+            print(f"   Updated execution context attempt: {execution_context.get('attempt')}")
             continue
 
+        print(f"   ✅ Returning successful response")
         return result.modified_response or response_data
 
     return response_data

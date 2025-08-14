@@ -32,41 +32,29 @@ class LLMRepromptStrategy(RepromptStrategy):
 
     def __init__(self, llm_config: Dict):
         self.llm_config = llm_config
+        self.include_previous_response = llm_config.get("include_previous_response", True)
         self.prompt_template = llm_config.get(
             "prompt_template", self._default_template()
         )
 
-    def generate_improved_prompt(self, context: RepromptContext) -> str:  # pragma: no cover - requires model calls
-        from ..models import agent_builder
-
-        reprompt_request = self.prompt_template.format(
-            original_prompt=context.original_prompt,
-            validation_error=context.validation_error,
-            validation_criteria=context.validation_criteria,
-            failed_response=context.failed_response,
-            attempt_number=context.attempt_number,
+    def generate_improved_prompt(self, context: RepromptContext) -> str:
+        # Simple template-based construction - no LLM call needed
+        base_prompt = (
+            f"{context.original_prompt}\n\n"
+            f"IMPORTANT: Previous attempt failed validation with error: {context.validation_error}. "
         )
-
-        reprompt_agent_config = {
-            "model_vendor": self.llm_config.get("model_vendor", "openai"),
-            "model_name": self.llm_config.get("model_name", "gpt-4"),
-            "prompt": reprompt_request,
-            "temperature": 0.7,
-        }
-
-        response = agent_builder.create_dynamic_agent(
-            reprompt_agent_config,
-            udf=None,
-            context_data_str="",
-            formatted_prompt=reprompt_request,
-        )
-
-        if isinstance(response, list) and response:
-            first = response[0]
-            if isinstance(first, dict):
-                return first.get("content", first.get("text", ""))
-            return str(first)
-        return str(response)
+        
+        if self.include_previous_response:
+            base_prompt += f"Your previous response was: \"{context.failed_response}\"\n"
+        
+        improved_prompt = base_prompt + "Reprocess and ensure your response meets the requirements."
+        
+        print(f"📝 CONSTRUCTED IMPROVED PROMPT:")
+        print(f"=" * 80)
+        print(improved_prompt)
+        print(f"=" * 80)
+        
+        return improved_prompt
 
     def _default_template(self) -> str:
         return (
