@@ -742,6 +742,124 @@ def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tu
 3. **Resource Limits**: Enforce maximum retry attempts and timeout limits
 4. **Audit Logging**: Log all retry attempts for monitoring
 
+## Implementation & Testing Log
+
+### Real-World Flow Example
+
+```
+📝 USER CONFIG:
+   • Prompt: "Summarize this article in exactly 5 words"
+   • Validator: word_count (expected: 5)
+   • Strategy: LLM reprompting
+   • Max attempts: 3
+
+🚀 ATTEMPT #1
+   ↓
+📤 Send to LLM: "Summarize this article in exactly 5 words"
+   ↓
+📥 LLM Response: "Azure AI speech recognition tutorial guide" (6 words)
+   ↓
+🔍 VALIDATION CHECK:
+   • Expected: 5 words
+   • Got: 6 words
+   • Result: ❌ FAILED
+   ↓
+🧠 REPROMPT LLM GETS:
+   "You are an expert prompt engineer. A previous LLM attempt failed validation.
+   
+   Original Prompt: Summarize this article in exactly 5 words
+   Validation Error: Expected 5 words, got 6
+   Failed Response: Azure AI speech recognition tutorial guide
+   
+   Generate an improved prompt..."
+   ↓
+🔄 REPROMPT LLM GENERATES:
+   "Summarize this article using EXACTLY 5 words. Count each word carefully. Use precisely 5 words, no more, no less."
+
+🚀 ATTEMPT #2  
+   ↓
+📤 Send to LLM: "Summarize this article using EXACTLY 5 words. Count each word carefully..."
+   ↓
+📥 LLM Response: "Azure AI speech recognition system" (5 words)
+   ↓
+🔍 VALIDATION CHECK:
+   • Expected: 5 words  
+   • Got: 5 words
+   • Result: ✅ PASSED
+   ↓
+🎉 SUCCESS: Return "Azure AI speech recognition system"
+```
+
+### Implementation Issues & Fixes
+
+#### Issue 1: Configuration Structure Bug
+**Problem**: `Unknown validator: None` error
+- **Root Cause**: Interceptor factory expected flat config structure, not nested under `config:`
+- **Fix**: Changed from nested to flat structure:
+```yaml
+# BEFORE (nested - didn't work)
+interceptors:
+  - type: validation
+    config:
+      validator: "word_count"
+      
+# AFTER (flat - works)
+interceptors:
+  - type: validation
+    validator: "word_count"
+```
+
+#### Issue 2: Content Extraction Failure
+**Problem**: Validator received empty string `''` instead of actual content
+- **Root Cause**: `_extract_content()` only looked for `content` and `text` keys, but response had `summary` key
+- **Response Format**: `[{'summary': 'Azure AI speech recognition tutorial.'}]`
+- **Fix**: Enhanced extraction to check multiple keys:
+```python
+# Added support for summary key and fallback to all values
+content = (first_item.get("content", "") or 
+          first_item.get("text", "") or 
+          first_item.get("summary", "") or
+          " ".join(str(v) for v in first_item.values() if v))
+```
+
+#### Issue 3: Infinite Retry Loop
+**Problem**: Attempt counter stuck at 0, causing infinite retries
+- **Root Cause**: Validation interceptor retry context didn't increment attempt counter
+- **Fix**: Added attempt increment in retry context:
+```python
+retry_context={
+    # ... existing fields ...
+    "attempt": current_attempt + 1,  # Added this line
+}
+```
+
+#### Issue 4: Missing Validator Registration
+**Problem**: Validators not found even when defined in tools
+- **Root Cause**: Tools directory not loaded before interceptor initialization
+- **Fix**: Created explicit validator registration in `tools/validators.py`
+
+### Debugging Methodology
+1. **Added comprehensive debug prints** to interceptor chain
+2. **Traced config parsing** through factory to interceptor
+3. **Examined response structure** to fix content extraction
+4. **Added safety counters** to prevent infinite loops
+5. **Incremental testing** with minimal configs
+
+### Current Status: ✅ WORKING
+- ✅ Validation interceptor working
+- ✅ Content extraction handling multiple response formats
+- ✅ Attempt counter incrementing properly
+- ✅ Reprompt interceptor ready for use
+- ✅ Built-in validators (word_count, char_count, contains_keywords) available
+
+### Next Iteration Items
+- [ ] Remove debug prints for production
+- [ ] Add performance monitoring
+- [ ] Implement caching for successful prompts
+- [ ] Add more built-in validators
+- [ ] Create template-based reprompting examples
+- [ ] Add async validation support
+
 ## Future Enhancements
 
 1. **Learning System**: Track successful prompts and learn patterns
@@ -749,7 +867,11 @@ def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tu
 3. **Multi-Agent Validation**: Use multiple validators with voting
 4. **Async Processing**: Parallel validation for multiple responses
 5. **GUI Configuration**: Visual tool for creating validation rules
+6. **Performance Optimization**: Cache successful prompt patterns
+7. **Advanced Content Extraction**: Support more response formats automatically
 
 ## Conclusion
 
 This conditional reprompting system provides a robust, extensible solution for validating LLM outputs and automatically improving prompts based on failures. The modular architecture ensures easy maintenance and enhancement while the configuration-driven approach makes it accessible to non-technical users.
+
+**Key Learnings**: Real-world implementation revealed several edge cases around configuration parsing, content extraction, and retry loop management. The system now handles diverse response formats and provides intelligent retry capabilities that significantly improve LLM output quality.

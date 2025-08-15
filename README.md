@@ -48,6 +48,39 @@ agent-actions/
 - gemini, cohere and,mistral usses the gemini schema format
 - Openai has its own schema formatclear
 
+## 🔄 Conditional Reprompting
+
+Agent-actions now supports automatic validation and reprompting of LLM responses! This feature allows you to:
+
+- ✅ **Validate outputs** against custom criteria (word count, character limits, required keywords, etc.)
+- 🔄 **Automatically retry** with improved prompts when validation fails
+- 🤖 **Learn from failures** using LLM-generated or template-based prompt improvements
+
+### Quick Example
+
+```yaml
+agents:
+  - agent_type: SummaryGenerator
+    model_vendor: "openai" 
+    model_name: "gpt-4"
+    prompt: "Summarize this article in exactly 5 words"
+    
+    interceptors:
+      - type: validation
+        config:
+          validator: "word_count"
+          validator_args:
+            expected: 5
+          on_failure: retry
+          
+      - type: reprompt
+        config:
+          strategy: "llm"
+          max_attempts: 3
+```
+
+📚 **See examples/reprompting/** for detailed examples and custom validator creation.
+
 
   - agent_type: step_7_dbt_exam_options_reviewer
     dependencies: ['step_6_tool_add_option_lengths']

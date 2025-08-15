@@ -176,20 +176,20 @@ class DataFlowValidator:
         result: FlowValidationResult
     ):
         """Validate that required fields are preserved through the pipeline."""
-        # Track required fields from the first stage
-        first_stage_input = f"{stages[0].name}_input"
-        
-        if first_stage_input in self._stage_schemas:
-            schema = self._stage_schemas[first_stage_input].schema
+        # Track required fields from the first stage's output
+        first_stage_output = f"{stages[0].name}_output"
+
+        if first_stage_output in self._stage_schemas:
+            schema = self._stage_schemas[first_stage_output].schema
             required_fields = self._extract_required_fields(schema)
-            
+
             # Check if required fields are preserved in final output
             last_stage_output = f"{stages[-1].name}_output"
-            
+
             if last_stage_output in self._stage_schemas:
                 output_schema = self._stage_schemas[last_stage_output].schema
                 output_fields = self._extract_all_fields(output_schema)
-                
+
                 missing_fields = required_fields - output_fields
                 if missing_fields:
                     if self.validation_level == ValidationLevel.STRICT:
@@ -197,11 +197,10 @@ class DataFlowValidator:
                             "field_preservation",
                             f"Required fields lost in pipeline: {missing_fields}"
                         )
-                    else:
-                        result.add_warning(
-                            "field_preservation",
-                            f"Required fields may be lost: {missing_fields}"
-                        )
+                    result.add_warning(
+                        "field_preservation",
+                        f"Required fields may be lost: {missing_fields}"
+                    )
     
     def _validate_data_integrity(
         self,

@@ -10,6 +10,7 @@ from typing import Optional, Dict, Union, List
 from dataclasses import dataclass
 from enum import Enum
 import os
+import stat
 import logging
 
 logger = logging.getLogger(__name__)
@@ -254,12 +255,26 @@ class PathManager:
                 errors.append(f"Path is not a directory: {path}")
                 
             # Check permissions
-            if requirements.get("must_be_readable", False) and not os.access(path, os.R_OK):
-                errors.append(f"Path is not readable: {path}")
-            if requirements.get("must_be_writable", False) and not os.access(path, os.W_OK):
-                errors.append(f"Path is not writable: {path}")
-            if requirements.get("must_be_executable", False) and not os.access(path, os.X_OK):
-                errors.append(f"Path is not executable: {path}")
+            mode = path.stat().st_mode
+
+            if requirements.get("must_be_readable", False):
+                readable = os.access(path, os.R_OK) and bool(
+                    mode & (stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+                )
+                if not readable:
+                    errors.append(f"Path is not readable: {path}")
+            if requirements.get("must_be_writable", False):
+                writable = os.access(path, os.W_OK) and bool(
+                    mode & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+                )
+                if not writable:
+                    errors.append(f"Path is not writable: {path}")
+            if requirements.get("must_be_executable", False):
+                executable = os.access(path, os.X_OK) and bool(
+                    mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+                )
+                if not executable:
+                    errors.append(f"Path is not executable: {path}")
         
         if errors:
             if self.config.validate_permissions:
