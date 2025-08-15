@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 import asyncio  # Added for async processing
 from pathlib import Path
 from datetime import datetime
@@ -8,6 +9,10 @@ from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.generators.output.output_processor import OutputProcessor
 from agent_actions.services.batch_service import BatchService
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
+from agent_actions.artifacts.manager import ArtifactManager
+from agent_actions.artifacts.manifest import ManifestArtifact
+from agent_actions.artifacts.base import SecurityError
+from agent_actions.artifacts import context as artifact_context
 
 from rich.console import Console
 
@@ -111,6 +116,25 @@ class AgentWorkflow:
         self._load_status()
 
         self.console = Console()
+        
+        # ARTIFACT SYSTEM INTEGRATION: Initialize artifact manager
+        try:
+            # Check if artifacts are enabled via environment variable for performance
+            enable_artifacts = os.getenv('AGENT_ACTIONS_ENABLE_ARTIFACTS', 'true').lower() == 'true'
+            
+            if enable_artifacts:
+                agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+                self.artifact_manager = ArtifactManager(agent_folder)
+                self._initialize_manifest()
+                # Set artifact context for interceptors
+                artifact_context.set_artifact_manager(self.artifact_manager)
+                self.console.print("[green]Artifact system initialized[/green]")
+            else:
+                self.artifact_manager = None
+                self.console.print("[yellow]Artifact system disabled (AGENT_ACTIONS_ENABLE_ARTIFACTS=false)[/yellow]")
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not initialize artifact system: {e}[/yellow]")
+            self.artifact_manager = None
 
     def _load_configs(self):
         self.config_manager.load_configs()
@@ -124,6 +148,28 @@ class AgentWorkflow:
         self.agent_configs = self.config_manager.agent_configs
         self.child_pipeline = self.config_manager.child_pipeline
 
+    def _initialize_manifest(self):
+        """Initialize the manifest artifact with project and agent information."""
+        if not self.artifact_manager:
+            return
+            
+        try:
+            project_name = self.agent_name
+            project_path = str(Path(self.constructor_path).parent)
+            
+            manifest = ManifestArtifact(project_name, project_path)
+            
+            # Add all agents from the workflow to the manifest
+            for agent_name in self.execution_order:
+                agent_config = self.agent_configs[agent_name]
+                manifest.add_agent(agent_name, agent_config)
+            
+            # Set the manifest in the artifact manager
+            self.artifact_manager.set_manifest(manifest)
+            
+        except Exception as e:
+            self.console.print(f"[yellow]Warning: Could not initialize manifest: {e}[/yellow]")
+    
     def _load_status(self):
         if self.status_file.exists():
             with open(self.status_file, 'r') as f:
@@ -240,12 +286,52 @@ class AgentWorkflow:
                 
                 self._update_status(agent_name, 'running')
 
-                output_folder = self.agent_runner.run_agent(
-                    agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
-                )
+                # ARTIFACT SYSTEM INTEGRATION: Record agent start
+                agent_result = None
+                if self.artifact_manager:
+                    try:
+                        agent_result = self.artifact_manager.record_agent_start(agent_name)
+                    except SecurityError as e:
+                        self.console.print(f"[yellow]Warning: Could not record agent start: {e}[/yellow]")
+                
+                # Initialize variables for timing
+                output_folder = None
+                agent_error_occurred = False
+                
+                try:
+                    output_folder = self.agent_runner.run_agent(
+                        agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
+                    )
+                            
+                except Exception as agent_error:
+                    agent_error_occurred = True
+                    # ARTIFACT SYSTEM INTEGRATION: Record agent error
+                    if self.artifact_manager and agent_result:
+                        try:
+                            self.artifact_manager.record_agent_error(
+                                agent_result,
+                                agent_error,
+                                (datetime.now() - start_time).total_seconds(),
+                                context={"agent_config": agent_config, "idx": idx}
+                            )
+                        except SecurityError as e:
+                            self.console.print(f"[yellow]Warning: Could not record agent error: {e}[/yellow]")
+                    raise agent_error
 
+                # Calculate duration after agent execution (success or failure)
                 end_time = datetime.now()
                 duration = (end_time - start_time).total_seconds()
+                
+                # Record success if no error occurred
+                if not agent_error_occurred and self.artifact_manager and agent_result:
+                    try:
+                        self.artifact_manager.record_agent_success(
+                            agent_result, 
+                            response={"output_folder": output_folder}, 
+                            execution_time=duration
+                        )
+                    except SecurityError as e:
+                        self.console.print(f"[yellow]Warning: Could not record agent success: {e}[/yellow]")
 
                 if agent_config.get('run_mode') == 'batch':
                     agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
@@ -290,8 +376,24 @@ class AgentWorkflow:
                     self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
                 
                 self.output_processor.process_final_output(self.ephemeral_directories)
+                
+                # ARTIFACT SYSTEM INTEGRATION: Save all artifacts at the end
+                if self.artifact_manager:
+                    try:
+                        self.artifact_manager.save_artifacts(force=True)  # Force save at workflow completion
+                        artifacts_dir = self.artifact_manager.artifacts_dir
+                        self.console.print(f"\n📊 [bold blue]Artifacts saved to:[/bold blue] {artifacts_dir}")
+                        self.console.print(f"   - manifest.json")
+                        self.console.print(f"   - run_results.json")
+                        self.console.print(f"   - validation_results.json")
+                    except Exception as e:
+                        self.console.print(f"[yellow]Warning: Could not save artifacts: {e}[/yellow]")
+                
                 self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
                 self.console.print("Done.")
+                
+                # Clear artifact context
+                artifact_context.clear_artifact_manager()
 
         except Exception as e:
             self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {e}")
@@ -301,4 +403,24 @@ class AgentWorkflow:
                 self._update_status(running_agent, 'failed')
             except StopIteration:
                 pass
+            
+            # ARTIFACT SYSTEM INTEGRATION: Save artifacts even on failure
+            if self.artifact_manager:
+                try:
+                    self.artifact_manager.record_error(
+                        error_type="workflow_failure",
+                        operation="run_workflow",
+                        target=self.agent_name,
+                        error=e,
+                        context={"execution_order": self.execution_order, "agent_status": self.agent_status},
+                        user_message="Workflow execution failed. Check the error details and agent configurations."
+                    )
+                    self.artifact_manager.save_artifacts(force=True)  # Force save on error
+                    self.console.print(f"[blue]Error artifacts saved to:[/blue] {self.artifact_manager.artifacts_dir}")
+                except Exception as artifact_error:
+                    self.console.print(f"[yellow]Warning: Could not save error artifacts: {artifact_error}[/yellow]")
+            
+            # Clear artifact context
+            artifact_context.clear_artifact_manager()
+            
             raise

@@ -57,8 +57,18 @@ class ManifestArtifact(BaseArtifact):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ManifestArtifact":
-        metadata = data["metadata"]
-        obj = cls(project_name=metadata["project_name"], project_path=metadata["project_path"])
+        metadata_dict = data["metadata"]
+        project_name = metadata_dict["project_name"]
+        project_path = metadata_dict["project_path"]
+        
+        # CRITICAL FIX: Properly restore metadata
+        metadata = ArtifactMetadata()
+        metadata.generated_at = metadata_dict.get("generated_at", metadata.generated_at)
+        metadata.agent_actions_version = metadata_dict.get("agent_actions_version", metadata.agent_actions_version)
+        metadata.invocation_id = metadata_dict.get("invocation_id", metadata.invocation_id)
+        metadata.schema_version = metadata_dict.get("schema_version", metadata.schema_version)
+        
+        obj = cls(project_name=project_name, project_path=project_path, metadata=metadata)
         obj.agents = data.get("agents", {})
         obj.workflows = data.get("workflows", {})
         obj.dependencies = data.get("dependencies", {})

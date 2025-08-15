@@ -6,6 +6,8 @@ from typing import Any, Dict
 
 from .base import InterceptorResult, ResponseInterceptor
 from ..validators.registry import ValidatorRegistry
+from ..artifacts import context as artifact_context
+from ..artifacts.base import SecurityError
 
 
 class ValidationInterceptor(ResponseInterceptor):
@@ -63,6 +65,9 @@ class ValidationInterceptor(ResponseInterceptor):
         success, error_message = self.validator_func(content, **self.validator_args)
         if self.prompt_debug:
             print(f"   Validation result: success={success}, error='{error_message}'")
+        
+        # ARTIFACT SYSTEM INTEGRATION: Record validation attempt
+        self._record_validation_attempt(context, success, error_message, content)
 
         if success:
             if self.prompt_debug:
@@ -93,6 +98,48 @@ class ValidationInterceptor(ResponseInterceptor):
             continue_processing=True,
             metadata={"validation_warning": error_message},
         )
+    
+    def _record_validation_attempt(
+        self, 
+        context: Dict, 
+        success: bool, 
+        error_message: str | None, 
+        response_content: str
+    ) -> None:
+        """Record validation attempt in artifact system if available."""
+        artifact_manager = artifact_context.get_artifact_manager()
+        if not artifact_manager:
+            return
+        
+        try:
+            # Try to extract agent name from context or use a default
+            agent_name = context.get("agent_name", "unknown_agent")
+            if not agent_name or agent_name == "unknown_agent":
+                # Try to get from agent_config if available
+                agent_config = context.get("agent_config", {})
+                agent_name = agent_config.get("agent_type", "unknown_agent")
+            
+            attempt = context.get("attempt", 1) + 1  # attempt is 0-based, make it 1-based
+            status = "success" if success else "error"
+            
+            artifact_manager.record_validation_attempt(
+                agent_id=agent_name,
+                validator_type=self.validator_name or "unknown_validator",
+                attempt=attempt,
+                status=status,
+                error=error_message if not success else None,
+                response=response_content[:500] if response_content else None  # Truncate for storage
+            )
+            
+            if self.prompt_debug:
+                print(f"   📊 Recorded validation attempt: {agent_name} -> {self.validator_name} -> {status}")
+                
+        except SecurityError as e:
+            if self.prompt_debug:
+                print(f"   ⚠️ Could not record validation attempt: {e}")
+        except Exception as e:
+            if self.prompt_debug:
+                print(f"   ⚠️ Error recording validation attempt: {e}")
 
     def _extract_content(self, response: Any) -> str:
         if isinstance(response, list) and response:

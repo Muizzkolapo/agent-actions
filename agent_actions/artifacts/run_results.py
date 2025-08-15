@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from .base import BaseArtifact, ArtifactMetadata
@@ -17,10 +17,10 @@ class ExecutionTiming:
         self.completed_at: Optional[str] = None
 
     def start(self) -> None:
-        self.started_at = datetime.utcnow().isoformat() + "Z"
+        self.started_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def complete(self) -> None:
-        self.completed_at = datetime.utcnow().isoformat() + "Z"
+        self.completed_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -85,7 +85,40 @@ class RunResultsArtifact(BaseArtifact):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RunResultsArtifact":
-        obj = cls()
+        # Restore metadata if present
+        metadata = None
+        if "metadata" in data:
+            metadata = ArtifactMetadata()
+            metadata_dict = data["metadata"]
+            metadata.generated_at = metadata_dict.get("generated_at", metadata.generated_at)
+            metadata.agent_actions_version = metadata_dict.get("agent_actions_version", metadata.agent_actions_version)
+            metadata.invocation_id = metadata_dict.get("invocation_id", metadata.invocation_id)
+            metadata.schema_version = metadata_dict.get("schema_version", metadata.schema_version)
+        
+        obj = cls(metadata)
         obj.elapsed_time = data.get("elapsed_time", 0.0)
         obj.args = data.get("args", {})
+        
+        # CRITICAL FIX: Restore results data that was being lost
+        results_data = data.get("results", [])
+        for result_dict in results_data:
+            result = AgentResult(result_dict["unique_id"])
+            result.status = result_dict.get("status", "pending")
+            result.thread_id = result_dict.get("thread_id")
+            result.execution_time = result_dict.get("execution_time", 0.0)
+            result.message = result_dict.get("message")
+            result.failures = result_dict.get("failures", 0)
+            result.adapter_response = result_dict.get("adapter_response", {})
+            result.error_details = result_dict.get("error_details")
+            
+            # Restore timing data
+            timing_data = result_dict.get("timing", [])
+            for timing_dict in timing_data:
+                timing = ExecutionTiming(timing_dict["name"])
+                timing.started_at = timing_dict.get("started_at")
+                timing.completed_at = timing_dict.get("completed_at")
+                result.timing.append(timing)
+            
+            obj.add_result(result)
+        
         return obj

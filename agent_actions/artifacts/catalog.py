@@ -22,6 +22,17 @@ class AgentCatalogArtifact(BaseArtifact):
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "AgentCatalogArtifact":
-        obj = cls()
+        # Restore metadata if present
+        metadata = None
+        if "metadata" in data:
+            metadata = ArtifactMetadata()
+            metadata_dict = data["metadata"]
+            metadata.generated_at = metadata_dict.get("generated_at", metadata.generated_at)
+            metadata.agent_actions_version = metadata_dict.get("agent_actions_version", metadata.agent_actions_version)
+            metadata.invocation_id = metadata_dict.get("invocation_id", metadata.invocation_id)
+            metadata.schema_version = metadata_dict.get("schema_version", metadata.schema_version)
+        
+        obj = cls(metadata)
+        # CRITICAL FIX: Properly restore agents data
         obj.agents = data.get("agents", {})
         return obj
