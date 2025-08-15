@@ -251,6 +251,16 @@ def _execute_with_interceptors(
         None,
     )
 
+    # Add prompt_debug to all interceptor configs without mutating original
+    prompt_debug = agent_config.get('prompt_debug', False)
+    
+    # Create copies with prompt_debug added
+    non_reprompt_configs = [
+        {**cfg, 'prompt_debug': prompt_debug} for cfg in non_reprompt_configs
+    ]
+    if reprompt_cfg:
+        reprompt_cfg = {**reprompt_cfg, 'prompt_debug': prompt_debug}
+    
     interceptors = InterceptorFactory.build_chain(non_reprompt_configs)
     reprompt_interceptor: RepromptInterceptor | None = (
         InterceptorFactory.create_interceptor(reprompt_cfg) if reprompt_cfg else None
@@ -272,8 +282,9 @@ def _execute_with_interceptors(
     safety_counter = 0  # Add safety counter to prevent infinite loops
     while execution_context["attempt"] < max_attempts and safety_counter < 10:
         safety_counter += 1
-        print(f"🔄 RETRY LOOP: attempt={execution_context['attempt']}, safety_counter={safety_counter}")
-        print(f"   validation_error present: {bool(execution_context.get('validation_error'))}")
+        if prompt_debug:
+            print(f"🔄 RETRY LOOP: attempt={execution_context['attempt']}, safety_counter={safety_counter}")
+            print(f"   validation_error present: {bool(execution_context.get('validation_error'))}")
         
         # Generate improved prompt if previous validation failed
         if reprompt_interceptor and execution_context.get("validation_error"):
@@ -348,20 +359,25 @@ def _execute_with_interceptors(
                 if isinstance(item, dict):
                     item.update(captured_results)
 
-        print(f"   Processing response through interceptors...")
-        print(f"   Response data type: {type(response_data)}")
-        print(f"   Response preview: {str(response_data)[:200]}")
+        if prompt_debug:
+            print(f"   Processing response through interceptors...")
+            print(f"   Response data type: {type(response_data)}")
+            print(f"   Response preview: {str(response_data)[:200]}")
         
         result = interceptors.process(response_data, execution_context)
 
-        print(f"   Interceptor result: retry_context={bool(result.retry_context)}")
+        if prompt_debug:
+            print(f"   Interceptor result: retry_context={bool(result.retry_context)}")
         if result.retry_context:
-            print(f"   Retry context keys: {list(result.retry_context.keys())}")
+            if prompt_debug:
+                print(f"   Retry context keys: {list(result.retry_context.keys())}")
             execution_context.update(result.retry_context)
-            print(f"   Updated execution context attempt: {execution_context.get('attempt')}")
+            if prompt_debug:
+                print(f"   Updated execution context attempt: {execution_context.get('attempt')}")
             continue
 
-        print(f"   ✅ Returning successful response")
+        if prompt_debug:
+            print(f"   ✅ Returning successful response")
         return result.modified_response or response_data
 
     return response_data

@@ -33,6 +33,7 @@ class LLMRepromptStrategy(RepromptStrategy):
     def __init__(self, llm_config: Dict):
         self.llm_config = llm_config
         self.include_previous_response = llm_config.get("include_previous_response", True)
+        self.prompt_debug = llm_config.get("prompt_debug", False)
         self.prompt_template = llm_config.get(
             "prompt_template", self._default_template()
         )
@@ -49,10 +50,11 @@ class LLMRepromptStrategy(RepromptStrategy):
         
         improved_prompt = base_prompt + "Reprocess and ensure your response meets the requirements."
         
-        print(f"📝 CONSTRUCTED IMPROVED PROMPT:")
-        print(f"=" * 80)
-        print(improved_prompt)
-        print(f"=" * 80)
+        if self.prompt_debug:
+            print(f"📝 CONSTRUCTED IMPROVED PROMPT:")
+            print(f"=" * 80)
+            print(improved_prompt)
+            print(f"=" * 80)
         
         return improved_prompt
 
@@ -73,15 +75,25 @@ class LLMRepromptStrategy(RepromptStrategy):
 class TemplateRepromptStrategy(RepromptStrategy):
     """Uses predefined templates for common failure patterns."""
 
-    def __init__(self, templates: Dict[str, str]):
+    def __init__(self, templates: Dict[str, str], prompt_debug: bool = False):
         self.templates = templates
+        self.prompt_debug = prompt_debug
 
     def generate_improved_prompt(self, context: RepromptContext) -> str:
         for pattern, template in self.templates.items():
             if pattern in context.validation_error.lower():
-                return template.format(
+                improved_prompt = template.format(
                     original_prompt=context.original_prompt,
                     **context.validation_criteria,
                 )
+                if self.prompt_debug:
+                    print(f"📝 TEMPLATE MATCH FOUND:")
+                    print(f"   Pattern: {pattern}")
+                    print(f"   Template used: {template[:50]}...")
+                return improved_prompt
 
-        return f"{context.original_prompt}\n\nIMPORTANT: {context.validation_error}"
+        # Default fallback
+        improved_prompt = f"{context.original_prompt}\n\nIMPORTANT: {context.validation_error}"
+        if self.prompt_debug:
+            print(f"📝 NO TEMPLATE MATCH - Using default fallback")
+        return improved_prompt
