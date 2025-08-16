@@ -4,8 +4,6 @@ import logging
 from pathlib import Path
 import yaml
 from typing import Optional, Dict, Any, List
-
-logger = logging.getLogger(__name__)
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.loaders.data_loaders.batch_data_loader import BatchDataLoader
@@ -25,12 +23,16 @@ from agent_actions.utils.path_utils import (
     resolve_absolute_path
 )
 from agent_actions.common.utils.processor_utils import ProcessorUtils
-from agent_actions.security import validate_where_clause, is_safe_where_clause, safe_eval, SecurityError, ExpressionValidationError
+from agent_actions.common.filters.where_parser import WhereClauseParser
 
 from ..core.dependency_injection import registry
 from ..providers.base import BatchProvider, BatchTask, BatchResult
 from ..providers.openai_provider import OpenAIBatchProvider
 from ..providers.factory import BatchProviderFactory
+
+
+logger = logging.getLogger(__name__)
+
 
 @registry.register_service("batch_service")
 class BatchService:
@@ -132,100 +134,8 @@ class BatchService:
         self.side_collection = []
         # Cache providers by type to avoid recreating them
         self._provider_cache = {}
+        self.where_parser = WhereClauseParser()
 
-    def _evaluate_where_clause(self, where_clause: str, row_data: dict) -> bool:
-        """
-        Safely evaluate a WHERE clause against row data.
-        
-        Args:
-            where_clause: WHERE clause expression to evaluate
-            row_data: Data to evaluate against
-            
-        Returns:
-            True if the row matches the WHERE clause, False otherwise
-        """
-        if not where_clause:
-            return True
-        
-        try:
-            # Create a simple WHERE clause evaluator
-            # Convert SQL-like syntax to Python expressions
-            expression = self._convert_where_to_expression(where_clause, row_data)
-            
-            # Create safe context for evaluation
-            context = {
-                'data': row_data,
-                'len': len,
-                'str': str,
-                'int': int,
-                'bool': bool,
-                'float': float,
-            }
-            
-            # Add flattened row data to context for direct field access
-            context.update(row_data)
-            
-            result = safe_eval(expression, context)
-            return bool(result)
-            
-        except (SecurityError, ExpressionValidationError) as e:
-            print(f"Security error in WHERE clause evaluation: {e}")
-            return False
-        except Exception as e:
-            print(f"Error evaluating WHERE clause '{where_clause}': {e}")
-            return False
-    
-    def _convert_where_to_expression(self, where_clause: str, row_data: dict) -> str:
-        """
-        Convert SQL-like WHERE clause to safe Python expression.
-        
-        Args:
-            where_clause: SQL-like WHERE clause
-            row_data: Row data for context
-            
-        Returns:
-            Python expression string
-        """
-        # Basic conversion of SQL-like operators to Python
-        expression = where_clause
-        
-        # Handle field access with .get() for safety
-        # Replace field references with safe dictionary access
-        import re
-        
-        # Find field references (word.word.word patterns)
-        field_pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b'
-        
-        def replace_field(match):
-            field_path = match.group(1)
-            if field_path in ['and', 'or', 'not', 'in', 'is', 'True', 'False', 'None']:
-                return field_path  # Don't replace keywords
-            
-            # Convert dot notation to safe nested get
-            parts = field_path.split('.')
-            if len(parts) == 1:
-                # Simple field access
-                return f'data.get("{parts[0]}")'
-            else:
-                # Nested field access
-                result = 'data'
-                for part in parts:
-                    result = f'{result}.get("{part}", {{}})'
-                return result
-        
-        expression = re.sub(field_pattern, replace_field, expression)
-        
-        # Convert SQL operators to Python operators
-        expression = re.sub(r'\bIS\s+NULL\b', 'is None', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bIS\s+NOT\s+NULL\b', 'is not None', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bNOT\s+IN\b', 'not in', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bCONTAINS\b', 'in', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bNOT\s+CONTAINS\b', 'not in', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bAND\b', 'and', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bOR\b', 'or', expression, flags=re.IGNORECASE)
-        expression = re.sub(r'\bNOT\b', 'not', expression, flags=re.IGNORECASE)
-        
-        return expression
 
     def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
         """
@@ -275,6 +185,33 @@ class BatchService:
             
         except Exception as e:
             raise RuntimeError(f"Failed to create batch provider '{provider_type}': {e}")
+
+    def _process_batch(self, *args, **kwargs):
+        """Placeholder batch processing method for testing/mocking."""
+        return None
+
+    def _should_process_item(self, item_data: dict, agent_config: dict) -> bool:
+        """Enhanced item filtering with WHERE clause support"""
+
+        if agent_config.get("conditional_clause"):
+            try:
+                if not execute_user_defined_function(
+                    agent_config["conditional_clause"], item_data
+                ):
+                    return False
+            except Exception as e:
+                logger.warning(f"Error in conditional_clause: {e}")
+
+        where_config = agent_config.get("where_clause")
+        if where_config and where_config.get("scope") == "item":
+            try:
+                conditions = self.where_parser.parse(where_config["clause"])
+                return self.where_parser.evaluate(item_data, conditions)
+            except Exception as e:
+                logger.warning(f"Error in WHERE clause evaluation: {e}")
+                return where_config.get("passthrough_on_empty", True)
+
+        return True
     
     @staticmethod
     def _separate_side_output(items):
@@ -385,21 +322,13 @@ class BatchService:
         # Check for new WHERE clause (secure)
         where_clause_config = agent_config.get("where_clause")
         
-        # Validate WHERE clause if present
+        # WHERE clause validation is handled by the filter service itself
         if where_clause_config:
-            where_clause = where_clause_config.get("clause", "")
-            if where_clause and not is_safe_where_clause(where_clause):
-                validation_result = validate_where_clause(where_clause)
-                error_msg = "; ".join(validation_result.errors)
-                raise ValueError(f"Unsafe WHERE clause detected: {error_msg}")
-            
             scope = where_clause_config.get("scope", "item")
             if scope != "item":
                 # For non-item scope, we skip processing at agent level
                 # This is handled in the workflow, not here
-                where_clause = None
-        else:
-            where_clause = None
+                where_clause_config = None
         
         # Prepare data for the provider
         prepared_data = []

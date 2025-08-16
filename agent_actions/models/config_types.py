@@ -17,6 +17,8 @@ class AgentEntryDict(TypedDict, total=False):
     is_operational: bool
     use_few_shot_samples: int
     conditional_clause: Optional[str]
+    where_clause: Optional[Dict[str, Any]]
+    skip_if: Optional[str]
     ephemeral: Optional[bool]
     add_dispatch: Optional[bool]
     # Anthropic-specific configuration options

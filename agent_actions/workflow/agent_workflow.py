@@ -15,6 +15,7 @@ from agent_actions.artifacts.manager import ArtifactManager
 from agent_actions.artifacts.manifest import ManifestArtifact
 from agent_actions.artifacts.base import SecurityError as ArtifactSecurityError
 from agent_actions.artifacts import context as artifact_context
+from agent_actions.common.filters.where_parser import WhereClauseParser
 
 from rich.console import Console
 
@@ -42,16 +43,16 @@ class AgentWorkflow:
                 duration = (end_time - start_time).total_seconds()
                 self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
                 return 'completed'
-            
-            # Check if agent should be skipped due to skip_if condition
             previous_outputs = self._get_previous_outputs(idx)
             if self._should_skip_agent(agent_config, previous_outputs):
-                self._update_status(agent_name, 'skipped')
+                self.console.print(f"[async] Skipping agent {agent_name} due to WHERE clause condition")
+                self._create_passthrough_output(idx, agent_name)
+                self._update_status(agent_name, 'completed')
                 self.previous_agent_type = agent_name
                 end_time = datetime.now()
                 duration = (end_time - start_time).total_seconds()
-                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] (skip_if) in {duration:.2f}s")
-                return 'skipped'
+                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
+                return 'completed'
             try:
                 if semaphore:
                     async with semaphore:
@@ -123,6 +124,7 @@ class AgentWorkflow:
         self.agent_runner = AgentRunner(self.use_tools)
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()
+        self.where_parser = WhereClauseParser()
 
         self.status_file = Path(self.agent_runner.get_agent_folder(self.agent_name)) / ".agent_status.json"
         self._load_status()
@@ -201,6 +203,42 @@ class AgentWorkflow:
         self.agent_status[agent_name]['status'] = status
         self._save_status()
 
+    def _get_input_directory(self, idx: int) -> str:
+        agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+        if idx == 0:
+            return str(agent_folder / "staging")
+        prev_agent = self.execution_order[idx - 1]
+        return str(agent_folder / "target" / f"node_{idx-1}_{prev_agent}")
+
+    def _get_previous_outputs(self, idx: int) -> Dict[str, Any]:
+        outputs: Dict[str, Any] = {}
+        agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+        for i, agent_name in enumerate(self.execution_order[:idx]):
+            output_dir = agent_folder / "target" / f"node_{i}_{agent_name}"
+            items = []
+            if output_dir.exists():
+                for file in output_dir.glob("*.json"):
+                    try:
+                        with open(file, "r", encoding="utf-8") as f:
+                            items.append(json.load(f))
+                    except Exception:
+                        continue
+            outputs[agent_name] = items
+        return outputs
+
+
+    def _create_passthrough_output(self, idx: int, agent_type: str):
+        input_dir = self._get_input_directory(idx)
+        agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+        output_dir = agent_folder / "target" / f"node_{idx}_{agent_type}"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        if os.path.exists(input_dir):
+            import shutil
+            for item in os.listdir(input_dir):
+                shutil.copy2(os.path.join(input_dir, item), output_dir / item)
+        with open(output_dir / ".agent_skipped", "w", encoding="utf-8") as f:
+            f.write(f"Agent {agent_type} skipped due to WHERE clause condition")
+
     def _handle_batch_agent(self, agent_name, idx):
         agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_name}"
@@ -269,14 +307,15 @@ class AgentWorkflow:
                     self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
                     continue
 
-                # Check if agent should be skipped based on conditions
                 previous_outputs = self._get_previous_outputs(idx)
                 if self._should_skip_agent(agent_config, previous_outputs):
-                    self._update_status(agent_name, 'skipped')
+                    self.console.print(f"Skipping agent {agent_name} due to WHERE clause condition")
+                    self._create_passthrough_output(idx, agent_name)
+                    self._update_status(agent_name, 'completed')
                     self.previous_agent_type = agent_name
                     end_time = datetime.now()
                     duration = (end_time - start_time).total_seconds()
-                    self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] (condition) in {duration:.2f}s")
+                    self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
                     continue
 
                 workflow_complete = False
