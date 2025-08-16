@@ -4,7 +4,7 @@ from typing import Dict, List
 
 from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.constants import SIDE_COLLECTION_KEY
-from agent_actions.common.utils.utils import transform_with_side_collection
+from agent_actions.common.utils.processor_helpers import transform_with_side_collection
 from agent_actions.common.utils.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.processors.exceptions import TransformationError
 

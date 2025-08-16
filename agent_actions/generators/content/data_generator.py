@@ -8,7 +8,7 @@ from agent_actions.processors.content.prompt_utils import PromptUtils
 from agent_actions.constants import PROMPT_KEY
 from agent_actions.processors.content.sample_enricher import SampleEnricher
 from agent_actions.common.transformers.data_transformer import DataTransformer
-from agent_actions.common.utils.utils import apply_remove_collection, run_dynamic_agent
+from agent_actions.common.utils.processor_helpers import apply_remove_collection, run_dynamic_agent
 
 from agent_actions.common.interfaces.interfaces import IGenerator, ProcessingMode
 from ...core.dependency_injection import registry

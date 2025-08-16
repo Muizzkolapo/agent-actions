@@ -1,0 +1,34 @@
+{
+  "error_type": "workflow_failure",
+  "operation": "run_workflow",
+  "target": "new_quiz_run",
+  "error_class": "AgentActionsError",
+  "error_message": "Unexpected error generating target for /Users/muizz/Documents/codeshop/agent_action_test/qanalabs/agent_workflow/new_quiz_run/agent_io/target/node_2_fact_questionability/Designing_and_Implementing_a_Microsoft_Azure_AI_Solution.json: Failed to process content: Failed to process item with source_guid 4b7cc075-ecd5-5782-adf4-d8d61def99da: Failed to process item: Failed to create agent with data: Prompt 'fact_explanation' not found in the content.",
+  "context": {
+    "execution_order": [
+      "fact_extractor",
+      "flatten_quotes",
+      "fact_questionability",
+      "fact_explanation"
+    ],
+    "agent_status": {
+      "fact_extractor": {
+        "status": "completed"
+      },
+      "flatten_quotes": {
+        "status": "completed"
+      },
+      "fact_questionability": {
+        "status": "completed"
+      },
+      "summary": {
+        "status": "failed"
+      },
+      "fact_explanation": {
+        "status": "running"
+      }
+    }
+  },
+  "user_message": "Workflow execution failed. Check the error details and agent configurations.",
+  "timestamp": "2025-08-16T09:52:18.079447Z"
+}

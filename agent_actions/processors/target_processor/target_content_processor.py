@@ -103,7 +103,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
     def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
-        Process a list of data items.
+        Process a list of data items with WHERE clause filtering support.
         
         Args:
             data: List of data items to process
@@ -125,9 +125,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
         try:
             source_data = self.source_loader.load_source_data(file_path)
+            
+            # Apply WHERE clause filtering for item-level scope
+            filtered_data = self._apply_where_clause_filtering(data)
+            
             processed_data = []
 
-            for item in data:
+            for item in filtered_data:
                 try:
                     processed_item = self._process_single_item(item, source_data)
                     processed_data.extend(processed_item)
@@ -312,6 +316,58 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
+
+    def _apply_where_clause_filtering(self, data: List[Dict]) -> List[Dict]:
+        """
+        Apply WHERE clause filtering at item level if configured.
+        
+        Args:
+            data: List of data items to filter
+            
+        Returns:
+            Filtered list of data items
+        """
+        where_clause_config = self.agent_config.get('where_clause')
+        
+        # Only apply filtering if WHERE clause is configured for item scope
+        if not where_clause_config or where_clause_config.get('scope') != 'item':
+            return data
+        
+        try:
+            from agent_actions.common.filters.where_filter import get_global_filter
+            
+            filter_service = get_global_filter()
+            filtered_data = []
+            
+            for item in data:
+                # Extract content for filtering - handle both wrapped and unwrapped formats
+                content = item.get('content', item)
+                
+                filter_result = filter_service.filter_item(
+                    content,
+                    where_clause_config['clause'],
+                    timeout=self.agent_config.get('max_execution_time', 5)
+                )
+                
+                if filter_result.success and filter_result.matched:
+                    filtered_data.append(item)
+                elif not filter_result.success:
+                    # Handle filter error based on configuration
+                    passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+                    if passthrough_on_error:
+                        filtered_data.append(item)
+                    # Otherwise skip this item
+                # If filter_result.matched is False, skip the item
+                
+            return filtered_data
+            
+        except Exception as e:
+            # On unexpected error, check passthrough behavior
+            passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+            if passthrough_on_error:
+                return data  # Return original data
+            else:
+                raise RuntimeError(f"WHERE clause filtering failed: {str(e)}")
     
     def _process_single_item(
         self, 
@@ -365,3 +421,4 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
+

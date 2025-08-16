@@ -4,14 +4,16 @@ import os
 import asyncio  # Added for async processing
 from pathlib import Path
 from datetime import datetime
+from typing import Dict, Any
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.core.agent_runner import AgentRunner
 from agent_actions.generators.output.output_processor import OutputProcessor
 from agent_actions.services.batch_service import BatchService
+from agent_actions.common.filters.where_filter import get_global_filter, evaluate_safe_skip_condition
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 from agent_actions.artifacts.manager import ArtifactManager
 from agent_actions.artifacts.manifest import ManifestArtifact
-from agent_actions.artifacts.base import SecurityError
+from agent_actions.artifacts.base import SecurityError as ArtifactSecurityError
 from agent_actions.artifacts import context as artifact_context
 
 from rich.console import Console
@@ -40,6 +42,16 @@ class AgentWorkflow:
                 duration = (end_time - start_time).total_seconds()
                 self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
                 return 'completed'
+            
+            # Check if agent should be skipped due to skip_if condition
+            previous_outputs = self._get_previous_outputs(idx)
+            if self._should_skip_agent(agent_config, previous_outputs):
+                self._update_status(agent_name, 'skipped')
+                self.previous_agent_type = agent_name
+                end_time = datetime.now()
+                duration = (end_time - start_time).total_seconds()
+                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] (skip_if) in {duration:.2f}s")
+                return 'skipped'
             try:
                 if semaphore:
                     async with semaphore:
@@ -170,6 +182,7 @@ class AgentWorkflow:
         except Exception as e:
             self.console.print(f"[yellow]Warning: Could not initialize manifest: {e}[/yellow]")
     
+    
     def _load_status(self):
         if self.status_file.exists():
             with open(self.status_file, 'r') as f:
@@ -256,6 +269,16 @@ class AgentWorkflow:
                     self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
                     continue
 
+                # Check if agent should be skipped based on conditions
+                previous_outputs = self._get_previous_outputs(idx)
+                if self._should_skip_agent(agent_config, previous_outputs):
+                    self._update_status(agent_name, 'skipped')
+                    self.previous_agent_type = agent_name
+                    end_time = datetime.now()
+                    duration = (end_time - start_time).total_seconds()
+                    self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] (condition) in {duration:.2f}s")
+                    continue
+
                 workflow_complete = False
                 
                 if current_status == 'batch_submitted':
@@ -291,7 +314,7 @@ class AgentWorkflow:
                 if self.artifact_manager:
                     try:
                         agent_result = self.artifact_manager.record_agent_start(agent_name)
-                    except SecurityError as e:
+                    except ArtifactSecurityError as e:
                         self.console.print(f"[yellow]Warning: Could not record agent start: {e}[/yellow]")
                 
                 # Initialize variables for timing
@@ -314,7 +337,7 @@ class AgentWorkflow:
                                 (datetime.now() - start_time).total_seconds(),
                                 context={"agent_config": agent_config, "idx": idx}
                             )
-                        except SecurityError as e:
+                        except ArtifactSecurityError as e:
                             self.console.print(f"[yellow]Warning: Could not record agent error: {e}[/yellow]")
                     raise agent_error
 
@@ -330,7 +353,7 @@ class AgentWorkflow:
                             response={"output_folder": output_folder}, 
                             execution_time=duration
                         )
-                    except SecurityError as e:
+                    except ArtifactSecurityError as e:
                         self.console.print(f"[yellow]Warning: Could not record agent success: {e}[/yellow]")
 
                 if agent_config.get('run_mode') == 'batch':
@@ -424,3 +447,201 @@ class AgentWorkflow:
             artifact_context.clear_artifact_manager()
             
             raise
+    
+    def _should_skip_agent(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any] = None) -> bool:
+        """
+        Determine if an agent should be skipped based on skip conditions.
+        
+        Enhanced with comprehensive WHERE clause filtering support and detailed logging.
+        
+        Args:
+            agent_config: Agent configuration
+            previous_outputs: Previous agent outputs for context
+            
+        Returns:
+            True if the agent should be skipped, False otherwise
+        """
+        agent_name = agent_config.get('agent_type', 'unknown')
+        
+        # Check new safe skip condition
+        skip_condition = agent_config.get('skip_condition')
+        if skip_condition:
+            try:
+                context = {
+                    'previous_outputs': previous_outputs or {},
+                    'agent_config': agent_config
+                }
+                should_skip = evaluate_safe_skip_condition(skip_condition, context)
+                if should_skip:
+                    self.console.print(f"[yellow]🔍 Agent {agent_name} SKIPPED: skip_condition evaluated to True[/yellow]")
+                else:
+                    self.console.print(f"[green]✓ Agent {agent_name} passed skip_condition check[/green]")
+                return should_skip
+            except Exception as e:
+                self.console.print(f"[red]⚠️ Agent {agent_name}: Error evaluating skip condition: {e}[/red]")
+                # Fail safe - don't skip on error
+                return False
+        
+        # Check WHERE clause with agent scope
+        where_config = agent_config.get('where_clause')
+        if where_config and where_config.get('scope') == 'agent':
+            try:
+                filter_service = get_global_filter()
+                context_data = {
+                    'previous_outputs': previous_outputs or {},
+                    'agent_type': agent_config.get('agent_type'),
+                    'dependencies': agent_config.get('dependencies', []),
+                    'agent_config': {k: v for k, v in agent_config.items() if k not in ['where_clause']}
+                }
+                
+                # Enhanced logging for WHERE clause evaluation
+                where_clause = where_config['clause']
+                self.console.print(f"[blue]🔍 Evaluating agent-level WHERE clause for {agent_name}: {where_clause}[/blue]")
+                
+                filter_result = filter_service.filter_item(
+                    context_data,
+                    where_clause,
+                    timeout=agent_config.get('max_execution_time', 5)
+                )
+                
+                if not filter_result.success:
+                    # Handle error based on configuration
+                    passthrough_on_error = where_config.get('passthrough_on_error', True)
+                    error_msg = filter_result.error or "Unknown filter error"
+                    self.console.print(f"[red]⚠️ Agent {agent_name}: WHERE clause evaluation failed: {error_msg}[/red]")
+                    
+                    if passthrough_on_error:
+                        self.console.print(f"[yellow]→ Agent {agent_name} proceeding due to passthrough_on_error=True[/yellow]")
+                        return False  # Don't skip
+                    else:
+                        self.console.print(f"[red]→ Agent {agent_name} SKIPPED due to passthrough_on_error=False[/red]")
+                        return True  # Skip
+                
+                if not filter_result.matched:
+                    self.console.print(f"[yellow]🚫 Agent {agent_name} SKIPPED: WHERE clause condition not met[/yellow]")
+                    self.console.print(f"[yellow]   Clause: {where_clause}[/yellow]")
+                    self.console.print(f"[yellow]   Context: {context_data}[/yellow]")
+                    return True  # Skip if doesn't match
+                else:
+                    self.console.print(f"[green]✓ Agent {agent_name} passed WHERE clause check (execution time: {filter_result.execution_time:.3f}s)[/green]")
+                    return False  # Don't skip
+                
+            except Exception as e:
+                self.console.print(f"[red]⚠️ Agent {agent_name}: Error evaluating agent WHERE clause: {e}[/red]")
+                # Fail safe - check passthrough behavior
+                passthrough_on_error = where_config.get('passthrough_on_error', True)
+                if passthrough_on_error:
+                    self.console.print(f"[yellow]→ Agent {agent_name} proceeding due to error and passthrough_on_error=True[/yellow]")
+                    return False
+                else:
+                    self.console.print(f"[red]→ Agent {agent_name} SKIPPED due to error and passthrough_on_error=False[/red]")
+                    return True
+        
+        # Legacy skip_if condition (deprecated but maintained for backwards compatibility)
+        if agent_config.get('skip_if'):
+            try:
+                from agent_actions.common.filters.parser import evaluate_safe_expression
+                context = {
+                    'previous_outputs': previous_outputs or {},
+                    'agent_config': agent_config
+                }
+                should_skip = evaluate_safe_expression(agent_config['skip_if'], context)
+                if should_skip:
+                    self.console.print(f"[yellow]🔍 Agent {agent_name} SKIPPED: legacy skip_if condition[/yellow]")
+                else:
+                    self.console.print(f"[green]✓ Agent {agent_name} passed legacy skip_if check[/green]")
+                return should_skip
+            except Exception as e:
+                self.console.print(f"[red]⚠️ Agent {agent_name}: Error evaluating legacy skip_if condition: {e}[/red]")
+                return False
+        
+        return False
+    
+    def _get_previous_outputs(self, current_idx: int) -> Dict[str, Any]:
+        """
+        Get outputs from previously executed agents with enhanced context for WHERE clause evaluation.
+        
+        Args:
+            current_idx: Index of the current agent
+            
+        Returns:
+            Dictionary of previous agent outputs with metadata
+        """
+        previous_outputs = {}
+        
+        # Get the agent folder path
+        agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
+        
+        # Look at all previous agents in the execution order
+        for i in range(current_idx):
+            prev_agent_name = self.execution_order[i]
+            output_dir = agent_io_path / "target" / f"node_{i}_{prev_agent_name}"
+            
+            # Initialize agent output structure
+            agent_output = {
+                'data': [],
+                'status': self.agent_status.get(prev_agent_name, {}).get('status', 'unknown'),
+                'output_count': 0,
+                'output_files': [],
+                'has_data': False,
+                'errors': []
+            }
+            
+            # Try to load output data from the previous agent
+            try:
+                if output_dir.exists():
+                    # Look for JSON files in the output directory
+                    json_files = list(output_dir.glob("*.json"))
+                    agent_output['output_files'] = [str(f.name) for f in json_files]
+                    
+                    if json_files:
+                        outputs = []
+                        for json_file in json_files:
+                            try:
+                                with open(json_file, 'r') as f:
+                                    data = json.load(f)
+                                    if isinstance(data, list):
+                                        outputs.extend(data)
+                                    else:
+                                        outputs.append(data)
+                            except Exception as file_error:
+                                agent_output['errors'].append(f"Failed to read {json_file.name}: {file_error}")
+                        
+                        agent_output['data'] = outputs
+                        agent_output['output_count'] = len(outputs)
+                        agent_output['has_data'] = len(outputs) > 0
+                    
+                    # Check for passthrough markers
+                    passthrough_marker = output_dir / ".passthrough_processed"
+                    if passthrough_marker.exists():
+                        agent_output['passthrough'] = True
+                        try:
+                            with open(passthrough_marker, 'r') as f:
+                                agent_output['passthrough_reason'] = f.read().strip()
+                        except:
+                            agent_output['passthrough_reason'] = "Unknown"
+                    
+                    # Check for skip markers
+                    skip_marker = output_dir / ".agent_skipped"
+                    if skip_marker.exists():
+                        agent_output['skipped'] = True
+                        try:
+                            with open(skip_marker, 'r') as f:
+                                agent_output['skip_reason'] = f.read().strip()
+                        except:
+                            agent_output['skip_reason'] = "Unknown"
+                
+                # Store both the structured output and the raw data list for backward compatibility
+                previous_outputs[prev_agent_name] = agent_output['data']  # Backward compatibility
+                previous_outputs[f"{prev_agent_name}_meta"] = agent_output  # Enhanced metadata
+                
+            except Exception as e:
+                error_msg = f"Could not load outputs for {prev_agent_name}: {e}"
+                self.console.print(f"[yellow]Warning: {error_msg}[/yellow]")
+                
+                # Still provide the structure even on error
+                agent_output['errors'].append(error_msg)
+                previous_outputs[prev_agent_name] = []
+                previous_outputs[f"{prev_agent_name}_meta"] = agent_output
+        
+        return previous_outputs

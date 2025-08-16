@@ -1,0 +1,17 @@
+{
+    "fact_extractor": {
+        "status": "completed"
+    },
+    "flatten_quotes": {
+        "status": "completed"
+    },
+    "fact_questionability": {
+        "status": "completed"
+    },
+    "fact_explanation": {
+        "status": "completed"
+    },
+    "ScenarioGenerator": {
+        "status": "completed"
+    }
+}

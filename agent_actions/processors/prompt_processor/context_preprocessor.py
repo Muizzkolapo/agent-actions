@@ -1,5 +1,5 @@
 """Module for preprocessing context data."""
-from agent_actions.common.utils.utils import apply_remove_collection
+from agent_actions.common.utils.processor_helpers import apply_remove_collection
 
 
 class ContextPreprocessor:

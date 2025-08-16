@@ -1,8 +1,11 @@
 import json
 import sys
+import logging
 from pathlib import Path
 import yaml
 from typing import Optional, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 from agent_actions.handlers.agent_handlers import AgentManager
 from agent_actions.handlers.config_handler import ConfigManager
 from agent_actions.loaders.data_loaders.batch_data_loader import BatchDataLoader
@@ -13,14 +16,16 @@ from agent_actions.models.schema_change import compile_unified_schema
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.common.transformers.data_transformer import DataTransformer
 from agent_actions.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, SIDE_COLLECTION_KEY
-from agent_actions.common.utils.utils import apply_remove_collection
+from agent_actions.common.utils.processor_helpers import apply_remove_collection
 from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.common.filters.where_filter import get_global_filter, evaluate_safe_skip_condition
 from agent_actions.utils.path_utils import (
     ensure_directory_exists,
     create_side_output_directory,
     resolve_absolute_path
 )
 from agent_actions.common.utils.processor_utils import ProcessorUtils
+from agent_actions.security import validate_where_clause, is_safe_where_clause, safe_eval, SecurityError, ExpressionValidationError
 
 from ..core.dependency_injection import registry
 from ..providers.base import BatchProvider, BatchTask, BatchResult
@@ -127,6 +132,100 @@ class BatchService:
         self.side_collection = []
         # Cache providers by type to avoid recreating them
         self._provider_cache = {}
+
+    def _evaluate_where_clause(self, where_clause: str, row_data: dict) -> bool:
+        """
+        Safely evaluate a WHERE clause against row data.
+        
+        Args:
+            where_clause: WHERE clause expression to evaluate
+            row_data: Data to evaluate against
+            
+        Returns:
+            True if the row matches the WHERE clause, False otherwise
+        """
+        if not where_clause:
+            return True
+        
+        try:
+            # Create a simple WHERE clause evaluator
+            # Convert SQL-like syntax to Python expressions
+            expression = self._convert_where_to_expression(where_clause, row_data)
+            
+            # Create safe context for evaluation
+            context = {
+                'data': row_data,
+                'len': len,
+                'str': str,
+                'int': int,
+                'bool': bool,
+                'float': float,
+            }
+            
+            # Add flattened row data to context for direct field access
+            context.update(row_data)
+            
+            result = safe_eval(expression, context)
+            return bool(result)
+            
+        except (SecurityError, ExpressionValidationError) as e:
+            print(f"Security error in WHERE clause evaluation: {e}")
+            return False
+        except Exception as e:
+            print(f"Error evaluating WHERE clause '{where_clause}': {e}")
+            return False
+    
+    def _convert_where_to_expression(self, where_clause: str, row_data: dict) -> str:
+        """
+        Convert SQL-like WHERE clause to safe Python expression.
+        
+        Args:
+            where_clause: SQL-like WHERE clause
+            row_data: Row data for context
+            
+        Returns:
+            Python expression string
+        """
+        # Basic conversion of SQL-like operators to Python
+        expression = where_clause
+        
+        # Handle field access with .get() for safety
+        # Replace field references with safe dictionary access
+        import re
+        
+        # Find field references (word.word.word patterns)
+        field_pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*)\b'
+        
+        def replace_field(match):
+            field_path = match.group(1)
+            if field_path in ['and', 'or', 'not', 'in', 'is', 'True', 'False', 'None']:
+                return field_path  # Don't replace keywords
+            
+            # Convert dot notation to safe nested get
+            parts = field_path.split('.')
+            if len(parts) == 1:
+                # Simple field access
+                return f'data.get("{parts[0]}")'
+            else:
+                # Nested field access
+                result = 'data'
+                for part in parts:
+                    result = f'{result}.get("{part}", {{}})'
+                return result
+        
+        expression = re.sub(field_pattern, replace_field, expression)
+        
+        # Convert SQL operators to Python operators
+        expression = re.sub(r'\bIS\s+NULL\b', 'is None', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bIS\s+NOT\s+NULL\b', 'is not None', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bNOT\s+IN\b', 'not in', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bCONTAINS\b', 'in', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bNOT\s+CONTAINS\b', 'not in', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bAND\b', 'and', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bOR\b', 'or', expression, flags=re.IGNORECASE)
+        expression = re.sub(r'\bNOT\b', 'not', expression, flags=re.IGNORECASE)
+        
+        return expression
 
     def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
         """
@@ -280,8 +379,27 @@ class BatchService:
         self.context_map = {}
         self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
         
-        # Check for conditional clause
-        conditional_clause = agent_config.get("conditional_clause", "").lower()
+        # Check for conditional clause (legacy support)
+        conditional_clause = agent_config.get("conditional_clause", "")
+        
+        # Check for new WHERE clause (secure)
+        where_clause_config = agent_config.get("where_clause")
+        
+        # Validate WHERE clause if present
+        if where_clause_config:
+            where_clause = where_clause_config.get("clause", "")
+            if where_clause and not is_safe_where_clause(where_clause):
+                validation_result = validate_where_clause(where_clause)
+                error_msg = "; ".join(validation_result.errors)
+                raise ValueError(f"Unsafe WHERE clause detected: {error_msg}")
+            
+            scope = where_clause_config.get("scope", "item")
+            if scope != "item":
+                # For non-item scope, we skip processing at agent level
+                # This is handled in the workflow, not here
+                where_clause = None
+        else:
+            where_clause = None
         
         # Prepare data for the provider
         prepared_data = []
@@ -305,11 +423,56 @@ class BatchService:
                 # Already unwrapped or different structure
                 row_content = row
 
-            # Skip processing if conditional clause is present and evaluates to False
-            if conditional_clause and not execute_user_defined_function(
+            # Check for WHERE clause filtering (new secure method)
+            where_clause_config = agent_config.get("where_clause")
+            should_skip = False
+            
+            if where_clause_config and where_clause_config.get("scope") == "item":
+                try:
+                    filter_service = get_global_filter()
+                    
+                    # Debug logging
+                    logger.info(f"WHERE clause filtering: '{where_clause_config['clause']}'")
+                    logger.info(f"Row content keys: {list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict'}")
+                    if isinstance(row_content, dict) and 'questionable' in row_content:
+                        logger.info(f"Row questionable value: {row_content['questionable']}")
+                    
+                    filter_result = filter_service.filter_item(
+                        row_content, 
+                        where_clause_config["clause"],
+                        timeout=agent_config.get("max_execution_time", 5)
+                    )
+                    
+                    logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")
+                    if filter_result.error:
+                        logger.warning(f"Filter error: {filter_result.error}")
+                    
+                    if not filter_result.success:
+                        # Handle filter error based on configuration
+                        passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                        if not passthrough_on_error:
+                            should_skip = True
+                            logger.info("Skipping item due to filter error and passthrough_on_error=False")
+                        # If passthrough_on_error is True, continue processing
+                    elif not filter_result.matched:
+                        # Item doesn't match WHERE clause
+                        should_skip = True
+                        logger.info(f"Skipping item - WHERE clause not matched")
+                        
+                except Exception as e:
+                    logger.warning(f"Error in WHERE clause evaluation: {e}")
+                    passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                    if not passthrough_on_error:
+                        should_skip = True
+            
+            # Legacy conditional clause support (deprecated but maintained for backwards compatibility)
+            elif conditional_clause and not execute_user_defined_function(
                 conditional_clause, row_content
             ):
-                # Store the original row without processing for conditional failures
+                should_skip = True
+            
+            # Skip this item if any filter condition failed
+            if should_skip:
                 continue
 
             # Apply remove_collection only for rows that pass the conditional check

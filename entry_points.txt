@@ -1,2 +1,0 @@
-[console_scripts]
-agent=agent_actions.cli.main:main

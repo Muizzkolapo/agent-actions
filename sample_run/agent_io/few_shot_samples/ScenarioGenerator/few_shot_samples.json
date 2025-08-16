@@ -1,0 +1,436 @@
+[
+  {
+    "question": "Your team is deploying an AI agent to perform actions based on user requests, such as scheduling meetings and sending notifications.\n\nYou need to integrate the AI agent with tools that enable it to perform these actions programmatically.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Add custom functions.",
+      "Configure static templates.",
+      "Enable default model capabilities.",
+      "Use a pre-trained chatbot framework."
+    ]
+  },
+  {
+    "question": "You are developing a custom AI agent using Azure AI Foundry Agent Service. The agent needs to interact with an Azure AI Foundry resource that has the GPT-35-Turbo model deployed.\n\nYou need to configure the agent to effectively use the GPT-35-Turbo model for generating responses.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Deploy a GPT-4 model.",
+      "Specify the GPT-35-Turbo deployment name.",
+      "Use the Completion endpoint.",
+      "Use the Embeddings endpoint."
+    ]
+  },
+  {
+    "question": "You are developing an AI agent using Azure AI Foundry Agent Service to assist with data retrieval and analysis tasks.\n\nYou need to configure the AI agent to interact effectively with external data sources.\n\nWhat should you use?\n\nSelect only one answer.",
+    "options": [
+      "Configure Azure AI Search.",
+      "Deploy a custom model in Azure Machine Learning.",
+      "Implement Azure Bot Framework.",
+      "Use Azure AI Document Intelligence."
+    ]
+  },
+  {
+    "question": "Your organization plans to develop an AI solution using Microsoft Azure AI Foundry Agent Service to automate customer support workflows.\n\nYou need to configure the agent to interact with external data sources and execute actions based on user queries.\n\nEach correct answer presents part of the solution. Which two actions should you perform?\n\nSelect all answers that apply.",
+    "options": [
+      "Add Bing search tools in the agent configuration.",
+      "Configure Azure Functions in the agent configuration file.",
+      "Deploy a containerized image.",
+      "Set up a SQL database.",
+      "Use Computer Vision."
+    ]
+  },
+  {
+    "question": "Your organization is using Azure AI Foundry Agent Service to automate customer support workflows.\n\nYou need to configure an agent to interact with external APIs and use real-time data for responses.\n\nEach correct answer presents part of the solution. Which three actions should you perform?\n\nSelect all answers that apply.",
+    "options": [
+      "Define tools for API access.",
+      "Deploy the agent using Azure SDK.",
+      "Manually parse API responses in code.",
+      "Configure the Bing Search tool.",
+      "Set up an Azure AI Search resource.",
+      "Use Blob Storage for conversation state."
+    ]
+  },
+  {
+    "question": "You are provisioning an Azure OpenAI in Foundry Models service resource.\n\nYou need to ensure that the resource is only available to applications that are hosted in your Azure subscription.\n\nWhich network security setting should you configure?\n\nSelect only one answer.",
+    "options": [
+      "All networks",
+      "All networks, and a network security group to control traffic",
+      "Disabled, and allow a private endpoint connection to establish access",
+      "Selected networks"
+    ]
+  },
+  {
+    "question": "You have an Azure OpenAI in Foundry Models solution. The solution uses a specific GPT-35-Turbo model version that was current during initial deployment. Auto-update is disabled.\n\nSometime later, you investigate the deployed solution and discover that it uses a newer version of the model.\n\nWhy was the model version updated?\n\nSelect only one answer.",
+    "options": [
+      "Auto-update is always enabled.",
+      "Auto-update is enabled automatically when a new version is released.",
+      "Model versions are updated automatically when the version is older than five version updates.",
+      "The model version reached its retirement date."
+    ]
+  },
+  {
+    "question": "Your organization is developing an AI-powered application using Azure OpenAI in Foundry Models.\n\nYou need to choose a model for text generation.\n\nWhat should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Vision",
+      "Code-Davinci-003",
+      "DALL-E",
+      "GPT-4"
+    ]
+  },
+  {
+    "question": "Your company is integrating Azure OpenAI in Foundry Models into its internal knowledge base system to provide intelligent query responses.\n\nYou need to ensure that the most relevant documents are prioritized during data retrieval.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Enable hybrid search mode.",
+      "Increase retrieved document count.",
+      "Reduce chunk size.",
+      "Set strictness to a higher value."
+    ]
+  },
+  {
+    "question": "An organization plans to use Azure OpenAI in Foundry Models to process user input and generate content.\n\nYou need to create visual content from text descriptions.\n\nWhat should you use?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Search",
+      "DALL-E",
+      "GPT-4",
+      "Text Embedding Models"
+    ]
+  },
+  {
+    "question": "Your company uses an Azure OpenAI in Foundry Models service to generate images based on text prompts.\n\nYou need to configure the API request to ensure optimized image quality and resolution.\n\nEach correct answer presents part of the solution. Which two actions should you take?\n\nSelect all answers that apply.",
+    "options": [
+      "Set 'n' to 10.",
+      "Set 'output_format' to JPEG.",
+      "Set 'quality' to hd.",
+      "Specify 'size' as 1024x1792."
+    ]
+  },
+  {
+    "question": "Your organization plans to implement a generative AI solution to assist the customer success by summarizing customer complaints and questions.\n\nYou need to ensure the model provides accurate summaries while reducing costs.\n\nWhat action should you take?\n\nSelect only one answer.",
+    "options": [
+      "Apply prompt engineering without external data sources.",
+      "Deploy a model without grounding data and rely on pre-trained capabilities.",
+      "Fine-tune a model using customer query data without an orchestration layer.",
+      "Use Retrieval-Augmented Generation (RAG) with Azure AI Search for grounding data."
+    ]
+  },
+  {
+    "question": "Your company uses an Azure OpenAI Foundry Models service to generate code snippets for software development.\n\nYou need to ensure the generated code adheres to your organization's coding standards.\n\nWhat action should you take to achieve this?\n\nSelect only one answer.",
+    "options": [
+      "Enable multi-region deployment.",
+      "Increase compute resources.",
+      "Provide standard-compliant examples in prompts.",
+      "Switch to a chat-optimized model."
+    ]
+  },
+  {
+    "question": "You are building an app named App1 that uses the Image Analysis API.\n\nYou are evaluating analyzing images by using the following request.\n\nhttps://*.cognitiveservices.azure.com/computervision/imageanalysis:analyze? features=read,description\n\nWhich results will the request return?\n\nSelect only one answer.",
+    "options": [
+      "a description of the image content only",
+      "the visible text in the image and a description of the image content",
+      "which objects there are in the image and their approximate location"
+    ]
+  },
+  {
+    "question": "You are building an app named App1 that uses the Image Analysis API.\n\nYou are evaluating analyzing images by using the following request.\n\nhttps://*.cognitiveservices.azure.com/computervision/imageanalysis:analyze? features=read,description\n\nWhich results will the request return?\n\nSelect only one answer.",
+    "options": [
+      "a description of the image content only",
+      "the visible text in the image and a description of the image content",
+      "which objects there are in the image and their approximate location"
+    ]
+  },
+  {
+    "question": "You build an app named App1 that uses the Azure AI Face service.\n\nYou need to optimize the app for images that contain blurry faces.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Change the recognition model to recognition_02.",
+      "Decrease the faceIdTimeToLive value.",
+      "Set the detection model to detection_03."
+    ]
+  },
+  {
+    "question": "You are building an app that will use Azure AI Vision to detect the presence of people in a video feed.\n\nWhich Azure AI Vision feature should you use?\n\nSelect only one answer.",
+    "options": [
+      "face detection",
+      "Image Analysis",
+      "optical character recognition (OCR)",
+      "Spatial Analysis"
+    ]
+  },
+  {
+    "question": "You need to build an app that will use Azure AI Vision to analyze and detect animals in images.\n\nWhich type of project should you use?\n\nSelect only one answer.",
+    "options": [
+      "image classification",
+      "image detection",
+      "object analysis",
+      "object classification",
+      "object detection"
+    ]
+  },
+  {
+    "question": "You are building an app that will use the Azure AI Custom Vision API to detect when all the spaces in a parking lot are empty.\n\nWhich feature of the API should you use?\n\nSelect only one answer.",
+    "options": [
+      "image classification",
+      "image description",
+      "object detection"
+    ]
+  },
+  {
+    "question": "You are developing a custom vision model using Microsoft Azure Custom Vision to classify images of various food items. The dataset includes images labeled as 'vegetable-fruit', 'dessert', and 'soup'.\n\nYou need to optimize the training process to improve the model's performance metrics.\n\nEach correct answer presents part of the solution. Which two actions should you perform?\n\nSelect all answers that apply.",
+    "options": [
+      "Select the 'Food' domain.",
+      "Select the 'General' domain.",
+      "Set a high probability threshold during training.",
+      "Use consistent tags to label images."
+    ]
+  },
+  {
+    "question": "You are building a video processing app that will use Azure AI Video Indexer to extract insights from videos that contain multi-language content.\n\nYou need to configure the API calls to enable multilingual identification.\n\nWhich value should you set for the sourceLanguage parameter?\n\nSelect only one answer.",
+    "options": [
+      "language detection",
+      "multi detection",
+      "multi-language detection",
+      "multi-lingual detection"
+    ]
+  },
+  {
+    "question": "You are building an app that will flag documents that contain the names of staff members by using the Azure AI Language Personally Identifiable Information (PII) detection feature.\n\nYou need to configure the PII detection feature.\n\nWhich category should you use?\n\nSelect only one answer.",
+    "options": [
+      "Age",
+      "DateTime",
+      "Person",
+      "PhoneNumber"
+    ]
+  },
+  {
+    "question": "You need to build an app that will summarize text documents into key phrases.\n\nWhich Azure AI Language feature should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Language Summarization",
+      "key phrase extraction",
+      "Named Entity Recognition (NER)",
+      "Personally Identifiable Information (PII) detection"
+    ]
+  },
+  {
+    "question": "You are building an Azure AI Translator custom model.\n\nYou need to ensure that the translation accuracy for the model has a Bilingual Evaluation Understudy (BLEU) score that indicates high quality.\n\nWhat is the minimum score range required?\n\nSelect only one answer.",
+    "options": [
+      "0 to 19",
+      "20 to 39",
+      "40 to 59",
+      "60 to 79",
+      "80 to 100"
+    ]
+  },
+  {
+    "question": "You plan to build an app that will transcribe large quantities of audio files by using the Azure AI Speech service batch transcription feature.\n\nYou need to recommend a storage solution for the audio files. The solution must minimize development effort.\n\nWhat should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Azure Cosmos DB",
+      "Azure Data Lake Storage",
+      "Azure SQL Database",
+      "Azure Storage"
+    ]
+  },
+  {
+    "question": "You are building a custom translation model.\n\nYou need to use bilingual training documents to teach the model your terminology and style.\n\nWhich rule should you follow?\n\nSelect only one answer.",
+    "options": [
+      "Be liberal.",
+      "Be restrictive.",
+      "Be strict."
+    ]
+  },
+  {
+    "question": "ou are building a custom translation model.\n\nYou need to evaluate the precision of the text that you translated by using a Bilingual Evaluation Understudy (BLEU) score.\n\nWhich scale is used for the score?\n\nSelect only one answer.",
+    "options": [
+      "between 0 and 1",
+      "between 0 and 100",
+      "low, medium, and high"
+    ]
+  },
+  {
+    "question": "You are building a multilingual conversational app by using Conversational Language Understanding (CLU), part of Azure AI Language service.\n\nYou create a CLU model that will serve multiple languages.\n\nYou need to optimize the performance of the model. The solution must minimize development effort.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Add utterances for languages that are performing poorly in the model.",
+      "Configure the app to only query utterances in the language that was used to train the model.",
+      "Create separate projects for each language.",
+      "Train the model by using utterances in multiple languages and only query the model by using the project language."
+    ]
+  },
+  {
+    "question": "You are building a chatbot that will use the Azure AI Language question answering service.\n\nYou need to identify the operational costs for the service.\n\nWhich two parameters will influence the costs? Each correct answer presents a complete solution.\n\nSelect all answers that apply.",
+    "options": [
+      "the number of assigned metadata tags",
+      "the number of knowledge base editors",
+      "the number of supported languages",
+      "the required throughput",
+      "the size and the number of knowledge bases"
+    ]
+  },
+  {
+    "question": "You have a website that allows users to upload images.\n\nYou need to ensure that the uploaded images do not contain adult content. The solution must minimize development effort.\n\nWhich service should you use?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Face Service",
+      "Azure AI Custom Vision",
+      "Azure AI Vision Image Analysis",
+      "Azure AI Vision Spatial Analysis"
+    ]
+  },
+  {
+    "question": "You build an app that enables users to upload scans of invoices.\n\nYou need to extract text and key/value pairs from the scanned invoices.\n\nWhich service should you use?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Search",
+      "Azure AI Document Intelligence",
+      "Azure AI Immersive Reader",
+      "Azure AI Metrics Advisor"
+    ]
+  },
+  {
+    "question": "ou are building a mobile app that will enable users to scan street signs and will read out the text on the sign.\n\nYou need to recommend a service to use. The solution must minimize development effort.\n\nWhich service should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Vision",
+      "Azure AI Custom Vision",
+      "Azure AI Face Service",
+      "Azure AI Document Intelligence"
+    ]
+  },
+  {
+    "question": "Your company plans to develop an app with an AI model using proprietary data.\n\nYou need to select an Azure platform to ensure the model is connected and operationalized effectively.\n\nWhich Azure platform should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Content Understanding",
+      "Azure AI Speech",
+      "Azure AI Vision",
+      "Azure AI Foundry"
+    ]
+  },
+  {
+    "question": "You are building an app that will use an Azure AI Foundry Service resource.\n\nYou need to identify the endpoint for the resource.\n\nFrom the Azure CLI, which command should you run?\n\nSelect only one answer.",
+    "options": [
+      "az cognitiveservices account show",
+      "az cognitiveservices account show --name myresource",
+      "az cognitiveservices account show --name myresource --resource-group cognitive-services-resource-group",
+      "az cognitiveservices account show --resource-group cognitive-services-resource-group"
+    ]
+  },
+  {
+    "question": "You are building an app that will identify the core concepts of a document by using Azure AI Foundry Service.\n\nWhich endpoint should you use as part of the solution?\n\nSelect only one answer.",
+    "options": [
+      "custom Named Entity Recognition (NER)",
+      "key phrase extraction",
+      "the Azure AI Vision API"
+    ]
+  },
+  {
+    "question": "You have an Azure App Services web app named App1.\n\nYou need to configure App1 to use Azure AI Services to authenticate by using Microsoft Entra ID. The solution must meet the following requirements:\n\nMinimize administrative effort.\nUse the principle of least privilege.\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Create a secret and store the secret in an Azure key vault. Assign App1 role-based access control (RBAC) permissions to the secret.",
+      "Create a Microsoft Entra app registration and enable certificate-based authentication.",
+      "From App1, enable a managed identity and assign role-based access control (RBAC) permissions to Azure AI Services.",
+      "From PowerShell, create a secret that never expires."
+    ]
+  },
+  {
+    "question": "You have an Azure AI Foundry Service resource.\n\nYou need to enable diagnostic logging.\n\nWhat are two prerequisites for diagnostic logging? Each correct answer presents a complete solution.\n\nSelect all answers that apply.",
+    "options": [
+      "a Log Analytics workspace",
+      "an Azure Cosmos DB for NoSQL account",
+      "an Azure key vault",
+      "an Azure SQL database",
+      "an Azure Storage account"
+    ]
+  },
+  {
+    "question": "You have a website that enables users to upload and share PNG image files.\n\nYou implement an Azure AI Foundry Content Safety solution for the website.\n\nThe users report that some images fail to display after they are uploaded.\n\nYou need to ensure that the solution assigns proper content flags to the uploaded images.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Adjust the content categories to be used.",
+      "Adjust the severity level.",
+      "Convert the images to a different file format.",
+      "Remove the severity level."
+    ]
+  },
+  {
+    "question": "You plan to build an AI solution that will detect harmful content in company documents.\n\nWhich Azure AI Foundry Service should you include in the solution?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Search",
+      "Bot Service",
+      "Content Safety",
+      "Document Intelligence",
+      "Metrics Advisor"
+    ]
+  },
+  {
+    "question": "You are building a custom copilot based on Azure OpenAI.\n\nYou discover attempts to exploit the copilot by jailbreaking it through a User Prompt Injection Attack (UPIA).\n\nYou need to increase security to prevent the jailbreak attack.\n\nWhich Azure AI Foundry Service should you include in the solution?\n\nSelect only one answer.",
+    "options": [
+      "Content Safety",
+      "Face",
+      "Language",
+      "Video Indexer",
+      "Vision"
+    ]
+  },
+  {
+    "question": "You are building a solution that uses Azure AI Search.\n\nYou need to execute the initial run of the indexer.\n\nWhich stages will be included during the initial run?\n\nSelect only one answer.",
+    "options": [
+      "connecting to an Azure data source, creating an index schema, and running the wizard to create objects and load data",
+      "creating a data source, creating an index, and creating and running the indexer",
+      "document cracking, field mapping, skillset execution, and output field mapping"
+    ]
+  },
+  {
+    "question": "You are building a solution that uses Azure AI Search.\n\nYou need to save normalized binary files as projections.\n\nWhich type of projection should you use?\n\nSelect only one answer.",
+    "options": [
+      "files",
+      "objects",
+      "tables"
+    ]
+  },
+  {
+    "question": "You are building a knowledge mining solution that uses Azure AI Search.\n\nYou need to apply AI enrichment to your indexer pipeline to generate links to Wikipedia articles.\n\nWhich skill should you use?\n\nSelect only one answer.",
+    "options": [
+      "Microsoft.Skills.Custom.WebApiSkill",
+      "Microsoft.Skills.Text.KeyPhraseExtractionSkill",
+      "Microsoft.Skills.Text.PIIDetectionSkill",
+      "Microsoft.Skills.Text.V3.EntityLinkingSkill"
+    ]
+  },
+  {
+    "question": "Your company processes various forms, including health insurance cards and identity documents, and requires accurate extraction of specific fields.\n\nYou need to recommend a solution for extracting structured data from these forms.\n\nWhat should you do?\n\nSelect only one answer.",
+    "options": [
+      "Train a composed model.",
+      "Use Azure OCR.",
+      "Use prebuilt models for Health Insurance Card and ID Document.",
+      "Use the Layout model."
+    ]
+  },
+  {
+    "question": "Your company collects cards during networking events and needs to automate processing to store contact information in a database.\n\nYou need to extract contact details such as names, email addresses, and phone numbers from the business cards.\n\nWhat should you use to achieve this goal?\n\nSelect only one answer.",
+    "options": [
+      "Train a custom model in Azure AI Document Intelligence Studio.",
+      "Use Azure AI Vision OCR.",
+      "Use the Business Card model in Azure AI Document Intelligence.",
+      "Use the ID Document model in Azure AI Document Intelligence."
+    ]
+  },
+  {
+    "question": "Your company receives customer feedback in audio format, including conversations between agents and customers.\n\nYou need to perform transcription, sentiment analysis, and generate summaries from these recordings.\n\nWhat service should you recommend?\n\nSelect only one answer.",
+    "options": [
+      "Azure AI Content Understanding",
+      "Azure AI Speech",
+      "Azure AI Language",
+      "Azure AI Document Intelligence"
+    ]
+  },
+  {
+    "question": "Your organization processes sensitive documents, such as contracts and invoices, and must comply with data privacy regulations.\n\nYou need to use Microsoft Azure AI Document Intelligence to automate structured data extraction from these documents.\n\nEach correct answer presents part of the solution. Which two actions should you perform?\n\nSelect all answers that apply.",
+    "options": [
+      "Configure an Azure AI Search resource.",
+      "Manually preprocess documents to remove sensitive information.",
+      "Upload documents to Azure Blob Storage.",
+      "Use the General Document model.",
+      "Use the Layout model."
+    ]
+  },
+  {
+    "question": "Your organization scans and stores various document types, such as invoices, receipts, and custom forms, in PDF format.\n\nYou need to extract structured information from these documents for analysis.\n\nEach correct answer presents part of the solution. Which two actions should you take?\n\nSelect all answers that apply.",
+    "options": [
+      "Convert the documents into plain text.",
+      "Train a custom model using labeled datasets in Azure AI Document Intelligence.",
+      "Use the General Document model in Azure AI Document Intelligence.",
+      "Use the Layout model in Azure AI Document Intelligence.",
+      "Use the prebuilt Invoice model in Azure AI Document Intelligence."
+    ]
+  }
+]

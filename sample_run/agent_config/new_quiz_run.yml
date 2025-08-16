@@ -1,0 +1,124 @@
+new_quiz_run:
+  - agent_type: topic_classifier
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4.1-mini"
+    schema_name: azure_ai_topics_and_subtopics
+    use_few_shot_samples: 6
+    is_operational: False
+    json_mode: True
+    remove_collection: ["id","url","topic"]
+    side_collection: ["id","url","page_content"]
+    run_mode: "online"
+    granularity: Record
+    chunk_config:
+      chunk_size: 7000
+      overlap: 200
+      tokenizer_model: "o200k_base"
+      split_method: "tiktoken"
+      field_chunking:
+        enabled: true
+        chunk_fields:
+          - "page_content"
+        preserve_fields:
+          - "id"
+          - "url"
+          - "topic"
+          - "doc_name"
+          - "bloom_details"
+        chunk_threshold: 10000
+        fallback_strategy: "preserve_original"
+        max_chunks_per_record: 25
+        truncate_at: 10000
+      chunk_metadata:
+        add_chunk_info: true
+        chunk_id_field: "chunk_id"
+        original_record_id: "original_doc_id"
+        add_char_positions: true
+        add_token_counts: true
+    prompt_debug: False
+    prompt: $new_quiz.classifier
+
+
+
+  - agent_type: fact_extractor
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4.1-mini"
+    schema_name: candidate_facts_list
+    use_few_shot_samples: 0
+    is_operational: True
+    json_mode: True
+    remove_collection: ["id","url","topic"]
+    side_collection: ["id","url","page_content","bloom_details"]
+    run_mode: "online"
+    granularity: Record
+    prompt_debug: False
+    prompt: $new_quiz.Fact_extraction
+
+  - {{ tooling_workflow(
+        agent_type="flatten_quotes",
+        model_name="new_quiz_run.flatten_quotes",
+        dependencies=["fact_extractor"],
+        side_collection=["id","url","topic","summary","page_content","bloom_details"],
+        is_operational=True,
+        granularity="Record",
+        description="Custom transformation tool"
+    ) }}  
+
+  - agent_type: fact_questionability
+    dependencies: ["flatten_quotes"]
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4.1-mini"
+    schema_name: fact_questionability
+    use_few_shot_samples: 0
+    is_operational: True
+    json_mode: True
+    remove_collection: ["id","url"]
+    side_collection: ["id","url","page_content","bloom_details","fact","quote"]
+    run_mode: "online"
+    granularity: Record
+    prompt_debug: False
+    prompt: $new_quiz.fact_questionability
+
+
+
+  - agent_type: fact_explanation
+    dependencies: ["fact_questionability"]
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4.1-mini"
+    run_mode: "online"
+    use_few_shot_samples: 0
+    is_operational: True
+    schema: {"fact_explanation": "string"}
+    side_collection: ["id","url","page_content","bloom_details","candidate_facts_list","fact","quote","questionable","why_questionable"]
+    json_mode: True
+    granularity: Record
+    prompt_debug: False
+    prompt: $new_quiz.fact_explanation
+
+
+  - agent_type: ScenarioGenerator
+    dependencies: ["fact_explanation"]
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4.1-mini"
+    schema: {"question": "string","options": "array","answer": "string","answer_explanation": "array",}
+    use_few_shot_samples: 6
+    is_operational: True
+    json_mode: True
+    side_collection: ["id","url","page_content","bloom_details","candidate_facts_list","fact","quote","questionable","why_questionable","fact_explanation"]
+    remove_collection: ["id","url","page_content"]
+    run_mode: "online"
+    granularity: Record
+    prompt_debug: False
+    where_clause:
+      clause: 'questionable != "Low Value"'
+      scope: "item"
+    prompt: $new_quiz.ScenarioGenerator_prompt
+
+

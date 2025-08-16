@@ -1,0 +1,245 @@
+{
+  "metadata": {
+    "generated_at": "2025-08-16T10:09:01.291490Z",
+    "agent_actions_version": "1.2.0",
+    "invocation_id": "2bb4f3c2-5b8b-4379-a0b0-01b36235216f",
+    "schema_version": "1.0.0",
+    "project_name": "new_quiz_run",
+    "project_path": "/Users/muizz/Documents/codeshop/agent_action_test/qanalabs/agent_workflow/new_quiz_run/agent_config"
+  },
+  "agents": {
+    "fact_extractor": {
+      "unique_id": "fact_extractor",
+      "name": "fact_extractor",
+      "agent_type": "fact_extractor",
+      "model_vendor": "openai",
+      "model_name": "gpt-4.1-mini",
+      "config": {
+        "api_key": "OPENAI_API_KEY",
+        "model_name": "gpt-4.1-mini",
+        "chunk_config": {
+          "overlap": 500,
+          "chunk_size": 4000
+        },
+        "is_operational": true,
+        "run_mode": "online",
+        "ephemeral": false,
+        "prompt_debug": false,
+        "agent_type": "fact_extractor",
+        "dependencies": [],
+        "model_vendor": "openai",
+        "schema_name": "candidate_facts_list",
+        "use_few_shot_samples": 0,
+        "json_mode": true,
+        "remove_collection": [
+          "id",
+          "url",
+          "topic"
+        ],
+        "side_collection": [
+          "id",
+          "url",
+          "page_content",
+          "bloom_details"
+        ],
+        "granularity": "Record",
+        "prompt": "# Azure AI Engineer Exam Fact Extraction\n\nYou are a student preparing for the Azure AI Engineer certification exam. Extract testable facts from the provided documentation that align with the exam syllabus.\n\n## Instructions\n\n**Only extract facts that are:**\n- Directly related to the provided topic and subtopic\n- Testable and exam-worthy \n- Grounded in the Azure AI Engineer exam syllabus below\n- Supported by verbatim quotes from the source material\n\n**For each fact, provide:**\n- `fact`: Short, testable statement (\u226425 words)\n- `quote`: Verbatim text span from the source that supports the fact\n\n**Classification Level:** {{ return_collection[bloom_details] }}\n\n## Azure AI Engineer Exam Syllabus\n\nAs a candidate for this exam, you should have subject matter expertise in applying data science and machine learning to implement and run machine learning workloads on Azure. Additionally, you should have knowledge of optimizing language models for AI applications using Azure AI.\n\n### Core Responsibilities:\n- Designing and creating suitable working environments for data science workloads\n- Exploring data\n- Training machine learning models\n- Implementing pipelines\n- Running jobs to prepare for production\n- Managing, deploying, and monitoring scalable machine learning solutions\n- Using language models for building AI applications\n\n### Required Knowledge Areas:\n- Azure Machine Learning\n- MLflow\n- Azure AI services, including Azure AI Search\n- Azure AI Foundry\n\n**Rule:** Only facts with verbatim supporting quotes will be accepted.\n\n- Select the appropriate service for a computer vision solution\n- Select the appropriate service for a natural language processing solution\n- Select the appropriate service for a speech solution\n- Select the appropriate service for a generative AI solution\n- Select the appropriate service for a document intelligence solution\n- Select the appropriate service for a knowledge mining solution\n- Plan for a solution that meets Responsible AI principles\n- Create an Azure AI resource\n- Determine a default endpoint for a service\n- Integrate Azure AI services into a continuous integration and continuous delivery (CI/CD) pipeline\n- Plan and implement a container deployment\n- Configure diagnostic logging\n- Monitor an Azure AI resource\n- Manage costs for Azure AI services\n- Manage account keys\n- Protect account keys by using Azure Key Vault\n- Manage authentication for an Azure AI Service resource\n- Manage private communications\n- Implement a text moderation solution with Azure AI Content Safety\n- Implement an image moderation solution with Azure AI Content Safety\n- Select visual features to meet image processing requirements\n- Detect objects in images and generate image tags\n- Include image analysis features in an image processing request\n- Interpret image processing responses\n- Extract text from images using Azure AI Vision\n- Convert handwritten text using Azure AI Vision\n- Choose between image classification and object detection models\n- Label images\n- Train a custom image model, including image classification and object detection\n- Evaluate custom vision model metrics\n- Publish a custom vision model\n- Consume a custom vision model\n- Use Azure AI Video Indexer to extract insights from a video or live stream\n- Use Azure AI Vision Spatial Analysis to detect presence and movement of people in video\n- Extract key phrases\n- Extract entities\n- Determine sentiment of text\n- Detect the language used in text\n- Detect personally identifiable information (PII) in text\n- Implement text-to-speech\n- Implement speech-to-text\n- Improve text-to-speech by using Speech Synthesis Markup Language (SSML)\n- Implement custom speech solutions\n- Implement intent recognition\n- Implement keyword recognition\n- Translate text and documents by using the Azure AI Translator service\n- Implement custom translation, including training, improving, and publishing a custom model\n- Translate speech-to-speech by using the Azure AI Speech service\n- Translate speech-to-text by using the Azure AI Speech service\n- Translate to multiple languages simultaneously\n- Create intents and add utterances\n- Create entities\n- Train, evaluate, deploy, and test a language understanding model\n- Optimize a language understanding model\n- Consume a language model from a client application\n- Backup and recover language understanding models\n- Create a custom question answering project\n- Add question-and-answer pairs manually\n- Import sources\n- Train and test a knowledge base\n- Publish a knowledge base\n- Create a multi-turn conversation\n- Add alternate phrasing\n- Add chit-chat to a knowledge base\n- Export a knowledge base\n- Create a multi-language question answering solution\n- Provision an Azure AI Search resource\n- Create data sources\n- Create an index\n- Define a skillset\n- Implement custom skills and include them in a skillset\n- Create and run an indexer\n- Query an index, including syntax, sorting, filtering, and wildcards\n- Manage Knowledge Store projections, including file, object, and table projections\n- Provision a Document Intelligence resource\n- Use prebuilt models to extract data from documents\n- Implement a custom document intelligence model\n- Train, test, and publish a custom document intelligence model\n- Create a composed document intelligence model\n- Implement a document intelligence model as a custom Azure AI Search skill\n- Provision an Azure OpenAI Service resource\n- Select and deploy an Azure OpenAI model\n- Submit prompts to generate natural language\n- Submit prompts to generate code\n- Use the DALL-E model to generate images\n- Use Azure OpenAI APIs to submit prompts and receive responses\n- Use large multimodal models in Azure OpenAI\n- Configure parameters to control generative behavior\n- Apply prompt engineering techniques to improve responses\n- Use your own data with an Azure OpenAI model\n- Fine-tune an Azure OpenAI model"
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    },
+    "flatten_quotes": {
+      "unique_id": "flatten_quotes",
+      "name": "flatten_quotes",
+      "agent_type": "flatten_quotes",
+      "model_vendor": "tool",
+      "model_name": "new_quiz_run.flatten_quotes",
+      "config": {
+        "api_key": "OPENAI_API_KEY",
+        "model_name": "new_quiz_run.flatten_quotes",
+        "chunk_config": {
+          "overlap": 500,
+          "chunk_size": 4000
+        },
+        "is_operational": true,
+        "run_mode": "online",
+        "ephemeral": false,
+        "prompt_debug": false,
+        "agent_type": "flatten_quotes",
+        "dependencies": [
+          "fact_extractor"
+        ],
+        "model_vendor": "tool",
+        "granularity": "Record",
+        "side_collection": [
+          "id",
+          "url",
+          "topic",
+          "summary",
+          "page_content",
+          "bloom_details"
+        ],
+        "description": "Custom transformation tool"
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    },
+    "fact_questionability": {
+      "unique_id": "fact_questionability",
+      "name": "fact_questionability",
+      "agent_type": "fact_questionability",
+      "model_vendor": "openai",
+      "model_name": "gpt-4.1-mini",
+      "config": {
+        "api_key": "OPENAI_API_KEY",
+        "model_name": "gpt-4.1-mini",
+        "chunk_config": {
+          "overlap": 500,
+          "chunk_size": 4000
+        },
+        "is_operational": true,
+        "run_mode": "online",
+        "ephemeral": false,
+        "prompt_debug": false,
+        "agent_type": "fact_questionability",
+        "dependencies": [
+          "flatten_quotes"
+        ],
+        "model_vendor": "openai",
+        "schema_name": "fact_questionability",
+        "use_few_shot_samples": 0,
+        "json_mode": true,
+        "remove_collection": [
+          "id",
+          "url"
+        ],
+        "side_collection": [
+          "id",
+          "url",
+          "page_content",
+          "bloom_details",
+          "fact",
+          "quote"
+        ],
+        "granularity": "Record",
+        "prompt": "## **Role**: MCQ Quality Evaluator\n\nYour task is to decide whether a given fact is **\"questionable\"**, meaning:\n\n> _Is this fact worth converting into a multiple-choice question and not just noise, we need to help student focus on the topics stated?_\n\nThe decision should be based on the Bloom\u2019s taxonomy level:  \n`{{ return_collection[bloom_details] }}`\n\n---\n\n### **Classification Rules**\n\n#### **Mark `questionable: true` if the fact:**\n\n- Is **concrete, factual, and explicitly stated** in the source text\n    \n- Can be answered by **someone who has read the source**\n    \n- Assesses a **relevant concept, skill, or capability** from the target domain\n    \n- Has a **clear, unambiguous scope** (e.g., definitions, features, use cases)\n    \n\n#### **Mark `questionable: false` if the fact:**\n\n- Is **too obvious**, trivial, or vague\n    \n- Is **not important** enough to assess\n    \n- Requires **outside knowledge** not provided in the source\n    \n- Cannot be **tested effectively** with a multiple-choice question\n    \n\n---\n\n### **Domain Scope**\n\nA fact is only **questionable: true** if it belongs to the **Azure AI services and solutions** skill set, which includes and limited to.:\n- Select the appropriate service for a computer vision solution\n- Select the appropriate service for a natural language processing solution\n- Select the appropriate service for a speech solution\n- Select the appropriate service for a generative AI solution\n- Select the appropriate service for a document intelligence solution\n- Select the appropriate service for a knowledge mining solution\n- Plan for a solution that meets Responsible AI principles\n- Create an Azure AI resource\n- Determine a default endpoint for a service\n- Integrate Azure AI services into a continuous integration and continuous delivery (CI/CD) pipeline\n- Plan and implement a container deployment\n- Configure diagnostic logging\n- Monitor an Azure AI resource\n- Manage costs for Azure AI services\n- Manage account keys\n- Protect account keys by using Azure Key Vault\n- Manage authentication for an Azure AI Service resource\n- Manage private communications\n- Implement a text moderation solution with Azure AI Content Safety\n- Implement an image moderation solution with Azure AI Content Safety\n- Select visual features to meet image processing requirements\n- Detect objects in images and generate image tags\n- Include image analysis features in an image processing request\n- Interpret image processing responses\n- Extract text from images using Azure AI Vision\n- Convert handwritten text using Azure AI Vision\n- Choose between image classification and object detection models\n- Label images\n- Train a custom image model, including image classification and object detection\n- Evaluate custom vision model metrics\n- Publish a custom vision model\n- Consume a custom vision model\n- Use Azure AI Video Indexer to extract insights from a video or live stream\n- Use Azure AI Vision Spatial Analysis to detect presence and movement of people in video\n- Extract key phrases\n- Extract entities\n- Determine sentiment of text\n- Detect the language used in text\n- Detect personally identifiable information (PII) in text\n- Implement text-to-speech\n- Implement speech-to-text\n- Improve text-to-speech by using Speech Synthesis Markup Language (SSML)\n- Implement custom speech solutions\n- Implement intent recognition\n- Implement keyword recognition\n- Translate text and documents by using the Azure AI Translator service\n- Implement custom translation, including training, improving, and publishing a custom model\n- Translate speech-to-speech by using the Azure AI Speech service\n- Translate speech-to-text by using the Azure AI Speech service\n- Translate to multiple languages simultaneously\n- Create intents and add utterances\n- Create entities\n- Train, evaluate, deploy, and test a language understanding model\n- Optimize a language understanding model\n- Consume a language model from a client application\n- Backup and recover language understanding models\n- Create a custom question answering project\n- Add question-and-answer pairs manually\n- Import sources\n- Train and test a knowledge base\n- Publish a knowledge base\n- Create a multi-turn conversation\n- Add alternate phrasing\n- Add chit-chat to a knowledge base\n- Export a knowledge base\n- Create a multi-language question answering solution\n- Provision an Azure AI Search resource\n- Create data sources\n- Create an index\n- Define a skillset\n- Implement custom skills and include them in a skillset\n- Create and run an indexer\n- Query an index, including syntax, sorting, filtering, and wildcards\n- Manage Knowledge Store projections, including file, object, and table projections\n- Provision a Document Intelligence resource\n- Use prebuilt models to extract data from documents\n- Implement a custom document intelligence model\n- Train, test, and publish a custom document intelligence model\n- Create a composed document intelligence model\n- Implement a document intelligence model as a custom Azure AI Search skill\n- Provision an Azure OpenAI Service resource\n- Select and deploy an Azure OpenAI model\n- Submit prompts to generate natural language\n- Submit prompts to generate code\n- Use the DALL-E model to generate images\n- Use Azure OpenAI APIs to submit prompts and receive responses\n- Use large multimodal models in Azure OpenAI\n- Configure parameters to control generative behavior\n- Apply prompt engineering techniques to improve responses\n- Use your own data with an Azure OpenAI model\n- Fine-tune an Azure OpenAI model"
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    },
+    "fact_explanation": {
+      "unique_id": "fact_explanation",
+      "name": "fact_explanation",
+      "agent_type": "fact_explanation",
+      "model_vendor": "openai",
+      "model_name": "gpt-4.1-mini",
+      "config": {
+        "api_key": "OPENAI_API_KEY",
+        "model_name": "gpt-4.1-mini",
+        "chunk_config": {
+          "overlap": 500,
+          "chunk_size": 4000
+        },
+        "is_operational": true,
+        "run_mode": "online",
+        "ephemeral": false,
+        "prompt_debug": false,
+        "agent_type": "fact_explanation",
+        "dependencies": [
+          "fact_questionability"
+        ],
+        "model_vendor": "openai",
+        "use_few_shot_samples": 0,
+        "schema": {
+          "fact_explanation": "string"
+        },
+        "side_collection": [
+          "id",
+          "url",
+          "page_content",
+          "bloom_details",
+          "candidate_facts_list",
+          "fact",
+          "quote",
+          "questionable",
+          "why_questionable"
+        ],
+        "json_mode": true,
+        "granularity": "Record",
+        "prompt": "You are tasked with creating a comprehensive summary explanation for a fact from a technical documentation content.\n\n  Content Fact:\n  Using the fact field write a short explanation for the fact_explanation field. The page_content is the reference material, take the fact, identify the context from the page_context and write a short explanation for a student based on it.\n\n  Instructions:\n  1. Create a clear, technical summary of the excerpt\n  2. Focus on the key concepts and recommendations mentioned\n  3. Include relevant technical details about the feature or service\n  4. Ensure the summary explains the distinction between different approaches (if mentioned)\n  5. Present information as facts and concepts, not as \"the document explains...\" or \"this guide covers...\"\n  6. Focus only on the main topics that are thoroughly explained, not concepts mentioned in passing\n\nThink step by step one at a time."
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    },
+    "ScenarioGenerator": {
+      "unique_id": "ScenarioGenerator",
+      "name": "ScenarioGenerator",
+      "agent_type": "ScenarioGenerator",
+      "model_vendor": "openai",
+      "model_name": "gpt-4.1-mini",
+      "config": {
+        "api_key": "OPENAI_API_KEY",
+        "model_name": "gpt-4.1-mini",
+        "chunk_config": {
+          "overlap": 500,
+          "chunk_size": 4000
+        },
+        "is_operational": true,
+        "run_mode": "online",
+        "ephemeral": false,
+        "prompt_debug": false,
+        "agent_type": "ScenarioGenerator",
+        "dependencies": [
+          "fact_explanation"
+        ],
+        "where_clause": {
+          "clause": "questionable != \"Low Value\"",
+          "scope": "item"
+        },
+        "model_vendor": "openai",
+        "schema": {
+          "question": "string",
+          "options": "array",
+          "answer": "string",
+          "answer_explanation": "array"
+        },
+        "use_few_shot_samples": 6,
+        "json_mode": true,
+        "side_collection": [
+          "id",
+          "url",
+          "page_content",
+          "bloom_details",
+          "candidate_facts_list",
+          "fact",
+          "quote",
+          "questionable",
+          "why_questionable",
+          "fact_explanation"
+        ],
+        "remove_collection": [
+          "id",
+          "url",
+          "page_content"
+        ],
+        "granularity": "Record",
+        "prompt": "**You are an `{{ return_collection[doc_name] }}` certification exam item-writer.**\nYou will be given one official `{{ return_collection[doc_name] }}`-related summary document (white paper, reference doc, or architecture guide).\n---\nGenerate scenario based question based on the bloom level using the fact_explanation"
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    }
+  },
+  "workflows": {},
+  "dependencies": {},
+  "project_config": {}
+}

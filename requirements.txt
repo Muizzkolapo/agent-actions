@@ -98,4 +98,7 @@ sentence-transformers==2.2.2
 jsonschema
 markdown2
 markdown
-openai
+simpleeval
+aiofiles==23.2.1
+psutil==5.9.8
+prometheus-client==0.20.0
