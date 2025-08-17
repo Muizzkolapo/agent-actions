@@ -15,7 +15,6 @@ from .exceptions import (
     SerializationError
 )
 
-from agent_actions.common.utils.error_handling import ProcessorErrorHandlerMixin
 
 __all__ = [
     # Base exceptions
@@ -39,5 +38,4 @@ __all__ = [
     'SerializationError',
     
     # Error handling
-    'ProcessorErrorHandlerMixin'
 ]

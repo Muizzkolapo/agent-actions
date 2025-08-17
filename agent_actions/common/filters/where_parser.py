@@ -59,7 +59,7 @@ class WhereClauseParser:
             return WhereCondition(field=field_original, operator="IS NOT NULL", value=None)
 
         for op in sorted(cls.OPERATORS.keys(), key=len, reverse=True):
-            pattern = re.compile(f"\s*{re.escape(op)}\s*", flags=re.IGNORECASE)
+            pattern = re.compile(rf"\s*{re.escape(op)}\s*", flags=re.IGNORECASE)
             if pattern.search(condition_str):
                 parts = pattern.split(condition_str)
                 if len(parts) == 2 and parts[0].strip() and parts[1].strip():

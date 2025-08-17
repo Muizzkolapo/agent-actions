@@ -52,7 +52,7 @@ class DIConfigurator:
     @staticmethod
     def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
         """Register processor implementations."""
-        from ..processors.source_processor.source_data_loader import SourceDataLoader
+        from ..loaders.data_loaders.source_data_loader import SourceDataLoader
         from ..processors.target_processor.data_processor import DataProcessor
         from ..processors.target_processor.data_generator import DataGenerator
         

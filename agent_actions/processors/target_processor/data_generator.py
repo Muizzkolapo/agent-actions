@@ -4,7 +4,7 @@ from agent_actions.models.config_types import AgentEntryDict
 
 from agent_actions.models import agent_builder
 from agent_actions.handlers.prompt_handler import PromptLoader
-from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
+from agent_actions.processors.content.prompt_utils import PromptUtils
 from agent_actions.constants import PROMPT_KEY
 from agent_actions.processors.prompt_processor.sample_enricher import SampleEnricher
 from agent_actions.common.transformers.data_transformer import DataTransformer

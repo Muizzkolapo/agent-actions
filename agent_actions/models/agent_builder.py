@@ -16,7 +16,7 @@ from agent_actions.vendors.tools_vendor      import ToolHandler
 from agent_actions.handlers.schema_handler         import SchemaLoader
 from agent_actions.handlers.prompt_handler         import PromptLoader
 from agent_actions.models.schema_change            import compile_unified_schema
-from agent_actions.processors.prompt_processor.prompt_utils import PromptUtils
+from agent_actions.processors.content.prompt_utils import PromptUtils
 from agent_actions.constants import (
     MODEL_VENDOR_KEY,
     PROMPT_KEY,

@@ -251,7 +251,7 @@ class ProcessorFactory:
     
     def create_source_data_loader(self, agent_name: str):
         """Create a SourceDataLoader with the required agent_name parameter."""
-        from ..processors.source_processor.source_data_loader import SourceDataLoader
+        from ..loaders.data_loaders.source_data_loader import SourceDataLoader
         from ..core.path_manager import PathManager
         
         path_manager = self.container.get(PathManager)
