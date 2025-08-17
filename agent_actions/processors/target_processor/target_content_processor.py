@@ -43,7 +43,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         
         # Store injected dependencies or create defaults for backward compatibility
         if source_loader is None:
-            from ..source_processor.source_data_loader import SourceDataLoader
+            from agent_actions.loaders.data_loaders.source_data_loader import SourceDataLoader
             from agent_actions.core.path_manager import PathManager
             self.source_loader = SourceDataLoader(agent_name, PathManager())
         else:
