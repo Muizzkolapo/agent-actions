@@ -48,18 +48,30 @@ class OpenAIBatchProvider(BatchProvider):
             }
         }
         """
+        model_name = batch_task.model_config.get("model_name", "gpt-4o-mini")
         body = {
-            "model": batch_task.model_config.get("model_name", "gpt-4o-mini"),
+            "model": model_name,
             "messages": [
                 {"role": "system", "content": batch_task.prompt},
                 {"role": "user", "content": batch_task.user_content}
             ]
         }
         
+        # Models that only support default temperature (1)
+        default_temp_only_models = ["gpt-5-mini", "gpt-5-nano", "gpt-5"]
+        
         # Add optional parameters from model_config
         if "temperature" in batch_task.model_config:
-            body["temperature"] = batch_task.model_config["temperature"]
-        if "max_tokens" in batch_task.model_config:
+            temp_value = batch_task.model_config["temperature"]
+            # Only add temperature if it's not 1 for models that support custom values
+            # Or if it's 1 for models that only support default
+            if model_name not in default_temp_only_models or temp_value == 1:
+                if model_name not in default_temp_only_models:
+                    body["temperature"] = temp_value
+                # For default-only models, we simply don't include temperature parameter
+                # OpenAI will use the default value of 1
+        
+        if "max_tokens" in batch_task.model_config and batch_task.model_config["max_tokens"] is not None:
             body["max_tokens"] = batch_task.model_config["max_tokens"]
             
         # Add schema if provided
