@@ -141,6 +141,36 @@ class TargetGenerator:
     
     def _process_by_strategy(self, data, file_path, base_directory, output_directory):
         """Select and apply the appropriate processing strategy based on configuration. Async for record granularity."""
+        # Handle batch mode first - it needs special handling for all strategies
+        if self.agent_config.get('run_mode') == 'batch':
+            batch_service = BatchService()
+            file_name = Path(file_path).name
+            result = batch_service.submit_batch_job_from_data(self.agent_config, file_name, data, output_directory)
+            relative_path = Path(file_path).relative_to(base_directory)
+            output_file_path = Path(output_directory) / relative_path
+            output_file_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Handle passthrough data when no batch is submitted
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                # Write passthrough data directly to output
+                file_writer = FileWriter(str(output_file_path))
+                file_writer.write_target(result['data'])
+                
+                # Create a marker file to indicate this was passthrough processing
+                passthrough_marker = output_file_path.parent / ".passthrough_processed"
+                passthrough_marker.touch()
+            else:
+                # Create batch placeholder
+                placeholder = {
+                    "batch_job_id": result,
+                    "status": "submitted",
+                    "agent": self.agent_name
+                }
+                with open(output_file_path, 'w') as f:
+                    json.dump(placeholder, f)
+            return  # Early return for batch mode
+        
+        # Non-batch mode processing
         # Tool vendor with record granularity and side output
         if self.model_vendor == TOOL_VENDOR and self.granularity == 'record' and self.side_output_enabled:
             main_output, side_output_data = self.content_processor.process_for_side_output(data, file_path, output_directory)
