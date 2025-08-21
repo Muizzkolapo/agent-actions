@@ -12,11 +12,16 @@ class PromptUtils:
     A class for processing strings, including placeholder replacement and function call processing.
     """
     @staticmethod
-    def replace_placeholders(prompt, content_dict):
+    def replace_placeholders(prompt, content_dict, warn_missing_keys=True):
         """
         Replace placeholders in the prompt with values from content_dict,
         and remove used keys from the dict.
 
+        Args:
+            prompt: The prompt string with placeholders
+            content_dict: Dictionary containing replacement values
+            warn_missing_keys: Whether to log warnings for missing return_collection keys
+            
         Returns:
             tuple: (modified_prompt, cleaned_dict)
         """
@@ -66,8 +71,13 @@ class PromptUtils:
                     replacements.append(replacement)
                     used_keys.add(orig_key)
                 else:
-                    # Handle missing keys
-                    replacement = f"[{key}: not available in current context]"
+                    # Handle missing keys - log warning but provide cleaner fallback
+                    if warn_missing_keys:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"return_collection key '{key}' not found in current context. Available keys: {list(content_dict.keys()) if content_dict else 'none'}")
+                    # Provide cleaner fallback that doesn't clutter the prompt
+                    replacement = f"{key}: [missing]"
                     replacements.append(replacement)
             return ', '.join(replacements)
 
