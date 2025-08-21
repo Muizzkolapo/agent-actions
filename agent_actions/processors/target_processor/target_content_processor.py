@@ -71,10 +71,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Async version: process a list of data items in parallel using proper async patterns.
         """
         if self.agent_config.get('run_mode') == 'batch':
+            # Extract source file info from aggregated data for proper file naming
+            source_file_info = self._extract_source_file_info(data)
             # TODO: Make batch service async in future iteration
             result = await asyncio.to_thread(
                 self.batch_service.submit_batch_job_from_data, 
-                self.agent_config, self.agent_name, data, output_directory
+                self.agent_config, self.agent_name, data, output_directory,
+                source_file_info=source_file_info
             )
             # Handle passthrough data when no batch is submitted
             if isinstance(result, dict) and result.get('type') == 'passthrough':
@@ -117,7 +120,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Extract source file info from aggregated data for proper file naming
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(
+                self.agent_config, self.agent_name, data, output_directory,
+                source_file_info=source_file_info
+            )
             # Handle passthrough data when no batch is submitted
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
@@ -164,7 +172,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Extract source file info from aggregated data for proper file naming
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(
+                self.agent_config, self.agent_name, data, output_directory,
+                source_file_info=source_file_info
+            )
             # Handle passthrough data when no batch is submitted
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 # Separate main and side outputs for passthrough data
@@ -203,7 +216,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             RuntimeError: If processing fails
         """
         if self.agent_config.get('run_mode') == 'batch':
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory)
+            # Extract source file info from aggregated data for proper file naming
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(
+                self.agent_config, self.agent_name, data, output_directory,
+                source_file_info=source_file_info
+            )
             # Handle passthrough data when no batch is submitted
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
@@ -316,6 +334,46 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")
+
+    def _extract_source_file_info(self, data: List[Dict]) -> Dict:
+        """
+        Extract source file information from aggregated data.
+        Groups data by source_guid to determine which items belong to which source files.
+        """
+        source_file_info = {}
+        
+        # Group data by source_guid to identify source files
+        source_groups = {}
+        for item in data:
+            source_guid = item.get('source_guid')
+            if source_guid:
+                if source_guid not in source_groups:
+                    source_groups[source_guid] = []
+                source_groups[source_guid].append(item)
+        
+        # Try to find source file names by looking at previous agent outputs
+        try:
+            # In workflows, we can try to infer file names from the data structure
+            # This is a heuristic approach that may need refinement
+            from pathlib import Path
+            
+            # If we only have one source_guid, we might be dealing with a single file
+            if len(source_groups) == 1:
+                source_file_info['single_file'] = True
+                source_file_info['source_guids'] = list(source_groups.keys())
+            else:
+                # Multiple source files - we need to map them
+                source_file_info['multiple_files'] = True
+                source_file_info['source_guid_groups'] = {
+                    guid: len(items) for guid, items in source_groups.items()
+                }
+                
+        except Exception:
+            # Fallback: just note that we have source file info
+            source_file_info['extracted'] = True
+            source_file_info['source_groups_count'] = len(source_groups)
+        
+        return source_file_info
 
     def _apply_where_clause_filtering(self, data: List[Dict]) -> List[Dict]:
         """
