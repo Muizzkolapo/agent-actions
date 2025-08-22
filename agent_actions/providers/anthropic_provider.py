@@ -345,7 +345,7 @@ class AnthropicBatchProvider(BatchProvider):
             # Create BatchTask from row data
             batch_task = BatchTask(
                 custom_id=row.get("target_id", row.get("id", "")),
-                prompt=agent_config.get("prompt", ""),
+                prompt=row.get("prompt", agent_config.get("prompt", "")),
                 user_content=json.dumps(row.get("content", row)),
                 model_config={
                     "model_name": agent_config.get("model_name", "claude-3-sonnet-20240229"),
