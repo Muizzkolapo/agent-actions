@@ -67,7 +67,7 @@ class PromptUtils:
                 original = ci_content.get(key.lower())
                 if original:
                     orig_key, value = original
-                    replacement = f"{orig_key}: {convert_to_string(value)}"
+                    replacement = convert_to_string(value)
                     replacements.append(replacement)
                     used_keys.add(orig_key)
                 else:
@@ -77,7 +77,7 @@ class PromptUtils:
                         logger = logging.getLogger(__name__)
                         logger.warning(f"return_collection key '{key}' not found in current context. Available keys: {list(content_dict.keys()) if content_dict else 'none'}")
                     # Provide cleaner fallback that doesn't clutter the prompt
-                    replacement = f"{key}: [missing]"
+                    replacement = "[missing]"
                     replacements.append(replacement)
             return ', '.join(replacements)
 
