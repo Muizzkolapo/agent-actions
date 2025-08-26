@@ -1,13 +1,34 @@
 """
-Production-grade structured logging for WHERE clause filtering.
-Implements structured logging with correlation IDs and context.
+Modular structured logging system with correlation tracking and domain-specific extensions.
+
+Architecture:
+- StructuredLogger: General-purpose structured logging with JSON output
+- LoggerFactory: Thread-safe factory for creating loggers and extensions  
+- Domain Extensions: Specialized loggers for specific use cases
+  - WhereClauseLogger: WHERE clause evaluation logging
+  - CircuitBreakerLogger: Circuit breaker state logging
+  - FeatureFlagLogger: Feature flag change logging
+
+Usage Example:
+    # Through DI container
+    logger_factory = container.get(LoggerFactory)
+    
+    # General logging
+    logger = logger_factory.create_logger(component="my_component")
+    logger.info("Something happened", extra_data={"key": "value"})
+    
+    # Domain-specific logging
+    where_logger = logger_factory.create_where_clause_logger()
+    where_logger.log_evaluation(...)
+
+This follows the Single Responsibility Principle by separating general logging
+from domain-specific concerns.
 """
 import json
 import logging
 import threading
-import time
 from contextvars import ContextVar
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from enum import Enum
@@ -31,14 +52,14 @@ class LogLevel(Enum):
 
 @dataclass
 class LogContext:
-    """Structured logging context."""
+    """General structured logging context."""
     correlation_id: Optional[str] = None
     agent_type: Optional[str] = None
     user_id: Optional[str] = None
     session_id: Optional[str] = None
     request_id: Optional[str] = None
     operation: Optional[str] = None
-    component: str = "where_clause"
+    component: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary, excluding None values."""
@@ -46,22 +67,16 @@ class LogContext:
 
 
 @dataclass
-class WhereClauseLogEntry:
-    """Structured log entry for WHERE clause operations."""
+class LogEntry:
+    """General structured log entry."""
     timestamp: str
     level: str
     message: str
     context: LogContext
-    where_clause: Optional[str] = None
-    scope: Optional[str] = None
-    evaluation_time_ms: Optional[float] = None
-    conditions_count: Optional[int] = None
-    filtered_items: Optional[int] = None
-    total_items: Optional[int] = None
-    error_type: Optional[str] = None
     error_details: Optional[Dict[str, Any]] = None
     performance_metrics: Optional[Dict[str, Any]] = None
     security_context: Optional[Dict[str, Any]] = None
+    extra_data: Optional[Dict[str, Any]] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -72,15 +87,27 @@ class WhereClauseLogEntry:
         return {k: v for k, v in data.items() if v is not None}
 
 
+@dataclass
+class WhereClauseLogEntry(LogEntry):
+    """Specialized log entry for WHERE clause operations."""
+    where_clause: Optional[str] = None
+    scope: Optional[str] = None
+    evaluation_time_ms: Optional[float] = None
+    conditions_count: Optional[int] = None
+    filtered_items: Optional[int] = None
+    total_items: Optional[int] = None
+
+
 class StructuredLogger:
     """
-    Production-grade structured logger for WHERE clause operations.
-    Provides correlation tracking, performance monitoring, and security logging.
+    General-purpose structured logger with correlation tracking and context management.
+    Provides thread-safe, structured logging with JSON output.
     """
     
-    def __init__(self, name: str = "where_clause", level: str = "INFO"):
+    def __init__(self, name: str = "agent_actions", level: str = "INFO", component: Optional[str] = None):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(getattr(logging, level.upper()))
+        self.component = component
         
         # Configure structured formatter if not already configured
         if not self.logger.handlers:
@@ -91,112 +118,73 @@ class StructuredLogger:
         
         self._local = threading.local()
     
-    def _get_context(self) -> LogContext:
-        """Get current logging context."""
-        return LogContext(
+    def _get_context(self, additional_context: Optional[Dict[str, Any]] = None) -> LogContext:
+        """Get current logging context with optional additional data."""
+        context = LogContext(
             correlation_id=correlation_id_var.get(),
             agent_type=agent_type_var.get(),
             user_id=user_id_var.get(),
-            session_id=session_id_var.get()
+            session_id=session_id_var.get(),
+            component=self.component
         )
+        
+        # Merge additional context
+        if additional_context:
+            for key, value in additional_context.items():
+                if hasattr(context, key) and value is not None:
+                    setattr(context, key, value)
+        
+        return context
     
     def _create_log_entry(
         self,
         level: LogLevel,
         message: str,
+        context_data: Optional[Dict[str, Any]] = None,
         **kwargs
-    ) -> WhereClauseLogEntry:
-        """Create a structured log entry."""
-        context = self._get_context()
+    ) -> LogEntry:
+        """Create a general structured log entry."""
+        context = self._get_context(context_data)
         
-        # Merge additional context
-        if 'context' in kwargs:
-            additional_context = kwargs.pop('context')
-            if isinstance(additional_context, dict):
-                for key, value in additional_context.items():
-                    if hasattr(context, key) and value is not None:
-                        setattr(context, key, value)
-        
-        return WhereClauseLogEntry(
-            timestamp=datetime.utcnow().isoformat() + "Z",
+        return LogEntry(
+            timestamp=datetime.now(datetime.timezone.utc).isoformat(),
             level=level.value,
             message=message,
             context=context,
             **kwargs
         )
     
-    def debug(self, message: str, **kwargs):
+    def debug(self, message: str, context_data: Optional[Dict[str, Any]] = None, **kwargs):
         """Log debug message."""
-        entry = self._create_log_entry(LogLevel.DEBUG, message, **kwargs)
+        entry = self._create_log_entry(LogLevel.DEBUG, message, context_data, **kwargs)
         self.logger.debug(json.dumps(entry.to_dict(), default=str))
     
-    def info(self, message: str, **kwargs):
+    def info(self, message: str, context_data: Optional[Dict[str, Any]] = None, **kwargs):
         """Log info message."""
-        entry = self._create_log_entry(LogLevel.INFO, message, **kwargs)
+        entry = self._create_log_entry(LogLevel.INFO, message, context_data, **kwargs)
         self.logger.info(json.dumps(entry.to_dict(), default=str))
     
-    def warning(self, message: str, **kwargs):
+    def warning(self, message: str, context_data: Optional[Dict[str, Any]] = None, **kwargs):
         """Log warning message."""
-        entry = self._create_log_entry(LogLevel.WARNING, message, **kwargs)
+        entry = self._create_log_entry(LogLevel.WARNING, message, context_data, **kwargs)
         self.logger.warning(json.dumps(entry.to_dict(), default=str))
     
-    def error(self, message: str, **kwargs):
+    def error(self, message: str, context_data: Optional[Dict[str, Any]] = None, **kwargs):
         """Log error message."""
-        entry = self._create_log_entry(LogLevel.ERROR, message, **kwargs)
+        entry = self._create_log_entry(LogLevel.ERROR, message, context_data, **kwargs)
         self.logger.error(json.dumps(entry.to_dict(), default=str))
     
-    def critical(self, message: str, **kwargs):
+    def critical(self, message: str, context_data: Optional[Dict[str, Any]] = None, **kwargs):
         """Log critical message."""
-        entry = self._create_log_entry(LogLevel.CRITICAL, message, **kwargs)
+        entry = self._create_log_entry(LogLevel.CRITICAL, message, context_data, **kwargs)
         self.logger.critical(json.dumps(entry.to_dict(), default=str))
     
-    def log_where_clause_evaluation(
-        self,
-        where_clause: str,
-        scope: str,
-        success: bool,
-        evaluation_time_ms: float,
-        conditions_count: int,
-        filtered_items: Optional[int] = None,
-        total_items: Optional[int] = None,
-        error_details: Optional[Dict[str, Any]] = None
-    ):
-        """Log WHERE clause evaluation with detailed context."""
-        if success:
-            message = f"WHERE clause evaluation successful for {scope} scope"
-            level = LogLevel.INFO
-        else:
-            message = f"WHERE clause evaluation failed for {scope} scope"
-            level = LogLevel.ERROR
-        
-        entry = self._create_log_entry(
-            level,
-            message,
-            where_clause=where_clause,
-            scope=scope,
-            evaluation_time_ms=evaluation_time_ms,
-            conditions_count=conditions_count,
-            filtered_items=filtered_items,
-            total_items=total_items,
-            error_details=error_details
-        )
-        
-        if success:
-            self.logger.info(json.dumps(entry.to_dict(), default=str))
-        else:
-            self.logger.error(json.dumps(entry.to_dict(), default=str))
-    
-    def log_security_event(
-        self,
-        event_type: str,
-        severity: str,
-        details: Dict[str, Any]
-    ):
+    def log_security_event(self, event_type: str, severity: str, details: Dict[str, Any]):
         """Log security-related events."""
         security_context = {
             "event_type": event_type,
             "severity": severity,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.now(datetime.timezone.utc).isoformat()
         }
         
         level = LogLevel.WARNING if severity == "medium" else LogLevel.ERROR
@@ -213,13 +201,7 @@ class StructuredLogger:
         else:
             self.logger.error(json.dumps(entry.to_dict(), default=str))
     
-    def log_performance_warning(
-        self,
-        operation: str,
-        duration_ms: float,
-        threshold_ms: float,
-        context_data: Optional[Dict[str, Any]] = None
-    ):
+    def log_performance_warning(self, operation: str, duration_ms: float, threshold_ms: float, context_data: Optional[Dict[str, Any]] = None):
         """Log performance warnings."""
         performance_metrics = {
             "operation": operation,
@@ -238,48 +220,183 @@ class StructuredLogger:
         )
         
         self.logger.warning(json.dumps(entry.to_dict(), default=str))
+
+
+class WhereClauseLogger:
+    """
+    Domain-specific logger extension for WHERE clause operations.
+    Builds on top of StructuredLogger to provide specialized logging methods.
+    """
     
-    def log_circuit_breaker_event(
+    def __init__(self, base_logger: StructuredLogger):
+        self.logger = base_logger
+    
+    def _create_where_clause_entry(
         self,
-        agent_type: str,
-        state: str,
-        failure_count: int,
-        failure_threshold: int
+        level: LogLevel,
+        message: str,
+        where_clause: str,
+        scope: str,
+        evaluation_time_ms: float,
+        conditions_count: int,
+        filtered_items: Optional[int] = None,
+        total_items: Optional[int] = None,
+        error_details: Optional[Dict[str, Any]] = None
+    ) -> WhereClauseLogEntry:
+        """Create a WHERE clause specific log entry."""
+        context = self.logger._get_context()
+        
+        return WhereClauseLogEntry(
+            timestamp=datetime.now(datetime.timezone.utc).isoformat(),
+            level=level.value,
+            message=message,
+            context=context,
+            where_clause=where_clause,
+            scope=scope,
+            evaluation_time_ms=evaluation_time_ms,
+            conditions_count=conditions_count,
+            filtered_items=filtered_items,
+            total_items=total_items,
+            error_details=error_details
+        )
+    
+    def log_evaluation(
+        self,
+        where_clause: str,
+        scope: str,
+        success: bool,
+        evaluation_time_ms: float,
+        conditions_count: int,
+        filtered_items: Optional[int] = None,
+        total_items: Optional[int] = None,
+        error_details: Optional[Dict[str, Any]] = None
     ):
+        """Log WHERE clause evaluation with detailed context."""
+        if success:
+            message = f"WHERE clause evaluation successful for {scope} scope"
+            level = LogLevel.INFO
+        else:
+            message = f"WHERE clause evaluation failed for {scope} scope"
+            level = LogLevel.ERROR
+        
+        entry = self._create_where_clause_entry(
+            level,
+            message,
+            where_clause,
+            scope,
+            evaluation_time_ms,
+            conditions_count,
+            filtered_items,
+            total_items,
+            error_details
+        )
+        
+        if success:
+            self.logger.logger.info(json.dumps(entry.to_dict(), default=str))
+        else:
+            self.logger.logger.error(json.dumps(entry.to_dict(), default=str))
+    
+    def log_start(self, where_clause: str, scope: str, conditions_count: int, total_items: int):
+        """Log the start of WHERE clause evaluation."""
+        self.logger.info(
+            f"Starting WHERE clause evaluation for {scope} scope",
+            extra_data={
+                "where_clause": where_clause,
+                "scope": scope,
+                "conditions_count": conditions_count,
+                "total_items": total_items
+            }
+        )
+    
+    def log_success(
+        self,
+        where_clause: str,
+        scope: str,
+        evaluation_time_ms: float,
+        conditions_count: int,
+        filtered_items: int,
+        total_items: int
+    ):
+        """Log successful WHERE clause evaluation."""
+        self.log_evaluation(
+            where_clause=where_clause,
+            scope=scope,
+            success=True,
+            evaluation_time_ms=evaluation_time_ms,
+            conditions_count=conditions_count,
+            filtered_items=filtered_items,
+            total_items=total_items
+        )
+    
+    def log_error(
+        self,
+        where_clause: str,
+        scope: str,
+        evaluation_time_ms: float,
+        conditions_count: int,
+        error: Exception,
+        context_data: Optional[Dict[str, Any]] = None
+    ):
+        """Log WHERE clause evaluation error."""
+        error_details = {
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "where_clause_length": len(where_clause)
+        }
+        
+        if context_data:
+            error_details.update(context_data)
+        
+        self.log_evaluation(
+            where_clause=where_clause,
+            scope=scope,
+            success=False,
+            evaluation_time_ms=evaluation_time_ms,
+            conditions_count=conditions_count,
+            error_details=error_details
+        )
+
+
+class CircuitBreakerLogger:
+    """
+    Domain-specific logger extension for circuit breaker operations.
+    """
+    
+    def __init__(self, base_logger: StructuredLogger):
+        self.logger = base_logger
+    
+    def log_state_change(self, agent_type: str, state: str, failure_count: int, failure_threshold: int):
         """Log circuit breaker state changes."""
-        entry = self._create_log_entry(
-            LogLevel.WARNING,
+        self.logger.warning(
             f"Circuit breaker state changed to {state}",
-            context={'agent_type': agent_type},
+            context_data={'agent_type': agent_type},
             error_details={
                 "state": state,
                 "failure_count": failure_count,
                 "failure_threshold": failure_threshold
             }
         )
-        
-        self.logger.warning(json.dumps(entry.to_dict(), default=str))
+
+
+class FeatureFlagLogger:
+    """
+    Domain-specific logger extension for feature flag operations.
+    """
     
-    def log_feature_flag_change(
-        self,
-        flag_name: str,
-        old_value: bool,
-        new_value: bool,
-        agent_type: Optional[str] = None
-    ):
+    def __init__(self, base_logger: StructuredLogger):
+        self.logger = base_logger
+    
+    def log_change(self, flag_name: str, old_value: bool, new_value: bool, agent_type: Optional[str] = None):
         """Log feature flag changes."""
-        entry = self._create_log_entry(
-            LogLevel.INFO,
+        self.logger.info(
             f"Feature flag {flag_name} changed from {old_value} to {new_value}",
-            context={'agent_type': agent_type} if agent_type else None,
-            error_details={
+            context_data={'agent_type': agent_type} if agent_type else None,
+            extra_data={
                 "flag_name": flag_name,
                 "old_value": old_value,
                 "new_value": new_value
             }
         )
-        
-        self.logger.info(json.dumps(entry.to_dict(), default=str))
 
 
 class StructuredFormatter(logging.Formatter):
@@ -337,53 +454,82 @@ class LoggingContext:
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         # Restore previous values
+        del exc_type, exc_val, exc_tb  # Parameters required by context manager protocol
         correlation_id_var.set(self._previous_values['correlation_id'])
         agent_type_var.set(self._previous_values['agent_type'])
         user_id_var.set(self._previous_values['user_id'])
         session_id_var.set(self._previous_values['session_id'])
 
 
-# Global logger instance
-_structured_logger: Optional[StructuredLogger] = None
-_logger_lock = threading.Lock()
-
-
-def get_logger() -> StructuredLogger:
-    """Get or create the global structured logger."""
-    global _structured_logger
+class LoggerFactory:
+    """
+    Thread-safe factory for creating StructuredLogger instances and extensions.
+    Can be injected through DI container to eliminate global state.
+    """
     
-    if _structured_logger is None:
-        with _logger_lock:
-            if _structured_logger is None:
-                _structured_logger = StructuredLogger()
+    def __init__(self):
+        self._loggers: Dict[str, StructuredLogger] = {}
+        self._lock = threading.Lock()
+        self._default_config = {'name': 'agent_actions', 'level': 'INFO'}
     
-    return _structured_logger
-
-
-def init_logging(name: str = "where_clause", level: str = "INFO") -> StructuredLogger:
-    """Initialize the global structured logger."""
-    global _structured_logger
+    def set_default_config(self, name: str = "agent_actions", level: str = "INFO"):
+        """Set default configuration for new logger instances."""
+        with self._lock:
+            self._default_config = {'name': name, 'level': level}
     
-    with _logger_lock:
-        _structured_logger = StructuredLogger(name=name, level=level)
+    def create_logger(self, name: Optional[str] = None, level: Optional[str] = None, component: Optional[str] = None) -> StructuredLogger:
+        """Create or return cached logger instance with thread-safe singleton behavior."""
+        final_name = name or self._default_config['name']
+        final_level = level or self._default_config['level']
+        logger_key = f"{final_name}:{final_level}:{component or 'default'}"
+        
+        # Check if logger already exists
+        if logger_key in self._loggers:
+            return self._loggers[logger_key]
+        
+        # Create new logger with double-checked locking
+        with self._lock:
+            if logger_key not in self._loggers:
+                self._loggers[logger_key] = StructuredLogger(name=final_name, level=final_level, component=component)
+            return self._loggers[logger_key]
     
-    return _structured_logger
+    def create_where_clause_logger(self, name: Optional[str] = None, level: Optional[str] = None) -> WhereClauseLogger:
+        """Create a WHERE clause logger extension."""
+        base_logger = self.create_logger(name, level, component="where_clause")
+        return WhereClauseLogger(base_logger)
+    
+    def create_circuit_breaker_logger(self, name: Optional[str] = None, level: Optional[str] = None) -> CircuitBreakerLogger:
+        """Create a circuit breaker logger extension."""
+        base_logger = self.create_logger(name, level, component="circuit_breaker")
+        return CircuitBreakerLogger(base_logger)
+    
+    def create_feature_flag_logger(self, name: Optional[str] = None, level: Optional[str] = None) -> FeatureFlagLogger:
+        """Create a feature flag logger extension."""
+        base_logger = self.create_logger(name, level, component="feature_flags")
+        return FeatureFlagLogger(base_logger)
+    
+    def get_default_logger(self) -> StructuredLogger:
+        """Get the default logger instance."""
+        return self.create_logger()
+    
+    def clear_cache(self):
+        """Clear cached logger instances. Useful for testing."""
+        with self._lock:
+            self._loggers.clear()
 
 
-# Convenience functions
-def log_where_clause_start(where_clause: str, scope: str, conditions_count: int, total_items: int):
+# Note: Global logger functions removed for production readiness
+# Use LoggerFactory injection through DI container instead
+
+
+# Convenience functions - now use domain-specific loggers
+def log_where_clause_start(where_clause_logger: WhereClauseLogger, where_clause: str, scope: str, conditions_count: int, total_items: int):
     """Log the start of WHERE clause evaluation."""
-    logger = get_logger()
-    logger.info(
-        f"Starting WHERE clause evaluation for {scope} scope",
-        where_clause=where_clause,
-        scope=scope,
-        conditions_count=conditions_count,
-        total_items=total_items
-    )
+    where_clause_logger.log_start(where_clause, scope, conditions_count, total_items)
 
 
 def log_where_clause_success(
+    where_clause_logger: WhereClauseLogger,
     where_clause: str,
     scope: str,
     evaluation_time_ms: float,
@@ -392,11 +538,9 @@ def log_where_clause_success(
     total_items: int
 ):
     """Log successful WHERE clause evaluation."""
-    logger = get_logger()
-    logger.log_where_clause_evaluation(
+    where_clause_logger.log_success(
         where_clause=where_clause,
         scope=scope,
-        success=True,
         evaluation_time_ms=evaluation_time_ms,
         conditions_count=conditions_count,
         filtered_items=filtered_items,
@@ -405,6 +549,7 @@ def log_where_clause_success(
 
 
 def log_where_clause_error(
+    where_clause_logger: WhereClauseLogger,
     where_clause: str,
     scope: str,
     evaluation_time_ms: float,
@@ -413,34 +558,21 @@ def log_where_clause_error(
     context_data: Optional[Dict[str, Any]] = None
 ):
     """Log WHERE clause evaluation error."""
-    logger = get_logger()
-    
-    error_details = {
-        "error_type": type(error).__name__,
-        "error_message": str(error),
-        "where_clause_length": len(where_clause)
-    }
-    
-    if context_data:
-        error_details.update(context_data)
-    
-    logger.log_where_clause_evaluation(
+    where_clause_logger.log_error(
         where_clause=where_clause,
         scope=scope,
-        success=False,
         evaluation_time_ms=evaluation_time_ms,
         conditions_count=conditions_count,
-        error_details=error_details
+        error=error,
+        context_data=context_data
     )
 
 
-def log_security_violation(violation_type: str, severity: str, details: Dict[str, Any]):
+def log_security_violation(logger: StructuredLogger, violation_type: str, severity: str, details: Dict[str, Any]):
     """Log security violations."""
-    logger = get_logger()
     logger.log_security_event(violation_type, severity, details)
 
 
-def log_performance_issue(operation: str, duration_ms: float, threshold_ms: float, **context):
+def log_performance_issue(logger: StructuredLogger, operation: str, duration_ms: float, threshold_ms: float, **context):
     """Log performance issues."""
-    logger = get_logger()
     logger.log_performance_warning(operation, duration_ms, threshold_ms, context)

@@ -6,99 +6,72 @@ with existing workflows while maintaining backward compatibility.
 """
 
 from typing import Dict, Any, Optional
+from contextlib import contextmanager
 from .core.application_container import ApplicationContainer
 from .core.agent_runner import AgentRunner
 
 
-# Global application container instance
-_app_container: Optional[ApplicationContainer] = None
+# Note: Global state removed for production readiness
 
 
-def initialize_application(config: Optional[Dict[str, Any]] = None) -> ApplicationContainer:
+@contextmanager
+def application_container_context(config: Optional[Dict[str, Any]] = None):
     """
-    Initialize the application with dependency injection.
+    Context manager for proper DI container lifecycle management.
     
     Args:
         config: Optional configuration dictionary. Uses development profile if not provided.
         
-    Returns:
+    Yields:
         ApplicationContainer instance
+        
+    Example:
+        with application_container_context() as container:
+            agent_runner = container.get_agent_runner()
     """
-    global _app_container
-    
     if config is None:
-        # Use development profile by default
-        _app_container = ApplicationContainer.create_for_environment('development')
+        container = ApplicationContainer.create_for_environment('development')
     else:
-        _app_container = ApplicationContainer(config)
+        container = ApplicationContainer(config)
     
-    return _app_container
+    try:
+        yield container
+    finally:
+        # Container cleanup would go here if needed
+        pass
 
 
-def get_application_container() -> ApplicationContainer:
+def create_agent_runner(config: Optional[Dict[str, Any]] = None, use_tools: bool = True) -> AgentRunner:
     """
-    Get the global application container.
-    
-    Returns:
-        ApplicationContainer instance
-        
-    Raises:
-        RuntimeError: If application has not been initialized
-    """
-    global _app_container
-    
-    if _app_container is None:
-        # Auto-initialize with development settings
-        _app_container = initialize_application()
-    
-    return _app_container
-
-
-def create_agent_runner(use_tools: bool = True) -> AgentRunner:
-    """
-    Create an AgentRunner with dependency injection support.
+    Create an AgentRunner with proper dependency injection.
     
     Args:
+        config: Optional configuration dictionary
         use_tools: Whether the agent runner should use tools
         
     Returns:
         AgentRunner configured with DI
     """
-    container = get_application_container()
-    return container.get_agent_runner(use_tools)
+    with application_container_context(config) as container:
+        return container.get_agent_runner(use_tools)
 
 
-def reset_application():
+def create_target_content_processor(config: Optional[Dict[str, Any]] = None, agent_config: Dict = None, agent_name: str = None, idx: int = None):
     """
-    Reset the global application container.
-    
-    This is primarily useful for testing scenarios where you need
-    to start with a clean container.
-    """
-    global _app_container
-    _app_container = None
-
-
-# Convenience functions for backward compatibility
-def get_agent_runner_with_di(use_tools: bool = True) -> AgentRunner:
-    """
-    Backward compatibility function for getting an AgentRunner with DI.
+    Create a TargetContentProcessor with proper dependency injection.
     
     Args:
-        use_tools: Whether the agent runner should use tools
+        config: Optional DI configuration dictionary
+        agent_config: Configuration for the agent
+        agent_name: Name of the agent  
+        idx: Index of the config being processed
         
     Returns:
-        AgentRunner configured with DI
+        TargetContentProcessor instance with injected dependencies
     """
-    return create_agent_runner(use_tools)
+    with application_container_context(config) as container:
+        return container.create_target_content_processor(agent_config, agent_name, idx)
 
 
-def is_di_enabled() -> bool:
-    """
-    Check if dependency injection is enabled.
-    
-    Returns:
-        True if DI container is initialized, False otherwise
-    """
-    global _app_container
-    return _app_container is not None
+# Note: All functions now use proper context management
+# No global state maintained

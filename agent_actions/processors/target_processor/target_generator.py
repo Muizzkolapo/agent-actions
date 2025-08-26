@@ -36,21 +36,17 @@ class TargetGenerator:
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         
-        # Use processor factory if available, otherwise fallback to direct instantiation
+        # Use processor factory with proper DI
         if processor_factory:
-            # Use the application container's method to handle complex dependencies
-            try:
-                from ...bootstrap import get_application_container
-                app_container = get_application_container()
-                self.content_processor = app_container.create_target_content_processor(
-                    agent_config=agent_config,
-                    agent_name=agent_name,
-                    idx=idx
-                )
-            except:
-                # Fallback to direct instantiation
-                self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
+            # Use bootstrap.create_target_content_processor() for proper DI setup
+            from ...bootstrap import create_target_content_processor
+            self.content_processor = create_target_content_processor(
+                agent_config=agent_config,
+                agent_name=agent_name,
+                idx=idx
+            )
         else:
+            # Direct instantiation when no DI is available
             self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
         
         self.output_handler = OutputHandler()

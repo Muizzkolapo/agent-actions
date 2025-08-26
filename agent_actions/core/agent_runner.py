@@ -31,15 +31,8 @@ class AgentRunner:
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
         
-        # Try to get processor factory from bootstrap if not provided
-        if processor_factory is None:
-            try:
-                from ..bootstrap import get_application_container
-                container = get_application_container()
-                self.processor_factory = container.get_processor_factory()
-            except:
-                # If DI is not available, strategies will work without processor factory
-                pass
+        # Processor factory is now required for proper DI
+        # Use bootstrap.create_agent_runner() to get a properly configured instance
         
         self.strategies: Dict[str, AgentStrategy] = {
             'initial': InitialStrategy(self.processor_factory),
