@@ -14,7 +14,7 @@ import logging
 import weakref
 
 from ..monitoring.metrics import get_metrics_collector, record_where_clause_cache_hit, record_where_clause_cache_miss
-from ..monitoring.logging import get_logger
+from ..monitoring.logging import LoggerFactory, StructuredLogger
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,7 @@ class LRUCache(Generic[T]):
     Thread-safe LRU cache with TTL support and monitoring.
     """
     
-    def __init__(self, max_size: int = 1000, default_ttl: Optional[float] = None):
+    def __init__(self, max_size: int = 1000, default_ttl: Optional[float] = None, logger_factory: LoggerFactory = None):
         self.max_size = max_size
         self.default_ttl = default_ttl
         self._cache: OrderedDict[str, CacheEntry] = OrderedDict()
@@ -60,7 +60,10 @@ class LRUCache(Generic[T]):
         }
         
         self.metrics = get_metrics_collector()
-        self.structured_logger = get_logger()
+        if logger_factory is None:
+            # Create a basic logger factory if none provided
+            logger_factory = LoggerFactory()
+        self.structured_logger = logger_factory.create_logger()
     
     def get(self, key: str) -> Optional[T]:
         """Get value from cache."""
@@ -211,14 +214,18 @@ class MultiLevelCache:
         l1_ttl: Optional[float] = 300,  # 5 minutes
         l2_max_size: int = 10000,
         l2_ttl: Optional[float] = 3600,  # 1 hour
-        enable_l2: bool = True
+        enable_l2: bool = True,
+        logger_factory: LoggerFactory = None
     ):
-        self.l1_cache = LRUCache[Any](l1_max_size, l1_ttl)
-        self.l2_cache = LRUCache[Any](l2_max_size, l2_ttl) if enable_l2 else None
+        if logger_factory is None:
+            logger_factory = LoggerFactory()
+            
+        self.l1_cache = LRUCache[Any](l1_max_size, l1_ttl, logger_factory)
+        self.l2_cache = LRUCache[Any](l2_max_size, l2_ttl, logger_factory) if enable_l2 else None
         self.enable_l2 = enable_l2
         
         self.metrics = get_metrics_collector()
-        self.structured_logger = get_logger()
+        self.structured_logger = logger_factory.create_logger()
         
         # Start cleanup thread
         self._cleanup_thread = threading.Thread(target=self._periodic_cleanup, daemon=True)
@@ -298,11 +305,14 @@ class CacheManager:
     Centralized cache manager for WHERE clause operations.
     """
     
-    def __init__(self):
+    def __init__(self, logger_factory: LoggerFactory = None):
         self._caches: Dict[str, Union[LRUCache, MultiLevelCache]] = {}
         self._lock = threading.RLock()
+        if logger_factory is None:
+            logger_factory = LoggerFactory()
+        self._logger_factory = logger_factory
         self.metrics = get_metrics_collector()
-        self.structured_logger = get_logger()
+        self.structured_logger = logger_factory.create_logger()
         
         # Initialize default caches
         self._initialize_default_caches()
@@ -316,7 +326,8 @@ class CacheManager:
                 l1_max_size=500,
                 l1_ttl=300,  # 5 minutes
                 l2_max_size=2000,
-                l2_ttl=1800  # 30 minutes
+                l2_ttl=1800,  # 30 minutes
+                logger_factory=self._logger_factory
             )
         )
         
@@ -325,7 +336,8 @@ class CacheManager:
             "where_clause_eval",
             LRUCache(
                 max_size=1000,
-                default_ttl=60  # 1 minute (shorter due to data dependency)
+                default_ttl=60,  # 1 minute (shorter due to data dependency)
+                logger_factory=self._logger_factory
             )
         )
         
@@ -334,7 +346,8 @@ class CacheManager:
             "field_access",
             LRUCache(
                 max_size=2000,
-                default_ttl=600  # 10 minutes
+                default_ttl=600,  # 10 minutes
+                logger_factory=self._logger_factory
             )
         )
     

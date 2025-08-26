@@ -71,11 +71,13 @@ class DIConfigurator:
         from ..common.transformers.data_transformer import DataTransformer
         from ..handlers.prompt_handler import PromptLoader
         from ..processors.prompt_processor.sample_enricher import SampleEnricher
+        from ..common.monitoring.logging import LoggerFactory
         
         # Register utilities as singletons (stateless services)
         container.register_singleton(DataTransformer, DataTransformer)
         container.register_singleton(PromptLoader, PromptLoader)
         container.register_singleton(SampleEnricher, SampleEnricher)
+        container.register_singleton(LoggerFactory, LoggerFactory)
     
     @staticmethod
     def create_processor_factory(container: DependencyContainer) -> ProcessorFactory:
