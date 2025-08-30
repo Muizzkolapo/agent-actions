@@ -72,13 +72,14 @@ class AgentStrategy(ABC):
         Returns:
             Path to the generated output file.
         """
-        # Create TargetGenerator with processor factory if available
-        if self.processor_factory:
-            generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory)
-            return generator.process(file_path, base_directory, output_directory)
-        else:
-            # Fallback to static method for backward compatibility
-            result = TargetGenerator.generate(agent_config, agent_name, file_path, base_directory, output_directory, idx)
+        # Processor factory is required - no fallback
+        if self.processor_factory is None:
+            from agent_actions.cli.exceptions import DependencyError
+            raise DependencyError("BaseAgentStrategy", "processor_factory")
+            
+        generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory)
+        result = generator.process(file_path, base_directory, output_directory)
+        
         if asyncio.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()

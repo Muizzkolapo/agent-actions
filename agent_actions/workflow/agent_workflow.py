@@ -121,7 +121,9 @@ class AgentWorkflow:
                 if abs_tool_path not in sys.path:
                     sys.path.insert(0, abs_tool_path)
 
-        self.agent_runner = AgentRunner(self.use_tools)
+        # Use bootstrap to create properly configured AgentRunner with DI
+        from agent_actions.bootstrap import create_agent_runner
+        self.agent_runner = create_agent_runner(use_tools=self.use_tools)
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()
         self.where_parser = WhereClauseParser()

@@ -73,3 +73,24 @@ class TemplateRenderingError(AgentActionsError):
 class VendorAPIError(AgentActionsError):
     """Raised when an error occurs during a call to a vendor's API."""
     pass
+
+
+class DependencyError(AgentActionsError):
+    """
+    Raised when a required dependency is not provided.
+    
+    This exception should be raised when a class requires dependencies
+    to be injected but they are not provided during instantiation.
+    """
+    def __init__(self, class_name: str, missing_dependency: str):
+        """
+        Initialize the DependencyError.
+        
+        Args:
+            class_name: Name of the class missing the dependency
+            missing_dependency: Name of the missing dependency
+        """
+        self.class_name = class_name
+        self.missing_dependency = missing_dependency
+        message = f"{class_name} requires {missing_dependency} to be provided. Please ensure all dependencies are properly injected."
+        super().__init__(message)
