@@ -148,7 +148,7 @@ class BatchService:
             BatchProvider instance for the specified provider type
         """
         # Get provider type from config - prioritize model_vendor, fallback to batch_provider for backward compatibility
-        provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
+        provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
         
         # Log deprecation warning if using batch_provider without model_vendor
         if agent_config.get('batch_provider') and not agent_config.get('model_vendor'):
@@ -455,7 +455,7 @@ class BatchService:
         try:
             # Get the appropriate provider for this agent configuration
             provider = self._get_provider_for_config(agent_config)
-            provider_type = agent_config.get('model_vendor', agent_config.get('batch_provider', 'openai')).lower()
+            provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
             
             # Use provider to submit the batch
             batch_id = provider.submit_batch(tasks, batch_name, output_directory)

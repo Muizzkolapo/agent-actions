@@ -5,24 +5,31 @@ from pydantic import ValidationError
 from agent_actions.core.utils import Utils
 from agent_actions.workflow.render_workflow import render_pipeline_with_templates
 from agent_actions.cli.validators.config_validator import ConfigValidator
-from typing import Dict, Any
+from typing import Dict, Any, Optional, List
 from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingError
 from agent_actions.models.config_schema import AgentConfig, DefaultAgentConfig
+from agent_actions.models.environment_config import EnvironmentConfig
+from agent_actions.models.pipeline_config import WorkflowConfig, PipelineConfig
 
 
 
 class ConfigManager:
-    def __init__(self, constructor_path, default_path):
+    def __init__(self, constructor_path: str, default_path: str):
         self.constructor_path = constructor_path
         self.default_path = default_path
-        self.user_config = None
-        self.default_config = None
-        self.agent_name = None
-        self.agent_configs = {}
-        self.execution_order = []
-        self.child_pipeline = None
-        self.tool_path = None
+        self.user_config: Optional[Dict[str, Any]] = None
+        self.default_config: Optional[Dict[str, Any]] = None
+        self.agent_name: Optional[str] = None
+        self.agent_configs: Dict[str, AgentConfig] = {}
+        self.execution_order: List[str] = []
+        self.child_pipeline: Optional[str] = None
+        self.tool_path: Optional[str] = None
         self.template_dir = str(Path.cwd() / "templates")
+        
+        # New typed configurations
+        self.environment_config: Optional[EnvironmentConfig] = None
+        self.workflow_config: Optional[WorkflowConfig] = None
+        self.pipeline_config: Optional[PipelineConfig] = None
 
     def load_configs(self):
         try:
@@ -93,9 +100,9 @@ class ConfigManager:
             user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
         return user_agents
 
-    def merge_agent_configs(self, user_agents):
+    def merge_agent_configs(self, user_agents: List[Dict[str, Any]]) -> None:
         default_model = DefaultAgentConfig.model_validate(
-            self.default_config.get('default_agent_config', {})
+            self.default_config.get('default_agent_config', {}) if self.default_config else {}
         )
         default_agent_config = default_model.model_dump()
 
@@ -106,27 +113,131 @@ class ConfigManager:
                 raise ConfigurationError(f"Invalid agent configuration: {e}") from e
 
             agent_type = agent_model.agent_type
-            merged_agent_config = {**default_agent_config, **agent_model.model_dump(exclude_unset=True)}
+            # Merge default config with agent-specific config
+            merged_dict = {**default_agent_config, **agent_model.model_dump(exclude_unset=True)}
+            # Create a validated AgentConfig from the merged dictionary
+            merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config
 
-    def determine_execution_order(self, user_agents):
+    def determine_execution_order(self, user_agents: List[Dict[str, Any]]) -> None:
         """
         Determines the execution order of agents based on their dependencies,
         considering only is_operational agents.
         """
         instance_config = ConfigValidator()
-        instance_config.validate(self.agent_configs)
+        # Convert AgentConfig models to dictionaries for validator compatibility
+        agent_configs_dict = {
+            agent_type: config.model_dump() 
+            for agent_type, config in self.agent_configs.items()
+        }
+        instance_config.validate(agent_configs_dict)
         
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
-            if config.get('is_operational', True):
+            if config.is_operational:
                 dependencies = [
-                    dep for dep in config.get('dependencies', [])
-                    if self.agent_configs[dep].get('is_operational', True)
+                    dep for dep in config.dependencies
+                    if dep in self.agent_configs and self.agent_configs[dep].is_operational
                 ]
                 dependency_graph[agent_type] = dependencies
 
         self.execution_order = Utils.topological_sort(dependency_graph)
+    
+    def load_environment_config(self) -> EnvironmentConfig:
+        """Load and validate environment configuration."""
+        try:
+            self.environment_config = EnvironmentConfig()
+            return self.environment_config
+        except ValidationError as e:
+            raise ConfigurationError(f"Invalid environment configuration: {e}") from e
+    
+    def get_agent_config(self, agent_type: str) -> Optional[AgentConfig]:
+        """Get typed agent configuration by agent type."""
+        return self.agent_configs.get(agent_type)
+    
+    def get_all_agent_configs(self) -> Dict[str, AgentConfig]:
+        """Get all typed agent configurations."""
+        return self.agent_configs.copy()
+    
+    def get_all_agent_configs_as_dicts(self) -> Dict[str, Dict[str, Any]]:
+        """Get all agent configurations as dictionaries for backward compatibility."""
+        result = {}
+        for agent_type, config in self.agent_configs.items():
+            # Get the dictionary representation and filter out None values for optional string fields
+            config_dict = config.model_dump()
+            
+            # Replace None values with appropriate defaults for backward compatibility
+            string_fields_with_defaults = {
+                'conditional_clause': '',
+                'model_vendor': '',
+                'granularity': 'record',
+                'run_mode': 'online',
+                'prompt': '',
+                'schema_name': '',
+                'code_path': '',
+                'data_source': '',
+                'anthropic_version': '',
+            }
+            
+            for field, default_value in string_fields_with_defaults.items():
+                if field in config_dict and config_dict[field] is None:
+                    config_dict[field] = default_value
+            
+            result[agent_type] = config_dict
+        
+        return result
+    
+    def create_workflow_config(self, workflow_data: Dict[str, Any]) -> WorkflowConfig:
+        """Create a typed workflow configuration from dictionary data."""
+        try:
+            self.workflow_config = WorkflowConfig.model_validate(workflow_data)
+            return self.workflow_config
+        except ValidationError as e:
+            raise ConfigurationError(f"Invalid workflow configuration: {e}") from e
+    
+    def create_pipeline_config(self, pipeline_data: Dict[str, Any]) -> PipelineConfig:
+        """Create a typed pipeline configuration from dictionary data."""
+        try:
+            self.pipeline_config = PipelineConfig.model_validate(pipeline_data)
+            return self.pipeline_config
+        except ValidationError as e:
+            raise ConfigurationError(f"Invalid pipeline configuration: {e}") from e
+    
+    def validate_all_configs(self) -> None:
+        """Validate all loaded configurations."""
+        if not self.environment_config:
+            self.load_environment_config()
+        
+        # Validate agent configurations
+        for agent_type, config in self.agent_configs.items():
+            try:
+                # Re-validate to ensure consistency
+                AgentConfig.model_validate(config.model_dump())
+            except ValidationError as e:
+                raise ConfigurationError(f"Agent '{agent_type}' configuration is invalid: {e}") from e
+    
+    def get_configuration_summary(self) -> Dict[str, Any]:
+        """Get a summary of all loaded configurations."""
+        return {
+            "environment": {
+                "loaded": self.environment_config is not None,
+                "env": self.environment_config.agent_actions_env if self.environment_config else None
+            },
+            "agents": {
+                "count": len(self.agent_configs),
+                "types": list(self.agent_configs.keys()),
+                "execution_order": self.execution_order
+            },
+            "workflow": {
+                "loaded": self.workflow_config is not None,
+                "name": self.workflow_config.name if self.workflow_config else None
+            },
+            "pipeline": {
+                "loaded": self.pipeline_config is not None,
+                "name": self.pipeline_config.name if self.pipeline_config else None
+            }
+        }
+
 
 class DuplicateAgentError(Exception):
     """Raised when duplicate agents are found in the configuration."""

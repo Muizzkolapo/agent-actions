@@ -35,8 +35,8 @@ class TargetGenerator:
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.idx = idx
-        self.model_vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
-        self.granularity = agent_config.get('granularity', '').lower()
+        self.model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
+        self.granularity = (agent_config.get('granularity') or '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         
         # Validate required dependency

@@ -123,7 +123,11 @@ class AgentWorkflow:
 
         # Use bootstrap to create properly configured AgentRunner with DI
         from agent_actions.bootstrap import create_agent_runner
-        self.agent_runner = create_agent_runner(use_tools=self.use_tools)
+        self.agent_runner = create_agent_runner(
+            use_tools=self.use_tools,
+            constructor_path=self.constructor_path,
+            default_path=getattr(self.config_manager, 'default_path', None)
+        )
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()
         self.where_parser = WhereClauseParser()
@@ -161,7 +165,7 @@ class AgentWorkflow:
         self.config_manager.determine_execution_order(user_agents)
         self.agent_name = self.config_manager.agent_name
         self.execution_order = self.config_manager.execution_order
-        self.agent_configs = self.config_manager.agent_configs
+        self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
         self.child_pipeline = self.config_manager.child_pipeline
 
     def _initialize_manifest(self):

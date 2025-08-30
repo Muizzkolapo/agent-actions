@@ -91,7 +91,7 @@ def create_dynamic_agent(
     if tools_path and tools_path not in sys.path:
         sys.path.insert(0, tools_path)
 
-    model_vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
+    model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
     is_tool      = model_vendor == "tool"
 
     # Convert context-data to a JSON string unless the vendor is 'tool'
@@ -117,7 +117,7 @@ def create_dynamic_agent(
 
     # ----- schema prep ----------------------------------------------------
     schema = _prepare_schema(agent_config, model_vendor)
-    granularity = agent_config.get('granularity', 'record').lower()
+    granularity = (agent_config.get('granularity') or 'record').lower()
 
     # ----- dispatch to vendor handler ------------------------------------
     response_data = _invoke_vendor_handler(
@@ -309,7 +309,7 @@ def _execute_with_interceptors(
         if tools_path and tools_path not in sys.path:
             sys.path.insert(0, tools_path)
 
-        model_vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
+        model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
         is_tool = model_vendor == "tool"
 
         context_data: Union[str, Dict] = (
@@ -340,7 +340,7 @@ def _execute_with_interceptors(
         )
 
         schema = _prepare_schema(agent_config, model_vendor)
-        granularity = agent_config.get("granularity", "record").lower()
+        granularity = (agent_config.get("granularity") or "record").lower()
 
         response_data = _invoke_vendor_handler(
             model_vendor,

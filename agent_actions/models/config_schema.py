@@ -137,11 +137,34 @@ class AgentConfig(BaseModel):
     agent_type: str
     name: Optional[str] = None
     model_name: Optional[str] = None
+    model_vendor: Optional[str] = Field(
+        default=None, 
+        description="Model vendor/provider: 'openai', 'gemini', 'anthropic', 'groq', or 'tool'"
+    )
+    api_key: Optional[str] = None
     code_path: Optional[str] = None
     dependencies: List[str] = Field(default_factory=list)
+    parent: List[str] = Field(default_factory=list)
+    prompt: Optional[str] = None
+    schema_name: Optional[str] = None
+    chunk_config: Dict[str, Any] = Field(default_factory=dict)
+    side_collection: List[str] = Field(default_factory=list)
     is_operational: bool = True
+    use_few_shot_samples: int = Field(default=0, ge=0)
+    ephemeral: Optional[bool] = None
+    add_dispatch: Optional[bool] = None
     run_mode: str = 'online'
     data_source: Optional[str] = None
+    
+    # Anthropic-specific configuration options
+    anthropic_version: Optional[str] = Field(
+        default=None,
+        description="API version header for Anthropic requests (e.g., '2023-06-01')"
+    )
+    enable_prompt_caching: Optional[bool] = Field(
+        default=None,
+        description="Enable Anthropic's prompt caching feature for improved performance"
+    )
     
     # Legacy filtering support (deprecated)
     conditional_clause: Optional[str] = Field(
