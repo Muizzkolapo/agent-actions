@@ -60,12 +60,23 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         self.data_generator = data_generator
         self.data_processor = data_processor
         self.batch_service = batch_service
+    
+    def _get_config_value(self, key: str, default=None):
+        """Get configuration value, supporting both AgentConfig models and dictionaries."""
+        if hasattr(self.agent_config, key):
+            # Pydantic model
+            return getattr(self.agent_config, key, default)
+        elif hasattr(self.agent_config, 'get'):
+            # Dictionary
+            return self.agent_config.get(key, default)
+        else:
+            return default
 
     async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
         Async version: process a list of data items in parallel using proper async patterns.
         """
-        if self.agent_config.get('run_mode') == 'batch':
+        if self._get_config_value('run_mode') == 'batch':
             # Extract source file info from aggregated data for proper file naming
             source_file_info = self._extract_source_file_info(data)
             # TODO: Make batch service async in future iteration
@@ -114,7 +125,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
-        if self.agent_config.get('run_mode') == 'batch':
+        if self._get_config_value('run_mode') == 'batch':
             # Extract source file info from aggregated data for proper file naming
             source_file_info = self._extract_source_file_info(data)
             result = self.batch_service.submit_batch_job_from_data(
@@ -166,7 +177,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
-        if self.agent_config.get('run_mode') == 'batch':
+        if self._get_config_value('run_mode') == 'batch':
             # Extract source file info from aggregated data for proper file naming
             source_file_info = self._extract_source_file_info(data)
             result = self.batch_service.submit_batch_job_from_data(
@@ -210,7 +221,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Raises:
             RuntimeError: If processing fails
         """
-        if self.agent_config.get('run_mode') == 'batch':
+        if self._get_config_value('run_mode') == 'batch':
             # Extract source file info from aggregated data for proper file naming
             source_file_info = self._extract_source_file_info(data)
             result = self.batch_service.submit_batch_job_from_data(
@@ -228,8 +239,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             
             # For tool vendor with file granularity, return generated_data directly
             # to match the bypass behavior in agent_builder.py
-            model_vendor = self.agent_config.get('model_vendor', '').lower()
-            granularity = self.agent_config.get('granularity', 'record').lower()
+            model_vendor = (self._get_config_value('model_vendor') or '').lower()
+            granularity = (self._get_config_value('granularity') or 'record').lower()
             
             if model_vendor == 'tool' and granularity == 'file':
                 # File-level tools should bypass the normal processing pipeline
@@ -380,10 +391,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Returns:
             Filtered list of data items
         """
-        where_clause_config = self.agent_config.get('where_clause')
+        where_clause_config = self._get_config_value('where_clause')
         
         # Only apply filtering if WHERE clause is configured for item scope
-        if not where_clause_config or where_clause_config.get('scope') != 'item':
+        if not where_clause_config:
+            return data
+        
+        # Handle both AgentConfig model and dictionary format
+        scope = where_clause_config.scope if hasattr(where_clause_config, 'scope') else where_clause_config.get('scope')
+        if scope != 'item':
             return data
         
         try:
@@ -396,10 +412,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 # Extract content for filtering - handle both wrapped and unwrapped formats
                 content = item.get('content', item)
                 
+                # Get clause from either AgentConfig model or dictionary
+                clause = where_clause_config.clause if hasattr(where_clause_config, 'clause') else where_clause_config['clause']
+                
                 filter_result = filter_service.filter_item(
                     content,
-                    where_clause_config['clause'],
-                    timeout=self.agent_config.get('max_execution_time', 5)
+                    clause,
+                    timeout=self._get_config_value('max_execution_time', 5)
                 )
                 
                 if filter_result.success and filter_result.matched:

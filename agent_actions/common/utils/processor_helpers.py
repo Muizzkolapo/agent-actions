@@ -29,7 +29,7 @@ def run_dynamic_agent(
     Returns a tuple of the response and a boolean indicating whether
     the agent was executed.
     """
-    conditional_clause = agent_config.get("conditional_clause", "").lower()
+    conditional_clause = (agent_config.get("conditional_clause") or "").lower()
 
     if conditional_clause and not execute_user_defined_function(
         conditional_clause, context
