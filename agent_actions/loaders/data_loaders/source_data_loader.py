@@ -5,21 +5,30 @@ from typing import List, Dict, Any, Optional
 from agent_actions.common.interfaces.interfaces import ISourceDataLoader, ProcessingMode
 from ...core.path_manager import PathManager, PathManagerError
 from ...core.dependency_injection import registry
+from agent_actions.cli.exceptions import DependencyError
 
 @registry.register_loader("source_data")
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 
-    def __init__(self, agent_name: str, path_manager: PathManager | None = None):
+    def __init__(self, agent_name: str, path_manager: PathManager):
         """
         Initialize the source data loader.
 
         Args:
             agent_name: Name of the agent
-            path_manager: Optional PathManager instance for path operations
+            path_manager: Required PathManager instance for path operations (must be provided)
+            
+        Raises:
+            DependencyError: If path_manager is not provided
         """
         self.agent_name = agent_name
-        self.path_manager = path_manager or PathManager()
+        
+        # Validate required dependency
+        if path_manager is None:
+            raise DependencyError("SourceDataLoader", "path_manager")
+        
+        self.path_manager = path_manager
     
     def supports_async(self) -> bool:
         """Return True as this loader supports async operations."""

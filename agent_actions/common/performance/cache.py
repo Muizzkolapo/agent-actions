@@ -15,6 +15,7 @@ import weakref
 
 from ..monitoring.metrics import get_metrics_collector, record_where_clause_cache_hit, record_where_clause_cache_miss
 from ..monitoring.logging import LoggerFactory, StructuredLogger
+from agent_actions.cli.exceptions import DependencyError
 
 logger = logging.getLogger(__name__)
 
@@ -305,11 +306,13 @@ class CacheManager:
     Centralized cache manager for WHERE clause operations.
     """
     
-    def __init__(self, logger_factory: LoggerFactory = None):
+    def __init__(self, logger_factory: LoggerFactory):
+        # Validate required dependency
+        if logger_factory is None:
+            raise DependencyError("CacheManager", "logger_factory")
+        
         self._caches: Dict[str, Union[LRUCache, MultiLevelCache]] = {}
         self._lock = threading.RLock()
-        if logger_factory is None:
-            logger_factory = LoggerFactory()
         self._logger_factory = logger_factory
         self.metrics = get_metrics_collector()
         self.structured_logger = logger_factory.create_logger()
@@ -449,17 +452,26 @@ def get_cache_manager() -> CacheManager:
     if _cache_manager is None:
         with _manager_lock:
             if _cache_manager is None:
-                _cache_manager = CacheManager()
+                # Create with default LoggerFactory for backward compatibility
+                # This should be replaced with proper DI in the future
+                _cache_manager = CacheManager(LoggerFactory())
     
     return _cache_manager
 
 
-def init_cache_manager() -> CacheManager:
-    """Initialize the global cache manager."""
+def init_cache_manager(logger_factory: LoggerFactory = None) -> CacheManager:
+    """Initialize the global cache manager.
+    
+    Args:
+        logger_factory: Optional LoggerFactory for the cache manager.
+                       If not provided, a default one will be created.
+    """
     global _cache_manager
     
     with _manager_lock:
-        _cache_manager = CacheManager()
+        if logger_factory is None:
+            logger_factory = LoggerFactory()
+        _cache_manager = CacheManager(logger_factory)
     
     return _cache_manager
 

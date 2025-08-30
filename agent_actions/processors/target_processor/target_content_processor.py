@@ -8,6 +8,7 @@ from agent_actions.services.batch_service import BatchService
 from ...core.dependency_injection import registry
 from agent_actions.common.utils.processor_utils import ProcessorUtils
 from agent_actions.common.interfaces.base_async_processor import BaseAsyncProcessor
+from agent_actions.cli.exceptions import DependencyError
 
 @registry.register_processor("target_content")
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
@@ -17,10 +18,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                  agent_config: Dict, 
                  agent_name: str, 
                  idx: int,
-                 source_loader: IDataLoader = None,
-                 data_generator: IGenerator = None,
-                 data_processor: IDataProcessor = None,
-                 batch_service: BatchService = None,
+                 source_loader: IDataLoader,
+                 data_generator: IGenerator,
+                 data_processor: IDataProcessor,
+                 batch_service: BatchService,
                  concurrency_limit: Optional[int] = None):
         """
         Initialize the target content processor with injected dependencies.
@@ -29,11 +30,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             agent_config: Configuration for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
-            source_loader: Injected data loader service
-            data_generator: Injected data generator service
-            data_processor: Injected data processor service
-            batch_service: Injected batch service
+            source_loader: Required data loader service (must be provided)
+            data_generator: Required data generator service (must be provided)
+            data_processor: Required data processor service (must be provided)
+            batch_service: Required batch service (must be provided)
             concurrency_limit: Maximum number of concurrent operations
+            
+        Raises:
+            DependencyError: If any required dependency is not provided
         """
         # Initialize base async processor
         super().__init__(concurrency_limit)
@@ -41,30 +45,21 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         self.agent_name = agent_name
         self.idx = idx
         
-        # Store injected dependencies or create defaults for backward compatibility
+        # Validate required dependencies
         if source_loader is None:
-            from agent_actions.loaders.data_loaders.source_data_loader import SourceDataLoader
-            from agent_actions.core.path_manager import PathManager
-            self.source_loader = SourceDataLoader(agent_name, PathManager())
-        else:
-            self.source_loader = source_loader
-            
+            raise DependencyError("TargetContentProcessor", "source_loader")
         if data_generator is None:
-            from .data_generator import DataGenerator
-            self.data_generator = DataGenerator(agent_config, agent_name)
-        else:
-            self.data_generator = data_generator
-            
+            raise DependencyError("TargetContentProcessor", "data_generator")
         if data_processor is None:
-            from .data_processor import DataProcessor
-            self.data_processor = DataProcessor(agent_config)
-        else:
-            self.data_processor = data_processor
-            
+            raise DependencyError("TargetContentProcessor", "data_processor")
         if batch_service is None:
-            self.batch_service = BatchService()
-        else:
-            self.batch_service = batch_service
+            raise DependencyError("TargetContentProcessor", "batch_service")
+        
+        # Store injected dependencies
+        self.source_loader = source_loader
+        self.data_generator = data_generator
+        self.data_processor = data_processor
+        self.batch_service = batch_service
 
     async def process_async(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """

@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
+from agent_actions.loaders.data_loaders.source_data_loader import SourceDataLoader
 from agent_actions.core.path_manager import PathManager, PathManagerError
 
 
@@ -62,9 +62,10 @@ class TestSourceDataLoader:
     
     def test_source_data_loader_initialization(self):
         """Test SourceDataLoader initialization."""
-        loader = SourceDataLoader("test_agent")
+        path_manager = PathManager()
+        loader = SourceDataLoader("test_agent", path_manager)
         assert loader.agent_name == "test_agent"
-        assert isinstance(loader.path_manager, PathManager)
+        assert loader.path_manager is path_manager
         
         # Test with custom path manager
         custom_pm = PathManager()
@@ -73,8 +74,10 @@ class TestSourceDataLoader:
     
     def test_load_source_data_success(self, temp_project):
         """Test successful source data loading with node directory skipping."""
-        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]), \
+             patch.object(PathManager, 'is_within_project', return_value=True):
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             # Load data using target path - should find source file
             result = loader.load_source_data(str(temp_project["target_file"]))
@@ -86,7 +89,8 @@ class TestSourceDataLoader:
     def test_path_transformation_logic(self, temp_project):
         """Test that target paths are correctly transformed to source paths."""
         with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             target_path = temp_project["target_file"]
             
@@ -102,7 +106,8 @@ class TestSourceDataLoader:
     
     def test_agent_io_not_found_error(self):
         """Test error when agent_io is not found in path."""
-        loader = SourceDataLoader("test_agent")
+        path_manager = PathManager()
+        loader = SourceDataLoader("test_agent", path_manager)
         
         invalid_path = "/some/path/without/agent_io/file.json"
         
@@ -111,7 +116,8 @@ class TestSourceDataLoader:
     
     def test_path_too_short_error(self):
         """Test error when path is too short to contain node directory."""
-        loader = SourceDataLoader("test_agent")
+        path_manager = PathManager()
+        loader = SourceDataLoader("test_agent", path_manager)
         
         short_path = "/project/agent_io/target/file.json"  # Missing node directory
         
@@ -120,7 +126,8 @@ class TestSourceDataLoader:
     
     def test_no_filename_error(self):
         """Test error when no filename is found after node directory."""
-        loader = SourceDataLoader("test_agent")
+        path_manager = PathManager()
+        loader = SourceDataLoader("test_agent", path_manager)
         
         path_without_file = "/project/agent_io/target/node_0"  # No filename
         
@@ -130,7 +137,8 @@ class TestSourceDataLoader:
     def test_source_file_not_found_error(self, temp_project):
         """Test error when source file doesn't exist."""
         with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             # Use a target path that would map to a non-existent source file
             non_existent_target = temp_project["target_file"].parent / "non_existent.json"
@@ -141,7 +149,8 @@ class TestSourceDataLoader:
     def test_source_file_outside_project_bounds(self, temp_project):
         """Test error when source file is outside project bounds."""
         with patch.object(PathManager, 'is_within_project', return_value=False):
-            loader = SourceDataLoader("test_agent")
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             with pytest.raises(IOError, match="Source file is outside project bounds"):
                 loader.load_source_data(str(temp_project["target_file"]))
@@ -153,15 +162,18 @@ class TestSourceDataLoader:
         invalid_source.write_text("invalid json content")
         
         with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             with pytest.raises(IOError, match="Failed to load source data"):
                 loader.load_source_data(str(temp_project["target_file"]))
     
     def test_multiple_nodes_same_source(self, temp_project):
         """Test that multiple nodes map to the same source file."""
-        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]), \
+             patch.object(PathManager, 'is_within_project', return_value=True):
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             # Create target paths for different nodes
             base_dir = temp_project["target_file"].parent.parent
@@ -187,8 +199,10 @@ class TestSourceDataLoader:
         # Create corresponding target path
         target_nested = temp_project["target_file"].parent / "nested" / "subdir" / "nested_file.json"
         
-        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]):
-            loader = SourceDataLoader("test_agent")
+        with patch.object(PathManager, 'get_project_root', return_value=temp_project["project_root"]), \
+             patch.object(PathManager, 'is_within_project', return_value=True):
+            path_manager = PathManager()
+            loader = SourceDataLoader("test_agent", path_manager)
             
             result = loader.load_source_data(str(target_nested))
             assert result == nested_data
@@ -206,7 +220,8 @@ class TestSourceDataLoader:
         original_source = pipeline_name_dir / "agent_io" / "source" / Path(*mirrored_structure_parts)
         
         # New logic simulation  
-        loader = SourceDataLoader("test_agent")
+        path_manager = PathManager()
+        loader = SourceDataLoader("test_agent", path_manager)
         target_path_obj = loader.path_manager.normalize_path(target_path)
         new_parts = target_path_obj.parts
         new_agent_io_index = new_parts.index("agent_io")

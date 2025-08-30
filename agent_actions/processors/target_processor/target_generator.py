@@ -6,7 +6,7 @@ from agent_actions.handlers.file_reader import FileReader
 from agent_actions.handlers.file_writer import FileWriter
 from agent_actions.processors.target_processor import TargetContentProcessor
 from .output_handler import OutputHandler
-from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError, DependencyError
 from agent_actions.constants import MODEL_VENDOR_KEY
 from agent_actions.services.batch_service import BatchService
 from ...core.dependency_injection import ProcessorFactory
@@ -19,7 +19,7 @@ SOURCE_FOLDER = 'source'
 class TargetGenerator:
     """Responsible for generating target data from input files based on configuration."""
     
-    def __init__(self, agent_config, agent_name, idx, processor_factory: Optional[ProcessorFactory] = None):
+    def __init__(self, agent_config, agent_name, idx, processor_factory: ProcessorFactory):
         """
         Initialize the target generator.
         
@@ -27,7 +27,10 @@ class TargetGenerator:
             agent_config: Configuration dictionary for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
-            processor_factory: Optional factory for creating processors with DI
+            processor_factory: Required factory for creating processors with DI (must be provided)
+            
+        Raises:
+            DependencyError: If processor_factory is not provided
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
@@ -36,25 +39,25 @@ class TargetGenerator:
         self.granularity = agent_config.get('granularity', '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         
+        # Validate required dependency
+        if processor_factory is None:
+            raise DependencyError("TargetGenerator", "processor_factory")
+        
         # Use processor factory with proper DI
-        if processor_factory:
-            # Use bootstrap.create_target_content_processor() for proper DI setup
-            from ...bootstrap import create_target_content_processor
-            self.content_processor = create_target_content_processor(
-                agent_config=agent_config,
-                agent_name=agent_name,
-                idx=idx
-            )
-        else:
-            # Direct instantiation when no DI is available
-            self.content_processor = TargetContentProcessor(agent_config, agent_name, idx)
+        # Use bootstrap.create_target_content_processor() for proper DI setup
+        from ...bootstrap import create_target_content_processor
+        self.content_processor = create_target_content_processor(
+            agent_config=agent_config,
+            agent_name=agent_name,
+            idx=idx
+        )
         
         self.output_handler = OutputHandler()
     
     @staticmethod
-    def generate(agent_config, agent_name, file_path, base_directory, output_directory, idx):
+    def generate(agent_config, agent_name, file_path, base_directory, output_directory, idx, processor_factory=None):
         """
-        Static method for generating target data (maintains original function signature).
+        Static method for generating target data.
         
         Args:
             agent_config: Configuration dictionary for the agent
@@ -63,10 +66,17 @@ class TargetGenerator:
             base_directory: Base directory for calculating relative paths
             output_directory: Directory where the output file will be saved
             idx: Index of the config being processed
+            processor_factory: Required ProcessorFactory for dependency injection
         
         Returns:
-            Path to the generated output file for compatibility
+            Path to the generated output file
+            
+        Raises:
+            DependencyError: If processor_factory is not provided
         """
+        if processor_factory is None:
+            raise DependencyError("TargetGenerator.generate", "processor_factory")
+            
         if agent_config.get('run_mode') == 'batch':
             batch_service = BatchService()
             file_reader = FileReader(file_path)
@@ -98,8 +108,8 @@ class TargetGenerator:
                 with open(output_file_path, 'w') as f:
                     json.dump(placeholder, f)
                 return str(output_file_path)
-
-        generator = TargetGenerator(agent_config, agent_name, idx)
+        
+        generator = TargetGenerator(agent_config, agent_name, idx, processor_factory)
         return generator.process(file_path, base_directory, output_directory)
     
     def process(self, file_path, base_directory, output_directory):
