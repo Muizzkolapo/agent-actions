@@ -184,7 +184,8 @@ class BatchService:
             return provider
             
         except Exception as e:
-            raise RuntimeError(f"Failed to create batch provider '{provider_type}': {e}")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(f"batch_provider_{provider_type}", f"Failed to create provider: {e}", cause=e)
 
     def _process_batch(self, *args, **kwargs):
         """Placeholder batch processing method for testing/mocking."""
@@ -462,7 +463,8 @@ class BatchService:
             self._save_batch_job_id(batch_id, output_directory, batch_name, provider_type)
             return batch_id
         except Exception as e:
-            raise RuntimeError(f"Error submitting batch job: {e}")
+            from agent_actions.core.exceptions import ExternalServiceError
+            raise ExternalServiceError(provider_type, f"Failed to submit batch job: {e}", cause=e)
 
     def _save_batch_job_id(self, batch_id: str, output_directory: str = None, file_name: str = None, provider_type: str = None):
         """Save batch job ID to batch registry."""
@@ -733,7 +735,8 @@ class BatchService:
             provider = self._get_provider_for_batch_id(batch_id, output_directory)
             return provider.check_status(batch_id)
         except Exception as e:
-            raise RuntimeError(f"Error checking batch status: {e}")
+            from agent_actions.core.exceptions import ExternalServiceError
+            raise ExternalServiceError(self.vendor_type or 'unknown', f"Failed to check batch status: {e}", cause=e)
 
     # This is the function that retrieves the job 
     # Muizzchange
@@ -779,7 +782,8 @@ class BatchService:
                         f.write(json.dumps(raw_format) + '\n')
                 return result_file_name
         except Exception as e:
-            raise RuntimeError(f"Error retrieving batch results: {e}")
+            from agent_actions.core.exceptions import ExternalServiceError
+            raise ExternalServiceError(self.vendor_type or 'unknown', f"Failed to retrieve batch results: {e}", cause=e)
 
     def process_batch_results_to_workflow_output(self, batch_id: str, output_directory: str, base_directory: str, file_path: str):
         """
@@ -832,7 +836,8 @@ class BatchService:
             return str(output_file_path)
             
         except Exception as e:
-            raise RuntimeError(f"Error processing batch results to workflow output: {e}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
 
     def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None):
         """
@@ -1089,7 +1094,8 @@ class BatchService:
             return str(output_file_path)
             
         except Exception as e:
-            raise RuntimeError(f"Error processing batch results to workflow output: {e}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
 
     def process_all_batch_results_to_workflow_output(self, output_directory: str):
         """
@@ -1194,4 +1200,5 @@ class BatchService:
             return processed_files
             
         except Exception as e:
-            raise RuntimeError(f"Error processing all batch results to workflow output: {e}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process all batch results to workflow output: {e}", cause=e)

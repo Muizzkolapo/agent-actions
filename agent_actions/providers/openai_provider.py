@@ -236,7 +236,8 @@ class OpenAIBatchProvider(BatchProvider):
             batch_job = self.client.batches.retrieve(batch_id)
             return batch_job.status
         except Exception as e:
-            raise RuntimeError(f"Error checking OpenAI batch status: {e}")
+            from agent_actions.core.exceptions import OpenAIError
+            raise OpenAIError("batch_status", cause=e)
     
     def retrieve_results(self, 
                         batch_id: str, 
@@ -269,7 +270,8 @@ class OpenAIBatchProvider(BatchProvider):
                         print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
                         time.sleep(retry_delay)
                     else:
-                        raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
+                        from agent_actions.core.exceptions import OpenAIError
+                        raise OpenAIError("batch_results", context={"max_retries": max_retries, "last_error": str(last_error)}, cause=last_error)
             
             # Save raw results if directory provided
             if output_directory:
@@ -304,7 +306,8 @@ class OpenAIBatchProvider(BatchProvider):
             return batch_results
             
         except Exception as e:
-            raise RuntimeError(f"Error retrieving OpenAI batch results: {e}")
+            from agent_actions.core.exceptions import OpenAIError
+            raise OpenAIError("batch_results", cause=e)
     
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Compile schema to OpenAI's format."""

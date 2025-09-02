@@ -83,7 +83,8 @@ class DataGenerator(IGenerator):
             )
             return response, executed
         except Exception as e:
-            raise RuntimeError(f"Failed to create agent with data: {str(e)}")
+            from agent_actions.core.exceptions import GenerationError
+            raise GenerationError(f"Failed to create agent with data: {str(e)}", cause=e)
 
     def _apply_remove_collection(self, contents: Dict) -> Dict:
         """

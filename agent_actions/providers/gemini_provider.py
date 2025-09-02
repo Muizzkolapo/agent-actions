@@ -277,7 +277,8 @@ class GeminiBatchProvider(BatchProvider):
             return batch_job.name
             
         except Exception as e:
-            raise RuntimeError(f"Error submitting Gemini batch job: {e}")
+            from agent_actions.core.exceptions import GeminiError
+            raise GeminiError("batch_submission", cause=e)
     
     def check_status(self, batch_id: str) -> str:
         """Check Gemini batch job status."""
@@ -297,7 +298,8 @@ class GeminiBatchProvider(BatchProvider):
             return status_mapping.get(gemini_status, gemini_status.lower())
             
         except Exception as e:
-            raise RuntimeError(f"Error checking Gemini batch status: {e}")
+            from agent_actions.core.exceptions import GeminiError
+            raise GeminiError("batch_status", cause=e)
     
     def retrieve_results(self, 
                         batch_id: str, 
@@ -339,7 +341,8 @@ class GeminiBatchProvider(BatchProvider):
                         print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
                         time.sleep(retry_delay)
                     else:
-                        raise RuntimeError(f"Failed to retrieve batch results after {max_retries} attempts: {last_error}")
+                        from agent_actions.core.exceptions import GeminiError
+                        raise GeminiError("batch_results", context={"max_retries": max_retries, "last_error": str(last_error)}, cause=last_error)
             
             # Save raw results if directory provided
             if output_directory:
@@ -375,7 +378,8 @@ class GeminiBatchProvider(BatchProvider):
             return batch_results
             
         except Exception as e:
-            raise RuntimeError(f"Error retrieving Gemini batch results: {e}")
+            from agent_actions.core.exceptions import GeminiError
+            raise GeminiError("batch_results", cause=e)
     
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """

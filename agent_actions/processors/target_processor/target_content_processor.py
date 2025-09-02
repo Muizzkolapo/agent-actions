@@ -108,7 +108,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return processed_data
             
         except Exception as e:
-            raise RuntimeError(f"Failed to process content: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process content: {str(e)}", cause=e)
 
     def process(self, data: List[Dict], file_path: str, output_directory: str = None) -> List[Dict]:
         """
@@ -155,7 +156,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
             return processed_data
         except Exception as e:
-            raise RuntimeError(f"Failed to process content: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process content: {str(e)}", cause=e)
 
     def process_for_side_output(
         self, 
@@ -205,7 +207,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             # Separate main and side outputs
             return self.data_processor.separate_side_output(all_processed_items)
         except Exception as e:
-            raise RuntimeError(f"Failed to process for side output: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process for side output: {str(e)}", cause=e)
 
     def process_file_level(self, data: List[Dict], output_directory: str = None) -> List[Dict]:
         """
@@ -253,7 +256,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             
             return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
-            raise RuntimeError(f"Failed to process at file level: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(f"Failed to process at file level: {str(e)}", cause=e)
 
     async def _load_source_data_async(self, file_path: str) -> List[Dict]:
         """
@@ -439,7 +443,8 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             if passthrough_on_error:
                 return data  # Return original data
             else:
-                raise RuntimeError(f"WHERE clause filtering failed: {str(e)}")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(f"WHERE clause filtering failed: {str(e)}", cause=e)
     
     def _process_single_item(
         self, 

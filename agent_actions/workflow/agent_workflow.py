@@ -90,7 +90,8 @@ class AgentWorkflow:
         self.console.print("\n🎉 [bold green][async] Workflow Complete[/bold green]")
         self.console.print("Done.")
         if exceptions:
-            raise Exception(f"Some agents failed: {exceptions}")
+            from agent_actions.core.exceptions import WorkflowError
+            raise WorkflowError("parallel_execution", f"Some agents failed: {exceptions}")
 
     # (rest of class unchanged)
 
@@ -287,7 +288,8 @@ class AgentWorkflow:
             # Use the new combined processing method
             processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
             if not processed_files:
-                raise RuntimeError("No batch results were successfully processed")
+                from agent_actions.core.exceptions import ProcessingError
+                raise ProcessingError("No batch results were successfully processed")
         except Exception as e:
             self.console.print(f"[red]Error: Could not process batch results: {e}[/red]")
             raise  # Re-raise to stop the workflow instead of continuing with bad data

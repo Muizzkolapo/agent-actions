@@ -14,7 +14,7 @@ from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
 
-from agent_actions.processors.exceptions import ProcessorError
+from agent_actions.core.exceptions import ProcessingError as ProcessorError
 
 T = TypeVar('T', bound=ProcessorError)
 
@@ -131,7 +131,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             ValidationError with appropriate message
         """
-        from agent_actions.processors.exceptions import ValidationError
+        from agent_actions.core.exceptions import ValidationError
         
         self.handle_processing_error(
             error,
@@ -161,7 +161,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             FileLoadError or FileWriteError depending on operation
         """
-        from agent_actions.processors.exceptions import FileLoadError, FileWriteError
+        from agent_actions.core.exceptions import FileLoadError, FileWriteError
         
         if operation.lower() in ['read', 'load', 'open']:
             error_type = FileLoadError
@@ -198,7 +198,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             TransformationError with appropriate message
         """
-        from agent_actions.processors.exceptions import TransformationError
+        from agent_actions.core.exceptions import TransformationError
         
         self.handle_processing_error(
             error,

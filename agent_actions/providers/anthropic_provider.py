@@ -64,9 +64,11 @@ class AnthropicBatchProvider(BatchProvider):
                 "anthropic package not installed. Install with: pip install anthropic"
             ) from e
         except Exception as e:
-            raise RuntimeError(
-                f"Failed to initialize Anthropic client: {str(e)}. "
-                "Make sure your ANTHROPIC_API_KEY environment variable is set or pass api_key parameter."
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "anthropic_client",
+                f"Failed to initialize: {str(e)}. Make sure your ANTHROPIC_API_KEY environment variable is set or pass api_key parameter.",
+                cause=e
             ) from e
         
     def format_task_for_provider(self, 
@@ -410,15 +412,18 @@ class AnthropicBatchProvider(BatchProvider):
         except self.anthropic.APIError as e:
             error_msg = f"Anthropic API error during batch submission: {str(e)}"
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
         except self.anthropic.AuthenticationError as e:
             error_msg = f"Anthropic authentication failed: {str(e)}. Check your API key."
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
         except Exception as e:
             error_msg = f"Failed to submit batch to Anthropic: {str(e)}"
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
     
     def check_status(self, batch_id: str) -> str:
         """
@@ -448,11 +453,14 @@ class AnthropicBatchProvider(BatchProvider):
             return status_mapping.get(anthropic_status, anthropic_status)
             
         except self.anthropic.APIError as e:
-            raise RuntimeError(f"Anthropic API error checking batch status: {str(e)}")
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_status", status_code=getattr(e, 'status_code', None), cause=e)
         except self.anthropic.AuthenticationError as e:
-            raise RuntimeError(f"Anthropic authentication failed: {str(e)}. Check your API key.")
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("authentication", context={"auth_error": str(e)}, cause=e)
         except Exception as e:
-            raise RuntimeError(f"Failed to check Anthropic batch status: {str(e)}")
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_status", cause=e)
     
     def retrieve_results(self, 
                         batch_id: str, 
@@ -513,15 +521,18 @@ class AnthropicBatchProvider(BatchProvider):
         except self.anthropic.APIError as e:
             error_msg = f"Anthropic API error retrieving batch results: {str(e)}"
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
         except self.anthropic.AuthenticationError as e:
             error_msg = f"Anthropic authentication failed: {str(e)}. Check your API key."
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
         except Exception as e:
             error_msg = f"Failed to retrieve Anthropic batch results: {str(e)}"
             print(f"❌ {error_msg}")
-            raise RuntimeError(error_msg)
+            from agent_actions.core.exceptions import AnthropicError
+            raise AnthropicError("batch_submission", cause=e)
     
     def _create_json_tool_from_schema(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
