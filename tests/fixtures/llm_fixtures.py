@@ -220,22 +220,22 @@ def interceptor_test_configs():
     return {
         "validation": {
             "word_count_10": {
-                "validator": "word_count",
+                "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
                 "validator_args": {"expected": 10},
                 "on_failure": "retry"
             },
             "char_count_range": {
-                "validator": "char_count",
+                "validator_function": "agent_actions.validators.builtin_functions.char_count_validator",
                 "validator_args": {"min_chars": 50, "max_chars": 200},
                 "on_failure": "retry"
             },
             "keywords_required": {
-                "validator": "contains_keywords",
+                "validator_function": "agent_actions.validators.builtin_functions.keywords_validator",
                 "validator_args": {"required_keywords": ["python", "testing", "code"]},
                 "on_failure": "retry"
             },
             "fail_on_error": {
-                "validator": "word_count",
+                "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
                 "validator_args": {"expected": 10},
                 "on_failure": "fail"
             }
@@ -298,5 +298,5 @@ def setup_mock_validator(name: str, behavior: str = "always_pass") -> Mock:
             (True, None)
         ]
     
-    with patch.object(ValidatorRegistry, 'get', return_value=mock):
-        yield mock
+    # Return mock validator for direct use in tests
+    yield mock

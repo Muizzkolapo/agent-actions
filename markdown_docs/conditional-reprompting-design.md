@@ -158,7 +158,7 @@ class InterceptorChain:
 ```python
 from typing import Callable, Tuple
 from .base import ResponseInterceptor, InterceptorResult
-from ..validators.registry import ValidatorRegistry
+import importlib
 
 class ValidationInterceptor(ResponseInterceptor):
     """Interceptor that validates responses against configured criteria"""
@@ -171,14 +171,16 @@ class ValidationInterceptor(ResponseInterceptor):
     
     def configure(self, config: Dict) -> None:
         """Configure validation from agent config"""
-        self.validator_name = config.get("validator")
+        self.validator_name = config.get("validator_function")
         self.validator_args = config.get("validator_args", {})
         self.on_failure = config.get("on_failure", "retry")
         
-        # Load validator function
-        self.validator_func = ValidatorRegistry.get(self.validator_name)
+        # Load validator function by module path
+        module_path, function_name = self.validator_name.rsplit('.', 1)
+        module = importlib.import_module(module_path)
+        self.validator_func = getattr(module, function_name)
         if not self.validator_func:
-            raise ValueError(f"Unknown validator: {self.validator_name}")
+            raise ValueError(f"Unknown validator function: {self.validator_name}")
     
     def intercept(self, response: Any, context: Dict) -> InterceptorResult:
         """Validate response and determine action"""
@@ -225,44 +227,21 @@ class ValidationInterceptor(ResponseInterceptor):
         return str(response)
 ```
 
-**File: `agent_actions/validators/registry.py`**
+**File: `agent_actions/validators/builtin_functions.py`**
 
 ```python
-from typing import Callable, Dict, Tuple
+from typing import List, Tuple
 
-class ValidatorRegistry:
-    """Registry for validation functions"""
-    _validators: Dict[str, Callable] = {}
-    
-    @classmethod
-    def register(cls, name: str):
-        """Decorator to register a validator function"""
-        def decorator(func: Callable) -> Callable:
-            cls._validators[name] = func
-            return func
-        return decorator
-    
-    @classmethod
-    def get(cls, name: str) -> Callable:
-        """Get a validator by name"""
-        return cls._validators.get(name)
-    
-    @classmethod
-    def list_validators(cls) -> List[str]:
-        """List all registered validators"""
-        return list(cls._validators.keys())
-
-# Built-in validators
-@ValidatorRegistry.register("word_count")
-def validate_word_count(content: str, expected: int = 5) -> Tuple[bool, str]:
+def word_count_validator(content: str, expected: int = 5) -> Tuple[bool, str | None]:
     """Validate that content has exactly the expected number of words"""
     word_count = len(content.split())
     if word_count == expected:
         return True, None
     return False, f"Expected {expected} words, got {word_count}"
 
-@ValidatorRegistry.register("char_count")
-def validate_char_count(content: str, min_chars: int = 0, max_chars: int = None) -> Tuple[bool, str]:
+def char_count_validator(
+    content: str, *, min_chars: int = 0, max_chars: int | None = None
+) -> Tuple[bool, str | None]:
     """Validate character count is within range"""
     char_count = len(content)
     if char_count < min_chars:
@@ -271,8 +250,7 @@ def validate_char_count(content: str, min_chars: int = 0, max_chars: int = None)
         return False, f"Too long: {char_count} chars, maximum {max_chars}"
     return True, None
 
-@ValidatorRegistry.register("contains_keywords")
-def validate_keywords(content: str, required_keywords: List[str]) -> Tuple[bool, str]:
+def keywords_validator(content: str, required_keywords: List[str]) -> Tuple[bool, str | None]:
     """Validate that content contains all required keywords"""
     content_lower = content.lower()
     missing = [kw for kw in required_keywords if kw.lower() not in content_lower]
@@ -280,6 +258,8 @@ def validate_keywords(content: str, required_keywords: List[str]) -> Tuple[bool,
         return False, f"Missing required keywords: {', '.join(missing)}"
     return True, None
 ```
+
+Note: Validator functions are now referenced by their full module path instead of using a registry system. This provides better IDE support, type checking, and makes the system more explicit.
 
 #### 3. Reprompting System
 
@@ -599,7 +579,7 @@ agents:
     interceptors:
       - type: validation
         config:
-          validator: "word_count"
+          validator_function: "agent_actions.validators.builtin_functions.word_count_validator"
           validator_args:
             expected: 5
           on_failure: retry
@@ -625,7 +605,7 @@ agents:
     interceptors:
       - type: validation
         config:
-          validator: "char_count"
+          validator_function: "agent_actions.validators.builtin_functions.char_count_validator"
           validator_args:
             min_chars: 100
             max_chars: 200
@@ -633,7 +613,7 @@ agents:
           
       - type: validation
         config:
-          validator: "contains_keywords"
+          validator_function: "agent_actions.validators.builtin_functions.keywords_validator"
           validator_args:
             required_keywords: ["features", "benefits", "price"]
           on_failure: retry
@@ -659,11 +639,10 @@ agents:
 ### Custom Validator Example
 
 ```python
-# In user's tools directory
-from agent_actions.validators.registry import ValidatorRegistry
+# In user's tools directory - my_validators.py
+from typing import Tuple
 
-@ValidatorRegistry.register("json_format")
-def validate_json_format(content: str) -> Tuple[bool, str]:
+def validate_json_format(content: str) -> Tuple[bool, str | None]:
     """Validate that content is valid JSON"""
     import json
     try:
@@ -672,8 +651,7 @@ def validate_json_format(content: str) -> Tuple[bool, str]:
     except json.JSONDecodeError as e:
         return False, f"Invalid JSON: {str(e)}"
 
-@ValidatorRegistry.register("sentiment")
-def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tuple[bool, str]:
+def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tuple[bool, str | None]:
     """Validate content sentiment (would use sentiment analysis library)"""
     # Simplified example
     positive_words = ["great", "excellent", "amazing", "wonderful"]
@@ -691,6 +669,9 @@ def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tu
         return False, "Content should have negative sentiment"
     
     return True, None
+
+# Use in YAML configuration:
+# validator_function: "my_validators.validate_json_format"
 ```
 
 ## Implementation Phases

@@ -10,11 +10,11 @@ Comprehensive test suite for the conditional reprompting feature with **100% cod
 
 #### ValidationInterceptor (`test_validation_interceptor.py`) - 20 tests
 - ✅ Initialization and configuration
-- ✅ Integration with ValidatorRegistry  
+- ✅ Integration with validator functions
 - ✅ Success/failure handling (retry, fail, continue modes)
 - ✅ Content extraction from various response formats
 - ✅ Edge cases (empty responses, None values)
-- ✅ Full validation flow with built-in validators
+- ✅ Full validation flow with built-in validator functions
 
 #### RepromptInterceptor (`test_reprompt_interceptor.py`) - 18 tests
 - ✅ Strategy configuration (LLM and template)
@@ -24,12 +24,12 @@ Comprehensive test suite for the conditional reprompting feature with **100% cod
 - ✅ Integration with reprompt strategies
 - ✅ Error handling for unconfigured strategies
 
-#### ValidatorRegistry (`test_validator_registry.py`) - 27 tests
-- ✅ Validator registration and retrieval
-- ✅ Built-in validators: word_count, char_count, contains_keywords
+#### Built-in Validator Functions (`test_builtin_functions.py`) - 27 tests
+- ✅ Function-based validator implementations
+- ✅ Built-in validators: word_count_validator, char_count_validator, keywords_validator
 - ✅ Edge cases and boundary conditions
-- ✅ Custom validator integration
-- ✅ Thread safety and isolation
+- ✅ Custom validator function integration
+- ✅ Direct function call testing
 
 #### RepromptStrategies (`test_reprompt_strategies.py`) - 15 tests
 - ✅ RepromptContext dataclass
@@ -83,7 +83,7 @@ agent_actions/interceptors/validation_interceptor.py      39      0   100%
 agent_actions/strategies/__init__.py                       0      0   100%
 agent_actions/strategies/reprompt_strategy.py             30      0   100%
 agent_actions/validators/__init__.py                       0      0   100%
-agent_actions/validators/registry.py                      38      0   100%
+agent_actions/validators/builtin_functions.py             38      0   100%
 --------------------------------------------------------------------------
 TOTAL                                                    191      0   100%
 ```
@@ -125,7 +125,7 @@ TOTAL                                                    191      0   100%
 # Run all tests with coverage
 python -m pytest tests/unit/test_validation_interceptor.py \
                  tests/unit/test_reprompt_interceptor.py \
-                 tests/unit/test_validator_registry.py \
+                 tests/unit/test_builtin_functions.py \
                  tests/unit/test_reprompt_strategies.py \
                  tests/unit/test_interceptor_base.py \
                  tests/unit/test_interceptor_factory.py \

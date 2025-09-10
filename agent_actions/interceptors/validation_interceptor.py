@@ -5,19 +5,19 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .base import InterceptorResult, ResponseInterceptor
-from ..validators.registry import ValidatorRegistry
+from ..core.tooling import load_user_defined_function, _split_udf_name
 from ..artifacts import context as artifact_context
 from ..artifacts.base import SecurityError
+from ..cli.exceptions import AgentActionsError, ConfigurationError
 
 
 class ValidationInterceptor(ResponseInterceptor):
     """Interceptor that validates responses against configured criteria."""
 
     def __init__(self) -> None:
-        self.validator_name: str | None = None
+        self.validator_function: str | None = None
         self.validator_args: Dict[str, Any] = {}
         self.on_failure: str = "retry"
-        self.validator_func = None
         self.prompt_debug: bool = False
 
     def configure(self, config: Dict) -> None:
@@ -26,23 +26,18 @@ class ValidationInterceptor(ResponseInterceptor):
         if self.prompt_debug:
             print(f"🔧 VALIDATION INTERCEPTOR CONFIGURE:")
             print(f"   Config received: {config}")
-            print(f"   Available validators: {ValidatorRegistry.list_validators()}")
         
-        self.validator_name = config.get("validator")
+        self.validator_function = config.get("validator_function")
         self.validator_args = config.get("validator_args", {})
         self.on_failure = config.get("on_failure", "retry")
 
         if self.prompt_debug:
-            print(f"   Parsed validator_name: {self.validator_name}")
+            print(f"   Parsed validator_function: {self.validator_function}")
             print(f"   Parsed validator_args: {self.validator_args}")
             print(f"   Parsed on_failure: {self.on_failure}")
-
-        self.validator_func = ValidatorRegistry.get(self.validator_name)
-        if self.prompt_debug:
-            print(f"   Retrieved validator_func: {self.validator_func}")
         
-        if not self.validator_func:
-            raise ValueError(f"Unknown validator: {self.validator_name}")
+        if not self.validator_function:
+            raise ValueError("validator_function is required")
 
     def intercept(self, response: Any, context: Dict) -> InterceptorResult:
         if self.prompt_debug:
@@ -50,24 +45,35 @@ class ValidationInterceptor(ResponseInterceptor):
             print(f"   Response type: {type(response)}")
             print(f"   Context attempt: {context.get('attempt', 'unknown')}")
         
-        if not self.validator_func:
+        if not self.validator_function:
             if self.prompt_debug:
                 print(f"   ⚠️ No validator function - continuing")
             return InterceptorResult(continue_processing=True)
 
-        content = self._extract_content(response)
         if self.prompt_debug:
             print(f"   Raw response: {response}")
-            print(f"   Extracted content: '{content[:100]}...' (first 100 chars)")
-            print(f"   Full content: '{content}'")
-            print(f"   Running validator '{self.validator_name}' with args: {self.validator_args}")
+            print(f"   Running validator function '{self.validator_function}' with args: {self.validator_args}")
         
-        success, error_message = self.validator_func(content, **self.validator_args)
+        try:
+            # Load and call the validator function directly using the tool loading system
+            # The validator function expects (response: Any, **kwargs) -> Tuple[bool, str | None]
+            module_name, func_name = _split_udf_name(self.validator_function)
+            validator_func = load_user_defined_function(module_name, func_name)
+            
+            # Merge validator args with context data so validator can access target_word_counts
+            merged_kwargs = {**self.validator_args, **context}
+            success, error_message = validator_func(response, **merged_kwargs)
+        except (ConfigurationError, AgentActionsError) as e:
+            if self.prompt_debug:
+                print(f"   ❌ Error loading/executing validator function: {e}")
+            # Treat as validation failure
+            success, error_message = False, f"Validator function error: {str(e)}"
+        
         if self.prompt_debug:
             print(f"   Validation result: success={success}, error='{error_message}'")
         
         # ARTIFACT SYSTEM INTEGRATION: Record validation attempt
-        self._record_validation_attempt(context, success, error_message, content)
+        self._record_validation_attempt(context, success, error_message, str(response)[:500])
 
         if success:
             if self.prompt_debug:
@@ -81,7 +87,7 @@ class ValidationInterceptor(ResponseInterceptor):
                 continue_processing=False,
                 retry_context={
                     "validation_error": error_message,
-                    "validator_name": self.validator_name,
+                    "validator_function": self.validator_function,
                     "validator_args": self.validator_args,
                     "failed_response": response,
                     # Don't increment attempt here - let reprompt interceptor handle it
@@ -124,7 +130,7 @@ class ValidationInterceptor(ResponseInterceptor):
             
             artifact_manager.record_validation_attempt(
                 agent_id=agent_name,
-                validator_type=self.validator_name or "unknown_validator",
+                validator_type=self.validator_function or "unknown_validator",
                 attempt=attempt,
                 status=status,
                 error=error_message if not success else None,
@@ -132,7 +138,7 @@ class ValidationInterceptor(ResponseInterceptor):
             )
             
             if self.prompt_debug:
-                print(f"   📊 Recorded validation attempt: {agent_name} -> {self.validator_name} -> {status}")
+                print(f"   📊 Recorded validation attempt: {agent_name} -> {self.validator_function} -> {status}")
                 
         except SecurityError as e:
             if self.prompt_debug:

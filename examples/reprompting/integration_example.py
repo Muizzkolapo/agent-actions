@@ -8,7 +8,23 @@ into an existing agent-actions project.
 
 import yaml
 from agent_actions.models.agent_builder import create_dynamic_agent
-from agent_actions.validators.registry import ValidatorRegistry
+# Validator functions are now used directly without registry
+
+
+def validate_blog_quality(content: str, min_paragraphs: int = 3) -> tuple[bool, str | None]:
+    """Validate blog post quality requirements."""
+    paragraphs = content.split('\n\n')
+    actual_paragraphs = len([p for p in paragraphs if p.strip()])
+    
+    if actual_paragraphs < min_paragraphs:
+        return False, f"Blog post needs at least {min_paragraphs} paragraphs, got {actual_paragraphs}"
+    
+    # Check for title (first line should be title-like)
+    first_line = content.split('\n')[0].strip()
+    if len(first_line) < 10 or not any(char.isupper() for char in first_line):
+        return False, "Blog post should start with a clear title"
+    
+    return True, None
 
 
 def example_blog_post_generator():
@@ -26,7 +42,7 @@ def example_blog_post_generator():
             {
                 "type": "validation",
                 "config": {
-                    "validator": "char_count",
+                    "validator_function": "agent_actions.validators.builtin_functions.char_count_validator",
                     "validator_args": {
                         "min_chars": 500,
                         "max_chars": 1500
@@ -37,7 +53,7 @@ def example_blog_post_generator():
             {
                 "type": "validation", 
                 "config": {
-                    "validator": "contains_keywords",
+                    "validator_function": "agent_actions.validators.builtin_functions.keywords_validator",
                     "validator_args": {
                         "required_keywords": ["sustainability", "technology", "environment"]
                     },
@@ -81,22 +97,7 @@ def example_blog_post_generator():
 def example_with_custom_validator():
     """Example: Using a custom validator for specific business rules."""
     
-    # Register a custom validator
-    @ValidatorRegistry.register("blog_quality")
-    def validate_blog_quality(content: str, min_paragraphs: int = 3) -> tuple[bool, str | None]:
-        """Validate blog post quality requirements."""
-        paragraphs = content.split('\n\n')
-        actual_paragraphs = len([p for p in paragraphs if p.strip()])
-        
-        if actual_paragraphs < min_paragraphs:
-            return False, f"Blog post needs at least {min_paragraphs} paragraphs, got {actual_paragraphs}"
-        
-        # Check for title (first line should be title-like)
-        first_line = content.split('\n')[0].strip()
-        if len(first_line) < 10 or not any(char.isupper() for char in first_line):
-            return False, "Blog post should start with a clear title"
-        
-        return True, None
+    # Use the custom validator function defined at module level
     
     # Use the custom validator
     agent_config = {
@@ -109,7 +110,7 @@ def example_with_custom_validator():
             {
                 "type": "validation",
                 "config": {
-                    "validator": "blog_quality",
+                    "validator_function": "examples.reprompting.integration_example.validate_blog_quality",
                     "validator_args": {
                         "min_paragraphs": 4
                     },
@@ -168,14 +169,14 @@ def load_config_from_yaml():
         interceptors:
           - type: validation
             config:
-              validator: "word_count"
+              validator_function: "agent_actions.validators.builtin_functions.word_count_validator"
               validator_args:
                 expected: 100
               on_failure: retry
               
           - type: validation
             config:
-              validator: "contains_keywords"
+              validator_function: "agent_actions.validators.builtin_functions.keywords_validator"
               validator_args:
                 required_keywords: ["pros", "cons", "rating"]
               on_failure: retry

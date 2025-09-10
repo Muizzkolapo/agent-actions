@@ -39,7 +39,7 @@ agents:
       # Validation interceptors
       - type: validation
         config:
-          validator: "validator_name"
+          validator_function: "module.function_name"
           validator_args:
             param1: value1
             param2: value2
@@ -87,15 +87,37 @@ Uses predefined templates matched to error patterns:
 4. **Template Patterns**: Use specific error message patterns in templates
 5. **Test Thoroughly**: Validate your validation logic with edge cases
 
-## Custom Validator Guidelines
+## Validator Functions
 
-When creating custom validators:
+The system supports two types of validator functions:
+
+### Built-in Validators
+Use the pre-built validators for common validation needs:
+
+```yaml
+# Word count validation
+validator_function: "agent_actions.validators.builtin_functions.word_count_validator"
+validator_args:
+  expected: 5
+
+# Character count validation
+validator_function: "agent_actions.validators.builtin_functions.char_count_validator"
+validator_args:
+  min_chars: 100
+  max_chars: 300
+
+# Keywords validation
+validator_function: "agent_actions.validators.builtin_functions.keywords_validator"
+validator_args:
+  required_keywords: ["features", "benefits", "price"]
+```
+
+### Custom Validators
+Create your own validator functions:
 
 ```python
-from agent_actions.validators.registry import ValidatorRegistry
 from typing import Tuple
 
-@ValidatorRegistry.register("your_validator_name")
 def your_validator(content: str, **kwargs) -> Tuple[bool, str | None]:
     \"\"\"
     Your validator description.
@@ -114,6 +136,13 @@ def your_validator(content: str, **kwargs) -> Tuple[bool, str | None]:
         return False, "Descriptive error message"
 ```
 
+Then reference it in your YAML configuration:
+```yaml
+validator_function: "your_module.your_validator"
+validator_args:
+  your_param: your_value
+```
+
 ## Integration with Existing Workflows
 
 The interceptor system is backward compatible. Agents without interceptors work exactly as before. Add interceptors gradually to existing configurations.
@@ -123,4 +152,13 @@ The interceptor system is backward compatible. Agents without interceptors work 
 - **Caching**: Successful prompts for similar validation criteria could be cached (future feature)
 - **Early Exit**: Set reasonable max attempts to avoid excessive retries
 - **Template Strategy**: Generally faster than LLM strategy for known patterns
-- **Validation Order**: Put cheaper validations before expensive ones
+- **Validation Order**: Put cheaper validations before expensive ones# 🔍 TRACING REMINDER
+
+## For Future Optimization Work:
+When working on artifacts optimization, CHECK:
+1. Are spans instrumented? 
+2. Are artifacts captured in traces?
+3. Is trace correlation maintained?
+
+See TRACING_REQUIREMENTS.md for details.
+

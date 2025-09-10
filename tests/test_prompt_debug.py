@@ -15,7 +15,6 @@ from agent_actions.strategies.reprompt_strategy import (
     RepromptContext,
     TemplateRepromptStrategy,
 )
-from agent_actions.validators.registry import ValidatorRegistry
 
 
 class TestPromptDebugValidationInterceptor:
@@ -25,15 +24,9 @@ class TestPromptDebugValidationInterceptor:
         """Test that no debug output is printed when prompt_debug is False."""
         interceptor = ValidationInterceptor()
         
-        # Mock validator
-        def mock_validator(content, expected):
-            return False, f"Expected {expected} words"
-        
-        ValidatorRegistry._validators["test_validator"] = mock_validator
-        
         config = {
             "prompt_debug": False,
-            "validator": "test_validator",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 3},
             "on_failure": "retry"
         }
@@ -59,15 +52,9 @@ class TestPromptDebugValidationInterceptor:
         """Test that debug output is printed when prompt_debug is True."""
         interceptor = ValidationInterceptor()
         
-        # Mock validator
-        def mock_validator(content, expected):
-            return False, f"Expected {expected} words"
-        
-        ValidatorRegistry._validators["test_validator"] = mock_validator
-        
         config = {
             "prompt_debug": True,
-            "validator": "test_validator",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 3},
             "on_failure": "retry"
         }
@@ -91,16 +78,10 @@ class TestPromptDebugValidationInterceptor:
         """Test debug output when validation passes."""
         interceptor = ValidationInterceptor()
         
-        # Mock validator that succeeds
-        def mock_validator(content, expected):
-            return True, None
-        
-        ValidatorRegistry._validators["success_validator"] = mock_validator
-        
         config = {
             "prompt_debug": True,
-            "validator": "success_validator",
-            "validator_args": {"expected": 3}
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
+            "validator_args": {"expected": 2}  # "test response" has 2 words
         }
         
         f = io.StringIO()
@@ -340,13 +321,11 @@ class TestPromptDebugIntegration:
             {
                 "type": "validation",
                 "prompt_debug": True,
-                "validator": "word_count",
+                "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
                 "validator_args": {"expected": 3}
             }
         ]
         
-        # Mock the validator
-        ValidatorRegistry._validators["word_count"] = lambda c, e: (False, "Error")
         
         chain = InterceptorFactory.build_chain(configs)
         

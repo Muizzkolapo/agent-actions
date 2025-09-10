@@ -1,14 +1,13 @@
 """
 Unit tests for ValidationInterceptor.
 
-Tests validation logic, error handling, and integration with ValidatorRegistry.
+Tests validation logic, error handling, and integration with validator functions.
 """
 
 import pytest
 from unittest.mock import Mock, patch
 from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
 from agent_actions.interceptors.base import InterceptorResult
-from agent_actions.validators.registry import ValidatorRegistry
 
 
 class TestValidationInterceptor:
@@ -28,90 +27,84 @@ class TestValidationInterceptor:
 
     def test_init(self, interceptor):
         """Test interceptor initialization."""
-        assert interceptor.validator_name is None
+        assert interceptor.validator_function is None
         assert interceptor.validator_args == {}
         assert interceptor.on_failure == "retry"
-        assert interceptor.validator_func is None
 
-    def test_configure_with_valid_validator(self, interceptor, mock_validator):
-        """Test configuration with a valid validator."""
-        with patch.object(ValidatorRegistry, 'get', return_value=mock_validator):
-            config = {
-                "validator": "word_count",
-                "validator_args": {"expected": 10},
-                "on_failure": "fail"
-            }
+    def test_configure_with_valid_validator_function(self, interceptor):
+        """Test configuration with a valid validator function."""
+        config = {
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
+            "validator_args": {"expected": 10},
+            "on_failure": "fail"
+        }
+        interceptor.configure(config)
+        
+        assert interceptor.validator_function == "agent_actions.validators.builtin_functions.word_count_validator"
+        assert interceptor.validator_args == {"expected": 10}
+        assert interceptor.on_failure == "fail"
+
+    def test_configure_with_missing_validator_function(self, interceptor):
+        """Test configuration with missing validator function."""
+        config = {"validator_args": {"expected": 10}}
+        
+        with pytest.raises(ValueError, match="validator_function is required"):
             interceptor.configure(config)
-            
-            assert interceptor.validator_name == "word_count"
-            assert interceptor.validator_args == {"expected": 10}
-            assert interceptor.on_failure == "fail"
-            assert interceptor.validator_func == mock_validator
 
-    def test_configure_with_invalid_validator(self, interceptor):
-        """Test configuration with an invalid validator."""
-        with patch.object(ValidatorRegistry, 'get', return_value=None):
-            config = {"validator": "non_existent"}
-            
-            with pytest.raises(ValueError, match="Unknown validator: non_existent"):
-                interceptor.configure(config)
-
-    def test_intercept_without_validator(self, interceptor):
-        """Test intercept when no validator is configured."""
+    def test_intercept_without_validator_function(self, interceptor):
+        """Test intercept when no validator function is configured."""
         result = interceptor.intercept("test response", {})
         
         assert result.continue_processing is True
         assert result.retry_context is None
 
-    def test_intercept_validation_success(self, interceptor, mock_validator):
+    def test_intercept_validation_success(self, interceptor):
         """Test intercept when validation passes."""
-        mock_validator.return_value = (True, None)
-        interceptor.validator_func = mock_validator
+        # Use the real word_count_validator
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.word_count_validator"
+        interceptor.validator_args = {"expected": 2}
         
         result = interceptor.intercept("test response", {})
         
         assert result.continue_processing is True
         assert result.retry_context is None
-        mock_validator.assert_called_once_with("test response")
 
-    def test_intercept_validation_failure_retry(self, interceptor, mock_validator):
+    def test_intercept_validation_failure_retry(self, interceptor):
         """Test intercept when validation fails with retry action."""
-        mock_validator.return_value = (False, "Validation failed")
-        interceptor.validator_func = mock_validator
+        # Use the real word_count_validator with impossible expectation
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.word_count_validator"
+        interceptor.validator_args = {"expected": 10}
         interceptor.on_failure = "retry"
-        interceptor.validator_name = "test_validator"
-        interceptor.validator_args = {"arg": "value"}
         
-        response = {"content": "test response"}
+        response = {"content": "test response"}  # 2 words, expects 10
         result = interceptor.intercept(response, {})
         
         assert result.continue_processing is False
-        assert result.retry_context == {
-            "validation_error": "Validation failed",
-            "validator_name": "test_validator",
-            "validator_args": {"arg": "value"},
-            "failed_response": response
-        }
+        assert result.retry_context is not None
+        assert "Expected 10 words, got 2" in result.retry_context["validation_error"]
+        assert result.retry_context["validator_function"] == "agent_actions.validators.builtin_functions.word_count_validator"
+        assert result.retry_context["validator_args"] == {"expected": 10}
+        assert result.retry_context["failed_response"] == response
 
-    def test_intercept_validation_failure_fail(self, interceptor, mock_validator):
+    def test_intercept_validation_failure_fail(self, interceptor):
         """Test intercept when validation fails with fail action."""
-        mock_validator.return_value = (False, "Validation failed")
-        interceptor.validator_func = mock_validator
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.word_count_validator"
+        interceptor.validator_args = {"expected": 10}
         interceptor.on_failure = "fail"
         
-        with pytest.raises(ValueError, match="Validation failed: Validation failed"):
+        with pytest.raises(ValueError, match="Validation failed: Expected 10 words, got 2"):
             interceptor.intercept("test response", {})
 
-    def test_intercept_validation_failure_continue(self, interceptor, mock_validator):
+    def test_intercept_validation_failure_continue(self, interceptor):
         """Test intercept when validation fails with continue action."""
-        mock_validator.return_value = (False, "Validation warning")
-        interceptor.validator_func = mock_validator
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.word_count_validator"
+        interceptor.validator_args = {"expected": 10}
         interceptor.on_failure = "continue"
         
         result = interceptor.intercept("test response", {})
         
         assert result.continue_processing is True
-        assert result.metadata == {"validation_warning": "Validation warning"}
+        assert "Expected 10 words, got 2" in result.metadata["validation_warning"]
 
     @pytest.mark.parametrize("response,expected_content", [
         # List with dict containing 'content'
@@ -139,14 +132,14 @@ class TestValidationInterceptor:
         assert content == expected_content
 
     def test_full_validation_flow_with_word_count(self, interceptor):
-        """Test full validation flow with the built-in word_count validator."""
+        """Test full validation flow with the built-in word_count validator function."""
         config = {
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 5},
             "on_failure": "retry"
         }
         
-        # Configure with real validator
+        # Configure with real validator function
         interceptor.configure(config)
         
         # Test success case
@@ -160,25 +153,40 @@ class TestValidationInterceptor:
         assert result.continue_processing is False
         assert "Expected 5 words, got 3" in result.retry_context["validation_error"]
 
-    def test_validator_with_kwargs(self, interceptor, mock_validator):
-        """Test that validator is called with configured arguments."""
-        mock_validator.return_value = (True, None)
-        interceptor.validator_func = mock_validator
-        interceptor.validator_args = {"min_length": 10, "max_length": 100}
+    def test_validator_function_with_kwargs(self, interceptor):
+        """Test that validator function is called with configured arguments."""
+        # Use char_count_validator which accepts min_chars and max_chars
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.char_count_validator"
+        interceptor.validator_args = {"min_chars": 5, "max_chars": 100}
         
-        interceptor.intercept("test", {})
+        result = interceptor.intercept("test content", {})
         
-        mock_validator.assert_called_once_with("test", min_length=10, max_length=100)
+        # This should pass because "test content" has 12 chars, within the 5-100 range
+        assert result.continue_processing is True
+        assert result.retry_context is None
 
-    def test_empty_response_handling(self, interceptor, mock_validator):
+    def test_empty_response_handling(self, interceptor):
         """Test handling of empty responses."""
-        mock_validator.return_value = (False, "Empty response")
-        interceptor.validator_func = mock_validator
+        interceptor.validator_function = "agent_actions.validators.builtin_functions.word_count_validator"
+        interceptor.validator_args = {"expected": 5}
+        interceptor.on_failure = "retry"
         
         # Empty dict
         result = interceptor.intercept({}, {})
-        mock_validator.assert_called_with("")
+        assert result.continue_processing is False
+        assert "Expected 5 words, got 0" in result.retry_context["validation_error"]
         
         # None values in dict
         result = interceptor.intercept({"content": None}, {})
-        mock_validator.assert_called_with("")
+        assert result.continue_processing is False
+        assert "Expected 5 words, got 0" in result.retry_context["validation_error"]
+
+    def test_invalid_function_handling(self, interceptor):
+        """Test handling of invalid validator function."""
+        interceptor.validator_function = "nonexistent.module.function"
+        interceptor.on_failure = "retry"
+        
+        result = interceptor.intercept("test content", {})
+        
+        assert result.continue_processing is False
+        assert "Validator function error" in result.retry_context["validation_error"]
