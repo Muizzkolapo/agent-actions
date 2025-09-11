@@ -48,6 +48,13 @@ class RunCommand:
         Raises:
             Various exceptions depending on the stage that fails
         """
+        # Import custom validators before workflow initialization
+        try:
+            from qanalabs.tools import validators
+            click.echo("Loaded qanalabs custom validators")
+        except ImportError:
+            pass  # qanalabs validators not available
+        
         click.echo(f"Starting agent run for: {self.args.agent}")
         
         try:

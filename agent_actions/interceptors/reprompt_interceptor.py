@@ -48,6 +48,8 @@ class RepromptInterceptor(ResponseInterceptor):
                 "include_previous_response": config.get("include_previous_response", True),
                 "prompt_debug": self.prompt_debug
             }
+            if "feedback_template" in config:
+                simple_config["feedback_template"] = config["feedback_template"]
             if self.prompt_debug:
                 print(f"   Simple config: {simple_config}")
             self.strategy = LLMRepromptStrategy(simple_config)
@@ -86,10 +88,19 @@ class RepromptInterceptor(ResponseInterceptor):
                 metadata={"max_attempts_reached": True},
             )
 
+        # Merge validator args with all context data for validation_criteria
+        validation_criteria = context.get("validator_args", {}).copy()
+        
+        # Pass through any context fields that might be needed for template variables
+        # This makes it workflow-agnostic (works for quiz gen, git review, etc.)
+        for key, value in context.items():
+            if key not in ["validator_args", "validation_error", "prompt", "original_prompt", "attempt", "agent_config", "history", "failed_response"]:
+                validation_criteria[key] = value
+        
         reprompt_context = RepromptContext(
             original_prompt=context.get("original_prompt", context.get("prompt")),
             validation_error=context["validation_error"],
-            validation_criteria=context.get("validator_args", {}),
+            validation_criteria=validation_criteria,
             attempt_number=attempt + 1,
             failed_response=context.get("failed_response"),
             agent_config=context.get("agent_config", {}),

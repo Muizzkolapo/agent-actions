@@ -9,7 +9,6 @@ from unittest.mock import Mock, patch, MagicMock
 from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
 from agent_actions.interceptors.reprompt_interceptor import RepromptInterceptor
 from agent_actions.interceptors.base import InterceptorChain
-from agent_actions.validators.registry import ValidatorRegistry
 from agent_actions.strategies.reprompt_strategy import TemplateRepromptStrategy
 
 
@@ -21,7 +20,7 @@ class TestRepromptingIntegration:
         """Create a configured validation interceptor."""
         interceptor = ValidationInterceptor()
         config = {
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "retry"
         }
@@ -126,17 +125,20 @@ class TestRepromptingIntegration:
 
     def test_custom_validator_integration(self):
         """Test integration with a custom validator."""
-        # Register a custom validator
-        @ValidatorRegistry.register("contains_python")
+        # Create a custom validator function for testing
         def validate_contains_python(content: str) -> tuple[bool, str | None]:
             if "python" in content.lower():
                 return True, None
             return False, "Response must mention Python"
         
+        # Monkey patch it for this test
+        import agent_actions.validators.builtin_functions as bf
+        bf.contains_python_validator = validate_contains_python
+        
         # Create interceptors with custom validator
         validation_interceptor = ValidationInterceptor()
         validation_interceptor.configure({
-            "validator": "contains_python",
+            "validator_function": "agent_actions.validators.builtin_functions.contains_python_validator",
             "on_failure": "retry"
         })
         
@@ -170,7 +172,7 @@ class TestRepromptingIntegration:
         # Create interceptors with LLM strategy
         validation_interceptor = ValidationInterceptor()
         validation_interceptor.configure({
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "retry"
         })
@@ -204,7 +206,7 @@ class TestRepromptingIntegration:
         """Test validation with multiple criteria using char_count validator."""
         validation_interceptor = ValidationInterceptor()
         validation_interceptor.configure({
-            "validator": "char_count",
+            "validator_function": "agent_actions.validators.builtin_functions.char_count_validator",
             "validator_args": {"min_chars": 50, "max_chars": 100},
             "on_failure": "retry"
         })
@@ -268,7 +270,7 @@ class TestRepromptingIntegration:
         """Test that errors in interceptors are properly propagated."""
         validation_interceptor = ValidationInterceptor()
         validation_interceptor.configure({
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "fail"  # Will raise exception
         })
@@ -290,7 +292,7 @@ class TestRepromptingIntegration:
         """Test that context is properly preserved across retry attempts."""
         validation_interceptor = ValidationInterceptor()
         validation_interceptor.configure({
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "retry"
         })

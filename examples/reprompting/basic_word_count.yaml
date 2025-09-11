@@ -13,7 +13,7 @@ agents:
       # Validation interceptor - checks if response meets criteria
       - type: validation
         config:
-          validator: "word_count"
+          validator_function: "agent_actions.validators.builtin_functions.word_count_validator"
           validator_args:
             expected: 5
           on_failure: retry  # Options: retry, fail, continue

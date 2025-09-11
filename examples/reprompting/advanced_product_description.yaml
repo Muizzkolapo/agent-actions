@@ -13,7 +13,7 @@ agents:
       # 1. Check character count is within range
       - type: validation
         config:
-          validator: "char_count"
+          validator_function: "agent_actions.validators.builtin_functions.char_count_validator"
           validator_args:
             min_chars: 100
             max_chars: 300
@@ -22,7 +22,7 @@ agents:
       # 2. Ensure required keywords are present
       - type: validation
         config:
-          validator: "contains_keywords"
+          validator_function: "agent_actions.validators.builtin_functions.keywords_validator"
           validator_args:
             required_keywords: ["features", "benefits", "price", "warranty"]
           on_failure: retry

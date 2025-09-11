@@ -34,11 +34,40 @@ class LLMRepromptStrategy(RepromptStrategy):
         self.llm_config = llm_config
         self.include_previous_response = llm_config.get("include_previous_response", True)
         self.prompt_debug = llm_config.get("prompt_debug", False)
+        self.feedback_template = llm_config.get("feedback_template", None)
         self.prompt_template = llm_config.get(
             "prompt_template", self._default_template()
         )
 
     def generate_improved_prompt(self, context: RepromptContext) -> str:
+        # Use custom feedback template with focused correction if provided
+        if self.feedback_template:
+            try:
+                template_vars = {
+                    "validation_errors": context.validation_error,
+                    "target_relationship": self._extract_target_relationship(context.validation_error),
+                    "correct_answer_words": context.validation_criteria.get("correct_answer_words", "unknown")
+                }
+                
+                feedback_section = self.feedback_template.format(**template_vars)
+                
+                # Research-based focused error correction approach
+                # Instead of appending to original prompt, create focused correction
+                improved_prompt = self._create_focused_correction_prompt(context, feedback_section)
+                
+                if self.prompt_debug:
+                    print(f"📝 FOCUSED CORRECTION PROMPT USED:")
+                    print(f"==" * 40)
+                    print(improved_prompt)
+                    print(f"==" * 40)
+                    
+                return improved_prompt
+                
+            except KeyError as e:
+                if self.prompt_debug:
+                    print(f"⚠️  Template variable missing: {e}")
+                # Fallback to simple construction
+        
         # Simple template-based construction - no LLM call needed
         base_prompt = (
             f"{context.original_prompt}\n\n"
@@ -57,6 +86,48 @@ class LLMRepromptStrategy(RepromptStrategy):
             print(f"=" * 80)
         
         return improved_prompt
+
+    def _extract_target_relationship(self, validation_error: str) -> str:
+        """Extract target relationship from validation error message."""
+        if "LONGER" in validation_error or "greater_than" in validation_error:
+            return "longer than"
+        elif "SHORTER" in validation_error or "lesser_than" in validation_error:
+            return "shorter than"
+        elif "SIMILAR" in validation_error or "equal_to" in validation_error:
+            return "similar length to"
+        else:
+            return "different from"
+    
+    def _create_focused_correction_prompt(self, context: RepromptContext, feedback_section: str) -> str:
+        """Create a focused correction prompt based on research best practices."""
+        
+        # Extract key context elements
+        correct_answer_words = context.validation_criteria.get("correct_answer_words", "unknown")
+        target_relationship = self._extract_target_relationship(context.validation_error)
+        
+        # Research shows 3 examples are optimal - create focused few-shot correction
+        focused_prompt = f"""TASK: Generate a distractor that is {target_relationship} the correct answer ({correct_answer_words} words).
+
+ERROR ANALYSIS:
+{feedback_section}
+
+CORRECTION EXAMPLES:
+INPUT: "Wrong answer" (2 words) - TOO SHORT for 8-word correct answer
+OUTPUT: "Wrong answer with additional explanatory context and detail" (9 words)
+
+INPUT: "Very detailed wrong answer with excessive explanatory content that goes on too long" (14 words) - TOO LONG for 8-word correct answer  
+OUTPUT: "Concise wrong answer explanation" (4 words)
+
+YOUR CURRENT ATTEMPT:
+{context.failed_response}
+
+GENERATE CORRECTED VERSION:
+- Maintain the incorrectness and plausibility
+- Adjust word count to be {target_relationship} {correct_answer_words} words
+- Keep the same technical accuracy level
+- Output only the corrected distractor, nothing else"""
+
+        return focused_prompt
 
     def _default_template(self) -> str:
         return (

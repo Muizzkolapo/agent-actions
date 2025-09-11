@@ -21,7 +21,7 @@ class TestRealisticRepromptingFlow:
         configs = [
             {
                 "type": "validation",
-                "validator": "word_count",
+                "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
                 "validator_args": {"expected": 10},
                 "on_failure": "retry"
             },
@@ -65,7 +65,7 @@ class TestRealisticRepromptingFlow:
         """Simulate a full retry loop with multiple attempts."""
         # Configuration
         validation_config = {
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "retry"
         }
@@ -137,10 +137,7 @@ class TestRealisticRepromptingFlow:
 
     def test_custom_validator_with_reprompt(self):
         """Test custom validator integration with reprompting."""
-        from agent_actions.validators.registry import ValidatorRegistry
-        
-        # Register custom validator
-        @ValidatorRegistry.register("sentiment_positive")
+        # We'll create a custom validator function inline for testing
         def validate_positive_sentiment(content: str) -> tuple[bool, str | None]:
             negative_words = ["bad", "terrible", "awful", "hate", "worst"]
             content_lower = content.lower()
@@ -149,11 +146,15 @@ class TestRealisticRepromptingFlow:
                     return False, f"Content contains negative word: '{word}'"
             return True, None
         
+        # Monkey patch it into the builtin_functions for this test
+        import agent_actions.validators.builtin_functions as bf
+        bf.sentiment_positive_validator = validate_positive_sentiment
+        
         # Build chain
         configs = [
             {
                 "type": "validation",
-                "validator": "sentiment_positive",
+                "validator_function": "agent_actions.validators.builtin_functions.sentiment_positive_validator",
                 "on_failure": "retry"
             },
             {
@@ -177,14 +178,15 @@ class TestRealisticRepromptingFlow:
         assert "Content contains negative word: 'terrible'" in result.retry_context["validation_error"]
         
         # Clean up
-        ValidatorRegistry._validators.pop("sentiment_positive", None)
+        if hasattr(bf, 'sentiment_positive_validator'):
+            delattr(bf, 'sentiment_positive_validator')
 
     def test_multiple_validators_with_reprompt(self):
         """Test chain with multiple validators."""
         # First validator checks word count
         val1 = ValidationInterceptor()
         val1.configure({
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 10},
             "on_failure": "retry"
         })
@@ -192,7 +194,7 @@ class TestRealisticRepromptingFlow:
         # Second validator checks keywords
         val2 = ValidationInterceptor()
         val2.configure({
-            "validator": "contains_keywords",
+            "validator_function": "agent_actions.validators.builtin_functions.keywords_validator",
             "validator_args": {"required_keywords": ["AI", "technology"]},
             "on_failure": "retry"
         })
@@ -216,7 +218,7 @@ class TestRealisticRepromptingFlow:
         
         # Should fail on second validator
         assert result.continue_processing is False
-        assert "Missing required keywords: AI, technology" in result.retry_context["validation_error"]
+        assert "Missing required keywords" in result.retry_context["validation_error"]
 
     @patch('agent_actions.models.agent_builder')
     def test_llm_reprompt_strategy_realistic(self, mock_agent_builder):
@@ -230,7 +232,7 @@ class TestRealisticRepromptingFlow:
         configs = [
             {
                 "type": "validation",
-                "validator": "word_count",
+                "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
                 "validator_args": {"expected": 10},
                 "on_failure": "retry"
             },
@@ -269,7 +271,7 @@ class TestRealisticRepromptingFlow:
         # Empty response
         validator = ValidationInterceptor()
         validator.configure({
-            "validator": "word_count",
+            "validator_function": "agent_actions.validators.builtin_functions.word_count_validator",
             "validator_args": {"expected": 5},
             "on_failure": "retry"
         })

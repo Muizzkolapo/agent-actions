@@ -1,16 +1,14 @@
 """
 Custom Validator Example
-This shows how to create and register custom validators for use with the conditional reprompting system.
+This shows how to create custom validator functions for use with the conditional reprompting system.
 """
 
-from agent_actions.validators.registry import ValidatorRegistry
 from typing import Tuple, List
 import json
 import re
 
 
 # Example 1: JSON Format Validator
-@ValidatorRegistry.register("json_format")
 def validate_json_format(content: str) -> Tuple[bool, str | None]:
     """Validate that content is valid JSON."""
     try:
@@ -21,7 +19,6 @@ def validate_json_format(content: str) -> Tuple[bool, str | None]:
 
 
 # Example 2: Email Format Validator
-@ValidatorRegistry.register("email_format")
 def validate_email_format(content: str) -> Tuple[bool, str | None]:
     """Validate that content contains a valid email address."""
     email_pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
@@ -31,7 +28,6 @@ def validate_email_format(content: str) -> Tuple[bool, str | None]:
 
 
 # Example 3: Sentiment Validator
-@ValidatorRegistry.register("sentiment")
 def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tuple[bool, str | None]:
     """Validate content sentiment (simplified example)."""
     positive_words = ["great", "excellent", "amazing", "wonderful", "fantastic", "love", "best"]
@@ -53,7 +49,6 @@ def validate_sentiment(content: str, required_sentiment: str = "positive") -> Tu
 
 
 # Example 4: Code Structure Validator
-@ValidatorRegistry.register("python_function")
 def validate_python_function(content: str) -> Tuple[bool, str | None]:
     """Validate that content contains a valid Python function definition."""
     # Check for function definition pattern
@@ -69,7 +64,6 @@ def validate_python_function(content: str) -> Tuple[bool, str | None]:
 
 
 # Example 5: Business Rules Validator
-@ValidatorRegistry.register("business_rules")
 def validate_business_rules(
     content: str, 
     max_price: float = 1000.0,
@@ -108,7 +102,7 @@ agents:
     interceptors:
       - type: validation
         config:
-          validator: "json_format"
+          validator_function: "examples.reprompting.custom_validator_example.validate_json_format"
           on_failure: retry
           
       - type: reprompt
@@ -127,4 +121,19 @@ agents:
                 "name": "John Doe",
                 "email": "john@example.com"
               }
+
+# Or for a validator with parameters:
+  - agent_type: ProductGenerator
+    model_vendor: "anthropic"
+    model_name: "claude-3-sonnet"
+    prompt: "Generate a product description"
+    
+    interceptors:
+      - type: validation
+        config:
+          validator_function: "examples.reprompting.custom_validator_example.validate_business_rules"
+          validator_args:
+            max_price: 500.0
+            required_sections: ["description", "pricing", "features"]
+          on_failure: retry
 """

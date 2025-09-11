@@ -266,12 +266,24 @@ def _execute_with_interceptors(
         InterceptorFactory.create_interceptor(reprompt_cfg) if reprompt_cfg else None
     )
 
+    # Parse context data to make it accessible to interceptors
+    parsed_context_data = {}
+    if isinstance(context_data_str, str):
+        try:
+            parsed_context_data = json.loads(context_data_str)
+        except (json.JSONDecodeError, TypeError):
+            parsed_context_data = {}
+    elif isinstance(context_data_str, dict):
+        parsed_context_data = context_data_str
+
     execution_context: Dict[str, Any] = {
         "prompt": formatted_prompt or agent_config.get("prompt", ""),
         "original_prompt": formatted_prompt or agent_config.get("prompt", ""),
         "attempt": 0,
         "agent_config": agent_config,
         "history": [],
+        # Add record context data so interceptors can access workflow data
+        **parsed_context_data,
     }
 
     max_attempts = 3
