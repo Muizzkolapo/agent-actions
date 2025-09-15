@@ -15,12 +15,6 @@ from .models.environment_config import EnvironmentConfig
 
 logger = logging.getLogger(__name__)
 
-# Import custom validators from qanalabs if available
-try:
-    from qanalabs.tools import validators
-    logger.info("Successfully loaded qanalabs custom validators")
-except ImportError:
-    logger.debug("qanalabs validators not available (this is normal if not using qanalabs)")
 
 
 # Note: Global state removed for production readiness

@@ -1,187 +1,142 @@
-"""Module for Data Manipulation Functions."""
+"""Data transformation utilities for agent actions."""
+
 import copy
-from agent_actions.cli.exceptions import AgentActionsError
+from typing import Any, Dict, List, Optional
+
 
 class DataTransformer:
-    """
-    A class for data manipulation and transformation.
-    """
+    """Utility class for data transformations."""
 
     @staticmethod
-    def update_schema_objects(data_old, data_new, keys_to_update):
+    def ensure_list(data):
         """
-        Updates data based on structure comparison:
-        - If the value types match for a given key, replace `data_new` value with `data_old` value.
-        - If the value types differ, append the `data_old` key/value into `data_new`.
+        Ensure that the input data is returned as a list.
 
-        Parameters:
-            data_old (dict): Original data dictionary.
-            data_new (dict): Dictionary to be updated.
-            keys_to_update (list): Keys to be considered for updating.
+        Args:
+            data: Input data that may be a single item, list, or other iterable
 
         Returns:
-            dict: Updated data_new dictionary.
+            list: The data as a list
         """
-        try:
-            updated_data = copy.deepcopy(data_new)
-            
-            # If data_new is not a dictionary, return it as-is or convert appropriately
-            if not isinstance(updated_data, dict):
-                # For non-dict data, return a dictionary wrapper or the original data
-                if isinstance(updated_data, str):
-                    # Convert string to a basic structure that can be processed
-                    updated_data = {"content": updated_data}
-                else:
-                    # For other types, return as-is since we can't meaningfully update schema
-                    return updated_data
-
-            for key in keys_to_update:
-                if key in data_old:
-                    old_value = data_old[key]
-                    new_value = updated_data.get(key, None)
-
-                    if new_value is not None:
-                        if isinstance(old_value, type(new_value)):
-                            updated_data[key] = old_value
-                        else:
-                            updated_data[key] = [new_value, old_value]
-                    else:
-                        updated_data[key] = old_value
-
-            return updated_data
-        except TypeError as e:
-            raise AgentActionsError(f"Type error updating schema objects: {str(e)}") from e
-        except Exception as e:
-            raise AgentActionsError(f"Unexpected error updating schema objects: {str(e)}") from e
-
-    @staticmethod
-    def remove_schema_objects(data, keys_to_update):
-        """
-        Removes specified keys from a given data dictionary.
-
-        Parameters:
-            data (dict): The dictionary from which keys should be removed.
-            keys_to_update (list): A list of keys to remove from the dictionary.
-
-        Returns:
-            dict: The updated dictionary with the specified keys removed.
-        """
-        try:
-            updated_data = copy.deepcopy(data)
-            for key in keys_to_update:
-                if key in updated_data:
-                    del updated_data[key]
-            return updated_data
-        except KeyError as e:
-            raise AgentActionsError(f"Key error removing schema objects: {str(e)}") from e
-        except Exception as e:
-            raise AgentActionsError(f"Unexpected error removing schema objects: {str(e)}") from e
-
-    @staticmethod
-    def extract_objects(input_data):
-        """
-        Extracts the list of summaries from the input dictionary.
-
-        Parameters:
-            input_data (dict or list): Dictionary containing a list of summaries under any key.
-
-        Returns:
-            list: List of summaries.
-        """
-        try:
-            if not isinstance(input_data, (dict, list)):
-                raise TypeError(f"Data type error: Expected dict or list, got {type(input_data).__name__}")
-
-            if isinstance(input_data, list):
-                if input_data and isinstance(input_data[0], dict):
-                    for field_value in input_data[0].values():
-                        if isinstance(field_value, list):
-                            return field_value
-                return input_data
-            else:
-                for field_value in input_data.values():
-                    if isinstance(field_value, list):
-                        return field_value
+        if data is None:
             return []
-        except TypeError as e: # Catch specific type errors if operations assume types
-            raise AgentActionsError(f"Type error during object extraction: {str(e)}") from e
-        except Exception as e:
-            raise AgentActionsError(f"Error extracting objects: {str(e)}") from e
+        elif isinstance(data, list):
+            return data
+        elif isinstance(data, (str, dict, int, float, bool)):
+            return [data]
+        else:
+            # Handle other iterables (tuples, sets, etc.)
+            try:
+                return list(data)
+            except (TypeError, ValueError):
+                # If conversion fails, wrap in list
+                return [data]
 
     @staticmethod
-    def flatten_to_list_of_dicts(nested_lists):
+    def remove_schema_objects(data: Dict[str, Any], keys_to_remove: List[str]) -> Dict[str, Any]:
         """
-        Flattens a nested list of lists containing dictionaries into a single list of dictionaries.
+        Removes specified keys from a dictionary without side effects.
 
-        Parameters:
-            nested_lists (list): A nested list where each inner list contains dictionaries.
+        Args:
+            data: The dictionary from which keys should be removed
+            keys_to_remove: A list of keys to remove
 
         Returns:
-            list: A flat list containing all dictionaries from the nested structure.
+            New dictionary with specified keys removed
         """
-        flattened_list = []
+        if not isinstance(data, dict):
+            return data
+        if not keys_to_remove:
+            return data
 
-        for sublist in nested_lists:
-            flattened_list.extend(sublist)
-
-        return flattened_list
+        # Create a new dictionary excluding the keys to remove
+        return {k: v for k, v in data.items() if k not in keys_to_remove}
 
     @staticmethod
-    def transform_structure(data):
+    def update_schema_objects(
+        data_old: Dict[str, Any],
+        data_new: Dict[str, Any],
+        keys_to_update: List[str]
+    ) -> Dict[str, Any]:
         """
-        Transforms a list of dictionaries with nested contents into a flat list of dictionaries.
+        Updates data based on structure comparison without side effects.
 
-        Parameters:
-            data (list): List of dictionaries to transform.
+        - If the value types match for a given key, replace data_new value with data_old value.
+        - If the value types differ, append the data_old key/value into data_new.
+
+        Args:
+            data_old: Original data dictionary
+            data_new: Dictionary to be updated
+            keys_to_update: Keys to be considered for updating
 
         Returns:
-            list: Transformed list of dictionaries.
+            New dictionary with updates applied
         """
-        transformed_data = []
+        # Create a deep copy to ensure no side effects
+        result = copy.deepcopy(data_new)
+
+        for key in keys_to_update:
+            if key in data_old:
+                old_value = data_old[key]
+                new_value = result.get(key)
+
+                if new_value is not None:
+                    if isinstance(old_value, type(new_value)):
+                        result[key] = copy.deepcopy(old_value)
+                    else:
+                        # Create list with both values
+                        result[key] = [new_value, copy.deepcopy(old_value)]
+                else:
+                    result[key] = copy.deepcopy(old_value)
+
+        return result
+
+    @staticmethod
+    def transform_structure(data: List[Dict]) -> List[Dict]:
+        """
+        Transforms nested dictionary structure to flat list without side effects.
+
+        Args:
+            data: List of dictionaries with nested contents
+
+        Returns:
+            Transformed flat list of dictionaries
+        """
+        result = []
+
         for data_item in data:
-            for source_guid, contents in data_item.items():
-                for content in contents:
-                    transformed_data.append({
-                        "source_guid": source_guid,
-                        "content": content
-                    })
-        return transformed_data
+            if isinstance(data_item, dict):
+                for source_guid, contents in data_item.items():
+                    if isinstance(contents, list):
+                        for content in contents:
+                            result.append({
+                                "source_guid": source_guid,
+                                "content": content
+                            })
+                    else:
+                        result.append({
+                            "source_guid": source_guid,
+                            "content": contents
+                        })
+
+        return result
 
     @staticmethod
-    def ensure_list(obj):
+    def get_content_by_source_guid(
+        data: List[Dict[str, Any]],
+        source_guid: str
+    ) -> Optional[Any]:
         """
-        Ensures that the input object is a list.
+        Retrieve content by source_guid without side effects.
 
-        Parameters:
-            obj (Any): The object to ensure as a list.
+        Args:
+            data: List containing dictionaries with GUIDs as keys
+            source_guid: The source_guid to search for
 
         Returns:
-            list: The object wrapped in a list if it wasn't already a list.
-        """
-        if not isinstance(obj, list):
-            return [obj]
-        return obj
-
-    @staticmethod
-    def get_content_by_source_guid(data, source_guid):
-        """
-        Retrieve the content associated with a specific source_guid from a list of dictionaries.
-        Supports both old format (GUID as key) and new format (GUID as field).
-
-        Parameters:
-            data (list of dict): The list containing dictionaries with GUIDs as keys or fields.
-            source_guid (str): The source_guid to search for.
-
-        Returns:
-            str: The content associated with the source_guid.
+            The content associated with the source_guid, or None if not found
         """
         for item in data:
-            # Check old format (GUID as key)
-            if source_guid in item:
+            if isinstance(item, dict) and source_guid in item:
                 return item[source_guid]
-            # Check new format (GUID as field)
-            elif isinstance(item, dict) and item.get("source_guid") == source_guid:
-                # Return the item without the source_guid field for clean content
-                clean_item = {k: v for k, v in item.items() if k != "source_guid"}
-                return clean_item
-        raise KeyError(f"source_guid not found: {source_guid}")
+        return None
