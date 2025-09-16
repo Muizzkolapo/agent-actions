@@ -13,12 +13,12 @@ from pathlib import Path
 from typing import Dict, Any, List
 from unittest.mock import patch, MagicMock
 
-from agent_actions.common.filters.where_filter import (
+from agent_actions._internal.common.filters.where_filter import (
     WhereClauseFilter, 
     get_global_filter,
     filter_data_with_where_clause
 )
-from agent_actions.services.batch_service import BatchService
+from agent_actions.tasks.services.batch_service import BatchService
 
 
 class TestScenarioGeneratorFilteringIssue:
@@ -343,7 +343,7 @@ class TestScenarioGeneratorFilteringIssue:
     
     def test_where_clause_parser_validation(self):
         """Test that the WHERE clause parser is working correctly."""
-        from agent_actions.common.filters.parser import parse_where_clause
+        from agent_actions._internal.common.filters.parser import parse_where_clause
         
         where_clause = 'questionable != "Low Value"'
         
@@ -412,8 +412,8 @@ class TestFilteringDebugging:
     
     def test_step_by_step_filtering_debug(self):
         """Step through the filtering process to identify where it might be failing."""
-        from agent_actions.common.filters.where_filter import get_global_filter
-        from agent_actions.common.filters.parser import parse_where_clause
+        from agent_actions._internal.common.filters.where_filter import get_global_filter
+        from agent_actions._internal.common.filters.parser import parse_where_clause
         
         # Test data
         test_item = {

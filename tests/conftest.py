@@ -32,30 +32,42 @@ from agent_actions.core.graph.dependency_injection import (
     ProcessorFactory,
     registry,
 )
-from agent_actions.core.application_container import ApplicationContainer
-from agent_actions.common.interfaces.interfaces import (
+from agent_actions.core.runtime.application_container import ApplicationContainer
+from agent_actions.core.contracts.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
     IOutputHandler,
 )
-from agent_actions.services.batch_service import BatchService
+from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.path_manager import PathManager
+from tests.utils.env_vars import test_env_context
+from tests.mocks.config import create_mock_config, create_mock_vendor, create_mock_data_loader
 
 
 @pytest.fixture
 def test_config():
     """Provide test configuration."""
-    return {
-        'environment': 'testing',
-        'agent_type': 'test_agent',
-        'run_mode': 'sync',
-        'logging': {'level': 'ERROR'},
-        'processors': {
-            'cache_enabled': False,
-            'parallel_processing': False
-        }
-    }
+    return create_mock_config()
+
+
+@pytest.fixture
+def test_env():
+    """Provide test environment context."""
+    with test_env_context():
+        yield
+
+
+@pytest.fixture
+def mock_vendor():
+    """Provide a mock vendor for testing."""
+    return create_mock_vendor()
+
+
+@pytest.fixture
+def mock_data_loader():
+    """Provide a mock data loader for testing."""
+    return create_mock_data_loader()
 
 
 @pytest.fixture
@@ -203,10 +215,10 @@ def integration_container(test_config):
     container = DependencyContainer()
     
     # Register real implementations for integration tests
-    from agent_actions.processors.source_processor.source_data_loader import SourceDataLoader
-    from agent_actions.processors.target_processor.data_processor import DataProcessor
-    from agent_actions.processors.target_processor.data_generator import DataGenerator
-    from agent_actions.services.batch_service import BatchService
+    from agent_actions.agents.processors.source_processor.source_data_loader import SourceDataLoader
+    from agent_actions.agents.processors.target_processor.data_processor import DataProcessor
+    from agent_actions.agents.processors.target_processor.data_generator import DataGenerator
+    from agent_actions.tasks.services.batch_service import BatchService
     from agent_actions.core.path_manager import PathManager
     from logging import Logger, getLogger
     

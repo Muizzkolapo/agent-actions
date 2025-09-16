@@ -5,8 +5,8 @@ import pytest
 from typing import List, Dict
 from unittest.mock import Mock, AsyncMock
 
-from agent_actions.common.interfaces.interfaces import ProcessingMode
-from agent_actions.common.interfaces.base_async_processor import BaseAsyncProcessor, ProcessingContext
+from agent_actions.core.contracts.interfaces import ProcessingMode
+from agent_actions._internal.common.interfaces.base_async_processor import BaseAsyncProcessor, ProcessingContext
 
 
 class MockAsyncProcessor(BaseAsyncProcessor):
@@ -188,7 +188,7 @@ class TestAsyncInterfaceCompatibility:
     
     def test_interface_methods_exist(self):
         """Test that all required async methods exist in interfaces."""
-        from agent_actions.processors.interfaces import (
+        from agent_actions.agents.processors.interfaces import (
             IContentProcessor, IDataProcessor, IDataGenerator, IDataLoader, ISourceDataLoader
         )
         
@@ -205,7 +205,7 @@ class TestAsyncInterfaceCompatibility:
     @pytest.mark.asyncio
     async def test_default_async_implementations(self):
         """Test that default async implementations work correctly."""
-        from agent_actions.processors.interfaces import IDataLoader
+        from agent_actions.agents.processors.interfaces import IDataLoader
         
         class MockSyncLoader(IDataLoader):
             def supports_async(self):

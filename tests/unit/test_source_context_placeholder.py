@@ -4,7 +4,7 @@ Unit tests for source_context{{}} placeholder functionality.
 
 import pytest
 import json
-from agent_actions.processors.content.prompt_utils import PromptUtils
+from agent_actions.agents.processors.content.prompt_utils import PromptUtils
 
 
 class TestSourceContextPlaceholder:

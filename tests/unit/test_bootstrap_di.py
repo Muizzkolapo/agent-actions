@@ -41,7 +41,7 @@ from agent_actions._internal.bootstrap.bootstrap import (
     get_agent_runner_with_di,
     is_di_enabled,
 )
-from agent_actions.core.application_container import ApplicationContainer
+from agent_actions.core.runtime.application_container import ApplicationContainer
 from agent_actions.core.graph.dependency_injection import (
     DependencyContainer,
     ProcessorFactory,
@@ -51,13 +51,13 @@ from agent_actions.core.graph.dependency_injection import (
 )
 from agent_actions.core.di_configurator import DIConfigurator, ConfigurationProfile
 from agent_actions.core.agent_runner import AgentRunner
-from agent_actions.common.interfaces.interfaces import (
+from agent_actions.core.contracts.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
     ISourceDataLoader,
 )
-from agent_actions.services.batch_service import BatchService
+from agent_actions.tasks.services.batch_service import BatchService
 
 
 # Test interfaces and implementations for DI validation

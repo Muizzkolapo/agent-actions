@@ -452,8 +452,8 @@ class TestIntegrationSecurity:
     
     def test_end_to_end_security_validation(self):
         """Test complete security validation flow."""
-        from agent_actions.services.batch_service import BatchService
-        from agent_actions.workflow.agent_workflow import AgentWorkflow
+        from agent_actions.tasks.services.batch_service import BatchService
+        from agent_actions.core.graph.agent_workflow import AgentWorkflow
         
         # Test potentially dangerous agent configs
         dangerous_configs = [

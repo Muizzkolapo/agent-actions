@@ -7,9 +7,9 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from agent_actions.interceptors.factory import InterceptorFactory
-from agent_actions.interceptors.reprompt_interceptor import RepromptInterceptor
-from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
+from agent_actions.agents.interceptors.factory import InterceptorFactory
+from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
 from agent_actions.strategies.reprompt_strategy import (
     LLMRepromptStrategy,
     RepromptContext,

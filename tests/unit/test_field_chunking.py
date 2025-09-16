@@ -1,7 +1,7 @@
 import pytest
 
 from agent_actions._internal.utils.field_chunking import FieldAnalyzer, FieldChunker, FieldChunkingValidationError, FieldChunkingError
-from agent_actions.common.transformers.string_transformer import Tokenizer
+from agent_actions.agents.transformers.string_transformer import Tokenizer
 
 
 @pytest.fixture(autouse=True)

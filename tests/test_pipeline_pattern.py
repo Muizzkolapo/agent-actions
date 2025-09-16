@@ -4,7 +4,7 @@ import pytest
 import json
 from typing import Dict, List, Any
 
-from agent_actions.processors.pipeline import (
+from agent_actions.agents.processors.pipeline import (
     Pipeline,
     ValidationStage,
     TransformationStage,
@@ -14,16 +14,16 @@ from agent_actions.processors.pipeline import (
     ValidationError,
     TransformationError
 )
-from agent_actions.processors.pipeline.validation import (
+from agent_actions.agents.processors.pipeline.validation import (
     DataFlowValidator,
     DataFlowMonitor,
     ValidationLevel
 )
-from agent_actions.processors.pipeline.examples import (
+from agent_actions.agents.processors.pipeline.examples import (
     create_data_processing_pipeline,
     create_agent_response_pipeline
 )
-from agent_actions.common.transformers.pure_transformers import PureDataTransformer
+from agent_actions._internal.common.transformers.pure_transformers import PureDataTransformer
 
 
 class TestPipeline:

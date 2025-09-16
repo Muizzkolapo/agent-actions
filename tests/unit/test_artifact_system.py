@@ -4,7 +4,7 @@ import json
 import pytest
 from pathlib import Path
 
-from agent_actions.artifacts.base import BaseArtifact, SecurityError
+from agent_actions.core.contracts.base import BaseArtifact, SecurityError
 from agent_actions.artifacts.manifest import ManifestArtifact
 from agent_actions.artifacts.run_results import AgentResult, RunResultsArtifact, ExecutionTiming
 from agent_actions.artifacts.catalog import AgentCatalogArtifact
@@ -249,7 +249,7 @@ def test_thread_safety_validation_recording(tmp_path: Path) -> None:
 
 def test_metadata_datetime_not_deprecated() -> None:
     """Test that metadata uses non-deprecated datetime methods."""
-    from agent_actions.artifacts.base import ArtifactMetadata
+    from agent_actions.core.contracts.base import ArtifactMetadata
     import warnings
     
     # Capture warnings

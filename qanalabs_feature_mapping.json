@@ -1,0 +1,802 @@
+{
+  "qanalabs_production_feature_mapping": {
+    "description": "Real-world feature mapping based on qanalabs actual production usage from sample_qanalabs/",
+    "analysis_date": "2025-09-16",
+    "source": "sample_qanalabs/ - Live qanalabs production project",
+
+    "active_workflows": {
+      "quiz_generation_workflow": {
+        "file": "sample_qanalabs/qanalabs/rendered_workflows/qanalabs-quiz-gen.yml",
+        "description": "Main production workflow for Azure AI certification quiz generation",
+        "agents": [
+          "fact_extractor",
+          "flatten_quotes (tooling_workflow)",
+          "fact_questionability",
+          "fact_explanation",
+          "ScenarioGenerator",
+          "AnswerLengthDistractorEditor_Stage1/2/3",
+          "QuizTaker",
+          "quiztaker_maker",
+          "Multiple tooling workflows"
+        ],
+        "critical_features_used": [
+          "remove_collection",
+          "side_collection",
+          "dependencies",
+          "is_operational",
+          "where_clause",
+          "tooling_workflow templates",
+          "schema validation",
+          "json_mode",
+          "granularity: Record",
+          "run_mode: batch"
+        ]
+      },
+
+      "code_quiz_workflow": {
+        "file": "sample_qanalabs/qanalabs/agent_workflow/code_quiz_gen/agent_config/code_quiz_gen.yml",
+        "description": "DBT Analytics Engineering certification code quiz generation",
+        "agents": [
+          "code_extractor",
+          "flatten_quotes (tooling_workflow)",
+          "code_usage_scenario",
+          "Blank_Recommendations"
+        ],
+        "critical_features_used": [
+          "remove_collection",
+          "side_collection",
+          "dependencies",
+          "schema definitions (inline)",
+          "tooling_workflow templates"
+        ]
+      }
+    },
+
+    "feature_usage_analysis": {
+      "collection_operations": {
+        "remove_collection": {
+          "usage_frequency": "CRITICAL - Used in every agent",
+          "real_world_patterns": [
+            "['id', 'url', 'topic'] - Most common pattern",
+            "['id', 'url'] - Secondary pattern",
+            "['id', 'url', 'page_content'] - Final stage pattern",
+            "[] - Empty array when no removal needed"
+          ],
+          "implementation_locations": [
+            "agent_actions/core/utils/processor_utils.py:apply_remove_collection()",
+            "agent_actions/agents/transformers/data_transformer.py:remove_schema_objects()"
+          ],
+          "test_priority": "CRITICAL",
+          "actual_data_flow": "Removes metadata fields while preserving content for processing"
+        },
+
+        "side_collection": {
+          "usage_frequency": "CRITICAL - Used in every agent",
+          "real_world_patterns": [
+            "['id', 'url', 'page_content', 'bloom_details'] - Base pattern",
+            "['id', 'url', 'topic', 'summary', 'page_content', 'bloom_details'] - Enhanced pattern",
+            "Extensive field preservation lists for complex workflows"
+          ],
+          "implementation_locations": [
+            "agent_actions/core/utils/processor_utils.py:transform_with_side_collection()",
+            "Actual usage seen in context_map.json files"
+          ],
+          "test_priority": "CRITICAL",
+          "actual_data_flow": "Preserves source context through entire pipeline",
+          "real_evidence": "Found in DBT_Analytics_Engineering_Certification_Exam_context_map.json"
+        }
+      },
+
+      "conditional_processing": {
+        "where_clause": {
+          "usage_frequency": "MODERATE - Used in quiztaker_maker agent",
+          "real_world_example": "clause: 'marked_result_is_correct == \"Correct\" and my_confidence_level == \"High\"'",
+          "implementation_location": "agent_actions/core/parser/where_parser.py:WhereClauseParser",
+          "test_priority": "HIGH",
+          "actual_usage_context": "Filter quiz results to only include high-confidence correct answers"
+        }
+      },
+
+      "workflow_orchestration": {
+        "dependencies": {
+          "usage_frequency": "CRITICAL - Core to workflow execution",
+          "real_world_patterns": [
+            "dependencies: [] - Root agents",
+            "dependencies: ['fact_extractor'] - Linear dependency",
+            "dependencies: ['AnswerLengthDistractorEditor_Stage2'] - Sequential processing",
+            "Complex multi-stage dependency chains"
+          ],
+          "implementation_location": "agent_actions/core/graph/agent_workflow.py",
+          "test_priority": "CRITICAL",
+          "actual_workflow_depth": "Up to 15+ agents in sequence"
+        },
+
+        "is_operational": {
+          "usage_frequency": "HIGH - Deployment control",
+          "real_world_usage": [
+            "is_operational: true - Active agents",
+            "is_operational: false - Disabled agents (QuizTaker, later stages)"
+          ],
+          "implementation_location": "agent_actions/core/parser/config_types.py",
+          "test_priority": "HIGH",
+          "actual_usage_context": "Used to enable/disable workflow stages during development"
+        }
+      },
+
+      "template_system": {
+        "tooling_workflow": {
+          "usage_frequency": "HIGH - Core template macro",
+          "real_world_examples": [
+            "{{ tooling_workflow(agent_type='flatten_quotes', model_name='code_quiz_gen.flatten_code.flatten_code') }}",
+            "{{ quiz_workflow(...) }}",
+            "{{ file_tooling_workflow(...) }}"
+          ],
+          "implementation_status": "NEEDS_INVESTIGATION - Template expansion system",
+          "test_priority": "HIGH",
+          "actual_usage_context": "Jinja2 template macros for workflow generation"
+        },
+
+        "conditional_workflows": {
+          "usage_frequency": "MODERATE - Conditional execution macros",
+          "macro_types": [
+            "conditional_tooling_workflow - Tool execution with conditions",
+            "conditional_quiz_workflow - Quiz generation with conditions",
+            "quiz_workflow_loop - Dynamic workflow iteration"
+          ],
+          "conditional_parameters": [
+            "conditional_clause - Execution condition logic",
+            "where_clause - Data filtering conditions",
+            "add_dispatch - Conditional dispatch parameter"
+          ],
+          "implementation_status": "NEEDS_INVESTIGATION - Conditional macro expansion",
+          "test_priority": "HIGH",
+          "actual_usage_context": "Dynamic workflow generation based on conditions"
+        }
+      },
+
+      "data_processing_controls": {
+        "schema_handling": {
+          "usage_frequency": "CRITICAL - Every agent uses schemas",
+          "real_world_patterns": [
+            "schema_name: candidate_facts_list - Named schema reference",
+            "schema: {\"sample_usage_scenario\": \"string\"} - Inline schema definition",
+            "Complex nested schemas for multi-field outputs"
+          ],
+          "implementation_locations": [
+            "agent_actions/agents/handlers/schema_handler.py",
+            "agent_actions/agents/validators/schema_validator.py"
+          ],
+          "test_priority": "CRITICAL"
+        },
+
+        "json_mode": {
+          "usage_frequency": "CRITICAL - json_mode: true in every agent",
+          "implementation_location": "agent_actions/core/parser/config_types.py",
+          "test_priority": "HIGH",
+          "actual_usage_context": "Ensures structured JSON output for all agents"
+        },
+
+        "granularity": {
+          "usage_frequency": "HIGH - granularity: Record in all agents",
+          "implementation_location": "agent_actions/agents/generators/target_content_processor.py",
+          "test_priority": "MEDIUM",
+          "actual_usage_context": "Record-level processing for individual data items"
+        },
+
+        "run_mode": {
+          "usage_frequency": "HIGH - run_mode: batch throughout",
+          "implementation_location": "agent_actions/tasks/services/batch_service.py",
+          "test_priority": "MEDIUM",
+          "actual_usage_context": "Batch processing for efficiency"
+        }
+      },
+
+      "model_configuration": {
+        "model_vendor_name": {
+          "usage_frequency": "CRITICAL - Every agent specifies model",
+          "real_world_patterns": [
+            "model_vendor: openai, model_name: gpt-4o-mini - Most common",
+            "model_vendor: openai, model_name: gpt-4o - Higher capability tasks",
+            "model_vendor: openai, model_name: gpt-5-mini - Cutting edge (Blank_Recommendations)",
+            "model_vendor: tool - Custom tool integrations"
+          ],
+          "implementation_location": "agent_actions/integrations/providers/",
+          "test_priority": "HIGH"
+        },
+
+        "api_key_management": {
+          "usage_frequency": "CRITICAL - api_key: OPENAI_API_KEY everywhere",
+          "implementation_location": "agent_actions/core/parser/vendor_config.py",
+          "test_priority": "HIGH",
+          "security_consideration": "Environment variable based API key management"
+        },
+
+        "few_shot_samples": {
+          "usage_frequency": "MODERATE - use_few_shot_samples: 0-6 range",
+          "real_world_patterns": [
+            "use_few_shot_samples: 0 - No examples (common)",
+            "use_few_shot_samples: 5 - ScenarioGenerator",
+            "use_few_shot_samples: 6 - AnswerLengthDistractorEditor stages"
+          ],
+          "implementation_location": "agent_actions/agents/transformers/sample_enricher.py",
+          "test_priority": "MEDIUM"
+        }
+      }
+    },
+
+    "critical_data_flows": {
+      "fact_extraction_pipeline": {
+        "description": "Core pipeline: fact_extractor -> flatten_quotes -> fact_questionability -> fact_explanation",
+        "data_transformations": [
+          "Remove metadata, preserve context",
+          "Flatten quotes with custom tooling",
+          "Add questionability assessment",
+          "Generate explanations"
+        ],
+        "collection_operations": "Heavy use of remove_collection and side_collection at each stage"
+      },
+
+      "quiz_generation_pipeline": {
+        "description": "Multi-stage distractor generation with conditional filtering",
+        "key_stages": [
+          "ScenarioGenerator -> AnswerLengthDistractorEditor_Stage1",
+          "Stage1 -> Stage2 -> Stage3 (sequential dependency chain)",
+          "quiztaker_maker with WHERE clause filtering",
+          "Multiple tooling_workflow integrations"
+        ],
+        "where_clause_usage": "Critical filtering at quiztaker_maker stage"
+      }
+    },
+
+    "production_artifacts_evidence": {
+      "execution_artifacts": {
+        "run_results": "sample_qanalabs/.../artifacts/run_results.json",
+        "validation_results": "sample_qanalabs/.../artifacts/validation_results.json",
+        "context_maps": "sample_qanalabs/.../target/*/batch/*_context_map.json",
+        "evidence_of": [
+          "side_collection preservation in context maps",
+          "Successful agent execution chains",
+          "Schema validation success",
+          "Batch processing completion"
+        ]
+      },
+
+      "actual_data_structures": {
+        "source_guid_tracking": "4caf6595-36b1-5f0f-80b6-85d39e66f71e pattern",
+        "node_id_generation": "node_0_f6fee173-030c-4e9a-ac59-f447e44e7f9f pattern",
+        "batch_processing": "batch_56bb294b6ad24b1da96e7809d55124ea structure",
+        "content_preservation": "Full page_content and bloom_details preservation"
+      }
+    },
+
+    "senior_test_engineer_assessment": {
+      "review_date": "2025-09-16",
+      "reviewer": "Senior Test Engineer with 10+ years experience",
+
+      "risk_assessment": {
+        "CRITICAL_RISK": {
+          "workflow_orchestration": {
+            "risk": "Dependency resolution failures could break entire user workflows",
+            "impact": "Production workflow failures for users like qanalabs",
+            "mitigation": "Robust integration tests covering complex dependency graphs"
+          },
+          "collection_management": {
+            "risk": "Data loss through incorrect remove_collection or side_collection implementation",
+            "impact": "User data corruption or missing fields in output",
+            "mitigation": "Property-based testing and data integrity validation"
+          }
+        },
+        "HIGH_RISK": {
+          "where_clause_engine": {
+            "risk": "Parsing errors or security vulnerabilities in condition evaluation",
+            "impact": "Incorrect filtering, potential code injection",
+            "mitigation": "Security-focused testing and safe evaluation sandboxing"
+          },
+          "template_system": {
+            "risk": "Jinja2 template injection or rendering failures",
+            "impact": "Workflow generation failures",
+            "mitigation": "Template security testing and rendering validation"
+          }
+        }
+      },
+
+      "test_strategy_recommendations": {
+        "collection_management_system": {
+          "unit_tests": "Test ProcessorUtils remove_collection and side_collection logic in isolation",
+          "integration_tests": "Test collection management within full workflow pipelines, data flow integrity",
+          "contract_tests": "Verify field preservation contracts between pipeline stages",
+          "property_based_tests": "Use hypothesis to test various field combinations and nested structures"
+        },
+        "conditional_processing_engine": {
+          "parser_tests": "Comprehensive testing of WhereClauseParser with all SQL operators (==, !=, IN, CONTAINS, etc.)",
+          "expression_evaluation_tests": "Test boolean logic combinations (AND/OR) with complex nested conditions",
+          "boundary_tests": "Edge cases for field access, null values, and malformed clauses",
+          "performance_tests": "Query parsing speed for complex WHERE clauses"
+        },
+        "workflow_orchestration": {
+          "dependency_resolution_tests": "Test execution ordering with various dependency graphs",
+          "error_recovery_tests": "Simulate failures in dependency chains and verify recovery mechanisms",
+          "state_management_tests": "Verify workflow state persistence across agent executions",
+          "concurrent_execution_tests": "Test async workflow execution with asyncio semaphore limits"
+        },
+        "jinja_template_system": {
+          "rendering_tests": "Template expansion validation for tooling_workflow macros",
+          "security_tests": "Template injection prevention and safe parameter handling",
+          "parameter_validation": "Dynamic workflow generation from templates with parameter injection"
+        }
+      },
+
+      "automation_priorities": {
+        "sequence": [
+          "1. Collection Management Tests - Core data integrity",
+          "2. WHERE Clause Parser Tests - Security and correctness critical",
+          "3. Workflow Orchestration Tests - User experience critical",
+          "4. Configuration System Tests - Platform stability",
+          "5. Integration Provider Tests - External dependency reliability",
+          "6. Performance Regression Tests - Scalability monitoring",
+          "7. Template Security Tests - Security compliance",
+          "8. Artifact Management Tests - Data persistence reliability"
+        ]
+      },
+
+      "test_coverage_gaps": [
+        "Multi-vendor integration testing across all AI providers (OpenAI, Anthropic, etc.)",
+        "Error boundary testing in async workflows",
+        "Performance regression benchmarking",
+        "Schema evolution and backward compatibility",
+        "Resource cleanup and memory management",
+        "Chaos engineering for dependency failures"
+      ],
+
+      "integration_vs_unit_testing": {
+        "unit_tests_70_percent": [
+          "Collection management utilities (ProcessorUtils)",
+          "WHERE clause parsing (WhereClauseParser)",
+          "Configuration validation",
+          "Template rendering components",
+          "Individual agent processors"
+        ],
+        "integration_tests_25_percent": [
+          "Full workflow execution with real dependencies",
+          "Multi-agent coordination and data flow",
+          "Batch processing with filtering",
+          "External provider integrations",
+          "File system operations and artifact management"
+        ],
+        "end_to_end_tests_5_percent": [
+          "Complete user workflows (like qanalabs quiz generation)",
+          "Production-like scenarios with real data",
+          "Performance under load"
+        ]
+      },
+
+      "performance_requirements": {
+        "load_testing": {
+          "workflow_throughput": "100+ concurrent workflows",
+          "data_processing": "10MB+ files through collection management",
+          "where_clause_evaluation": "1000+ evaluations per second",
+          "dependency_resolution": "Complex graphs with 50+ agents"
+        },
+        "test_categories": [
+          "Stress Tests: Push system to failure points",
+          "Endurance Tests: Long-running workflows (24+ hours)",
+          "Spike Tests: Sudden load increases",
+          "Volume Tests: Large data processing scenarios"
+        ]
+      },
+
+      "edge_cases_and_error_scenarios": {
+        "data_corruption_scenarios": [
+          "Malformed JSON in pipeline data",
+          "Circular dependencies in agent workflows",
+          "Memory exhaustion with large datasets",
+          "Concurrent access to shared artifacts"
+        ],
+        "security_edge_cases": [
+          "WHERE clause injection attempts",
+          "Template injection through user configs",
+          "Path traversal in file operations",
+          "Unauthorized access to artifacts"
+        ],
+        "performance_edge_cases": [
+          "Very deep dependency chains (20+ levels)",
+          "Large WHERE clause expressions (100+ conditions)",
+          "High concurrency (50+ simultaneous workflows)",
+          "Network timeouts with external providers"
+        ]
+      }
+    },
+
+    "test_requirements_by_priority": {
+      "CRITICAL_PRIORITY": {
+        "features": [
+          "remove_collection field removal",
+          "side_collection field preservation",
+          "dependency chain execution",
+          "where_clause parsing and security",
+          "workflow orchestration reliability"
+        ],
+        "rationale": "Core functionality used in every agent execution + critical risk areas identified by senior engineer",
+        "implementation_locations": [
+          "agent_actions/core/utils/processor_utils.py",
+          "agent_actions/core/graph/agent_workflow.py",
+          "agent_actions/core/parser/where_parser.py"
+        ],
+        "test_types": [
+          "Unit tests with property-based testing",
+          "Integration tests for data flow integrity",
+          "Security tests for injection prevention",
+          "Error recovery and boundary testing"
+        ]
+      },
+
+      "HIGH_PRIORITY": {
+        "features": [
+          "jinja template system security and rendering",
+          "is_operational agent control",
+          "schema validation and compliance",
+          "multi-vendor model integration",
+          "async workflow coordination"
+        ],
+        "rationale": "Essential for workflow control, security, and production deployment",
+        "implementation_locations": [
+          "agent_actions/core/graph/render_workflow.py",
+          "agent_actions/core/parser/config_types.py",
+          "agent_actions/integrations/providers/"
+        ],
+        "test_types": [
+          "Template injection security tests",
+          "Configuration validation tests",
+          "Provider integration tests",
+          "Concurrent execution tests"
+        ]
+      },
+
+      "MEDIUM_PRIORITY": {
+        "features": [
+          "granularity control (Record vs File)",
+          "run_mode batch processing",
+          "performance optimization",
+          "artifact management and cleanup"
+        ],
+        "rationale": "Performance and operational features",
+        "implementation_locations": [
+          "agent_actions/tasks/services/batch_service.py",
+          "agent_actions/artifacts/manager.py"
+        ],
+        "test_types": [
+          "Performance regression tests",
+          "Load testing scenarios",
+          "Resource cleanup validation",
+          "Endurance testing"
+        ]
+      }
+    },
+
+    "integration_test_scenarios": {
+      "end_to_end_quiz_generation": {
+        "description": "Full qanalabs-quiz-gen workflow execution",
+        "test_data": "Azure AI certification content",
+        "expected_stages": "15+ sequential agent executions",
+        "validation_points": [
+          "Each agent receives proper side_collection data",
+          "remove_collection correctly filters fields",
+          "Dependencies execute in correct order",
+          "WHERE clause filtering works at quiztaker_maker",
+          "Final output matches schema requirements"
+        ]
+      },
+
+      "code_quiz_workflow": {
+        "description": "DBT code quiz generation workflow",
+        "test_data": "DBT documentation and code samples",
+        "expected_stages": "4 agent sequential execution",
+        "validation_points": [
+          "Code extraction with proper schemas",
+          "tooling_workflow template expansion",
+          "Scenario generation from code samples",
+          "Blank recommendation generation"
+        ]
+      }
+    },
+
+    "performance_requirements": {
+      "batch_processing": {
+        "evidence": "Multiple files in agent_io/target/*/batch/ directories",
+        "requirement": "Handle multiple documents in single batch execution",
+        "test_scenario": "Process 10+ documents through full workflow"
+      },
+
+      "memory_efficiency": {
+        "evidence": "Large page_content preservation in side_collection",
+        "requirement": "Preserve full document content through 15+ agent pipeline",
+        "test_scenario": "Monitor memory usage during full workflow execution"
+      }
+    },
+
+    "enterprise_architecture_features": {
+      "dependency_injection_system": {
+        "usage_frequency": "CORE - Foundation of entire system",
+        "description": "Full IoC container with transient, singleton, and factory registrations",
+        "implementation_location": "agent_actions/core/graph/dependency_injection.py",
+        "test_priority": "CRITICAL",
+        "capabilities": [
+          "Lifecycle management (transient, singleton, factory)",
+          "Service resolution and circular dependency detection",
+          "Environment-specific configuration loading"
+        ],
+        "risk_assessment": "CRITICAL - System bootstrap failure breaks everything"
+      },
+
+      "bootstrap_factory": {
+        "usage_frequency": "CORE - System initialization",
+        "description": "Environment-specific configuration and system startup",
+        "implementation_location": "agent_actions/core/bootstrap_factory.py",
+        "test_priority": "CRITICAL",
+        "capabilities": [
+          "Development/production/testing environment setup",
+          "Configuration layer management",
+          "Startup validation and error handling"
+        ]
+      },
+
+      "graph_based_execution": {
+        "usage_frequency": "CORE - Workflow orchestration engine",
+        "description": "DAG-based workflow execution with NetworkX",
+        "implementation_locations": [
+          "agent_actions/core/graph/agent_workflow.py",
+          "agent_actions/core/graph/render_workflow.py"
+        ],
+        "test_priority": "CRITICAL",
+        "capabilities": [
+          "Dependency resolution and execution ordering",
+          "Parallel execution with async coordination",
+          "Workflow visualization and debugging"
+        ]
+      },
+
+      "async_coordination": {
+        "usage_frequency": "HIGH - Performance critical",
+        "description": "Semaphore-based concurrency control for parallel agent execution",
+        "implementation_location": "agent_actions/core/graph/agent_workflow.py:async_run()",
+        "test_priority": "HIGH",
+        "capabilities": [
+          "Configurable concurrency limits",
+          "Thread pool integration",
+          "Mixed sync/async operation support"
+        ]
+      }
+    },
+
+    "security_and_validation_features": {
+      "ast_based_evaluation": {
+        "usage_frequency": "CRITICAL - WHERE clause security",
+        "description": "Safe expression evaluation without eval() using AST parsing",
+        "implementation_locations": [
+          "agent_actions/_internal/filters/secure_parser.py",
+          "agent_actions/_internal/filters/ast_nodes.py"
+        ],
+        "test_priority": "CRITICAL",
+        "security_features": [
+          "Timeout protection against infinite loops",
+          "Input sanitization and validation",
+          "Thread-safe execution with performance monitoring"
+        ]
+      },
+
+      "input_sanitization": {
+        "usage_frequency": "CRITICAL - Security foundation",
+        "description": "Path traversal protection and injection prevention",
+        "implementation_location": "agent_actions/core/contracts/base.py",
+        "test_priority": "CRITICAL",
+        "security_controls": [
+          "File system access validation",
+          "Size limits and resource protection",
+          "Input validation with detailed error context"
+        ]
+      },
+
+      "secret_masking": {
+        "usage_frequency": "HIGH - Compliance requirement",
+        "description": "Automatic credential redaction in logs and outputs",
+        "implementation_location": "agent_actions/_internal/common/monitoring/logging.py",
+        "test_priority": "HIGH",
+        "compliance_features": [
+          "API key masking in logs",
+          "Audit trail generation",
+          "Data encryption for sensitive fields"
+        ]
+      }
+    },
+
+    "documentation_and_visualization": {
+      "web_visualization_system": {
+        "usage_frequency": "MODERATE - Development tool",
+        "description": "Flask-based web interface for workflow inspection",
+        "implementation_location": "agent_actions/tasks/docs.py",
+        "test_priority": "MEDIUM",
+        "capabilities": [
+          "Real-time workflow visualization",
+          "Interactive dependency graph exploration",
+          "Agent configuration browser",
+          "Performance metrics dashboard"
+        ]
+      },
+
+      "dag_generation": {
+        "usage_frequency": "MODERATE - Debugging tool",
+        "description": "NetworkX-based dependency graph generation and visualization",
+        "implementation_location": "agent_actions/core/graph/agent_workflow.py",
+        "test_priority": "MEDIUM",
+        "features": [
+          "Visual workflow representation",
+          "Dependency analysis and validation",
+          "Execution path optimization"
+        ]
+      }
+    },
+
+    "advanced_data_processing": {
+      "pure_transformers": {
+        "usage_frequency": "HIGH - Data transformation core",
+        "description": "Stateless transformation functions for data processing",
+        "implementation_location": "agent_actions/agents/transformers/pure_transformers.py",
+        "test_priority": "HIGH",
+        "capabilities": [
+          "Functional programming approach",
+          "Composable transformation pipelines",
+          "Type-safe transformations"
+        ]
+      },
+
+      "sample_enrichment": {
+        "usage_frequency": "MODERATE - Used with few_shot_samples",
+        "description": "Data augmentation and sample enrichment system",
+        "implementation_location": "agent_actions/agents/transformers/pp_sample_enricher.py",
+        "test_priority": "MEDIUM",
+        "evidence_in_qanalabs": "use_few_shot_samples: 0-6 range in production configs"
+      },
+
+      "multi_format_loaders": {
+        "usage_frequency": "MODERATE - Data ingestion",
+        "description": "Support for JSON, XML, CSV, text file processing",
+        "implementation_location": "agent_actions/integrations/loaders/data_loaders/",
+        "test_priority": "MEDIUM",
+        "supported_formats": [
+          "JSON with nested structure support",
+          "XML with XPath processing",
+          "CSV with tabular data handling",
+          "Plain text with encoding detection"
+        ]
+      },
+
+      "lineage_tracking": {
+        "usage_frequency": "MODERATE - Data provenance",
+        "description": "Automatic tracking of data transformations through nodes",
+        "implementation_location": "agent_actions/artifacts/lineage/lineage_mixin.py",
+        "test_priority": "MEDIUM",
+        "capabilities": [
+          "End-to-end data lineage",
+          "Transformation history tracking",
+          "Audit trail for data changes"
+        ]
+      }
+    },
+
+    "monitoring_and_observability": {
+      "correlation_tracking": {
+        "usage_frequency": "HIGH - Debugging essential",
+        "description": "Request tracing across components and workflows",
+        "implementation_location": "agent_actions/_internal/common/correlation/tracker.py",
+        "test_priority": "HIGH",
+        "capabilities": [
+          "Cross-component request tracking",
+          "Distributed tracing support",
+          "Performance bottleneck identification"
+        ]
+      },
+
+      "feature_flags": {
+        "usage_frequency": "MODERATE - Deployment control",
+        "description": "Runtime feature toggling system",
+        "implementation_location": "agent_actions/_internal/common/feature_flags/manager.py",
+        "test_priority": "MEDIUM",
+        "use_cases": [
+          "Gradual feature rollout",
+          "A/B testing support",
+          "Emergency feature disable"
+        ]
+      },
+
+      "health_monitoring": {
+        "usage_frequency": "HIGH - Production requirement",
+        "description": "System health checks and monitoring",
+        "implementation_location": "agent_actions/_internal/common/monitoring/",
+        "test_priority": "HIGH",
+        "metrics": [
+          "Resource usage tracking",
+          "Performance metrics collection",
+          "Error rate monitoring",
+          "Cache statistics"
+        ]
+      },
+
+      "resilience_patterns": {
+        "usage_frequency": "HIGH - Production stability",
+        "description": "Circuit breaker and retry mechanisms",
+        "implementation_locations": [
+          "agent_actions/_internal/common/resilience/circuit_breaker.py",
+          "agent_actions/_internal/common/resilience/retry.py"
+        ],
+        "test_priority": "HIGH",
+        "patterns": [
+          "Exponential backoff with jitter",
+          "Circuit breaker for external services",
+          "Custom retry policies per agent"
+        ]
+      }
+    },
+
+    "advanced_provider_features": {
+      "schema_compilation": {
+        "usage_frequency": "CRITICAL - Every agent uses schemas",
+        "description": "Vendor-specific schema transformation and optimization",
+        "implementation_location": "agent_actions/integrations/providers/",
+        "test_priority": "CRITICAL",
+        "evidence_in_qanalabs": "Complex nested schemas in every agent config",
+        "capabilities": [
+          "OpenAI function calling schema generation",
+          "Anthropic tool use schema adaptation",
+          "Schema validation and optimization"
+        ]
+      },
+
+      "tool_integration": {
+        "usage_frequency": "MODERATE - Advanced workflows",
+        "description": "External tool execution and integration",
+        "implementation_location": "agent_actions/agents/handlers/",
+        "test_priority": "MEDIUM",
+        "evidence_in_qanalabs": "model_vendor: tool in Blank_Recommendations agent",
+        "capabilities": [
+          "External command execution",
+          "API integration support",
+          "Custom tool development framework"
+        ]
+      },
+
+      "batch_job_registry": {
+        "usage_frequency": "HIGH - Batch processing core",
+        "description": "Persistent batch job tracking across sessions",
+        "implementation_location": "agent_actions/tasks/services/batch_service.py",
+        "test_priority": "HIGH",
+        "evidence_in_qanalabs": "run_mode: batch throughout qanalabs workflows",
+        "capabilities": [
+          "Job lifecycle management",
+          "Cross-session persistence",
+          "Batch optimization strategies"
+        ]
+      }
+    },
+
+    "updated_test_priorities": {
+      "CRITICAL_PRIORITY_ADDITIONS": [
+        "Dependency injection container reliability",
+        "Bootstrap factory environment handling",
+        "AST-based expression evaluation security",
+        "Schema compilation accuracy across vendors"
+      ],
+      "HIGH_PRIORITY_ADDITIONS": [
+        "Async coordination and concurrency control",
+        "Correlation tracking and request tracing",
+        "Resilience patterns (circuit breaker, retry)",
+        "Health monitoring and metrics collection"
+      ],
+      "MEDIUM_PRIORITY_ADDITIONS": [
+        "Web visualization system functionality",
+        "Pure transformers and data processing",
+        "Feature flags and deployment control",
+        "Multi-format data loaders"
+      ]
+    }
+  }
+}

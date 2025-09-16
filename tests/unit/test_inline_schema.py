@@ -1,7 +1,7 @@
 """Unit tests for inline schema functionality."""
 
 import pytest
-from agent_actions.handlers.schema_handler import SchemaLoader
+from agent_actions.agents.handlers.schema_handler import SchemaLoader
 from agent_actions.core.parser.schema_change import compile_unified_schema
 
 

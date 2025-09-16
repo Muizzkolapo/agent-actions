@@ -1,5 +1,5 @@
 import pytest
-from agent_actions.common.filters.where_parser import WhereClauseParser, WhereCondition
+from agent_actions._internal.common.filters.where_parser import WhereClauseParser, WhereCondition
 
 
 class TestWhereClauseParser:

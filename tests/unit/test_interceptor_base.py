@@ -6,7 +6,7 @@ Tests InterceptorResult, ResponseInterceptor, and InterceptorChain.
 
 import pytest
 from unittest.mock import Mock
-from agent_actions.interceptors.base import (
+from agent_actions.agents.interceptors.base import (
     InterceptorResult,
     ResponseInterceptor,
     InterceptorChain

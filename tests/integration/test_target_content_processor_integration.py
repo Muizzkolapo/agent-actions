@@ -10,8 +10,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from agent_actions.core.application_container import ApplicationContainer
-from agent_actions.processors.target_processor.target_content_processor import TargetContentProcessor
+from agent_actions.core.runtime.application_container import ApplicationContainer
+from agent_actions.agents.processors.target_processor.target_content_processor import TargetContentProcessor
 
 
 class TestTargetContentProcessorIntegration:

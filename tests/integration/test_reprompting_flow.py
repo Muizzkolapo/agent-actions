@@ -6,9 +6,9 @@ Tests the full pipeline of validation, reprompting, and retry logic.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
-from agent_actions.interceptors.reprompt_interceptor import RepromptInterceptor
-from agent_actions.interceptors.base import InterceptorChain
+from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
+from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.agents.interceptors.base import InterceptorChain
 from agent_actions.strategies.reprompt_strategy import TemplateRepromptStrategy
 
 
@@ -132,7 +132,7 @@ class TestRepromptingIntegration:
             return False, "Response must mention Python"
         
         # Monkey patch it for this test
-        import agent_actions.validators.builtin_functions as bf
+        import agent_actions.agents.validators.builtin_functions as bf
         bf.contains_python_validator = validate_contains_python
         
         # Create interceptors with custom validator

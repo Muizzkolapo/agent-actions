@@ -6,8 +6,8 @@ Tests validation logic, error handling, and integration with validator functions
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
-from agent_actions.interceptors.base import InterceptorResult
+from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
+from agent_actions.agents.interceptors.base import InterceptorResult
 
 
 class TestValidationInterceptor:

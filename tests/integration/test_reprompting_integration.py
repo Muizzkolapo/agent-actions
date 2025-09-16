@@ -6,10 +6,10 @@ Tests the realistic integration of validation and reprompting.
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.interceptors.validation_interceptor import ValidationInterceptor
-from agent_actions.interceptors.reprompt_interceptor import RepromptInterceptor
-from agent_actions.interceptors.base import InterceptorChain
-from agent_actions.interceptors.factory import InterceptorFactory
+from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
+from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.agents.interceptors.base import InterceptorChain
+from agent_actions.agents.interceptors.factory import InterceptorFactory
 
 
 class TestRealisticRepromptingFlow:
@@ -147,7 +147,7 @@ class TestRealisticRepromptingFlow:
             return True, None
         
         # Monkey patch it into the builtin_functions for this test
-        import agent_actions.validators.builtin_functions as bf
+        import agent_actions.agents.validators.builtin_functions as bf
         bf.sentiment_positive_validator = validate_positive_sentiment
         
         # Build chain

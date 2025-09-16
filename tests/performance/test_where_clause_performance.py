@@ -2,7 +2,7 @@ import pytest
 import time
 import random
 import string
-from agent_actions.common.filters.where_parser import WhereClauseParser
+from agent_actions._internal.common.filters.where_parser import WhereClauseParser
 
 
 class TestWhereClausePerformance:

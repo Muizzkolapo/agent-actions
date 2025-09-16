@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from agent_actions.loaders.data_loaders.source_data_loader import SourceDataLoader
+from agent_actions.integrations.loaders.data_loaders.source_data_loader import SourceDataLoader
 from agent_actions.core.path_manager import PathManager, PathManagerError
 
 

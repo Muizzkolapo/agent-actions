@@ -6,8 +6,8 @@ Tests reprompt generation, max attempts, and strategy integration.
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.interceptors.reprompt_interceptor import RepromptInterceptor
-from agent_actions.interceptors.base import InterceptorResult
+from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.agents.interceptors.base import InterceptorResult
 from agent_actions.strategies.reprompt_strategy import (
     RepromptContext,
     LLMRepromptStrategy,

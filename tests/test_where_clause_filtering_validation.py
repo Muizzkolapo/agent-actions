@@ -14,15 +14,15 @@ from pathlib import Path
 from typing import Dict, Any, List
 from unittest.mock import patch, MagicMock
 
-from agent_actions.common.filters.where_filter import (
+from agent_actions._internal.common.filters.where_filter import (
     WhereClauseFilter, 
     get_global_filter,
     filter_data_with_where_clause,
     filter_batch_with_where_clause
 )
-from agent_actions.common.filters.parser import WhereClauseParser, parse_where_clause
-from agent_actions.services.batch_service import BatchService
-from agent_actions.workflow.agent_workflow import AgentWorkflow
+from agent_actions._internal.common.filters.parser import WhereClauseParser, parse_where_clause
+from agent_actions.tasks.services.batch_service import BatchService
+from agent_actions.core.graph.agent_workflow import AgentWorkflow
 
 
 class TestWhereClauseBasicFiltering:
@@ -333,7 +333,7 @@ class TestBatchServiceIntegration:
                 except Exception as e:
                     # If there are dependency issues, at least verify the filtering logic
                     # by testing the WHERE clause evaluation directly
-                    from agent_actions.common.filters.where_filter import get_global_filter
+                    from agent_actions._internal.common.filters.where_filter import get_global_filter
                     filter_service = get_global_filter()
                     
                     filtered_items = []
@@ -404,7 +404,7 @@ class TestAgentWorkflowIntegration:
     def test_agent_level_skip_condition(self):
         """Test agent-level WHERE clause filtering."""
         # This would require a full workflow setup, so we test the core logic
-        from agent_actions.common.filters.where_filter import get_global_filter
+        from agent_actions._internal.common.filters.where_filter import get_global_filter
         
         filter_service = get_global_filter()
         

@@ -4,9 +4,9 @@ import tempfile
 import os
 import json
 from unittest.mock import patch
-from agent_actions.workflow.agent_workflow import AgentWorkflow
-from agent_actions.services.batch_service import BatchService
-from agent_actions.common.filters.where_parser import WhereClauseParser
+from agent_actions.core.graph.agent_workflow import AgentWorkflow
+from agent_actions.tasks.services.batch_service import BatchService
+from agent_actions._internal.common.filters.where_parser import WhereClauseParser
 
 
 class TestWorkflowIntegration:

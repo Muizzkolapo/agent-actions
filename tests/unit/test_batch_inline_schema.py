@@ -2,10 +2,10 @@
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.services.batch_service import BatchService
-from agent_actions.providers.openai_provider import OpenAIBatchProvider
-from agent_actions.providers.gemini_provider import GeminiBatchProvider
-from agent_actions.providers.anthropic_provider import AnthropicBatchProvider
+from agent_actions.tasks.services.batch_service import BatchService
+from agent_actions.integrations.providers.openai_provider import OpenAIBatchProvider
+from agent_actions.integrations.providers.gemini_provider import GeminiBatchProvider
+from agent_actions.integrations.providers.anthropic_provider import AnthropicBatchProvider
 
 
 class TestBatchInlineSchema:

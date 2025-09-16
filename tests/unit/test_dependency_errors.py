@@ -8,10 +8,10 @@ import pytest
 from unittest.mock import Mock, MagicMock
 
 from agent_actions.cli.exceptions import DependencyError
-from agent_actions.processors.target_processor.target_content_processor import TargetContentProcessor
-from agent_actions.processors.target_processor.target_generator import TargetGenerator
-from agent_actions.loaders.data_loaders.source_data_loader import SourceDataLoader
-from agent_actions.common.performance.cache import CacheManager
+from agent_actions.agents.processors.target_processor.target_content_processor import TargetContentProcessor
+from agent_actions.agents.processors.target_processor.target_generator import TargetGenerator
+from agent_actions.integrations.loaders.data_loaders.source_data_loader import SourceDataLoader
+from agent_actions._internal.common.performance.cache import CacheManager
 from agent_actions.core.agent_strategies import AgentStrategy
 
 

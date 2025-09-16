@@ -8,7 +8,7 @@ content extraction, and context preparation with various input formats.
 import pytest
 from unittest.mock import Mock, patch
 
-from agent_actions.processors.prompt_processor.context_preprocessor import ContextPreprocessor
+from agent_actions.agents.processors.prompt_processor.context_preprocessor import ContextPreprocessor
 
 
 class TestContextPreprocessor:
