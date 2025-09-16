@@ -220,7 +220,7 @@ class TestRealisticRepromptingFlow:
         assert result.continue_processing is False
         assert "Missing required keywords" in result.retry_context["validation_error"]
 
-    @patch('agent_actions.models.agent_builder')
+    @patch('agent_actions.agents.base.agent_builder')
     def test_llm_reprompt_strategy_realistic(self, mock_agent_builder):
         """Test realistic LLM reprompt strategy."""
         # Mock LLM to return progressively better prompts

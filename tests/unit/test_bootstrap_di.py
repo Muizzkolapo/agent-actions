@@ -33,7 +33,7 @@ import gc
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_actions.bootstrap import (
+from agent_actions._internal.bootstrap.bootstrap import (
     initialize_application,
     get_application_container,
     create_agent_runner,
@@ -42,7 +42,7 @@ from agent_actions.bootstrap import (
     is_di_enabled,
 )
 from agent_actions.core.application_container import ApplicationContainer
-from agent_actions.core.dependency_injection import (
+from agent_actions.core.graph.dependency_injection import (
     DependencyContainer,
     ProcessorFactory,
     ServiceLifetime,

@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import Mock
 from typing import Protocol
 
-from agent_actions.core.dependency_injection import (
+from agent_actions.core.graph.dependency_injection import (
     DependencyContainer, ProcessorRegistry, ProcessorFactory, ServiceLifetime
 )
 

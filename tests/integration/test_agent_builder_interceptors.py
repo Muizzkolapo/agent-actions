@@ -18,7 +18,7 @@ class TestAgentBuilderInterceptors:
     @pytest.fixture
     def mock_base_agent_call(self):
         """Mock the base agent execution."""
-        with patch('agent_actions.models.agent_builder._execute_base_agent') as mock:
+        with patch('agent_actions.agents.base.agent_builder._execute_base_agent') as mock:
             mock.return_value = [{"content": "Initial response"}]
             yield mock
 
@@ -50,7 +50,7 @@ class TestAgentBuilderInterceptors:
     @pytest.fixture
     def mock_interceptor_factory(self):
         """Mock the interceptor factory."""
-        with patch('agent_actions.models.agent_builder.InterceptorFactory') as mock:
+        with patch('agent_actions.agents.base.agent_builder.InterceptorFactory') as mock:
             # Create mock interceptors
             mock_validation = Mock()
             mock_reprompt = Mock()
@@ -72,7 +72,7 @@ class TestAgentBuilderInterceptors:
         }]
         
         # Mock the function (this would be the actual import)
-        from agent_actions.models.agent_builder import _execute_with_interceptors
+        from agent_actions.agents.base.agent_builder import _execute_with_interceptors
         
         config = {
             "model_vendor": "openai",
@@ -199,8 +199,8 @@ class TestAgentBuilderInterceptors:
         
         # Test that both validations must pass
 
-    @patch('agent_actions.models.agent_builder.InterceptorChain')
-    @patch('agent_actions.models.agent_builder.InterceptorFactory')
+    @patch('agent_actions.agents.base.agent_builder.InterceptorChain')
+    @patch('agent_actions.agents.base.agent_builder.InterceptorFactory')
     def test_context_preservation(self, mock_factory, mock_chain):
         """Test that context is preserved through retry cycles."""
         # Setup mocks

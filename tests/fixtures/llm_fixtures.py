@@ -78,7 +78,7 @@ def mock_llm_agent():
 @pytest.fixture
 def mock_agent_builder():
     """Mock the agent_builder module."""
-    with patch('agent_actions.models.agent_builder') as mock:
+    with patch('agent_actions.agents.base.agent_builder') as mock:
         # Default behavior
         mock.create_dynamic_agent.return_value = LLMResponseFixtures.simple_response("Mock response")
         yield mock
@@ -89,7 +89,7 @@ def mock_agent_builder_with_responses():
     """Mock agent_builder with configurable responses."""
     def _create_mock(responses: List[Any]):
         mock_agent = MockLLMAgent(responses)
-        with patch('agent_actions.models.agent_builder') as mock:
+        with patch('agent_actions.agents.base.agent_builder') as mock:
             mock.create_dynamic_agent.side_effect = mock_agent
             mock._agent = mock_agent  # Store reference for test access
             yield mock
@@ -208,7 +208,7 @@ def mock_llm_with_behavior():
                 return LLMResponseFixtures.simple_response("Default response")
     
     mock = BehaviorMockLLM()
-    with patch('agent_actions.models.agent_builder') as builder_mock:
+    with patch('agent_actions.agents.base.agent_builder') as builder_mock:
         builder_mock.create_dynamic_agent.side_effect = mock
         builder_mock._behavior_mock = mock  # Store reference
         yield builder_mock

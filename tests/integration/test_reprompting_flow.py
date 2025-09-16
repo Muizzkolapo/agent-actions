@@ -161,7 +161,7 @@ class TestRepromptingIntegration:
         assert result.continue_processing is False
         assert "Make sure to mention Python" in result.retry_context["prompt"]
 
-    @patch('agent_actions.models.agent_builder')
+    @patch('agent_actions.agents.base.agent_builder')
     def test_llm_reprompt_strategy_integration(self, mock_agent_builder):
         """Test integration with LLM reprompt strategy."""
         # Mock LLM response

@@ -1,1 +1,0 @@
-# Production resilience patterns package

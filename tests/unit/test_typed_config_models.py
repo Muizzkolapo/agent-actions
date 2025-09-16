@@ -5,11 +5,11 @@ import os
 from unittest.mock import patch
 from pydantic import ValidationError
 
-from agent_actions.models.environment_config import EnvironmentConfig, Environment, LogLevel
-from agent_actions.models.config_schema import AgentConfig, WhereClauseConfig, FilterScope
-from agent_actions.models.processor_config import ProcessorConfig, DataProcessorConfig, ProcessingMode
-from agent_actions.models.vendor_config import OpenAIConfig, AnthropicConfig, VendorType
-from agent_actions.models.pipeline_config import PipelineConfig, StageConfig, ExecutionMode
+from agent_actions.core.context.environment_config import EnvironmentConfig, Environment, LogLevel
+from agent_actions.core.parser.config_schema import AgentConfig, WhereClauseConfig, FilterScope
+from agent_actions.core.parser.processor_config import ProcessorConfig, DataProcessorConfig, ProcessingMode
+from agent_actions.core.parser.vendor_config import OpenAIConfig, AnthropicConfig, VendorType
+from agent_actions.core.parser.pipeline_config import PipelineConfig, StageConfig, ExecutionMode
 
 
 class TestEnvironmentConfig:

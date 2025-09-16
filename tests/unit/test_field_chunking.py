@@ -1,6 +1,6 @@
 import pytest
 
-from agent_actions.utils import FieldAnalyzer, FieldChunker, FieldChunkingValidationError, FieldChunkingError
+from agent_actions._internal.utils.field_chunking import FieldAnalyzer, FieldChunker, FieldChunkingValidationError, FieldChunkingError
 from agent_actions.common.transformers.string_transformer import Tokenizer
 
 

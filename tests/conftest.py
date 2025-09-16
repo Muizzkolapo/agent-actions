@@ -27,7 +27,7 @@ if "ollama" not in sys.modules:  # pragma: no cover - testing utility
 
     sys.modules["ollama"] = types.SimpleNamespace(Client=_DummyClient)
 
-from agent_actions.core.dependency_injection import (
+from agent_actions.core.graph.dependency_injection import (
     DependencyContainer,
     ProcessorFactory,
     registry,

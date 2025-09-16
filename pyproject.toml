@@ -1,43 +1,75 @@
-[tool.poetry]
+[project]
 name = "agent-actions"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
-license = "n"
+authors = [
+    {name = "Your Name", email = "you@example.com"},
+]
 readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.26.0",
+    "tiktoken>=0.9.0",
+    "flask>=3.0.3",
+    "flask-cors>=4.0.1",
+    "networkx>=3.3",
+    "pypdf2>=3.0.1",
+    "python-docx>=1.1.2",
+    "pandas>=2.2.2",
+    "openpyxl>=3.1.2",
+    "beautifulsoup4>=4.12.3",
+    "google-api-python-client>=2.130.0",
+    "google-generativeai>=0.7.2",
+    "google-genai>=1.0.0",
+    "anthropic>=0.30.0",
+    "sentence-transformers>=2.2.2",
+    "numpy>=1.26.4",
+    "jsonschema>=4.23.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "python-dotenv>=1.0.1",
+    "ollama>=0.1.0",
+    "mistralai>=0.1.0",
+    "cohere>=5.0.0",
+    "groq>=0.1.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-openai = "^1.26.0"
-tiktoken = "^0.9.0"
-flask = "^3.0.3"
-flask-cors = "^4.0.1"
-networkx = "^3.3"
-pypdf2 = "^3.0.1"
-python-docx = "^1.1.2"
-pandas = "^2.2.2"
-openpyxl = "^3.1.2"
-beautifulsoup4 = "^4.12.3"
-google-api-python-client = "^2.130.0"
-google-generativeai   = "^0.7.2"
-google-genai = "^1.0.0"
-anthropic = "^0.30.0"
-sentence-transformers = "^2.2.2"
-numpy= "^1.26.4" 
-jsonschema= "^4.23.0"
-pydantic = "^2.8.0"
-pydantic-settings = "^2.4.0"
-python-dotenv = "^1.0.1"  
+[project.scripts]
+agent = "agent_actions.cli.main:main"
 
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pylint = "^2.17.0"
-pytest-cov = "^4.1.0"
-mypy = "^1.8.0"
-types-PyYAML = "^6.0.12"
-pandas-stubs = "^2.0.3"
-types-requests = "^2.31.0"
-types-beautifulsoup4 = "^4.12.0"
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pylint>=2.17.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.8.0",
+    "types-PyYAML>=6.0.12",
+    "pandas-stubs>=2.0.3",
+    "types-requests>=2.31.0",
+    "types-beautifulsoup4>=4.12.0",
+    "ipython>=8.0.0",
+    "ipdb>=0.13.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pylint>=2.17.0",
+    "pytest-cov>=4.1.0",
+    "mypy>=1.8.0",
+    "types-PyYAML>=6.0.12",
+    "pandas-stubs>=2.0.3",
+    "types-requests>=2.31.0",
+    "types-beautifulsoup4>=4.12.0",
+    "ipython>=8.0.0",
+    "ipdb>=0.13.0",
+]
 
 [tool.mypy]
 python_version = "3.11"
@@ -82,7 +114,3 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "agent_actions.vendors.*"
 ignore_errors = true
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"

@@ -2,7 +2,7 @@
 
 import pytest
 from agent_actions.handlers.schema_handler import SchemaLoader
-from agent_actions.models.schema_change import compile_unified_schema
+from agent_actions.core.parser.schema_change import compile_unified_schema
 
 
 class TestInlineSchema:

@@ -37,3 +37,21 @@ agent_actions.egg-info/
 # Ignore build directory
 build/
 dist/
+
+# Ignore test coverage files
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Ignore virtual environments
+.venv/
+.venv-dev/
+.venv-prod/
+venv/
+env/
+
+# UV specific
+uv.lock.bak

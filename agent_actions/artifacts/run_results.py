@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .base import BaseArtifact, ArtifactMetadata
+from agent_actions.core.contracts.base import BaseArtifact, ArtifactMetadata
 
 
 class ExecutionTiming:

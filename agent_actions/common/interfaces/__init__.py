@@ -1,1 +1,0 @@
-"""Common interfaces package - shared interface definitions."""

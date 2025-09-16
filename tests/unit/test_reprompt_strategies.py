@@ -42,7 +42,7 @@ class TestLLMRepromptStrategy:
     @pytest.fixture
     def mock_agent_builder(self):
         """Mock the agent_builder module."""
-        with patch('agent_actions.models.agent_builder') as mock:
+        with patch('agent_actions.agents.base.agent_builder') as mock:
             mock.create_dynamic_agent.return_value = [{"content": "Improved prompt"}]
             yield mock
 

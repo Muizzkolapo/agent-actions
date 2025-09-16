@@ -13,13 +13,13 @@ from typing import Optional, Sequence, List, Any
 import click
 
 # Import commands
-from agent_actions.cli.commands.clean_command import clean_cli as clean
-from agent_actions.cli.commands.docs_command import docs
-from agent_actions.cli.commands.init_command import init
-from agent_actions.cli.commands.render_command import render
-from agent_actions.cli.commands.run_command import run
-from agent_actions.cli.commands.batch_command import batch
-from agent_actions.cli.commands.status_command import status
+from agent_actions.tasks.test import clean_cli as clean
+from agent_actions.tasks.docs import docs
+from agent_actions.tasks.init import init
+from agent_actions.tasks.compile import render
+from agent_actions.tasks.run import run
+from agent_actions.tasks.batch import batch
+from agent_actions.tasks.status import status
 
 # Version information
 __version__ = '1.0.0'

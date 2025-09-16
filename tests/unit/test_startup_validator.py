@@ -11,7 +11,7 @@ from agent_actions.core.startup_validator import (
     StartupValidationError, 
     validate_startup
 )
-from agent_actions.models.environment_config import Environment
+from agent_actions.core.context.environment_config import Environment
 
 
 class TestStartupValidator:

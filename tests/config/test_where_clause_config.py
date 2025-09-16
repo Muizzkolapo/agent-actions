@@ -1,7 +1,7 @@
 import pytest
 import yaml
 from pydantic import ValidationError
-from agent_actions.models.config_schema import EnhancedAgentConfig, WhereClauseConfig
+from agent_actions.core.parser.config_schema import EnhancedAgentConfig, WhereClauseConfig
 
 
 class TestWhereClauseConfiguration:
