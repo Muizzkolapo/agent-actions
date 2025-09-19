@@ -1,0 +1,112 @@
+version: '3'
+
+vars:
+  PACKAGE: agent_actions
+  DIST_DIR: dist
+  BUILD_DIR: build
+
+tasks:
+  # Development tasks
+  dev:
+    desc: Install package in development mode with all dev dependencies
+    cmds:
+      - uv sync --dev
+
+  dev:install:
+    desc: Install editable package with dev dependencies (legacy pip method)
+    cmds:
+      - pip install -e ".[dev]"
+
+  # Production tasks
+  prod:
+    desc: Install production dependencies only
+    cmds:
+      - uv sync --no-dev --active
+
+  # Build tasks
+  build:
+    desc: Build the package distribution
+    deps: [clean]
+    cmds:
+      - uv build
+
+  build:legacy:
+    desc: Build and install using setup.py (legacy method)
+    cmds:
+      - python3 setup.py sdist bdist_wheel
+      - pip3 install dist/agent_actions-0.1.0-py3-none-any.whl
+
+  # Clean tasks
+  clean:
+    desc: Remove build artifacts and cache files
+    cmds:
+      - rm -rf {{.DIST_DIR}} {{.BUILD_DIR}} *.egg-info
+      - find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+      - find . -type f -name "*.pyc" -delete
+
+  uninstall:
+    desc: Uninstall the package
+    cmds:
+      - pip uninstall -y {{.PACKAGE}} || echo "Package {{.PACKAGE}} is not installed"
+
+  # Restart workflow
+  restart:
+    desc: Complete restart - uninstall, clean, and rebuild
+    cmds:
+      - task: uninstall
+      - task: clean
+      - task: build
+
+  # Testing tasks
+  test:
+    desc: Run tests with pytest
+    cmds:
+      - uv run pytest
+
+  test:coverage:
+    desc: Run tests with coverage report
+    cmds:
+      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
+
+  # Linting and type checking
+  lint:
+    desc: Run linting with pylint
+    cmds:
+      - uv run pylint {{.PACKAGE}}
+
+  mypy:
+    desc: Run type checking with mypy
+    cmds:
+      - uv run mypy {{.PACKAGE}}
+
+  check:
+    desc: Run all checks (lint and type check)
+    deps: [lint, mypy]
+
+  # Utility tasks
+  deps:tree:
+    desc: Show dependency tree
+    cmds:
+      - uv pip tree
+
+  deps:outdated:
+    desc: Show outdated dependencies
+    cmds:
+      - uv pip list --outdated
+
+  # Agent-specific tasks
+  agent:run:
+    desc: Run the agent CLI
+    cmds:
+      - uv run agent {{.CLI_ARGS}}
+
+  agent:help:
+    desc: Show agent CLI help
+    cmds:
+      - uv run agent --help
+
+  # Default task
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list

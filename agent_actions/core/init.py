@@ -5,7 +5,7 @@ Module for initializing new Agent Actions projects.
 from pathlib import Path
 import yaml
 import logging
-from agent_actions.constants import (
+from agent_actions.core.constants import (
     API_KEY_KEY,
     MODEL_NAME_KEY,
     CHUNK_CONFIG_KEY,

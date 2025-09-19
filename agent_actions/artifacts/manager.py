@@ -15,7 +15,7 @@ from .manifest import ManifestArtifact
 from .run_results import RunResultsArtifact, AgentResult
 from .catalog import AgentCatalogArtifact
 from .validation_results import ValidationResultsArtifact
-from .base import SecurityError
+from agent_actions.core.contracts.base import SecurityError
 
 
 class ArtifactManager:
