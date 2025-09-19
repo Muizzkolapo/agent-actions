@@ -61,12 +61,12 @@ tasks:
   test:
     desc: Run tests with pytest
     cmds:
-      - uv run pytest tests/
+      - uv run pytest
 
   test:coverage:
     desc: Run tests with coverage report
     cmds:
-      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing tests/
+      - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
 
   # Linting and type checking
   lint:
