@@ -250,15 +250,23 @@ class ProcessorUtils:
             if already_structured:
                 # Extract content from structured data for side_collection processing
                 contents = [item['content'] for item in data]
-                updated = [
-                    DataTransformer.update_schema_objects(context_data, content, side_collection)
-                    for content in contents
-                ]
+                updated = []
+                for content in contents:
+                    if isinstance(content, dict):
+                        updated.append(DataTransformer.update_schema_objects(context_data, content, side_collection))
+                    else:
+                        # Convert non-dict content to dict format for processing
+                        content_dict = {"content": content}
+                        updated.append(DataTransformer.update_schema_objects(context_data, content_dict, side_collection))
             else:
-                updated = [
-                    DataTransformer.update_schema_objects(context_data, item, side_collection)
-                    for item in data
-                ]
+                updated = []
+                for item in data:
+                    if isinstance(item, dict):
+                        updated.append(DataTransformer.update_schema_objects(context_data, item, side_collection))
+                    else:
+                        # Convert non-dict items to dict format for processing
+                        item_dict = {"content": item}
+                        updated.append(DataTransformer.update_schema_objects(context_data, item_dict, side_collection))
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
             # Apply transform_structure to ensure consistent output format

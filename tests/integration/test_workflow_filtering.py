@@ -6,7 +6,7 @@ import json
 from unittest.mock import patch
 from agent_actions.core.graph.agent_workflow import AgentWorkflow
 from agent_actions.tasks.services.batch_service import BatchService
-from agent_actions._internal.common.filters.where_parser import WhereClauseParser
+from agent_actions.core.parser.where_parser import WhereClauseParser
 
 
 class TestWorkflowIntegration:

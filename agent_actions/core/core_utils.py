@@ -46,12 +46,14 @@ class Utils:
         if not isinstance(dependencies, dict):
             raise ValueError("Dependencies must be a dictionary")
 
-        # Initialize in-degree count for each node
-        in_degree: Dict[T, int] = {node: 0 for node in dependencies}
+        # Initialize in-degree count for all nodes (including dependencies)
+        all_nodes = set(dependencies.keys())
+        for dependent_nodes in dependencies.values():
+            all_nodes.update(dependent_nodes)
+
+        in_degree: Dict[T, int] = {node: 0 for node in all_nodes}
         for node, dependent_nodes in dependencies.items():
             for dep_node in dependent_nodes:
-                if dep_node not in in_degree:
-                    raise ValueError(f"Dependent node '{dep_node}' not found in dependency graph")
                 in_degree[dep_node] += 1
 
         # Start with nodes having zero in-degree
@@ -62,13 +64,15 @@ class Utils:
             current = queue.popleft()
             sorted_nodes.append(current)
 
-            for neighbor in dependencies[current]:
-                in_degree[neighbor] -= 1
-                if in_degree[neighbor] == 0:
-                    queue.append(neighbor)
+            # Only process neighbors if this node has dependencies in the original dict
+            if current in dependencies:
+                for neighbor in dependencies[current]:
+                    in_degree[neighbor] -= 1
+                    if in_degree[neighbor] == 0:
+                        queue.append(neighbor)
 
-        if len(sorted_nodes) != len(dependencies):
-            cycle_nodes: Set[T] = set(dependencies.keys()) - set(sorted_nodes)
+        if len(sorted_nodes) != len(all_nodes):
+            cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
             raise ValueError(f"Cyclic dependency detected in the workflow: {list(cycle_nodes)}")
 
         # Reverse the sorted order for correct processing order

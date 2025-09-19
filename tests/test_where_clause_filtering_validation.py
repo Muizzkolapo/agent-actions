@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Dict, Any, List
 from unittest.mock import patch, MagicMock
 
-from agent_actions._internal.common.filters.where_filter import (
-    WhereClauseFilter, 
+from agent_actions._internal.filters.where_filter import (
+    WhereClauseFilter,
     get_global_filter,
     filter_data_with_where_clause,
     filter_batch_with_where_clause
 )
-from agent_actions._internal.common.filters.parser import WhereClauseParser, parse_where_clause
+from agent_actions._internal.filters.parser import WhereClauseParser, parse_where_clause
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.graph.agent_workflow import AgentWorkflow
 

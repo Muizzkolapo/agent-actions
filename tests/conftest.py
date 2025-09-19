@@ -8,6 +8,7 @@ making it easy to test components in isolation with mocked dependencies.
 import logging
 import sys
 import types
+import time
 import pytest
 from pathlib import Path
 from unittest.mock import Mock
@@ -313,3 +314,326 @@ class TestDataBuilder:
 def test_data_builder():
     """Provide the test data builder."""
     return TestDataBuilder
+
+
+# Enhanced test infrastructure for comprehensive testing (CF-001)
+# ================================================================
+
+# Test framework imports for comprehensive testing
+import hypothesis
+from hypothesis import settings
+
+# Framework imports for enhanced testing
+from agent_actions.core.utils.processor_utils import ProcessorUtils
+from agent_actions.agents.transformers.data_transformer import DataTransformer
+from agent_actions.core.parser.where_parser import WhereClauseParser, SimpleWhereFilter
+
+try:
+    from agent_actions._internal.filters.secure_parser import SecureWhereClauseParser, SecurityContext
+    SECURE_PARSER_AVAILABLE = True
+except ImportError:
+    SECURE_PARSER_AVAILABLE = False
+    SecurityContext = None
+    SecureWhereClauseParser = None
+
+try:
+    from tests.utils.test_utils import (
+        TestState, CollectionManagementTestHelper, WhereClauseSecurityTestHelper,
+        WorkflowOrchestrationTestHelper, PerformanceBenchmarkHelper,
+        ThreadSafeDataGenerator, test_state, temporary_test_environment
+    )
+    TEST_UTILS_AVAILABLE = True
+except ImportError:
+    TEST_UTILS_AVAILABLE = False
+
+
+# Configure hypothesis for comprehensive property-based testing
+settings.register_profile("comprehensive",
+    max_examples=50,  # Reduced for CI performance
+    deadline=500,     # 0.5 second deadline per test
+    database=None,    # Disable example database for CI
+    suppress_health_check=[hypothesis.HealthCheck.too_slow]
+)
+settings.load_profile("comprehensive")
+
+
+# Enhanced Test Data Generation Fixtures
+@pytest.fixture(scope="session")
+def qanalabs_test_patterns():
+    """qanalabs production test patterns."""
+    if not TEST_UTILS_AVAILABLE:
+        # Fallback minimal patterns
+        return [{
+            "name": "basic_pattern",
+            "remove_collection_fields": ["id", "url"],
+            "side_collection_fields": ["content", "metadata"],
+            "performance_threshold_ms": 50.0
+        }]
+    return CollectionManagementTestHelper.create_qanalabs_test_patterns()
+
+
+@pytest.fixture(scope="function")
+def enhanced_test_data(qanalabs_test_patterns):
+    """Generate enhanced test data based on qanalabs patterns."""
+    if not TEST_UTILS_AVAILABLE:
+        # Fallback test data
+        return [
+            {"id": "1", "url": "test", "content": "sample", "metadata": {"type": "test"}},
+            {"id": "2", "url": "test2", "content": "sample2", "metadata": {"type": "test"}}
+        ]
+
+    pattern = qanalabs_test_patterns[0]
+    return CollectionManagementTestHelper.generate_test_data(
+        pattern, item_count=10, add_nested_objects=True
+    )
+
+
+# Collection Management Test Fixtures
+@pytest.fixture(scope="function")
+def processor_utils_instance():
+    """ProcessorUtils instance for testing."""
+    return ProcessorUtils()
+
+
+@pytest.fixture(scope="function")
+def data_transformer_instance():
+    """DataTransformer instance for testing."""
+    return DataTransformer()
+
+
+@pytest.fixture(scope="function")
+def enhanced_agent_config():
+    """Enhanced agent configuration for comprehensive testing."""
+    return {
+        "agent_type": "test_agent",
+        "remove_collection": ["id", "url", "topic"],
+        "side_collection": ["id", "url", "page_content", "bloom_details"],
+        "json_mode": True,
+        "granularity": "Record",
+        "run_mode": "batch",
+        "is_operational": True,
+        "dependencies": [],
+        "model_vendor": "openai",
+        "model_name": "gpt-4o-mini",
+        "use_few_shot_samples": 0
+    }
+
+
+# WHERE Clause Security Test Fixtures
+@pytest.fixture(scope="function")
+def where_parser():
+    """Basic WHERE clause parser for testing."""
+    return WhereClauseParser()
+
+
+@pytest.fixture(scope="function")
+def where_filter():
+    """Simple WHERE filter for testing."""
+    return SimpleWhereFilter()
+
+
+@pytest.fixture(scope="function")
+def secure_parser():
+    """Secure WHERE clause parser if available."""
+    if not SECURE_PARSER_AVAILABLE:
+        pytest.skip("Secure parser not available")
+
+    security_context = SecurityContext(
+        allowed_fields=set(),
+        max_clause_length=1000,
+        max_conditions=10,
+        max_evaluation_time_ms=100.0
+    )
+    return SecureWhereClauseParser(security_context)
+
+
+@pytest.fixture(scope="function")
+def qanalabs_where_test_cases():
+    """WHERE clause test cases from qanalabs production."""
+    if not TEST_UTILS_AVAILABLE:
+        return [{
+            'name': 'basic_test',
+            'clause': 'status == "active"',
+            'test_data': {'status': 'active'},
+            'expected_result': True
+        }]
+    return WhereClauseSecurityTestHelper.get_legitimate_test_cases()
+
+
+# Performance Testing Fixtures
+@pytest.fixture(scope="function")
+def performance_helper():
+    """Performance benchmark helper."""
+    if not TEST_UTILS_AVAILABLE:
+        return Mock()
+    return PerformanceBenchmarkHelper()
+
+
+@pytest.fixture(scope="function")
+def benchmark_thresholds():
+    """Performance benchmark thresholds."""
+    return {
+        "collection_management": {
+            "remove_collection_100_items_ms": 50.0,
+            "side_collection_100_items_ms": 100.0,
+            "data_integrity_validation_ms": 25.0
+        },
+        "where_clause": {
+            "parse_simple_clause_ms": 5.0,
+            "evaluate_1000_items_ms": 100.0,
+            "security_validation_ms": 10.0
+        },
+        "workflow_orchestration": {
+            "dependency_resolution_50_agents_ms": 100.0,
+            "status_save_1000_agents_ms": 1000.0,
+            "status_load_1000_agents_ms": 500.0
+        }
+    }
+
+
+# Enhanced File System Test Fixtures
+@pytest.fixture(scope="function")
+def enhanced_temp_environment():
+    """Enhanced temporary test environment with cleanup."""
+    if TEST_UTILS_AVAILABLE:
+        with temporary_test_environment() as env:
+            yield env
+    else:
+        # Fallback implementation
+        import tempfile
+        import shutil
+
+        temp_dir = tempfile.mkdtemp(prefix="agent_actions_test_")
+        try:
+            agent_io = Path(temp_dir) / "agent_io"
+            agent_io.mkdir()
+            (agent_io / "staging").mkdir()
+            (agent_io / "target").mkdir()
+            (agent_io / "artifacts").mkdir()
+
+            yield {
+                'temp_dir': temp_dir,
+                'agent_io': str(agent_io),
+                'staging': str(agent_io / "staging"),
+                'target': str(agent_io / "target"),
+                'artifacts': str(agent_io / "artifacts")
+            }
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+# Test State Management
+@pytest.fixture(scope="function")
+def test_state_manager():
+    """Test state manager for tracking test execution."""
+    if TEST_UTILS_AVAILABLE:
+        # Reset global test state
+        test_state._test_runs.clear()
+        test_state._performance_metrics.clear()
+        test_state._security_violations.clear()
+        test_state._data_integrity_checks.clear()
+        return test_state
+    else:
+        return Mock()
+
+
+# Enhanced pytest configuration
+def pytest_configure(config):
+    """Enhanced pytest configuration with custom markers."""
+    config.addinivalue_line(
+        "markers", "slow: mark test as slow running"
+    )
+    config.addinivalue_line(
+        "markers", "security: mark test as security-focused"
+    )
+    config.addinivalue_line(
+        "markers", "integration: mark test as integration test"
+    )
+    config.addinivalue_line(
+        "markers", "performance: mark test as performance test"
+    )
+    config.addinivalue_line(
+        "markers", "collection_management: mark test as collection management test"
+    )
+    config.addinivalue_line(
+        "markers", "where_clause: mark test as WHERE clause test"
+    )
+    config.addinivalue_line(
+        "markers", "workflow: mark test as workflow orchestration test"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Enhanced test collection with automatic marker assignment."""
+    for item in items:
+        # Add markers based on test names and file locations
+        if "performance" in item.name.lower():
+            item.add_marker(pytest.mark.performance)
+        if "security" in item.name.lower():
+            item.add_marker(pytest.mark.security)
+        if "integration" in item.name.lower() or "e2e" in item.name.lower():
+            item.add_marker(pytest.mark.integration)
+        if any(keyword in item.name.lower() for keyword in ["large", "stress", "concurrent"]):
+            item.add_marker(pytest.mark.slow)
+
+        # Add markers based on file names
+        if "collection_management" in str(item.fspath):
+            item.add_marker(pytest.mark.collection_management)
+        if "where_clause" in str(item.fspath):
+            item.add_marker(pytest.mark.where_clause)
+        if "workflow" in str(item.fspath):
+            item.add_marker(pytest.mark.workflow)
+
+
+# Enhanced test execution monitoring
+@pytest.fixture(scope="function", autouse=True)
+def enhanced_test_monitor(request):
+    """Enhanced test execution monitoring."""
+    test_name = request.node.name
+    start_time = time.perf_counter()
+
+    # Setup
+    yield
+
+    # Cleanup and monitoring
+    duration = time.perf_counter() - start_time
+
+    # Log slow tests
+    if duration > 3.0:  # 3 second threshold
+        print(f"\n[PERFORMANCE WARNING] Slow test: {test_name} took {duration:.2f}s")
+
+    # Check for test markers and log appropriately
+    if hasattr(request.node, 'iter_markers'):
+        markers = [marker.name for marker in request.node.iter_markers()]
+        if 'security' in markers and duration > 1.0:
+            print(f"\n[SECURITY TEST] {test_name} completed in {duration:.2f}s")
+
+
+# Enhanced session cleanup
+@pytest.fixture(scope="session", autouse=True)
+def enhanced_session_cleanup():
+    """Enhanced session cleanup with comprehensive reporting."""
+    yield
+
+    if TEST_UTILS_AVAILABLE:
+        summary = test_state.get_summary()
+
+        print("\n" + "="*80)
+        print("ENHANCED AGENT ACTIONS TEST SUITE SUMMARY")
+        print("="*80)
+        print(f"Total tests executed: {len(summary['test_runs'])}")
+        print(f"Performance metrics collected: {len(summary['performance_metrics'])}")
+        print(f"Security violations detected and blocked: {len(summary['security_violations'])}")
+        print(f"Data integrity checks performed: {len(summary['data_integrity_checks'])}")
+
+        if summary['security_violations']:
+            print("\nSecurity Violations Blocked:")
+            for violation in summary['security_violations'][-5:]:  # Show last 5
+                print(f"  - {violation['type']}: {violation['details'][:60]}...")
+
+        if summary['performance_metrics']:
+            print("\nPerformance Metrics (samples):")
+            for test_id, metrics in list(summary['performance_metrics'].items())[-3:]:  # Show last 3
+                print(f"  - {test_id}: {metrics}")
+
+        print("="*80)

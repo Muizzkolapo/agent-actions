@@ -368,9 +368,8 @@ class BatchService:
                         logger.info(f"Row questionable value: {row_content['questionable']}")
                     
                     filter_result = filter_service.filter_item(
-                        row_content, 
-                        where_clause_config["clause"],
-                        timeout=agent_config.get("max_execution_time", 5)
+                        row_content,
+                        where_clause_config["clause"]
                     )
                     
                     logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")

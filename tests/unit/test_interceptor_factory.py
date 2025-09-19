@@ -6,10 +6,10 @@ Tests factory creation of interceptors and chain building.
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.agents.interceptors.factory import InterceptorFactory
-from agent_actions.agents.interceptors.base import ResponseInterceptor, InterceptorChain
-from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
-from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.integrations.interceptors.factory import InterceptorFactory
+from agent_actions.integrations.interceptors.base import ResponseInterceptor, InterceptorChain
+from agent_actions.agents.validators.validation_interceptor import ValidationInterceptor
+from agent_actions.integrations.interceptors.reprompt_interceptor import RepromptInterceptor
 
 
 class TestInterceptorFactory:

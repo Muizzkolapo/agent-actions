@@ -6,9 +6,9 @@ Tests the full pipeline of validation, reprompting, and retry logic.
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.agents.interceptors.validation_interceptor import ValidationInterceptor
-from agent_actions.agents.interceptors.reprompt_interceptor import RepromptInterceptor
-from agent_actions.agents.interceptors.base import InterceptorChain
+from agent_actions.agents.validators.validation_interceptor import ValidationInterceptor
+from agent_actions.integrations.interceptors.reprompt_interceptor import RepromptInterceptor
+from agent_actions.integrations.interceptors.base import InterceptorChain
 from agent_actions.strategies.reprompt_strategy import TemplateRepromptStrategy
 
 
