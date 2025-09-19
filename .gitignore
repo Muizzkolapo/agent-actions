@@ -18,6 +18,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Ignore JSONC planning files (editable with comments)
+*.jsonc
+
 # Ignore logs
 logs/
 *.log
