@@ -50,7 +50,13 @@ class StatusCommand:
             table.add_column("Status", justify="center", style="yellow")
 
             for agent, details in status_data.items():
-                table.add_row(agent, details.get('status', 'N/A'))
+                if details is None:
+                    status = 'N/A'
+                elif isinstance(details, dict):
+                    status = details.get('status', 'N/A')
+                else:
+                    status = 'N/A'
+                table.add_row(agent, status)
 
             self.console.print(table)
 

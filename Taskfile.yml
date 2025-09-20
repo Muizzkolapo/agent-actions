@@ -68,6 +68,79 @@ tasks:
     cmds:
       - uv run pytest --cov={{.PACKAGE}} --cov-report=term-missing
 
+  test:verbose:
+    desc: Run tests with verbose output
+    cmds:
+      - uv run pytest -v --tb=short
+
+  test:fast:
+    desc: Run tests in parallel for faster execution
+    cmds:
+      - uv run pytest -n auto
+
+  test:failed:
+    desc: Run only previously failed tests
+    cmds:
+      - uv run pytest --lf
+
+  test:stream:
+    desc: Run tests for specific work stream
+    vars:
+      STREAM: '{{default "" .STREAM}}'
+    cmds:
+      - |
+        if [ -z "{{.STREAM}}" ]; then
+          echo "Usage: task test:stream STREAM=<stream_name>"
+          echo "Available streams: cli, core, tasks, agents, utils"
+        else
+          uv run pytest tests/{{.STREAM}}/
+        fi
+
+  test:unit:
+    desc: Run only unit tests (exclude integration)
+    cmds:
+      - uv run pytest -m "not integration"
+
+  test:integration:
+    desc: Run only integration tests
+    cmds:
+      - uv run pytest -m integration
+
+  test:watch:
+    desc: Run tests in watch mode (auto-rerun on file changes)
+    cmds:
+      - uv run pytest-watch
+
+  test:report:
+    desc: Run tests with HTML coverage report
+    cmds:
+      - uv run pytest --cov={{.PACKAGE}} --cov-report=html --cov-report=term
+      - echo "Coverage report generated at htmlcov/index.html"
+
+  test:all:
+    desc: Run complete test suite with full reporting
+    cmds:
+      - uv run pytest -v --cov={{.PACKAGE}} --cov-report=term-missing --cov-report=html --tb=short
+
+  test:parallel:
+    desc: Run test streams in parallel (simulates multi-engineer workflow)
+    cmds:
+      - echo "Running test streams in parallel..."
+      - |
+        uv run pytest tests/test_cli.py tests/core/ & \
+        uv run pytest tests/tasks/ & \
+        uv run pytest tests/agents/ & \
+        uv run pytest tests/utils/ & \
+        wait
+      - echo "All parallel test streams completed"
+
+  test:quick:
+    desc: Quick smoke test of critical paths
+    cmds:
+      - uv run pytest tests/test_cli.py::TestCLIVersionHandling -v
+      - uv run pytest tests/tasks/test_init.py::TestInitCommand::test_init_creates_expected_structure -v
+      - uv run pytest tests/agents/test_base.py::TestAgentBuilder::test_create_dynamic_agent_builds_correct_components -v
+
   # Linting and type checking
   lint:
     desc: Run linting with pylint

@@ -95,10 +95,10 @@ class CLI:
         
 
     
-    def _show_version_and_exit(self) -> None:
-        """Display version information and exit."""
+    def _show_version_and_exit(self) -> int:
+        """Display version information and return exit code."""
         print(f"Agent Actions CLI v{__version__}")
-        sys.exit(0)
+        return 0
     
     def execute(self, argv: Optional[Sequence[str]] = None) -> int:
         """
@@ -116,7 +116,7 @@ class CLI:
             
             # Handle version flag
             if '--version' in argv or '-V' in argv:
-                self._show_version_and_exit()
+                return self._show_version_and_exit()
             
             # Set up logging before any other operations
             self._configure_logging(argv)
@@ -127,8 +127,8 @@ class CLI:
                 'args': argv
             })
             
-            # Execute command
-            self.click_group(argv)
+            # Execute command with standalone_mode=False to avoid SystemExit
+            self.click_group.main(argv, standalone_mode=False)
             
             self.logger.info("CLI execution completed successfully")
             return 0
@@ -154,17 +154,35 @@ class CLI:
             return 1
 
 
+def _print_help_callback(ctx, param, value):
+    """Callback to handle -h flag by printing help."""
+    if value:
+        click.echo(ctx.get_help())
+        ctx.exit()
+
+
 @click.group()
 @click.version_option(version=__version__)
 @click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging')
 @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
+@click.option('-h', is_flag=True, expose_value=False, is_eager=True, callback=_print_help_callback, help='Show this message and exit.')
 def cli(debug: bool, verbose: bool) -> None:
     """
     Agent Actions CLI tool for managing and running agent workflows.
-    
+
     Use --help with any command for more information.
     """
     pass
+
+
+# Register commands with the main cli group
+cli.add_command(clean)
+cli.add_command(docs)
+cli.add_command(init)
+cli.add_command(render)
+cli.add_command(run)
+cli.add_command(batch)
+cli.add_command(status)
 
 
 def main_entrypoint(argv: Optional[Sequence[str]] = None) -> int:

@@ -17,12 +17,14 @@ class WhereClauseParser:
     OPERATORS = {
         "!=": lambda a, b: a != b,
         "==": lambda a, b: a == b,
-        ">=": lambda a, b: a >= b if a is not None and b is not None else False,
-        "<=": lambda a, b: a <= b if a is not None and b is not None else False,
-        ">": lambda a, b: a > b if a is not None and b is not None else False,
-        "<": lambda a, b: a < b if a is not None and b is not None else False,
+        "=": lambda a, b: a == b,
+        ">=": lambda a, b: WhereClauseParser._safe_compare(a, b, lambda x, y: x >= y),
+        "<=": lambda a, b: WhereClauseParser._safe_compare(a, b, lambda x, y: x <= y),
+        ">": lambda a, b: WhereClauseParser._safe_compare(a, b, lambda x, y: x > y),
+        "<": lambda a, b: WhereClauseParser._safe_compare(a, b, lambda x, y: x < y),
         "IN": lambda a, b: a in b if isinstance(b, (list, tuple)) else False,
         "NOT IN": lambda a, b: a not in b if isinstance(b, (list, tuple)) else True,
+        "LIKE": lambda a, b: WhereClauseParser._like_match(a, b),
         "CONTAINS": lambda a, b: str(b) in str(a) if a is not None else False,
         "NOT CONTAINS": lambda a, b: str(b) not in str(a) if a is not None else True,
         "IS NULL": lambda a, b: a is None,
@@ -49,6 +51,10 @@ class WhereClauseParser:
     @classmethod
     def _parse_condition(cls, condition_str: str) -> Optional[WhereCondition]:
         """Parse a single condition"""
+        # Check for malformed triple operators
+        if "===" in condition_str or "!==" in condition_str:
+            return None
+
         upper = condition_str.upper()
         if "IS NULL" in upper:
             field = upper.replace("IS NULL", "").strip()
@@ -94,8 +100,30 @@ class WhereClauseParser:
             try:
                 return json.loads(value_str)
             except json.JSONDecodeError:
-                pass
+                # Try Python literal evaluation for single-quoted arrays
+                try:
+                    import ast
+                    return ast.literal_eval(value_str)
+                except (ValueError, SyntaxError):
+                    pass
         return value_str
+
+    @classmethod
+    def _like_match(cls, value: Any, pattern: str) -> bool:
+        """Implement LIKE pattern matching with % wildcards."""
+        if value is None:
+            return False
+
+        # Convert pattern to regex
+        # Escape regex special chars except %
+        escaped = re.escape(str(pattern))
+        # Convert % back to .*
+        regex_pattern = escaped.replace(r'\%', '.*')
+
+        try:
+            return bool(re.match(f'^{regex_pattern}$', str(value)))
+        except re.error:
+            return False
 
     @classmethod
     def evaluate(cls, data: Dict[str, Any], conditions: List[WhereCondition]) -> bool:
@@ -110,6 +138,8 @@ class WhereClauseParser:
     @classmethod
     def _get_nested_value(cls, data: Dict[str, Any], field_path: str) -> Any:
         """Get value from nested dictionary using dot notation"""
+        if not field_path:
+            return data
         keys = field_path.split(".")
         value: Any = data
         for key in keys:
@@ -118,6 +148,17 @@ class WhereClauseParser:
             else:
                 return None
         return value
+
+    @classmethod
+    def _safe_compare(cls, a: Any, b: Any, compare_func) -> bool:
+        """Safely compare two values with type checking."""
+        if a is None or b is None:
+            return False
+        try:
+            return compare_func(a, b)
+        except TypeError:
+            # Handle type mismatches gracefully
+            return False
 
 
 # Simple filter service for compatibility with existing code
@@ -162,6 +203,8 @@ class SimpleWhereFilter:
         """
         try:
             conditions = self.parser.parse(where_clause)
+            if not conditions:  # No valid conditions parsed
+                return True  # Default to including item on parse failure
             return self.parser.evaluate(data, conditions)
         except Exception:
             return True  # Default to including item on error
@@ -208,6 +251,8 @@ def evaluate_safe_expression(expression: str, context: Dict[str, Any]) -> bool:
     try:
         parser = WhereClauseParser()
         conditions = parser.parse(expression)
+        if not conditions:  # No valid conditions parsed means invalid syntax
+            return False
         return parser.evaluate(context, conditions)
     except Exception:
         return False
