@@ -46,7 +46,11 @@ class _TestableAsyncLoader(BaseLoader[List[str]]):
 
     async def process_async(self, content: Any, file_path: Optional[str] = None) -> List[str]:
         """Async implementation."""
-        await asyncio.sleep(0.01)  # Simulate async work
+        try:
+            import anyio
+            await anyio.sleep(0.01)  # Simulate async work
+        except ImportError:
+            await asyncio.sleep(0.01)  # Fallback to asyncio
         return self.process(content, file_path)
 
     def supports_filetype(self, file_extension: str) -> bool:

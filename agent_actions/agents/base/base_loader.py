@@ -55,14 +55,20 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     async def load_file_async(self, file_path: str) -> str:
         """Safely load a file's content asynchronously with retry logic."""
         try:
-            # Try to use aiofiles for true async I/O
+            # Try to use anyio for cross-backend compatibility
             try:
-                import aiofiles  # type: ignore[import-untyped]
-                async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                import anyio
+                async with await anyio.open_file(file_path, "r", encoding="utf-8") as f:
                     return await f.read()
             except ImportError:
                 # Fallback to thread-based async
-                return await asyncio.to_thread(self.load_file, file_path)
+                try:
+                    # For Python 3.9+
+                    return await asyncio.to_thread(self.load_file, file_path)
+                except AttributeError:
+                    # For older Python versions
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(None, self.load_file, file_path)
         except Exception as e:
             self.handle_file_error(e, "read", file_path)
             raise  # Re-raise the exception since handle_file_error may not always raise
@@ -90,7 +96,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         file_path: Optional[str] = None
     ) -> T:
         """Async version of process method.
-        
+
         Args:
             content: Raw content provided directly (optional if file_path is provided).
             file_path: Path to the file to load content from.
@@ -99,7 +105,17 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
             Parsed content such as a string, dictionary, or list depending on loader type.
         """
         # Default implementation uses thread-based async for backward compatibility
-        return await asyncio.to_thread(self.process, content, file_path)
+        try:
+            import anyio
+            return await anyio.to_thread.run_sync(self.process, content, file_path)
+        except ImportError:
+            try:
+                # For Python 3.9+ with asyncio
+                return await asyncio.to_thread(self.process, content, file_path)
+            except (AttributeError, RuntimeError):
+                # For older Python versions or when no event loop is running
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, self.process, content, file_path)
     
     def load_data(self, file_path: str) -> T:
         """Implementation of IDataLoader interface."""
