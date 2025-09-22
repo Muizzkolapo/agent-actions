@@ -101,21 +101,22 @@ def check_path_exists(path: Union[str, Path]) -> bool:
 def find_project_root(start_path: Optional[Path] = None, marker_file: str = "agent_actions.yml") -> Path:
     """
     Find project root by looking for marker file.
-    
+
     This consolidates the project root discovery logic.
-    
+
     Args:
         start_path: Starting point for search
         marker_file: Name of marker file to look for
-        
+
     Returns:
         Path to project root
-        
+
     Raises:
         ProjectRootNotFoundError: If project root cannot be found
     """
     config = PathConfigManager()
-    pm = PathManager()
+    config.marker_file = marker_file  # Set the custom marker file
+    pm = PathManager(config)
     return pm.get_project_root(start_path)
 
 

@@ -1,0 +1,3607 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.2, pytest-8.4.2, pluggy-1.6.0
+benchmark: 5.1.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /Users/muizz/Documents/codeshop/agent-actions
+configfile: pytest.ini
+testpaths: tests, agent_actions/cli/validators/test_local
+plugins: mock-3.15.1, asyncio-1.2.0, hypothesis-6.139.2, xdist-3.8.0, anyio-4.10.0, benchmark-5.1.0, cov-7.0.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 300 items
+
+tests/agents/test_base.py .........FF.FF..........F.F....FF              [ 11%]
+tests/core/test_loaders.py ...................F........................  [ 25%]
+tests/core/test_parser.py FFFF......F..F....F.F.F..F.F......F...FF...FF. [ 41%]
+                                                                         [ 41%]
+tests/tasks/test_compile.py F.F..FFFFFFFFFFFFFFF.F.F..FFFFF              [ 51%]
+tests/tasks/test_init.py ..F.....................F.F......               [ 62%]
+tests/tasks/test_status.py .F......F..F........F......                   [ 71%]
+tests/test_cli.py EEEEEEEEEEEEEEEEEFF.F...EEEEE....FF.....               [ 84%]
+tests/utils/test_paths.py .........FF....................F......s....F.. [100%]
+
+==================================== ERRORS ====================================
+_ ERROR at setup of TestCLIVersionHandling.test_version_flag_prints_version_and_exits_0 _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_version_flag_prints_version_and_exits_0>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIVersionHandling.test_version_short_flag_prints_version_and_exits_0 _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_version_short_flag_prints_version_and_exits_0>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIVersionHandling.test_version_flag_with_other_args_still_exits _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_version_flag_with_other_args_still_exits>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_____ ERROR at setup of TestCLIVersionHandling.test_version_output_format ______
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_version_output_format>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+__ ERROR at setup of TestCLIHelpDisplay.test_root_help_displays_without_error __
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_root_help_displays_without_error>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+__ ERROR at setup of TestCLIHelpDisplay.test_help_flag_displays_without_error __
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_help_flag_displays_without_error>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[init] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[init]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[render] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[render]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[run] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[run]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[batch] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[batch]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[status] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[status]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[clean] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[clean]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIHelpDisplay.test_subcommand_help_displays_without_error[docs] _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_subcommand_help_displays_without_error[docs]>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+___ ERROR at setup of TestCLIHelpDisplay.test_help_shows_available_commands ____
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_help_shows_available_commands>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIErrorHandling.test_invalid_command_produces_clear_error _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_invalid_command_produces_clear_error>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIErrorHandling.test_invalid_flag_produces_clear_error _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_invalid_flag_produces_clear_error>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLIErrorHandling.test_malformed_arguments_produce_error _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_malformed_arguments_produce_error>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLICommandDispatch.test_dispatch_routes_to_init_with_correct_args _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_dispatch_routes_to_init_with_correct_args>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLICommandDispatch.test_dispatch_routes_to_compile_with_correct_args _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_dispatch_routes_to_compile_with_correct_args>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLICommandDispatch.test_dispatch_routes_to_run_with_correct_args _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_dispatch_routes_to_run_with_correct_args>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLICommandDispatch.test_dispatch_routes_to_status_with_correct_args _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_dispatch_routes_to_status_with_correct_args>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+_ ERROR at setup of TestCLICommandDispatch.test_dispatch_routes_to_batch_with_correct_args _
+
+fixturedef = <FixtureDef argname='cli_runner' scope='function' baseid='tests'>
+request = <SubRequest 'cli_runner' for <Function test_dispatch_routes_to_batch_with_correct_args>>
+
+    @pytest.hookimpl(wrapper=True)
+    def pytest_fixture_setup(fixturedef: FixtureDef, request) -> object | None:
+        asyncio_mode = _get_asyncio_mode(request.config)
+        if not _is_asyncio_fixture_function(fixturedef.func):
+            if asyncio_mode == Mode.STRICT:
+                # Ignore async fixtures without explicit asyncio mark in strict mode
+                # This applies to pytest_trio fixtures, for example
+>               return (yield)
+                        ^^^^^
+
+.venv/lib/python3.13/site-packages/pytest_asyncio/plugin.py:733: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    @pytest.fixture
+    def cli_runner() -> CliRunner:
+        """Provide a Click CliRunner for testing CLI commands."""
+>       return CliRunner(mix_stderr=False)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: CliRunner.__init__() got an unexpected keyword argument 'mix_stderr'
+
+tests/conftest.py:63: TypeError
+=================================== FAILURES ===================================
+___________ TestAgentBuilder.test_prepare_prompt_with_file_reference ___________
+
+self = <test_base.TestAgentBuilder object at 0x1126a18b0>
+
+    def test_prepare_prompt_with_file_reference(self):
+        """Test _prepare_prompt with file reference."""
+        config = {"prompt": "$prompt_file.txt"}
+    
+        with patch('agent_actions.agents.base.agent_builder.PromptLoader') as mock_loader_class:
+            mock_loader = Mock()
+            mock_loader.load_prompt.return_value = "loaded_prompt_content"
+            mock_loader_class.return_value = mock_loader
+    
+            result = _prepare_prompt(config, None)
+    
+            # Should attempt to load from file
+>           assert result == "direct_prompt_text"  # Fallback behavior
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: assert <MagicMock name='PromptLoader.load_prompt()' id='4891632912'> == 'direct_prompt_text'
+
+tests/agents/test_base.py:243: AssertionError
+_________________ TestAgentBuilder.test_prepare_schema_success _________________
+
+self = <test_base.TestAgentBuilder object at 0x1126a1a90>
+
+    def test_prepare_schema_success(self):
+        """Test _prepare_schema with valid schema configuration."""
+        config = {
+            "schema": {"type": "object", "properties": {"field": {"type": "string"}}},
+            "schema_name": "test_schema"
+        }
+    
+        with patch('agent_actions.agents.base.agent_builder.compile_unified_schema') as mock_compile:
+            mock_compile.return_value = {"compiled": "schema"}
+    
+>           result = _prepare_schema(config, "openai")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/agents/test_base.py:255: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/agents/base/agent_builder.py:173: in _prepare_schema
+    base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+schema_dict = {'properties': {'field': {'type': 'string'}}, 'type': 'object'}
+
+    @staticmethod
+    def construct_schema_from_dict(schema_dict: dict) -> dict:
+        """
+        Construct a unified schema from a simple key-value dictionary.
+    
+        Args:
+            schema_dict (dict): Simple dictionary where keys are field names
+                               and values are data types (e.g., {"name": "string", "age": "number"})
+    
+        Returns:
+            dict: A unified schema in the standard format
+        """
+        fields = []
+    
+        for field_name, field_type in schema_dict.items():
+            # Check if field is required (indicated by ! suffix)
+>           is_required = field_type.endswith("!")
+                          ^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'dict' object has no attribute 'endswith'
+
+agent_actions/agents/handlers/schema_handler.py:123: AttributeError
+______________ TestAgentBuilder.test_invoke_vendor_handler_openai ______________
+
+self = <test_base.TestAgentBuilder object at 0x1126ff4d0>
+
+    def test_invoke_vendor_handler_openai(self):
+        """Test _invoke_vendor_handler with OpenAI vendor."""
+        agent_config = {"model_vendor": "openai", "model_name": "gpt-4"}
+        mock_response = [{"result": "openai_response"}]
+    
+        with patch.object(VENDOR_HANDLERS['openai'], '__call__') as mock_handler:
+            mock_handler.return_value = mock_response
+    
+>           result = _invoke_vendor_handler(
+                model_vendor="openai",
+                agent_config=agent_config,
+                prompt_config="test prompt",
+                context_data="test context",
+                schema=None,
+                granularity="record",
+                formatted_prompt="formatted prompt",
+                tool_args=None,
+                source_content=None
+            )
+
+tests/agents/test_base.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/agents/base/agent_builder.py:221: in _invoke_vendor_handler
+    response_data = handler.invoke(agent_config, prompt_config, context_data, schema)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent_actions/integrations/providers/vendor_base.py:22: in invoke
+    return cls.call_json(api_key, agent_config, prompt_config, context_data, schema)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent_actions/integrations/providers/openai/vendor.py:38: in call_json
+    response = client.chat.completions.create(
+.venv/lib/python3.13/site-packages/openai/_utils/_utils.py:286: in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/openai/resources/chat/completions/completions.py:1147: in create
+    return self._post(
+.venv/lib/python3.13/site-packages/openai/_base_client.py:1259: in post
+    return cast(ResponseT, self.request(cast_to, opts, stream=stream, stream_cls=stream_cls))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <openai.OpenAI object at 0x123919310>
+cast_to = <class 'openai.types.chat.chat_completion.ChatCompletion'>
+options = FinalRequestOptions(method='post', url='/chat/completions', params={}, headers=NOT_GIVEN, max_retries=NOT_GIVEN, timeo...UT AS STRING\n'}], 'model': 'gpt-4', 'response_format': {'type': 'json_schema', 'json_schema': None}}, extra_json=None)
+
+    def request(
+        self,
+        cast_to: Type[ResponseT],
+        options: FinalRequestOptions,
+        *,
+        stream: bool = False,
+        stream_cls: type[_StreamT] | None = None,
+    ) -> ResponseT | _StreamT:
+        cast_to = self._maybe_override_cast_to(cast_to, options)
+    
+        # create a copy of the options we were given so that if the
+        # options are mutated later & we then retry, the retries are
+        # given the original options
+        input_options = model_copy(options)
+        if input_options.idempotency_key is None and input_options.method.lower() != "get":
+            # ensure the idempotency key is reused between requests
+            input_options.idempotency_key = self._idempotency_key()
+    
+        response: httpx.Response | None = None
+        max_retries = input_options.get_max_retries(self.max_retries)
+    
+        retries_taken = 0
+        for retries_taken in range(max_retries + 1):
+            options = model_copy(input_options)
+            options = self._prepare_options(options)
+    
+            remaining_retries = max_retries - retries_taken
+            request = self._build_request(options, retries_taken=retries_taken)
+            self._prepare_request(request)
+    
+            kwargs: HttpxSendArgs = {}
+            if self.custom_auth is not None:
+                kwargs["auth"] = self.custom_auth
+    
+            if options.follow_redirects is not None:
+                kwargs["follow_redirects"] = options.follow_redirects
+    
+            log.debug("Sending HTTP Request: %s %s", request.method, request.url)
+    
+            response = None
+            try:
+                response = self._client.send(
+                    request,
+                    stream=stream or self._should_stream_response_body(request=request),
+                    **kwargs,
+                )
+            except httpx.TimeoutException as err:
+                log.debug("Encountered httpx.TimeoutException", exc_info=True)
+    
+                if remaining_retries > 0:
+                    self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising timeout error")
+                raise APITimeoutError(request=request) from err
+            except Exception as err:
+                log.debug("Encountered Exception", exc_info=True)
+    
+                if remaining_retries > 0:
+                    self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=None,
+                    )
+                    continue
+    
+                log.debug("Raising connection error")
+                raise APIConnectionError(request=request) from err
+    
+            log.debug(
+                'HTTP Response: %s %s "%i %s" %s',
+                request.method,
+                request.url,
+                response.status_code,
+                response.reason_phrase,
+                response.headers,
+            )
+            log.debug("request_id: %s", response.headers.get("x-request-id"))
+    
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as err:  # thrown on 4xx and 5xx status code
+                log.debug("Encountered httpx.HTTPStatusError", exc_info=True)
+    
+                if remaining_retries > 0 and self._should_retry(err.response):
+                    err.response.close()
+                    self._sleep_for_retry(
+                        retries_taken=retries_taken,
+                        max_retries=max_retries,
+                        options=input_options,
+                        response=response,
+                    )
+                    continue
+    
+                # If the response is streamed then we need to explicitly read the response
+                # to completion before attempting to access the response text.
+                if not err.response.is_closed:
+                    err.response.read()
+    
+                log.debug("Re-raising status error")
+>               raise self._make_status_error_from_response(err.response) from None
+E               openai.BadRequestError: Error code: 400 - {'error': {'message': "Invalid type for 'response_format.json_schema': expected an object, but got null instead.", 'type': 'invalid_request_error', 'param': 'response_format.json_schema', 'code': 'invalid_type'}}
+
+.venv/lib/python3.13/site-packages/openai/_base_client.py:1047: BadRequestError
+______ TestAgentBuilder.test_invoke_vendor_handler_single_response_vendor ______
+
+self = <test_base.TestAgentBuilder object at 0x106045bf0>
+
+    def test_invoke_vendor_handler_single_response_vendor(self):
+        """Test _invoke_vendor_handler with single response vendor."""
+        agent_config = {"model_vendor": "cohere", "model_name": "command"}
+        mock_response = {"single": "response"}  # Single response
+    
+        with patch.object(VENDOR_HANDLERS['cohere'], '__call__') as mock_handler:
+            mock_handler.return_value = mock_response
+    
+>           result = _invoke_vendor_handler(
+                model_vendor="cohere",
+                agent_config=agent_config,
+                prompt_config="test prompt",
+                context_data="test context",
+                schema=None,
+                granularity="record",
+                formatted_prompt="formatted prompt",
+                tool_args=None,
+                source_content=None
+            )
+
+tests/agents/test_base.py:298: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/agents/base/agent_builder.py:221: in _invoke_vendor_handler
+    response_data = handler.invoke(agent_config, prompt_config, context_data, schema)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent_actions/integrations/providers/vendor_base.py:22: in invoke
+    return cls.call_json(api_key, agent_config, prompt_config, context_data, schema)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+api_key = None
+agent_config = {'model_name': 'command', 'model_vendor': 'cohere'}
+prompt_config = 'test prompt', context_data = 'test context', schema = None
+
+    @staticmethod
+    def call_json(api_key, agent_config, prompt_config, context_data, schema):
+        model_name = agent_config[MODEL_NAME_KEY]
+        context_data_str = StringProcessor.process_as_string(context_data)
+        co = cohere.Client(api_key=api_key)
+        prompt = f"""
+            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
+            <|begin_of_text|>: {context_data_str} :<|end_of_text|>
+>           <|begin_of_output_schema|> : GENERATE JSON with the fields {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>
+                                                                                                             ^^^^^^^^^^^
+            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT
+            """
+E       AttributeError: 'NoneType' object has no attribute 'keys'
+
+agent_actions/integrations/providers/cohere/vendor.py:18: AttributeError
+_ TestAgentBuilderIdempotency.test_agent_builder_idempotent_build_no_duplicate_singletons _
+
+self = <unittest.mock._patch object at 0x1245a10f0>
+
+    def __enter__(self):
+        """Perform the patch."""
+        if self.is_started:
+            raise RuntimeError("Patch is already started")
+    
+        new, spec, spec_set = self.new, self.spec, self.spec_set
+        autospec, kwargs = self.autospec, self.kwargs
+        new_callable = self.new_callable
+        self.target = self.getter()
+    
+        # normalise False to None
+        if spec is False:
+            spec = None
+        if spec_set is False:
+            spec_set = None
+        if autospec is False:
+            autospec = None
+    
+        if spec is not None and autospec is not None:
+            raise TypeError("Can't specify spec and autospec")
+        if ((spec is not None or autospec is not None) and
+            spec_set not in (True, None)):
+            raise TypeError("Can't provide explicit spec_set *and* spec or autospec")
+    
+        original, local = self.get_original()
+    
+        if new is DEFAULT and autospec is None:
+            inherit = False
+            if spec is True:
+                # set spec to the object we are replacing
+                spec = original
+                if spec_set is True:
+                    spec_set = original
+                    spec = None
+            elif spec is not None:
+                if spec_set is True:
+                    spec_set = spec
+                    spec = None
+            elif spec_set is True:
+                spec_set = original
+    
+            if spec is not None or spec_set is not None:
+                if original is DEFAULT:
+                    raise TypeError("Can't use 'spec' with create=True")
+                if isinstance(original, type):
+                    # If we're patching out a class and there is a spec
+                    inherit = True
+    
+            # Determine the Klass to use
+            if new_callable is not None:
+                Klass = new_callable
+            elif spec is None and _is_async_obj(original):
+                Klass = AsyncMock
+            elif spec is not None or spec_set is not None:
+                this_spec = spec
+                if spec_set is not None:
+                    this_spec = spec_set
+                if _is_list(this_spec):
+                    not_callable = '__call__' not in this_spec
+                else:
+                    not_callable = not callable(this_spec)
+                if _is_async_obj(this_spec):
+                    Klass = AsyncMock
+                elif not_callable:
+                    Klass = NonCallableMagicMock
+                else:
+                    Klass = MagicMock
+            else:
+                Klass = MagicMock
+    
+            _kwargs = {}
+            if spec is not None:
+                _kwargs['spec'] = spec
+            if spec_set is not None:
+                _kwargs['spec_set'] = spec_set
+    
+            # add a name to mocks
+            if (isinstance(Klass, type) and
+                issubclass(Klass, NonCallableMock) and self.attribute):
+                _kwargs['name'] = self.attribute
+    
+            _kwargs.update(kwargs)
+            new = Klass(**_kwargs)
+    
+            if inherit and _is_instance_mock(new):
+                # we can only tell if the instance should be callable if the
+                # spec is not a list
+                this_spec = spec
+                if spec_set is not None:
+                    this_spec = spec_set
+                if (not _is_list(this_spec) and not
+                    _instance_callable(this_spec)):
+                    Klass = NonCallableMagicMock
+    
+                _kwargs.pop('name')
+                new.return_value = Klass(_new_parent=new, _new_name='()',
+                                         **_kwargs)
+        elif autospec is not None:
+            # spec is ignored, new *must* be default, spec_set is treated
+            # as a boolean. Should we check spec is not None and that spec_set
+            # is a bool?
+            if new is not DEFAULT:
+                raise TypeError(
+                    "autospec creates the mock for you. Can't specify "
+                    "autospec and new."
+                )
+            if original is DEFAULT:
+                raise TypeError("Can't use 'autospec' with create=True")
+            spec_set = bool(spec_set)
+            if autospec is True:
+                autospec = original
+    
+            if _is_instance_mock(self.target):
+                raise InvalidSpecError(
+                    f'Cannot autospec attr {self.attribute!r} as the patch '
+                    f'target has already been mocked out. '
+                    f'[target={self.target!r}, attr={autospec!r}]')
+            if _is_instance_mock(autospec):
+                target_name = getattr(self.target, '__name__', self.target)
+                raise InvalidSpecError(
+                    f'Cannot autospec attr {self.attribute!r} from target '
+                    f'{target_name!r} as it has already been mocked out. '
+                    f'[target={self.target!r}, attr={autospec!r}]')
+    
+            new = create_autospec(autospec, spec_set=spec_set,
+                                  _name=self.attribute, **kwargs)
+        elif kwargs:
+            # can't set keyword args when we aren't creating the mock
+            # XXXX If new is a Mock we could call new.configure_mock(**kwargs)
+            raise TypeError("Can't pass kwargs to a mock we aren't creating")
+    
+        new_attr = new
+    
+        self.temp_original = original
+        self.is_local = local
+        self._exit_stack = contextlib.ExitStack()
+        self.is_started = True
+        try:
+>           setattr(self.target, self.attribute, new_attr)
+E           AttributeError: 'dict' object attribute 'get' is read-only
+
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1609: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_base.TestAgentBuilderIdempotency object at 0x1125e7ed0>
+
+    def test_agent_builder_idempotent_build_no_duplicate_singletons(self):
+        """Test agent_builder idempotent build does not duplicate singletons."""
+        config = {
+            "model_vendor": "openai",
+            "model_name": "gpt-4",
+            "prompt": "Test prompt"
+        }
+    
+        # Mock vendor handler to track calls
+        mock_handler = Mock()
+        mock_handler.return_value = [{"result": "test"}]
+    
+>       with patch.object(VENDOR_HANDLERS, 'get') as mock_get:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/agents/test_base.py:464: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1622: in __enter__
+    if not self.__exit__(*sys.exc_info()):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x1245a10f0>
+exc_info = (<class 'AttributeError'>, AttributeError("'dict' object attribute 'get' is read-only"), <traceback object at 0x1237b10c0>)
+
+    def __exit__(self, *exc_info):
+        """Undo the patch."""
+        if not self.is_started:
+            return
+    
+        if self.is_local and self.temp_original is not DEFAULT:
+            setattr(self.target, self.attribute, self.temp_original)
+        else:
+>           delattr(self.target, self.attribute)
+E           AttributeError: 'dict' object attribute 'get' is read-only
+
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1633: AttributeError
+_ TestAgentBuilderIdempotency.test_agent_builder_with_same_config_different_context _
+
+self = <test_base.TestAgentBuilderIdempotency object at 0x1126609d0>
+
+    def test_agent_builder_with_same_config_different_context(self):
+        """Test agent builder with same config but different context data."""
+        config = {
+            "model_vendor": "openai",
+            "model_name": "gpt-4",
+            "prompt": "Test prompt: {{context}}"
+        }
+    
+        contexts = ["context1", "context2", "context3"]
+        results = []
+    
+        with patch('agent_actions.agents.base.agent_builder._invoke_vendor_handler') as mock_invoke:
+            mock_invoke.side_effect = lambda **kwargs: [{"context": kwargs.get("context_data", "")}]
+    
+            with patch('agent_actions.agents.base.agent_builder._prepare_prompt') as mock_prompt:
+                mock_prompt.return_value = "prepared prompt"
+    
+                for context in contexts:
+>                   result = create_dynamic_agent(
+                        agent_config=config,
+                        udf=None,
+                        context_data_str=context
+                    )
+
+tests/agents/test_base.py:522: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/agents/base/agent_builder.py:123: in create_dynamic_agent
+    response_data = _invoke_vendor_handler(
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1167: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1171: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='_invoke_vendor_handler' id='4904763808'>
+args = ('openai', {'model_name': 'gpt-4', 'model_vendor': 'openai', 'prompt': 'Test prompt: {{context}}'}, 'prepared prompt', 'context1', None, 'record', ...)
+kwargs = {}
+effect = <function TestAgentBuilderIdempotency.test_agent_builder_with_same_config_different_context.<locals>.<lambda> at 0x124582e80>
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+                raise effect
+            elif not _callable(effect):
+                result = next(effect)
+                if _is_exception(result):
+                    raise result
+            else:
+>               result = effect(*args, **kwargs)
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+E               TypeError: TestAgentBuilderIdempotency.test_agent_builder_with_same_config_different_context.<locals>.<lambda>() takes 0 positional arguments but 9 were given
+
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1232: TypeError
+__________ TestAgentBuilderIntegration.test_end_to_end_agent_creation __________
+
+self = <test_base.TestAgentBuilderIntegration object at 0x112740410>
+
+    def test_end_to_end_agent_creation(self):
+        """Test end-to-end agent creation with minimal mocking."""
+        config = {
+            "model_vendor": "openai",
+            "model_name": "gpt-4",
+            "prompt": "Create a summary of: {{context}}",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string"}
+                }
+            },
+            "granularity": "record"
+        }
+    
+        context_data = {"content": "This is test content to summarize"}
+        expected_response = [{"summary": "Test summary"}]
+    
+        # Mock only the vendor handler
+        with patch.object(VENDOR_HANDLERS['openai'], '__call__') as mock_handler:
+            mock_handler.return_value = expected_response
+    
+>           result = create_dynamic_agent(
+                agent_config=config,
+                udf=None,
+                context_data_str=context_data
+            )
+
+tests/agents/test_base.py:655: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/agents/base/agent_builder.py:119: in create_dynamic_agent
+    schema = _prepare_schema(agent_config, model_vendor)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent_actions/agents/base/agent_builder.py:173: in _prepare_schema
+    base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+schema_dict = {'properties': {'summary': {'type': 'string'}}, 'type': 'object'}
+
+    @staticmethod
+    def construct_schema_from_dict(schema_dict: dict) -> dict:
+        """
+        Construct a unified schema from a simple key-value dictionary.
+    
+        Args:
+            schema_dict (dict): Simple dictionary where keys are field names
+                               and values are data types (e.g., {"name": "string", "age": "number"})
+    
+        Returns:
+            dict: A unified schema in the standard format
+        """
+        fields = []
+    
+        for field_name, field_type in schema_dict.items():
+            # Check if field is required (indicated by ! suffix)
+>           is_required = field_type.endswith("!")
+                          ^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'dict' object has no attribute 'endswith'
+
+agent_actions/agents/handlers/schema_handler.py:123: AttributeError
+_ TestAgentBuilderIntegration.test_agent_builder_with_all_optional_parameters __
+
+self = <test_base.TestAgentBuilderIntegration object at 0x112740550>
+
+    def test_agent_builder_with_all_optional_parameters(self):
+        """Test agent builder with all optional parameters."""
+        config = {
+            "model_vendor": "openai",
+            "model_name": "gpt-4",
+            "prompt": "Process: {{context}} with {{tool_result}}"
+        }
+    
+        with patch('agent_actions.agents.base.agent_builder._invoke_vendor_handler') as mock_invoke:
+            mock_invoke.return_value = [{"processed": True}]
+    
+            with patch('agent_actions.agents.base.agent_builder._prepare_prompt') as mock_prompt:
+                mock_prompt.return_value = "prepared prompt"
+    
+                result = create_dynamic_agent(
+                    agent_config=config,
+                    udf=lambda x: x,
+                    context_data_str="test context",
+                    formatted_prompt="custom formatted prompt",
+                    tools_path="/path/to/tools",
+                    tool_args={"arg1": "value1"},
+                    source_content="source content"
+                )
+    
+                assert result == [{"processed": True}]
+                mock_invoke.assert_called_once()
+    
+                # Verify all parameters were passed through
+                call_kwargs = mock_invoke.call_args[1]
+>               assert call_kwargs["tool_args"] == {"arg1": "value1"}
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+E               KeyError: 'tool_args'
+
+tests/agents/test_base.py:693: KeyError
+_____________ TestBatchDataLoader.test_load_unsupported_file_type ______________
+
+self = <agent_actions.integrations.loaders.batch_data_loader.BatchDataLoader object at 0x123b736f0>
+file_path = '/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_load_unsupported_file_typ0/test.txt'
+
+    def load_data(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Loads data from the given file path.
+        Supports JSON and JSONL files.
+    
+        Args:
+            file_path: The path to the data file.
+    
+        Returns:
+            A list of dictionaries, where each dictionary represents a row of data.
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"The specified file does not exist: {file_path}")
+    
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                if path.suffix == '.jsonl':
+                    return [json.loads(line) for line in f]
+                elif path.suffix == '.json':
+                    return json.load(f)
+                else:
+>                   raise ValueError(f"Unsupported file type: {path.suffix}. Please use .json or .jsonl.")
+E                   ValueError: Unsupported file type: .txt. Please use .json or .jsonl.
+
+agent_actions/integrations/loaders/batch_data_loader.py:39: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <test_loaders.TestBatchDataLoader object at 0x11274a7b0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_load_unsupported_file_typ0')
+
+    def test_load_unsupported_file_type(self, tmp_path):
+        """Test unsupported file type error handling."""
+        loader = BatchDataLoader()
+    
+        # Create test file with unsupported extension
+        test_file = tmp_path / "test.txt"
+        test_file.write_text("not json content")
+    
+        with pytest.raises(ValueError, match="Unsupported file type"):
+>           loader.load_data(str(test_file))
+
+tests/core/test_loaders.py:308: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_actions.integrations.loaders.batch_data_loader.BatchDataLoader object at 0x123b736f0>
+file_path = '/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_load_unsupported_file_typ0/test.txt'
+
+    def load_data(self, file_path: str) -> List[Dict[str, Any]]:
+        """
+        Loads data from the given file path.
+        Supports JSON and JSONL files.
+    
+        Args:
+            file_path: The path to the data file.
+    
+        Returns:
+            A list of dictionaries, where each dictionary represents a row of data.
+        """
+        path = Path(file_path)
+        if not path.exists():
+            raise FileNotFoundError(f"The specified file does not exist: {file_path}")
+    
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                if path.suffix == '.jsonl':
+                    return [json.loads(line) for line in f]
+                elif path.suffix == '.json':
+                    return json.load(f)
+                else:
+                    raise ValueError(f"Unsupported file type: {path.suffix}. Please use .json or .jsonl.")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Error decoding JSON from {file_path}: {e}") from e
+        except Exception as e:
+>           raise IOError(f"Could not read file: {file_path}") from e
+E           OSError: Could not read file: /private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_load_unsupported_file_typ0/test.txt
+
+agent_actions/integrations/loaders/batch_data_loader.py:43: OSError
+__________ TestWhereClauseParser.test_parse_simple_equality_condition __________
+
+self = <test_parser.TestWhereClauseParser object at 0x112741950>
+
+    def test_parse_simple_equality_condition(self):
+        """Test parsing simple equality condition."""
+        parser = WhereClauseParser()
+        conditions = parser.parse("field = 'value'")
+    
+>       assert len(conditions) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/core/test_parser.py:36: AssertionError
+__ TestWhereClauseParser.test_parse_multiple_and_conditions_case_insensitive ___
+
+self = <test_parser.TestWhereClauseParser object at 0x112741d10>
+
+    def test_parse_multiple_and_conditions_case_insensitive(self):
+        """Test parsing multiple AND conditions with case insensitivity."""
+        parser = WhereClauseParser()
+    
+        # Test case insensitive AND
+        conditions = parser.parse("age > 18 AND status = 'active'")
+>       assert len(conditions) == 2
+E       AssertionError: assert 1 == 2
+E        +  where 1 = len([WhereCondition(field='age', operator='>', value=18)])
+
+tests/core/test_parser.py:47: AssertionError
+_____________ TestWhereClauseParser.test_parse_whitespace_tolerant _____________
+
+self = <test_parser.TestWhereClauseParser object at 0x11278cb00>
+
+    def test_parse_whitespace_tolerant(self):
+        """Test parser is tolerant of extra whitespace."""
+        parser = WhereClauseParser()
+    
+        # Extra spaces around operators and values
+        conditions = parser.parse("  field   =   'value'  ")
+>       assert len(conditions) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/core/test_parser.py:65: AssertionError
+___ TestWhereClauseParser.test_parse_supported_operators[=-field-'value'-=] ____
+
+self = <test_parser.TestWhereClauseParser object at 0x11278cd60>, operator = '='
+field = 'field', value = "'value'", expected_op = '='
+
+    @pytest.mark.parametrize("operator,field,value,expected_op", [
+        ("=", "field", "'value'", "="),
+        ("!=", "field", "'value'", "!="),
+        (">", "age", "18", ">"),
+        ("<", "age", "65", "<"),
+        (">=", "score", "80", ">="),
+        ("<=", "count", "100", "<="),
+        ("IN", "category", "['A', 'B', 'C']", "IN"),
+        ("LIKE", "name", "'%test%'", "LIKE"),
+    ])
+    def test_parse_supported_operators(self, operator, field, value, expected_op):
+        """Test parsing of all supported operators."""
+        parser = WhereClauseParser()
+        clause = f"{field} {operator} {value}"
+        conditions = parser.parse(clause)
+    
+>       assert len(conditions) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/core/test_parser.py:89: AssertionError
+_ TestWhereClauseParser.test_parse_supported_operators[LIKE-name-'%test%'-LIKE] _
+
+self = <test_parser.TestWhereClauseParser object at 0x1126a32f0>
+operator = 'LIKE', field = 'name', value = "'%test%'", expected_op = 'LIKE'
+
+    @pytest.mark.parametrize("operator,field,value,expected_op", [
+        ("=", "field", "'value'", "="),
+        ("!=", "field", "'value'", "!="),
+        (">", "age", "18", ">"),
+        ("<", "age", "65", "<"),
+        (">=", "score", "80", ">="),
+        ("<=", "count", "100", "<="),
+        ("IN", "category", "['A', 'B', 'C']", "IN"),
+        ("LIKE", "name", "'%test%'", "LIKE"),
+    ])
+    def test_parse_supported_operators(self, operator, field, value, expected_op):
+        """Test parsing of all supported operators."""
+        parser = WhereClauseParser()
+        clause = f"{field} {operator} {value}"
+        conditions = parser.parse(clause)
+    
+>       assert len(conditions) == 1
+E       assert 0 == 1
+E        +  where 0 = len([])
+
+tests/core/test_parser.py:89: AssertionError
+_________________ TestWhereClauseParser.test_parse_value_types _________________
+
+self = <test_parser.TestWhereClauseParser object at 0x1126dbc70>
+
+    def test_parse_value_types(self):
+        """Test parsing different value types."""
+        parser = WhereClauseParser()
+    
+        # String values (quoted)
+        conditions = parser.parse("name = 'John'")
+>       assert conditions[0].value == "John"
+               ^^^^^^^^^^^^^
+E       IndexError: list index out of range
+
+tests/core/test_parser.py:129: IndexError
+__________ TestWhereClauseEvaluation.test_evaluate_simple_conditions ___________
+
+self = <test_parser.TestWhereClauseEvaluation object at 0x112741e50>
+
+    def test_evaluate_simple_conditions(self):
+        """Test evaluation of simple conditions."""
+        parser = WhereClauseParser()
+        data = {"name": "Alice", "age": 30, "active": True}
+    
+        # Simple equality
+        conditions = parser.parse("name = 'Alice'")
+        assert parser.evaluate(data, conditions) is True
+    
+        conditions = parser.parse("name = 'Bob'")
+>       assert parser.evaluate(data, conditions) is False
+E       AssertionError: assert True is False
+E        +  where True = evaluate({'active': True, 'age': 30, 'name': 'Alice'}, [])
+E        +    where evaluate = <agent_actions.core.parser.where_parser.WhereClauseParser object at 0x12453e570>.evaluate
+
+tests/core/test_parser.py:213: AssertionError
+_________ TestWhereClauseEvaluation.test_evaluate_nested_field_access __________
+
+self = <test_parser.TestWhereClauseEvaluation object at 0x11278ce90>
+
+    def test_evaluate_nested_field_access(self):
+        """Test evaluation with nested field access."""
+        parser = WhereClauseParser()
+        data = {
+            "user": {
+                "profile": {
+                    "age": 30,
+                    "name": "Alice"
+                }
+            }
+        }
+    
+        conditions = parser.parse("user.profile.age > 25")
+        assert parser.evaluate(data, conditions) is True
+    
+        conditions = parser.parse("user.profile.name = 'Alice'")
+        assert parser.evaluate(data, conditions) is True
+    
+        # Non-existent nested field
+        conditions = parser.parse("user.nonexistent.field = 'value'")
+>       assert parser.evaluate(data, conditions) is False
+E       AssertionError: assert True is False
+E        +  where True = evaluate({'user': {'profile': {'age': 30, 'name': 'Alice'}}}, [])
+E        +    where evaluate = <agent_actions.core.parser.where_parser.WhereClauseParser object at 0x1245d65d0>.evaluate
+
+tests/core/test_parser.py:255: AssertionError
+____________ TestWhereClauseEvaluation.test_evaluate_in_conditions _____________
+
+self = <test_parser.TestWhereClauseEvaluation object at 0x112785eb0>
+
+    def test_evaluate_in_conditions(self):
+        """Test evaluation of IN conditions."""
+        parser = WhereClauseParser()
+        data = {"category": "A", "tags": ["tag1", "tag2"]}
+    
+        conditions = parser.parse("category IN ['A', 'B', 'C']")
+>       assert parser.evaluate(data, conditions) is True
+E       assert False is True
+E        +  where False = evaluate({'category': 'A', 'tags': ['tag1', 'tag2']}, [WhereCondition(field='category', operator='IN', value="['A', 'B', 'C']")])
+E        +    where evaluate = <agent_actions.core.parser.where_parser.WhereClauseParser object at 0x12452db50>.evaluate
+
+tests/core/test_parser.py:277: AssertionError
+____________ TestSimpleWhereFilter.test_filter_item_error_handling _____________
+
+self = <test_parser.TestSimpleWhereFilter object at 0x112742210>
+
+    def test_filter_item_error_handling(self):
+        """Test filter_item handles errors gracefully."""
+        filter_service = SimpleWhereFilter()
+        data = {"field": "value"}
+    
+        # Invalid WHERE clause should return True (default include)
+        result = filter_service.filter_item(data, "invalid === syntax")
+>       assert result is True
+E       assert False is True
+
+tests/core/test_parser.py:318: AssertionError
+____ TestSimpleWhereFilter.test_evaluate_safe_skip_condition_error_handling ____
+
+self = <test_parser.TestSimpleWhereFilter object at 0x11278d0f0>
+
+    def test_evaluate_safe_skip_condition_error_handling(self):
+        """Test safe skip condition handles errors gracefully."""
+        filter_service = SimpleWhereFilter()
+        context = {"field": "value"}
+    
+        # Invalid condition should not skip (default behavior)
+        condition_config = {"where": "invalid === syntax"}
+        result = filter_service.evaluate_safe_skip_condition(condition_config, context)
+>       assert result is False
+E       assert True is False
+
+tests/core/test_parser.py:343: AssertionError
+____ TestWhereClauseConfig.test_where_clause_config_validation_empty_clause ____
+
+self = <test_parser.TestWhereClauseConfig object at 0x11278d480>
+
+    def test_where_clause_config_validation_empty_clause(self):
+        """Test WHERE clause config validation rejects empty clause."""
+        with pytest.raises(ValueError, match="WHERE clause cannot be empty"):
+>           WhereClauseConfig(clause="")
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for WhereClauseConfig
+E           clause
+E             String should have at least 1 character [type=string_too_short, input_value='', input_type=str]
+E               For further information visit https://errors.pydantic.dev/2.11/v/string_too_short
+
+tests/core/test_parser.py:420: ValidationError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_parser.TestWhereClauseConfig object at 0x11278d480>
+
+    def test_where_clause_config_validation_empty_clause(self):
+        """Test WHERE clause config validation rejects empty clause."""
+>       with pytest.raises(ValueError, match="WHERE clause cannot be empty"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E        Regex: 'WHERE clause cannot be empty'
+E        Input: "1 validation error for WhereClauseConfig\nclause\n  String should have at least 1 character [type=string_too_short, input_value='', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.11/v/string_too_short"
+
+tests/core/test_parser.py:419: AssertionError
+________ TestEdgeCasesAndErrorHandling.test_get_nested_value_edge_cases ________
+
+self = <test_parser.TestEdgeCasesAndErrorHandling object at 0x112742990>
+
+    def test_get_nested_value_edge_cases(self):
+        """Test _get_nested_value method edge cases."""
+        parser = WhereClauseParser()
+    
+        # Empty data
+        value = parser._get_nested_value({}, "field")
+        assert value is None
+    
+        # Non-dict intermediate value
+        data = {"field": "not_a_dict"}
+        value = parser._get_nested_value(data, "field.subfield")
+        assert value is None
+    
+        # Empty field path
+        data = {"field": "value"}
+        value = parser._get_nested_value(data, "")
+>       assert value == data
+E       AssertionError: assert None == {'field': 'value'}
+
+tests/core/test_parser.py:487: AssertionError
+____________ TestEdgeCasesAndErrorHandling.test_operator_edge_cases ____________
+
+self = <test_parser.TestEdgeCasesAndErrorHandling object at 0x11278d6e0>
+
+    def test_operator_edge_cases(self):
+        """Test operator evaluation edge cases."""
+        parser = WhereClauseParser()
+    
+        # None comparisons
+        conditions = [WhereCondition("field", ">", 10)]
+        data = {"field": None}
+        assert parser.evaluate(data, conditions) is False
+    
+        # Type mismatches
+        conditions = [WhereCondition("field", ">", "string")]
+        data = {"field": 10}
+>       result = parser.evaluate(data, conditions)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/core/test_parser.py:501: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/core/parser/where_parser.py:106: in evaluate
+    if not operator_func(field_value, condition.value):
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = 10, b = 'string'
+
+>       ">": lambda a, b: a > b if a is not None and b is not None else False,
+                          ^^^^^
+        "<": lambda a, b: a < b if a is not None and b is not None else False,
+        "IN": lambda a, b: a in b if isinstance(b, (list, tuple)) else False,
+        "NOT IN": lambda a, b: a not in b if isinstance(b, (list, tuple)) else True,
+        "CONTAINS": lambda a, b: str(b) in str(a) if a is not None else False,
+        "NOT CONTAINS": lambda a, b: str(b) not in str(a) if a is not None else True,
+        "IS NULL": lambda a, b: a is None,
+        "IS NOT NULL": lambda a, b: a is not None,
+    }
+E   TypeError: '>' not supported between instances of 'int' and 'str'
+
+agent_actions/core/parser/where_parser.py:22: TypeError
+_ TestEdgeCasesAndErrorHandling.test_parametrized_evaluation[data2-status = 'active'-False] _
+
+self = <test_parser.TestEdgeCasesAndErrorHandling object at 0x1126d6e00>
+data = {'status': 'inactive'}, clause = "status = 'active'", expected = False
+
+    @pytest.mark.parametrize("data,clause,expected", [
+        ({"field": "value"}, "field = 'value'", True),
+        ({"age": 25}, "age > 18", True),
+        ({"status": "inactive"}, "status = 'active'", False),
+        ({}, "field = 'value'", False),
+        ({"field": None}, "field != null", False)
+    ])
+    def test_parametrized_evaluation(self, data, clause, expected):
+        """Test parametrized WHERE clause evaluation."""
+        parser = WhereClauseParser()
+        conditions = parser.parse(clause)
+        result = parser.evaluate(data, conditions)
+>       assert result == expected
+E       assert True == False
+
+tests/core/test_parser.py:528: AssertionError
+_ TestEdgeCasesAndErrorHandling.test_parametrized_evaluation[data3-field = 'value'-False] _
+
+self = <test_parser.TestEdgeCasesAndErrorHandling object at 0x1127c0650>
+data = {}, clause = "field = 'value'", expected = False
+
+    @pytest.mark.parametrize("data,clause,expected", [
+        ({"field": "value"}, "field = 'value'", True),
+        ({"age": 25}, "age > 18", True),
+        ({"status": "inactive"}, "status = 'active'", False),
+        ({}, "field = 'value'", False),
+        ({"field": None}, "field != null", False)
+    ])
+    def test_parametrized_evaluation(self, data, clause, expected):
+        """Test parametrized WHERE clause evaluation."""
+        parser = WhereClauseParser()
+        conditions = parser.parse(clause)
+        result = parser.evaluate(data, conditions)
+>       assert result == expected
+E       assert True == False
+
+tests/core/test_parser.py:528: AssertionError
+_____________ TestRenderCommandArgs.test_valid_render_command_args _____________
+
+self = <test_compile.TestRenderCommandArgs object at 0x112743250>
+
+    def test_valid_render_command_args(self):
+        """Test valid RenderCommandArgs creation."""
+>       args = RenderCommandArgs(
+            agent_name="test_agent",
+            output_file="/path/to/output.yml",
+            template_dir="/path/to/templates"
+        )
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for RenderCommandArgs
+E       output_file
+E         Path does not point to a file [type=path_not_file, input_value='/path/to/output.yml', input_type=str]
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/path/to/templates', input_type=str]
+
+tests/tasks/test_compile.py:32: ValidationError
+__ TestRenderCommandArgs.test_render_command_args_validation_empty_agent_name __
+
+self = <test_compile.TestRenderCommandArgs object at 0x11278dba0>
+
+    def test_render_command_args_validation_empty_agent_name(self):
+        """Test RenderCommandArgs validation rejects empty agent name."""
+>       with pytest.raises(PydanticValidationError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+
+tests/tasks/test_compile.py:52: Failed
+___ TestRenderCommand.test_render_command_initialization_custom_template_dir ___
+
+self = <test_compile.TestRenderCommand object at 0x1127434d0>
+
+    def test_render_command_initialization_custom_template_dir(self):
+        """Test RenderCommand initialization with custom template directory."""
+>       args = RenderCommandArgs(
+            agent_name="test_agent",
+            template_dir="/custom/templates"
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/custom/templates', input_type=str]
+
+tests/tasks/test_compile.py:76: ValidationError
+________________ TestRenderCommand.test_render_template_success ________________
+
+self = <test_compile.TestRenderCommand object at 0x11278de00>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_template_success0')
+
+    def test_render_template_success(self, tmp_path):
+        """Test successful template rendering."""
+>       args = RenderCommandArgs(
+            agent_name="test_agent",
+            output_file=str(tmp_path / "output.yml"),
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for RenderCommandArgs
+E       output_file
+E         Path does not point to a file [type=path_not_file, input_value='/private/var/folders/vw/...ate_success0/output.yml', input_type=str]
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...late_success0/templates', input_type=str]
+
+tests/tasks/test_compile.py:88: ValidationError
+____________ TestRenderCommand.test_render_template_no_output_file _____________
+
+self = <test_compile.TestRenderCommand object at 0x11278df30>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_template_no_output0')
+
+    def test_render_template_no_output_file(self, tmp_path):
+        """Test template rendering without output file."""
+>       args = RenderCommandArgs(
+            agent_name="test_agent",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...te_no_output0/templates', input_type=str]
+
+tests/tasks/test_compile.py:114: ValidationError
+________________ TestRenderCommand.test_render_template_failure ________________
+
+self = <test_compile.TestRenderCommand object at 0x112786690>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_template_failure0')
+
+    def test_render_template_failure(self, tmp_path):
+        """Test template rendering failure handling."""
+>       args = RenderCommandArgs(
+            agent_name="test_agent",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...late_failure0/templates', input_type=str]
+
+tests/tasks/test_compile.py:137: ValidationError
+_________ TestRenderCommand.test_render_template_deterministic_output __________
+
+self = <test_compile.TestRenderCommand object at 0x1126d7020>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_template_determini0')
+
+    def test_render_template_deterministic_output(self, tmp_path):
+        """Test renders configs to artifacts deterministically for same input."""
+>       args = RenderCommandArgs(
+            agent_name="deterministic_agent",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...te_determini0/templates', input_type=str]
+
+tests/tasks/test_compile.py:153: ValidationError
+_______ TestRenderCommandExecution.test_execute_success_with_output_file _______
+
+self = <test_compile.TestRenderCommandExecution object at 0x112743610>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_success_with_outp0')
+
+    def test_execute_success_with_output_file(self, tmp_path):
+        """Test successful execution with output file."""
+>       args = RenderCommandArgs(
+            agent_name="execute_test",
+            output_file=str(tmp_path / "output.yml"),
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for RenderCommandArgs
+E       output_file
+E         Path does not point to a file [type=path_not_file, input_value='/private/var/folders/vw/...s_with_outp0/output.yml', input_type=str]
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...ss_with_outp0/templates', input_type=str]
+
+tests/tasks/test_compile.py:187: ValidationError
+________ TestRenderCommandExecution.test_execute_success_console_output ________
+
+self = <test_compile.TestRenderCommandExecution object at 0x112743750>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_success_console_o0')
+
+    def test_execute_success_console_output(self, tmp_path):
+        """Test successful execution with console output."""
+>       args = RenderCommandArgs(
+            agent_name="console_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...ss_console_o0/templates', input_type=str]
+
+tests/tasks/test_compile.py:220: ValidationError
+_________ TestRenderCommandExecution.test_execute_file_not_found_error _________
+
+self = <test_compile.TestRenderCommandExecution object at 0x11278e060>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_file_not_found_er0')
+
+    def test_execute_file_not_found_error(self, tmp_path):
+        """Test execute handles file not found errors."""
+>       args = RenderCommandArgs(
+            agent_name="missing_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...not_found_er0/templates', input_type=str]
+
+tests/tasks/test_compile.py:250: ValidationError
+___________ TestRenderCommandExecution.test_execute_validation_error ___________
+
+self = <test_compile.TestRenderCommandExecution object at 0x11278e190>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_validation_error0')
+
+    def test_execute_validation_error(self, tmp_path):
+        """Test execute handles validation errors."""
+>       args = RenderCommandArgs(
+            agent_name="validation_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...dation_error0/templates', input_type=str]
+
+tests/tasks/test_compile.py:272: ValidationError
+_______ TestRenderCommandExecution.test_execute_template_rendering_error _______
+
+self = <test_compile.TestRenderCommandExecution object at 0x11274a8d0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_template_renderin0')
+
+    def test_execute_template_rendering_error(self, tmp_path):
+        """Test execute handles template rendering errors."""
+>       args = RenderCommandArgs(
+            agent_name="template_error_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...ate_renderin0/templates', input_type=str]
+
+tests/tasks/test_compile.py:292: ValidationError
+___________ TestRenderCommandExecution.test_execute_unexpected_error ___________
+
+self = <test_compile.TestRenderCommandExecution object at 0x1126d7240>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_unexpected_error0')
+
+    def test_execute_unexpected_error(self, tmp_path):
+        """Test execute handles unexpected errors."""
+>       args = RenderCommandArgs(
+            agent_name="unexpected_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...pected_error0/templates', input_type=str]
+
+tests/tasks/test_compile.py:312: ValidationError
+_ TestRenderCommandConfigValidation.test_fails_fast_on_invalid_configs_with_helpful_messages _
+
+self = <test_compile.TestRenderCommandConfigValidation object at 0x112743890>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_fails_fast_on_invalid_con0')
+
+    def test_fails_fast_on_invalid_configs_with_helpful_messages(self, tmp_path):
+        """Test fails fast on invalid configs with helpful messages."""
+>       args = RenderCommandArgs(
+            agent_name="invalid_config_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/..._invalid_con0/templates', input_type=str]
+
+tests/tasks/test_compile.py:330: ValidationError
+____ TestRenderCommandConfigValidation.test_config_schema_validation_errors ____
+
+self = <test_compile.TestRenderCommandConfigValidation object at 0x1127439d0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_config_schema_validation_0')
+
+    def test_config_schema_validation_errors(self, tmp_path):
+        """Test various configuration schema validation errors."""
+>       args = RenderCommandArgs(
+            agent_name="schema_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/..._validation_0/templates', input_type=str]
+
+tests/tasks/test_compile.py:370: ValidationError
+________ TestRenderCommandConfigValidation.test_template_syntax_errors _________
+
+self = <test_compile.TestRenderCommandConfigValidation object at 0x11278e2c0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_template_syntax_errors0')
+
+    def test_template_syntax_errors(self, tmp_path):
+        """Test template syntax error handling."""
+>       args = RenderCommandArgs(
+            agent_name="template_syntax_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...yntax_errors0/templates', input_type=str]
+
+tests/tasks/test_compile.py:407: ValidationError
+___________ TestRenderClickCommand.test_render_click_command_success ___________
+
+self = <test_compile.TestRenderClickCommand object at 0x112743b10>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_click_command_succ0')
+
+    def test_render_click_command_success(self, tmp_path):
+        """Test render Click command executes successfully."""
+        runner = CliRunner()
+    
+        with patch('agent_actions.tasks.compile.RenderCommand') as mock_command_class:
+            mock_command = Mock()
+            mock_command_class.return_value = mock_command
+    
+            result = runner.invoke(render, [
+                '--agent', 'test_agent',
+                '--output', str(tmp_path / "output.yml"),
+                '--template-dir', str(tmp_path / "templates")
+            ])
+    
+>           assert result.exit_code == 0
+E           assert 1 == 0
+E            +  where 1 = <Result SystemExit(1)>.exit_code
+
+tests/tasks/test_compile.py:458: AssertionError
+________ TestRenderClickCommand.test_render_click_command_short_options ________
+
+self = <test_compile.TestRenderClickCommand object at 0x11278e3f0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_click_command_shor0')
+
+    def test_render_click_command_short_options(self, tmp_path):
+        """Test render Click command with short options."""
+        runner = CliRunner()
+    
+        with patch('agent_actions.tasks.compile.RenderCommand') as mock_command_class:
+            mock_command = Mock()
+            mock_command_class.return_value = mock_command
+    
+            result = runner.invoke(render, [
+                '-a', 'short_test',
+                '-o', str(tmp_path / "output.yml"),
+                '-t', str(tmp_path / "templates")
+            ])
+    
+>           assert result.exit_code == 0
+E           assert 1 == 0
+E            +  where 1 = <Result SystemExit(1)>.exit_code
+
+tests/tasks/test_compile.py:485: AssertionError
+______ TestRenderClickCommand.test_render_click_command_validation_error _______
+
+self = <test_compile.TestRenderClickCommand object at 0x1127ef770>
+
+    def test_render_click_command_validation_error(self):
+        """Test render Click command handles validation errors."""
+        runner = CliRunner()
+    
+        # Mock RenderCommandArgs to raise validation error
+        with patch('agent_actions.tasks.compile.RenderCommandArgs') as mock_args_class:
+>           mock_args_class.side_effect = PydanticValidationError(
+                [{"msg": "Invalid agent name", "type": "value_error"}],
+                RenderCommandArgs
+            )
+E           TypeError: argument 'line_errors': 'ModelMetaclass' object cannot be converted to 'Sequence'
+
+tests/tasks/test_compile.py:515: TypeError
+______ TestRenderCommandDeterminism.test_same_input_produces_same_output _______
+
+self = <test_compile.TestRenderCommandDeterminism object at 0x112743d90>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_same_input_produces_same_0')
+
+        def test_same_input_produces_same_output(self, tmp_path):
+            """Test that same input produces identical output (deterministic)."""
+            # Create consistent test setup
+            config_content = """
+    name: deterministic_test
+    type: generator
+    version: 1.0
+    settings:
+      param1: value1
+      param2: value2
+    """
+            config_file = tmp_path / "config.yml"
+            config_file.write_text(config_content)
+    
+>           args = RenderCommandArgs(
+                agent_name="deterministic_test",
+                template_dir=str(tmp_path / "templates")
+            )
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E           template_dir
+E             Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...oduces_same_0/templates', input_type=str]
+
+tests/tasks/test_compile.py:568: ValidationError
+_ TestRenderCommandDeterminism.test_different_inputs_produce_different_outputs _
+
+self = <test_compile.TestRenderCommandDeterminism object at 0x112743ed0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_different_inputs_produce_0')
+
+    def test_different_inputs_produce_different_outputs(self, tmp_path):
+        """Test that different inputs produce different outputs."""
+        # Create different configurations
+        configs = [
+            ("config1.yml", "name: test1\ntype: generator"),
+            ("config2.yml", "name: test2\ntype: transformer"),
+            ("config3.yml", "name: test3\ntype: validator")
+        ]
+    
+        results = []
+        for config_name, config_content in configs:
+            config_file = tmp_path / config_name
+            config_file.write_text(config_content)
+    
+>           args = RenderCommandArgs(
+                agent_name=config_name.replace('.yml', ''),
+                template_dir=str(tmp_path / "templates")
+            )
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E           template_dir
+E             Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...uts_produce_0/templates', input_type=str]
+
+tests/tasks/test_compile.py:605: ValidationError
+_________ TestRenderCommandDeterminism.test_template_caching_behavior __________
+
+self = <test_compile.TestRenderCommandDeterminism object at 0x11278e650>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_template_caching_behavior0')
+
+    def test_template_caching_behavior(self, tmp_path):
+        """Test template rendering caching behavior for performance."""
+        config_file = tmp_path / "cache_test.yml"
+        config_file.write_text("name: cache_test\ntype: generator")
+    
+>       args = RenderCommandArgs(
+            agent_name="cache_test",
+            template_dir=str(tmp_path / "templates")
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E       template_dir
+E         Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...ing_behavior0/templates', input_type=str]
+
+tests/tasks/test_compile.py:626: ValidationError
+_________ TestRenderCommandIntegration.test_end_to_end_render_command __________
+
+self = <test_compile.TestRenderCommandIntegration object at 0x11292c050>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_end_to_end_render_command0')
+
+    def test_end_to_end_render_command(self, tmp_path):
+        """Test end-to-end render command with minimal mocking."""
+        # Setup test environment
+        templates_dir = tmp_path / "templates"
+        templates_dir.mkdir()
+    
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+    
+        config_file = config_dir / "integration_test.yml"
+        config_file.write_text("name: integration_test\ntype: generator")
+    
+        args = RenderCommandArgs(
+            agent_name="integration_test",
+            template_dir=str(templates_dir)
+        )
+        command = RenderCommand(args)
+    
+        # Mock only the external dependencies
+        mock_paths = Mock()
+        mock_paths.agent_config_dir = config_dir
+    
+>       with patch('agent_actions.tasks.compile.ProjectPathsFactory') as mock_factory:
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/tasks/test_compile.py:671: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1495: in __enter__
+    original, local = self.get_original()
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <unittest.mock._patch object at 0x12450d390>
+
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+    
+        original = DEFAULT
+        local = False
+    
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+    
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+    
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'agent_actions.tasks.compile' from '/Users/muizz/Documents/codeshop/agent-actions/agent_actions/tasks/compile.py'> does not have the attribute 'ProjectPathsFactory'
+
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1465: AttributeError
+_ TestRenderCommandIntegration.test_render_command_with_complex_configuration __
+
+self = <test_compile.TestRenderCommandIntegration object at 0x11292c190>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_render_command_with_compl0')
+
+        def test_render_command_with_complex_configuration(self, tmp_path):
+            """Test render command with complex agent configuration."""
+            # Create complex configuration
+            complex_config = """
+    name: complex_agent
+    type: pipeline
+    version: 2.0
+    dependencies:
+      - agent1
+      - agent2
+    settings:
+      nested:
+        deep:
+          value: test
+      array:
+        - item1
+        - item2
+    """
+            config_file = tmp_path / "complex_agent.yml"
+            config_file.write_text(complex_config)
+    
+>           args = RenderCommandArgs(
+                agent_name="complex_agent",
+                template_dir=str(tmp_path / "templates")
+            )
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for RenderCommandArgs
+E           template_dir
+E             Path does not point to a directory [type=path_not_directory, input_value='/private/var/folders/vw/...d_with_compl0/templates', input_type=str]
+
+tests/tasks/test_compile.py:705: ValidationError
+___ TestInitCommandArgs.test_init_command_args_validation_empty_project_name ___
+
+self = <test_init.TestInitCommandArgs object at 0x11278e780>
+
+    def test_init_command_args_validation_empty_project_name(self):
+        """Test InitCommandArgs validation rejects empty project name."""
+>       with pytest.raises(PydanticValidationError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+
+tests/tasks/test_init.py:53: Failed
+________ TestInitClickCommand.test_init_click_command_validation_error _________
+
+self = <test_init.TestInitClickCommand object at 0x11278f100>
+
+    def test_init_click_command_validation_error(self):
+        """Test init Click command handles validation errors."""
+        runner = CliRunner()
+    
+        # Mock InitCommandArgs to raise validation error
+        with patch('agent_actions.tasks.init.InitCommandArgs') as mock_args_class:
+>           mock_args_class.side_effect = PydanticValidationError(
+                [{"msg": "Invalid project name", "type": "value_error"}],
+                InitCommandArgs
+            )
+E           TypeError: argument 'line_errors': 'ModelMetaclass' object cannot be converted to 'Sequence'
+
+tests/tasks/test_init.py:522: TypeError
+______________ TestInitClickCommand.test_init_click_command_help _______________
+
+self = <test_init.TestInitClickCommand object at 0x1129297f0>
+
+    def test_init_click_command_help(self):
+        """Test init Click command help display."""
+        runner = CliRunner()
+    
+        result = runner.invoke(init, ['--help'])
+    
+        assert result.exit_code == 0
+        assert 'Initialize a new Agent Actions project' in result.output
+>       assert 'project_name' in result.output
+E       AssertionError: assert 'project_name' in 'Usage: init [OPTIONS] PROJECT_NAME\n\n  Initialize a new Agent Actions project.\n\n  This command creates a new proje...rce            Force project creation even if directory exists\n  --help                 Show this message and exit.\n'
+E        +  where 'Usage: init [OPTIONS] PROJECT_NAME\n\n  Initialize a new Agent Actions project.\n\n  This command creates a new proje...rce            Force project creation even if directory exists\n  --help                 Show this message and exit.\n' = <Result okay>.output
+
+tests/tasks/test_init.py:556: AssertionError
+____ TestStatusCommandArgs.test_status_command_args_validation_empty_agent _____
+
+self = <test_status.TestStatusCommandArgs object at 0x11292de50>
+
+    def test_status_command_args_validation_empty_agent(self):
+        """Test StatusCommandArgs validation rejects empty agent name."""
+>       with pytest.raises(PydanticValidationError):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE <class 'pydantic_core._pydantic_core.ValidationError'>
+
+tests/tasks/test_status.py:32: Failed
+________ TestStatusCommand.test_execute_handles_missing_data_gracefully ________
+
+self = <agent_actions.tasks.status.StatusCommand object at 0x123b73820>
+
+    def execute(self) -> None:
+        """
+        Execute the status command.
+        """
+        try:
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
+            status_file = paths.agent_io_dir / ".agent_status.json"
+    
+            if not status_file.exists():
+                self.console.print(f"[yellow]No status file found for agent '{self.agent_name}'. Has a workflow been run?[/yellow]")
+                return
+    
+            with open(status_file, 'r') as f:
+                status_data = json.load(f)
+    
+            table = Table(title=f"Workflow Status for {self.agent_name}")
+            table.add_column("Agent Name", justify="left", style="green")
+            table.add_column("Status", justify="center", style="yellow")
+    
+            for agent, details in status_data.items():
+>               table.add_row(agent, details.get('status', 'N/A'))
+                                     ^^^^^^^^^^^
+E               AttributeError: 'NoneType' object has no attribute 'get'
+
+agent_actions/tasks/status.py:53: AttributeError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_status.TestStatusCommand object at 0x112990ef0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_handles_missing_d0')
+
+    def test_execute_handles_missing_data_gracefully(self, tmp_path):
+        """Test handles missing/stale/partial data gracefully."""
+        args = StatusCommandArgs(agent="partial_agent")
+    
+        # Create status data with missing/partial information
+        partial_status_data = {
+            "agent1": {"status": "completed"},  # Missing last_run
+            "agent2": {},  # Missing status
+            "agent3": {"status": "unknown", "extra_field": "value"},  # Extra fields
+            "agent4": None,  # Null entry
+        }
+    
+        mock_paths = Mock()
+        mock_paths.agent_io_dir = tmp_path / "io"
+        mock_paths.agent_io_dir.mkdir(parents=True)
+    
+        status_file = mock_paths.agent_io_dir / ".agent_status.json"
+        status_file.write_text(json.dumps(partial_status_data))
+    
+        with patch('agent_actions.tasks.status.ProjectPathsFactory') as mock_factory:
+            mock_factory.create_project_paths.return_value = mock_paths
+    
+            with patch('agent_actions.tasks.status.Console') as mock_console_class:
+                mock_console = Mock()
+                mock_console_class.return_value = mock_console
+    
+                command = StatusCommand(args)
+>               command.execute()
+
+tests/tasks/test_status.py:161: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_actions.tasks.status.StatusCommand object at 0x123b73820>
+
+    def execute(self) -> None:
+        """
+        Execute the status command.
+        """
+        try:
+            paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
+            status_file = paths.agent_io_dir / ".agent_status.json"
+    
+            if not status_file.exists():
+                self.console.print(f"[yellow]No status file found for agent '{self.agent_name}'. Has a workflow been run?[/yellow]")
+                return
+    
+            with open(status_file, 'r') as f:
+                status_data = json.load(f)
+    
+            table = Table(title=f"Workflow Status for {self.agent_name}")
+            table.add_column("Agent Name", justify="left", style="green")
+            table.add_column("Status", justify="center", style="yellow")
+    
+            for agent, details in status_data.items():
+                table.add_row(agent, details.get('status', 'N/A'))
+    
+            self.console.print(table)
+    
+        except Exception as e:
+>           raise click.ClickException(f"Failed to get status for agent {self.agent_name}: {str(e)}")
+E           click.exceptions.ClickException: Failed to get status for agent partial_agent: 'NoneType' object has no attribute 'get'
+
+agent_actions/tasks/status.py:58: ClickException
+_______________ TestStatusCommand.test_execute_permission_error ________________
+
+self = <test_status.TestStatusCommand object at 0x1127c2b50>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_execute_permission_error1')
+
+    def test_execute_permission_error(self, tmp_path):
+        """Test execution handles permission errors gracefully."""
+        args = StatusCommandArgs(agent="permission_agent")
+    
+        mock_paths = Mock()
+        mock_paths.agent_io_dir = tmp_path / "io"
+    
+        with patch('agent_actions.tasks.status.ProjectPathsFactory') as mock_factory:
+            mock_factory.create_project_paths.return_value = mock_paths
+    
+            # Mock file read to raise permission error
+            with patch('builtins.open', side_effect=PermissionError("Permission denied")):
+                with patch('agent_actions.tasks.status.Console'):
+                    command = StatusCommand(args)
+    
+>                   with pytest.raises(Exception) as exc_info:
+                         ^^^^^^^^^^^^^^^^^^^^^^^^
+E                   Failed: DID NOT RAISE <class 'Exception'>
+
+tests/tasks/test_status.py:231: Failed
+______ TestStatusClickCommand.test_status_click_command_validation_error _______
+
+self = <test_status.TestStatusClickCommand object at 0x11299c510>
+
+    def test_status_click_command_validation_error(self):
+        """Test status Click command handles validation errors."""
+        runner = CliRunner()
+    
+        # Mock StatusCommandArgs to raise validation error
+        with patch('agent_actions.tasks.status.StatusCommandArgs') as mock_args_class:
+>           mock_args_class.side_effect = PydanticValidationError(
+                [{"msg": "Invalid agent name", "type": "value_error"}],
+                StatusCommandArgs
+            )
+E           TypeError: argument 'line_errors': 'ModelMetaclass' object cannot be converted to 'Sequence'
+
+tests/tasks/test_status.py:474: TypeError
+____________ TestCLIErrorHandling.test_cli_execute_with_usage_error ____________
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x124716650>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+>                   rv = self.invoke(ctx)
+                         ^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/click/core.py:1363: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/click/core.py:1824: in invoke
+    cmd_name, cmd, args = self.resolve_command(ctx, args)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/click/core.py:1888: in resolve_command
+    ctx.fail(_("No such command {name!r}.").format(name=original_cmd_name))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <click.core.Context object at 0x124716650>
+message = "No such command 'test'."
+
+    def fail(self, message: str) -> t.NoReturn:
+        """Aborts the execution of the program with a specific error
+        message.
+    
+        :param message: the error message to fail with.
+        """
+>       raise UsageError(message, self)
+E       click.exceptions.UsageError: No such command 'test'.
+
+.venv/lib/python3.13/site-packages/click/core.py:704: UsageError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_cli.TestCLIErrorHandling object at 0x12377cd60>
+
+    def test_cli_execute_with_usage_error(self):
+        """Test CLI.execute handles click.UsageError properly."""
+        cli_app = CLI()
+    
+        with patch.object(cli_app.click_group, '__call__') as mock_call:
+            from click import UsageError
+            mock_call.side_effect = UsageError("Invalid usage")
+    
+>           exit_code = cli_app.execute(['test', 'args'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cli.py:135: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/cli/main.py:131: in execute
+    self.click_group(argv)
+.venv/lib/python3.13/site-packages/click/core.py:1442: in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x124716650>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+                    rv = self.invoke(ctx)
+                    if not standalone_mode:
+                        return rv
+                    # it's not safe to `ctx.exit(rv)` here!
+                    # note that `rv` may actually contain data like "1" which
+                    # has obvious effects
+                    # more subtle case: `rv=[None, None]` can come out of
+                    # chained commands which all returned `None` -- so it's not
+                    # even always obvious that `rv` indicates success/failure
+                    # by its truthiness/falsiness
+                    ctx.exit()
+            except (EOFError, KeyboardInterrupt) as e:
+                echo(file=sys.stderr)
+                raise Abort() from e
+            except ClickException as e:
+                if not standalone_mode:
+                    raise
+                e.show()
+>               sys.exit(e.exit_code)
+E               SystemExit: 2
+
+.venv/lib/python3.13/site-packages/click/core.py:1381: SystemExit
+----------------------------- Captured stderr call -----------------------------
+Usage: pytest [OPTIONS] COMMAND [ARGS]...
+Try 'pytest --help' for help.
+
+Error: No such command 'test'.
+_________ TestCLIErrorHandling.test_cli_execute_with_unexpected_error __________
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x123b73ce0>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+>                   rv = self.invoke(ctx)
+                         ^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/click/core.py:1363: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/click/core.py:1824: in invoke
+    cmd_name, cmd, args = self.resolve_command(ctx, args)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/click/core.py:1888: in resolve_command
+    ctx.fail(_("No such command {name!r}.").format(name=original_cmd_name))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <click.core.Context object at 0x123b73ce0>
+message = "No such command 'test'."
+
+    def fail(self, message: str) -> t.NoReturn:
+        """Aborts the execution of the program with a specific error
+        message.
+    
+        :param message: the error message to fail with.
+        """
+>       raise UsageError(message, self)
+E       click.exceptions.UsageError: No such command 'test'.
+
+.venv/lib/python3.13/site-packages/click/core.py:704: UsageError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_cli.TestCLIErrorHandling object at 0x1237071d0>
+capsys = <_pytest.capture.CaptureFixture object at 0x123919310>
+
+    def test_cli_execute_with_unexpected_error(self, capsys):
+        """Test CLI.execute handles unexpected errors properly."""
+        cli_app = CLI()
+    
+        with patch.object(cli_app.click_group, '__call__') as mock_call:
+            mock_call.side_effect = RuntimeError("Unexpected error")
+    
+>           exit_code = cli_app.execute(['test', 'args'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cli.py:146: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/cli/main.py:131: in execute
+    self.click_group(argv)
+.venv/lib/python3.13/site-packages/click/core.py:1442: in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x123b73ce0>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+                    rv = self.invoke(ctx)
+                    if not standalone_mode:
+                        return rv
+                    # it's not safe to `ctx.exit(rv)` here!
+                    # note that `rv` may actually contain data like "1" which
+                    # has obvious effects
+                    # more subtle case: `rv=[None, None]` can come out of
+                    # chained commands which all returned `None` -- so it's not
+                    # even always obvious that `rv` indicates success/failure
+                    # by its truthiness/falsiness
+                    ctx.exit()
+            except (EOFError, KeyboardInterrupt) as e:
+                echo(file=sys.stderr)
+                raise Abort() from e
+            except ClickException as e:
+                if not standalone_mode:
+                    raise
+                e.show()
+>               sys.exit(e.exit_code)
+E               SystemExit: 2
+
+.venv/lib/python3.13/site-packages/click/core.py:1381: SystemExit
+----------------------------- Captured stderr call -----------------------------
+Usage: pytest [OPTIONS] COMMAND [ARGS]...
+Try 'pytest --help' for help.
+
+Error: No such command 'test'.
+_____ TestCLIKeyboardInterrupt.test_keyboard_interrupt_exits_with_code_130 _____
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x123b735c0>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+>                   rv = self.invoke(ctx)
+                         ^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/click/core.py:1363: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/click/core.py:1824: in invoke
+    cmd_name, cmd, args = self.resolve_command(ctx, args)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.13/site-packages/click/core.py:1888: in resolve_command
+    ctx.fail(_("No such command {name!r}.").format(name=original_cmd_name))
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <click.core.Context object at 0x123b735c0>
+message = "No such command 'test'."
+
+    def fail(self, message: str) -> t.NoReturn:
+        """Aborts the execution of the program with a specific error
+        message.
+    
+        :param message: the error message to fail with.
+        """
+>       raise UsageError(message, self)
+E       click.exceptions.UsageError: No such command 'test'.
+
+.venv/lib/python3.13/site-packages/click/core.py:704: UsageError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_cli.TestCLIKeyboardInterrupt object at 0x1237856d0>
+
+    def test_keyboard_interrupt_exits_with_code_130(self):
+        """Test KeyboardInterrupt exits with code 130 and no stack trace."""
+        cli_app = CLI()
+    
+        with patch.object(cli_app.click_group, '__call__') as mock_call:
+            from click import Abort
+            mock_call.side_effect = Abort()
+    
+>           exit_code = cli_app.execute(['test', 'args'])
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cli.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/cli/main.py:131: in execute
+    self.click_group(argv)
+.venv/lib/python3.13/site-packages/click/core.py:1442: in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Group agent-actions>, args = ['test', 'args'], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}, ctx = <click.core.Context object at 0x123b735c0>
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+                    rv = self.invoke(ctx)
+                    if not standalone_mode:
+                        return rv
+                    # it's not safe to `ctx.exit(rv)` here!
+                    # note that `rv` may actually contain data like "1" which
+                    # has obvious effects
+                    # more subtle case: `rv=[None, None]` can come out of
+                    # chained commands which all returned `None` -- so it's not
+                    # even always obvious that `rv` indicates success/failure
+                    # by its truthiness/falsiness
+                    ctx.exit()
+            except (EOFError, KeyboardInterrupt) as e:
+                echo(file=sys.stderr)
+                raise Abort() from e
+            except ClickException as e:
+                if not standalone_mode:
+                    raise
+                e.show()
+>               sys.exit(e.exit_code)
+E               SystemExit: 2
+
+.venv/lib/python3.13/site-packages/click/core.py:1381: SystemExit
+----------------------------- Captured stderr call -----------------------------
+Usage: pytest [OPTIONS] COMMAND [ARGS]...
+Try 'pytest --help' for help.
+
+Error: No such command 'test'.
+------------------------------ Captured log call -------------------------------
+DEBUG    agent_actions.cli.main:main.py:40 Registering CLI commands
+DEBUG    agent_actions.cli.main:main.py:57 Signal handlers registered successfully
+__________ TestCLIIntegration.test_main_entrypoint_returns_exit_code ___________
+
+self = <test_cli.TestCLIIntegration object at 0x123785e50>
+
+    def test_main_entrypoint_returns_exit_code(self):
+        """Test main_entrypoint returns proper exit code."""
+        # Test with version flag which should exit cleanly
+>       exit_code = main_entrypoint(['--version'])
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_cli.py:321: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/cli/main.py:181: in main_entrypoint
+    return app.execute(argv)
+           ^^^^^^^^^^^^^^^^^
+agent_actions/cli/main.py:119: in execute
+    self._show_version_and_exit()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_actions.cli.main.CLI object at 0x123b773e0>
+
+    def _show_version_and_exit(self) -> None:
+        """Display version information and exit."""
+        print(f"Agent Actions CLI v{__version__}")
+>       sys.exit(0)
+E       SystemExit: 0
+
+agent_actions/cli/main.py:101: SystemExit
+----------------------------- Captured stdout call -----------------------------
+Agent Actions CLI v1.0.0
+___________ TestCLIIntegration.test_main_entrypoint_handles_no_args ____________
+
+self = <Group agent-actions>, args = [], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+>               with self.make_context(prog_name, args, **extra) as ctx:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.venv/lib/python3.13/site-packages/click/core.py:1362: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.13/site-packages/click/core.py:1186: in make_context
+    self.parse_args(ctx, args)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Group agent-actions>, ctx = <click.core.Context object at 0x124714640>
+args = []
+
+    def parse_args(self, ctx: Context, args: list[str]) -> list[str]:
+        if not args and self.no_args_is_help and not ctx.resilient_parsing:
+>           raise NoArgsIsHelpError(ctx)
+E           click.exceptions.NoArgsIsHelpError: Usage: pytest [OPTIONS] COMMAND [ARGS]...
+E           
+E           Options:
+E             --help  Show this message and exit.
+E           
+E           Commands:
+E             batch   Manages the lifecycle of batch processing jobs.
+E             clean   Remove temporary directories created by an agent.
+E             docs    Generate or display agent documentation.
+E             init    Initialize a new Agent Actions project.
+E             render  Render a Jinja template for the specified agent.
+E             run     Run agents with a specified agent configuration.
+E             status  Display the status of an agent workflow.
+
+.venv/lib/python3.13/site-packages/click/core.py:1784: NoArgsIsHelpError
+
+During handling of the above exception, another exception occurred:
+
+self = <test_cli.TestCLIIntegration object at 0x123785f90>
+
+    def test_main_entrypoint_handles_no_args(self):
+        """Test main_entrypoint handles no arguments."""
+        # Should not crash with no arguments
+>       exit_code = main_entrypoint([])
+                    ^^^^^^^^^^^^^^^^^^^
+
+tests/test_cli.py:328: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/cli/main.py:181: in main_entrypoint
+    return app.execute(argv)
+           ^^^^^^^^^^^^^^^^^
+agent_actions/cli/main.py:131: in execute
+    self.click_group(argv)
+.venv/lib/python3.13/site-packages/click/core.py:1442: in __call__
+    return self.main(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Group agent-actions>, args = [], prog_name = 'pytest'
+complete_var = None, standalone_mode = True, windows_expand_args = True
+extra = {}
+
+    def main(
+        self,
+        args: cabc.Sequence[str] | None = None,
+        prog_name: str | None = None,
+        complete_var: str | None = None,
+        standalone_mode: bool = True,
+        windows_expand_args: bool = True,
+        **extra: t.Any,
+    ) -> t.Any:
+        """This is the way to invoke a script with all the bells and
+        whistles as a command line application.  This will always terminate
+        the application after a call.  If this is not wanted, ``SystemExit``
+        needs to be caught.
+    
+        This method is also available by directly calling the instance of
+        a :class:`Command`.
+    
+        :param args: the arguments that should be used for parsing.  If not
+                     provided, ``sys.argv[1:]`` is used.
+        :param prog_name: the program name that should be used.  By default
+                          the program name is constructed by taking the file
+                          name from ``sys.argv[0]``.
+        :param complete_var: the environment variable that controls the
+                             bash completion support.  The default is
+                             ``"_<prog_name>_COMPLETE"`` with prog_name in
+                             uppercase.
+        :param standalone_mode: the default behavior is to invoke the script
+                                in standalone mode.  Click will then
+                                handle exceptions and convert them into
+                                error messages and the function will never
+                                return but shut down the interpreter.  If
+                                this is set to `False` they will be
+                                propagated to the caller and the return
+                                value of this function is the return value
+                                of :meth:`invoke`.
+        :param windows_expand_args: Expand glob patterns, user dir, and
+            env vars in command line args on Windows.
+        :param extra: extra keyword arguments are forwarded to the context
+                      constructor.  See :class:`Context` for more information.
+    
+        .. versionchanged:: 8.0.1
+            Added the ``windows_expand_args`` parameter to allow
+            disabling command line arg expansion on Windows.
+    
+        .. versionchanged:: 8.0
+            When taking arguments from ``sys.argv`` on Windows, glob
+            patterns, user dir, and env vars are expanded.
+    
+        .. versionchanged:: 3.0
+           Added the ``standalone_mode`` parameter.
+        """
+        if args is None:
+            args = sys.argv[1:]
+    
+            if os.name == "nt" and windows_expand_args:
+                args = _expand_args(args)
+        else:
+            args = list(args)
+    
+        if prog_name is None:
+            prog_name = _detect_program_name()
+    
+        # Process shell completion requests and exit early.
+        self._main_shell_completion(extra, prog_name, complete_var)
+    
+        try:
+            try:
+                with self.make_context(prog_name, args, **extra) as ctx:
+                    rv = self.invoke(ctx)
+                    if not standalone_mode:
+                        return rv
+                    # it's not safe to `ctx.exit(rv)` here!
+                    # note that `rv` may actually contain data like "1" which
+                    # has obvious effects
+                    # more subtle case: `rv=[None, None]` can come out of
+                    # chained commands which all returned `None` -- so it's not
+                    # even always obvious that `rv` indicates success/failure
+                    # by its truthiness/falsiness
+                    ctx.exit()
+            except (EOFError, KeyboardInterrupt) as e:
+                echo(file=sys.stderr)
+                raise Abort() from e
+            except ClickException as e:
+                if not standalone_mode:
+                    raise
+                e.show()
+>               sys.exit(e.exit_code)
+E               SystemExit: 2
+
+.venv/lib/python3.13/site-packages/click/core.py:1381: SystemExit
+----------------------------- Captured stderr call -----------------------------
+Usage: pytest [OPTIONS] COMMAND [ARGS]...
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  batch   Manages the lifecycle of batch processing jobs.
+  clean   Remove temporary directories created by an agent.
+  docs    Generate or display agent documentation.
+  init    Initialize a new Agent Actions project.
+  render  Render a Jinja template for the specified agent.
+  run     Run agents with a specified agent configuration.
+  status  Display the status of an agent workflow.
+________ TestProjectRootDiscovery.test_find_project_root_custom_marker _________
+
+self = <test_paths.TestProjectRootDiscovery object at 0x123786ad0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_custom_0')
+
+    def test_find_project_root_custom_marker(self, tmp_path):
+        """Test find_project_root with custom marker file."""
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        custom_marker = project_root / "custom_marker.yml"
+        custom_marker.write_text("custom: marker")
+    
+        with patch('agent_actions._internal.utils.path_utils.get_path_manager') as mock_pm:
+            mock_manager = Mock()
+            mock_manager.get_project_root.return_value = project_root
+            mock_pm.return_value = mock_manager
+    
+>           result = find_project_root(project_root, marker_file="custom_marker.yml")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/utils/test_paths.py:164: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/_internal/utils/path_utils.py:119: in find_project_root
+    return pm.get_project_root(start_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_actions.core.context.path_manager.PathManager object at 0x123919bd0>
+start_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_custom_0/project')
+
+    def get_project_root(self, start_path: Optional[Path] = None) -> Path:
+        """
+        Find and return the project root directory.
+    
+        Args:
+            start_path: Starting point for search (defaults to current directory)
+    
+        Returns:
+            Path to project root directory
+    
+        Raises:
+            ProjectRootNotFoundError: If project root cannot be found
+        """
+        if self._project_root and self.config.cache_paths:
+            return self._project_root
+    
+        search_path = Path(start_path or Path.cwd()).resolve()
+    
+        # Look for marker file in current and parent directories
+        current = search_path
+        while current != current.parent:
+            marker_path = current / self.config.marker_file
+            if marker_path.exists():
+                self._project_root = current
+                return current
+            current = current.parent
+    
+>       raise ProjectRootNotFoundError(
+            f"Project root not found. Searched for '{self.config.marker_file}' "
+            f"starting from {search_path}"
+        )
+E       agent_actions.core.context.path_manager.ProjectRootNotFoundError: Project root not found. Searched for 'agent_actions.yml' starting from /private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_custom_0/project
+
+agent_actions/core/context/path_manager.py:127: ProjectRootNotFoundError
+__________ TestProjectRootDiscovery.test_find_project_root_not_found ___________
+
+self = <test_paths.TestProjectRootDiscovery object at 0x12377dba0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_not_fou0')
+
+    def test_find_project_root_not_found(self, tmp_path):
+        """Test find_project_root raises error when project root not found."""
+        with patch('agent_actions._internal.utils.path_utils.get_path_manager') as mock_pm:
+            mock_manager = Mock()
+            mock_manager.get_project_root.side_effect = FileNotFoundError("Project root not found")
+            mock_pm.return_value = mock_manager
+    
+            with pytest.raises(FileNotFoundError):
+>               find_project_root(tmp_path)
+
+tests/utils/test_paths.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/_internal/utils/path_utils.py:119: in find_project_root
+    return pm.get_project_root(start_path)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_actions.core.context.path_manager.PathManager object at 0x12377efd0>
+start_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_not_fou0')
+
+    def get_project_root(self, start_path: Optional[Path] = None) -> Path:
+        """
+        Find and return the project root directory.
+    
+        Args:
+            start_path: Starting point for search (defaults to current directory)
+    
+        Returns:
+            Path to project root directory
+    
+        Raises:
+            ProjectRootNotFoundError: If project root cannot be found
+        """
+        if self._project_root and self.config.cache_paths:
+            return self._project_root
+    
+        search_path = Path(start_path or Path.cwd()).resolve()
+    
+        # Look for marker file in current and parent directories
+        current = search_path
+        while current != current.parent:
+            marker_path = current / self.config.marker_file
+            if marker_path.exists():
+                self._project_root = current
+                return current
+            current = current.parent
+    
+>       raise ProjectRootNotFoundError(
+            f"Project root not found. Searched for '{self.config.marker_file}' "
+            f"starting from {search_path}"
+        )
+E       agent_actions.core.context.path_manager.ProjectRootNotFoundError: Project root not found. Searched for 'agent_actions.yml' starting from /private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_find_project_root_not_fou0
+
+agent_actions/core/context/path_manager.py:127: ProjectRootNotFoundError
+__ TestAgentDirectoryStructure.test_create_agent_directory_structure_logging ___
+
+self = <test_paths.TestAgentDirectoryStructure object at 0x12377e520>
+caplog = <_pytest.logging.LogCaptureFixture object at 0x124235940>
+
+    def test_create_agent_directory_structure_logging(self, caplog):
+        """Test create_agent_directory_structure logs creation."""
+        agent_name = "logged_agent"
+    
+        with patch('agent_actions._internal.utils.path_utils.get_path_manager') as mock_pm:
+            mock_manager = Mock()
+            mock_manager.get_project_root.return_value = Path("/project")
+            mock_manager.get_agent_paths.return_value = {"config": Path("/project/config")}
+            mock_pm.return_value = mock_manager
+    
+            with patch('agent_actions._internal.utils.path_utils.ensure_directory_exists') as mock_ensure:
+                mock_ensure.side_effect = lambda p: p
+    
+                create_agent_directory_structure(agent_name)
+    
+>               assert f"Created agent directory structure for {agent_name}" in caplog.text
+E               AssertionError: assert 'Created agent directory structure for logged_agent' in ''
+E                +  where '' = <_pytest.logging.LogCaptureFixture object at 0x124235940>.text
+
+tests/utils/test_paths.py:548: AssertionError
+_______ TestErrorHandlingAndEdgeCases.test_concurrent_directory_creation _______
+
+self = <test_paths.TestErrorHandlingAndEdgeCases object at 0x12377e9e0>
+tmp_path = PosixPath('/private/var/folders/vw/_1nlpm9n6fg_4cz7tps95wx80000gn/T/pytest-of-muizz/pytest-3/test_concurrent_directory_crea0')
+
+    def test_concurrent_directory_creation(self, tmp_path):
+        """Test concurrent directory creation scenarios."""
+        test_dir = tmp_path / "concurrent_test"
+    
+        # Simulate race condition where directory is created between checks
+        with patch('pathlib.Path.exists') as mock_exists:
+            with patch('pathlib.Path.mkdir') as mock_mkdir:
+                # First call returns False, second returns True (created by another process)
+                mock_exists.side_effect = [False, True]
+                mock_mkdir.side_effect = FileExistsError("Directory already exists")
+    
+                # Should handle race condition gracefully
+>               result = ensure_directory_exists(test_dir)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/utils/test_paths.py:694: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+agent_actions/_internal/utils/path_utils.py:48: in ensure_directory_exists
+    return get_path_manager().ensure_path_exists(Path(path), is_file=is_file)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+agent_actions/core/context/path_manager.py:223: in ensure_path_exists
+    directory.mkdir(parents=True, exist_ok=True)
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1167: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1171: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <MagicMock name='mkdir' id='4901266368'>, args = ()
+kwargs = {'exist_ok': True, 'parents': True}
+effect = FileExistsError('Directory already exists')
+
+    def _execute_mock_call(self, /, *args, **kwargs):
+        # separate from _increment_mock_call so that awaited functions are
+        # executed separately from their call, also AsyncMock overrides this method
+    
+        effect = self.side_effect
+        if effect is not None:
+            if _is_exception(effect):
+>               raise effect
+E               FileExistsError: Directory already exists
+
+/opt/homebrew/Cellar/python@3.13/3.13.2/Frameworks/Python.framework/Versions/3.13/lib/python3.13/unittest/mock.py:1226: FileExistsError
+=============================== warnings summary ===============================
+.venv/lib/python3.13/site-packages/_hypothesis_pytestplugin.py:470
+  /Users/muizz/Documents/codeshop/agent-actions/.venv/lib/python3.13/site-packages/_hypothesis_pytestplugin.py:470: UserWarning: Skipping collection of '.hypothesis' directory - this usually means you've explicitly set the `norecursedirs` pytest config option, replacing rather than extending the default ignores.
+    warnings.warn(
+
+tests/agents/test_base.py:32
+  /Users/muizz/Documents/codeshop/agent-actions/tests/agents/test_base.py:32: PytestCollectionWarning: cannot collect test class 'TestableLoader' because it has a __init__ constructor (from: tests/agents/test_base.py)
+    class TestableLoader(BaseLoader[str]):
+
+tests/agents/test_base.py:44
+  /Users/muizz/Documents/codeshop/agent-actions/tests/agents/test_base.py:44: PytestCollectionWarning: cannot collect test class 'TestableValidator' because it has a __init__ constructor (from: tests/agents/test_base.py)
+    class TestableValidator(BaseValidator):
+
+tests/core/test_loaders.py:24
+  /Users/muizz/Documents/codeshop/agent-actions/tests/core/test_loaders.py:24: PytestCollectionWarning: cannot collect test class 'TestableLoader' because it has a __init__ constructor (from: tests/core/test_loaders.py)
+    class TestableLoader(BaseLoader[str]):
+
+tests/core/test_loaders.py:38
+  /Users/muizz/Documents/codeshop/agent-actions/tests/core/test_loaders.py:38: PytestCollectionWarning: cannot collect test class 'TestableAsyncLoader' because it has a __init__ constructor (from: tests/core/test_loaders.py)
+    class TestableAsyncLoader(BaseLoader[List[str]]):
+
+.venv/lib/python3.13/site-packages/PyPDF2/__init__.py:21
+  /Users/muizz/Documents/codeshop/agent-actions/.venv/lib/python3.13/site-packages/PyPDF2/__init__.py:21: DeprecationWarning: PyPDF2 is deprecated. Please move to the pypdf library instead.
+    warnings.warn(
+
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_file_not_found
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_file_not_found
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_file_not_found
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_file_not_found
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_permission_error
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_permission_error
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_permission_error
+tests/core/test_loaders.py::TestBaseLoader::test_load_file_permission_error
+tests/core/test_loaders.py::TestLoaderErrorHandling::test_retry_mechanism_in_base_loader
+  /Users/muizz/Documents/codeshop/agent-actions/agent_actions/core/utils/error_handling.py:54: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+    'timestamp': datetime.utcnow().isoformat(),
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/agents/test_base.py::TestAgentBuilder::test_prepare_prompt_with_file_reference
+FAILED tests/agents/test_base.py::TestAgentBuilder::test_prepare_schema_success
+FAILED tests/agents/test_base.py::TestAgentBuilder::test_invoke_vendor_handler_openai
+FAILED tests/agents/test_base.py::TestAgentBuilder::test_invoke_vendor_handler_single_response_vendor
+FAILED tests/agents/test_base.py::TestAgentBuilderIdempotency::test_agent_builder_idempotent_build_no_duplicate_singletons
+FAILED tests/agents/test_base.py::TestAgentBuilderIdempotency::test_agent_builder_with_same_config_different_context
+FAILED tests/agents/test_base.py::TestAgentBuilderIntegration::test_end_to_end_agent_creation
+FAILED tests/agents/test_base.py::TestAgentBuilderIntegration::test_agent_builder_with_all_optional_parameters
+FAILED tests/core/test_loaders.py::TestBatchDataLoader::test_load_unsupported_file_type
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_simple_equality_condition
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_multiple_and_conditions_case_insensitive
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_whitespace_tolerant
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_supported_operators[=-field-'value'-=]
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_supported_operators[LIKE-name-'%test%'-LIKE]
+FAILED tests/core/test_parser.py::TestWhereClauseParser::test_parse_value_types
+FAILED tests/core/test_parser.py::TestWhereClauseEvaluation::test_evaluate_simple_conditions
+FAILED tests/core/test_parser.py::TestWhereClauseEvaluation::test_evaluate_nested_field_access
+FAILED tests/core/test_parser.py::TestWhereClauseEvaluation::test_evaluate_in_conditions
+FAILED tests/core/test_parser.py::TestSimpleWhereFilter::test_filter_item_error_handling
+FAILED tests/core/test_parser.py::TestSimpleWhereFilter::test_evaluate_safe_skip_condition_error_handling
+FAILED tests/core/test_parser.py::TestWhereClauseConfig::test_where_clause_config_validation_empty_clause
+FAILED tests/core/test_parser.py::TestEdgeCasesAndErrorHandling::test_get_nested_value_edge_cases
+FAILED tests/core/test_parser.py::TestEdgeCasesAndErrorHandling::test_operator_edge_cases
+FAILED tests/core/test_parser.py::TestEdgeCasesAndErrorHandling::test_parametrized_evaluation[data2-status = 'active'-False]
+FAILED tests/core/test_parser.py::TestEdgeCasesAndErrorHandling::test_parametrized_evaluation[data3-field = 'value'-False]
+FAILED tests/tasks/test_compile.py::TestRenderCommandArgs::test_valid_render_command_args
+FAILED tests/tasks/test_compile.py::TestRenderCommandArgs::test_render_command_args_validation_empty_agent_name
+FAILED tests/tasks/test_compile.py::TestRenderCommand::test_render_command_initialization_custom_template_dir
+FAILED tests/tasks/test_compile.py::TestRenderCommand::test_render_template_success
+FAILED tests/tasks/test_compile.py::TestRenderCommand::test_render_template_no_output_file
+FAILED tests/tasks/test_compile.py::TestRenderCommand::test_render_template_failure
+FAILED tests/tasks/test_compile.py::TestRenderCommand::test_render_template_deterministic_output
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_success_with_output_file
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_success_console_output
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_file_not_found_error
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_validation_error
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_template_rendering_error
+FAILED tests/tasks/test_compile.py::TestRenderCommandExecution::test_execute_unexpected_error
+FAILED tests/tasks/test_compile.py::TestRenderCommandConfigValidation::test_fails_fast_on_invalid_configs_with_helpful_messages
+FAILED tests/tasks/test_compile.py::TestRenderCommandConfigValidation::test_config_schema_validation_errors
+FAILED tests/tasks/test_compile.py::TestRenderCommandConfigValidation::test_template_syntax_errors
+FAILED tests/tasks/test_compile.py::TestRenderClickCommand::test_render_click_command_success
+FAILED tests/tasks/test_compile.py::TestRenderClickCommand::test_render_click_command_short_options
+FAILED tests/tasks/test_compile.py::TestRenderClickCommand::test_render_click_command_validation_error
+FAILED tests/tasks/test_compile.py::TestRenderCommandDeterminism::test_same_input_produces_same_output
+FAILED tests/tasks/test_compile.py::TestRenderCommandDeterminism::test_different_inputs_produce_different_outputs
+FAILED tests/tasks/test_compile.py::TestRenderCommandDeterminism::test_template_caching_behavior
+FAILED tests/tasks/test_compile.py::TestRenderCommandIntegration::test_end_to_end_render_command
+FAILED tests/tasks/test_compile.py::TestRenderCommandIntegration::test_render_command_with_complex_configuration
+FAILED tests/tasks/test_init.py::TestInitCommandArgs::test_init_command_args_validation_empty_project_name
+FAILED tests/tasks/test_init.py::TestInitClickCommand::test_init_click_command_validation_error
+FAILED tests/tasks/test_init.py::TestInitClickCommand::test_init_click_command_help
+FAILED tests/tasks/test_status.py::TestStatusCommandArgs::test_status_command_args_validation_empty_agent
+FAILED tests/tasks/test_status.py::TestStatusCommand::test_execute_handles_missing_data_gracefully
+FAILED tests/tasks/test_status.py::TestStatusCommand::test_execute_permission_error
+FAILED tests/tasks/test_status.py::TestStatusClickCommand::test_status_click_command_validation_error
+FAILED tests/test_cli.py::TestCLIErrorHandling::test_cli_execute_with_usage_error
+FAILED tests/test_cli.py::TestCLIErrorHandling::test_cli_execute_with_unexpected_error
+FAILED tests/test_cli.py::TestCLIKeyboardInterrupt::test_keyboard_interrupt_exits_with_code_130
+FAILED tests/test_cli.py::TestCLIIntegration::test_main_entrypoint_returns_exit_code
+FAILED tests/test_cli.py::TestCLIIntegration::test_main_entrypoint_handles_no_args
+FAILED tests/utils/test_paths.py::TestProjectRootDiscovery::test_find_project_root_custom_marker
+FAILED tests/utils/test_paths.py::TestProjectRootDiscovery::test_find_project_root_not_found
+FAILED tests/utils/test_paths.py::TestAgentDirectoryStructure::test_create_agent_directory_structure_logging
+FAILED tests/utils/test_paths.py::TestErrorHandlingAndEdgeCases::test_concurrent_directory_creation
+ERROR tests/test_cli.py::TestCLIVersionHandling::test_version_flag_prints_version_and_exits_0
+ERROR tests/test_cli.py::TestCLIVersionHandling::test_version_short_flag_prints_version_and_exits_0
+ERROR tests/test_cli.py::TestCLIVersionHandling::test_version_flag_with_other_args_still_exits
+ERROR tests/test_cli.py::TestCLIVersionHandling::test_version_output_format
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_root_help_displays_without_error
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_help_flag_displays_without_error
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[init]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[render]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[run]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[batch]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[status]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[clean]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_subcommand_help_displays_without_error[docs]
+ERROR tests/test_cli.py::TestCLIHelpDisplay::test_help_shows_available_commands
+ERROR tests/test_cli.py::TestCLIErrorHandling::test_invalid_command_produces_clear_error
+ERROR tests/test_cli.py::TestCLIErrorHandling::test_invalid_flag_produces_clear_error
+ERROR tests/test_cli.py::TestCLIErrorHandling::test_malformed_arguments_produce_error
+ERROR tests/test_cli.py::TestCLICommandDispatch::test_dispatch_routes_to_init_with_correct_args
+ERROR tests/test_cli.py::TestCLICommandDispatch::test_dispatch_routes_to_compile_with_correct_args
+ERROR tests/test_cli.py::TestCLICommandDispatch::test_dispatch_routes_to_run_with_correct_args
+ERROR tests/test_cli.py::TestCLICommandDispatch::test_dispatch_routes_to_status_with_correct_args
+ERROR tests/test_cli.py::TestCLICommandDispatch::test_dispatch_routes_to_batch_with_correct_args
+====== 65 failed, 212 passed, 1 skipped, 15 warnings, 22 errors in 7.67s =======

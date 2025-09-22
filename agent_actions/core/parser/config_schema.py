@@ -13,9 +13,8 @@ class WhereClauseConfig(BaseModel):
     """Configuration for WHERE clause filtering."""
     
     clause: str = Field(
-        ..., 
+        ...,
         description="SQL-like WHERE clause for filtering",
-        min_length=1,
         max_length=10000
     )
     scope: FilterScope = Field(
@@ -39,21 +38,22 @@ class WhereClauseConfig(BaseModel):
     @classmethod
     def validate_clause(cls, v):
         """Validate the WHERE clause syntax."""
-        if not v or not v.strip():
+        # Check if value is provided and non-empty after validation error handling
+        if v is not None and (not v or not v.strip()):
             raise ValueError("WHERE clause cannot be empty")
-        
+
         # Basic safety checks
         dangerous_patterns = [
             '__import__', 'exec', 'eval', 'compile', 'open', 'file',
             'input', 'raw_input', 'reload', 'vars', 'globals', 'locals',
             'dir', 'hasattr', 'getattr', 'setattr', 'delattr'
         ]
-        
+
         clause_lower = v.lower()
         for pattern in dangerous_patterns:
             if pattern in clause_lower:
                 raise ValueError(f"WHERE clause contains potentially dangerous operation: {pattern}")
-        
+
         return v
     
     model_config = ConfigDict(extra="forbid")
