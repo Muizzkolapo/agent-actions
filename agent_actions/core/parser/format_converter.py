@@ -43,7 +43,7 @@ class WorkflowFormatConverter:
         return "old"
 
     @staticmethod
-    def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer) -> AgentEntryDict:
+    def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer, is_operational: bool = True) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
 
@@ -52,6 +52,7 @@ class WorkflowFormatConverter:
             defaults: Default settings
             agent: Pre-initialized agent dict with agent_type and name already set
             template_replacer: Function to replace template variables
+            is_operational: Whether this action should run (based on plan)
 
         Returns:
             Completed agent configuration
@@ -61,7 +62,7 @@ class WorkflowFormatConverter:
         agent['model_name'] = action.get('model', defaults.get('model'))
 
         # Execution settings
-        agent['is_operational'] = True
+        agent['is_operational'] = is_operational
         agent['run_mode'] = defaults.get('run_mode', 'online')
         agent['use_few_shot_samples'] = action.get('few_shot', 0)
 
@@ -142,10 +143,24 @@ class WorkflowFormatConverter:
         actions = new_config.get('actions', [])
         defaults = new_config.get('defaults', {})
 
+        # Extract actions that are in the plan
+        plan = new_config.get('plan', [])
+        actions_in_plan = set()
+        for plan_item in plan:
+            if '<-' in plan_item:
+                action_name = plan_item.split('<-')[0].strip()
+            else:
+                action_name = plan_item.strip()
+            actions_in_plan.add(action_name)
+
         # Convert actions to agents
         agents: AgentConfigList = []
 
         for action in actions:
+            # Check if this action is in the plan
+            action_name = action.get('name')
+            is_in_plan = action_name in actions_in_plan
+
             # Check if this action has a loop configuration
             loop_config = action.get('loop')
             if loop_config:
@@ -183,7 +198,7 @@ class WorkflowFormatConverter:
                     agent['name'] = f"{action.get('name')}_{i}"
 
                     # Continue with rest of agent setup
-                    agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, replace_template_var))
+                    agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_in_plan))
             else:
                 # No loop - create single agent
                 agent: AgentEntryDict = {}
@@ -192,7 +207,7 @@ class WorkflowFormatConverter:
                 agent['agent_type'] = action.get('name', 'unknown')
                 agent['name'] = action.get('name')
 
-                agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, lambda x: x))
+                agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_in_plan))
 
         # Extract dependencies from plan
         plan = new_config.get('plan', [])
