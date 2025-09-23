@@ -43,6 +43,91 @@ class WorkflowFormatConverter:
         return "old"
 
     @staticmethod
+    def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer) -> AgentEntryDict:
+        """
+        Create an agent configuration from an action.
+
+        Args:
+            action: Action configuration from new format
+            defaults: Default settings
+            agent: Pre-initialized agent dict with agent_type and name already set
+            template_replacer: Function to replace template variables
+
+        Returns:
+            Completed agent configuration
+        """
+        # Model configuration
+        agent['model_vendor'] = action.get('vendor', defaults.get('vendor'))
+        agent['model_name'] = action.get('model', defaults.get('model'))
+
+        # Execution settings
+        agent['is_operational'] = True
+        agent['run_mode'] = defaults.get('run_mode', 'online')
+        agent['use_few_shot_samples'] = action.get('few_shot', 0)
+
+        # Schema handling - apply template replacement
+        schema_value = action.get('schema') or action.get('output_schema')
+        if schema_value:
+            schema_value = template_replacer(schema_value)
+            if isinstance(schema_value, str):
+                agent['schema_name'] = schema_value
+            elif isinstance(schema_value, dict):
+                agent['schema'] = schema_value
+            else:
+                agent['schema'] = schema_value
+
+        # Conditional logic
+        if action.get('guard'):
+            agent['where_clause'] = {
+                'clause': action['guard'],
+                'scope': 'item'
+            }
+
+        # Prompt
+        agent['prompt'] = action.get('prompt')
+
+        # Handle tool vs LLM actions
+        action_kind = action.get('kind', 'llm')
+        if action_kind == 'tool':
+            agent['model_vendor'] = 'tool'
+            agent['model_name'] = action.get('impl', action.get('name'))
+
+        # Granularity
+        granularity = action.get('granularity', defaults.get('granularity'))
+        if granularity:
+            agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
+
+        # Data flow collections - apply template replacement
+        current_granularity = agent.get('granularity', 'Record')
+        is_file_level = current_granularity == 'File'
+        is_tool_action = action_kind == 'tool'
+
+        if not (is_file_level and is_tool_action):
+            # Apply template replacement to collection fields
+            observe = template_replacer(action.get('observe', []))
+            drops = template_replacer(action.get('drops', []))
+            writes = template_replacer(action.get('writes', []))
+            reads = template_replacer(action.get('reads', []))
+
+            agent['side_collection'] = observe if isinstance(observe, list) else [observe]
+            agent['remove_collection'] = drops if isinstance(drops, list) else [drops]
+
+        # Dependencies - will be populated from plan
+        agent['dependencies'] = []
+        agent['parent'] = []
+
+        # Default empty collections
+        agent['chunk_config'] = {}
+        agent['conditional_clause'] = None
+        agent['skip_if'] = None
+        agent['ephemeral'] = None
+        agent['add_dispatch'] = None
+        agent['anthropic_version'] = None
+        agent['enable_prompt_caching'] = None
+
+        return agent
+
+    @staticmethod
     def convert_new_to_old(new_config: Dict[str, Any]) -> AgentConfigMap:
         """
         Convert new format to old format for execution.
@@ -61,87 +146,78 @@ class WorkflowFormatConverter:
         agents: AgentConfigList = []
 
         for action in actions:
-            agent: AgentEntryDict = {}
+            # Check if this action has a loop configuration
+            loop_config = action.get('loop')
+            if loop_config:
+                # Expand loop into multiple agent instances
+                param_name = loop_config.get('param', 'i')
+                loop_range = loop_config.get('range', [1, 1])
 
-            # Core fields
-            agent['agent_type'] = action.get('name', 'unknown')
-            agent['name'] = action.get('name')
-
-            # Model configuration
-            agent['model_vendor'] = action.get('vendor', defaults.get('vendor'))
-            agent['model_name'] = action.get('model', defaults.get('model'))
-
-            # Execution settings
-            agent['is_operational'] = True
-            agent['run_mode'] = defaults.get('run_mode', 'online')
-            agent['use_few_shot_samples'] = action.get('few_shot', 0)
-
-            # Data flow - convert new format back to old
-            # Note: side_collection and remove_collection will be set later based on granularity
-
-            # Schema handling - check both 'schema' and 'output_schema' fields
-            schema_value = action.get('schema') or action.get('output_schema')
-            if schema_value:
-                if isinstance(schema_value, str):
-                    agent['schema_name'] = schema_value
-                elif isinstance(schema_value, dict):
-                    # Handle inline schema definitions
-                    agent['schema'] = schema_value
+                # Generate range values
+                if len(loop_range) == 2:
+                    start, end = loop_range
+                    range_values = range(start, end + 1)
                 else:
-                    # Fallback for other types
-                    agent['schema'] = schema_value
+                    range_values = loop_range
 
-            # Conditional logic
-            if action.get('guard'):
-                agent['where_clause'] = {
-                    'clause': action['guard'],
-                    'scope': 'item'
-                }
+                # Create an agent for each loop iteration
+                for i in range_values:
+                    agent: AgentEntryDict = {}
 
-            # Prompt
-            agent['prompt'] = action.get('prompt')
+                    # Replace template variables in relevant fields
+                    def replace_template_var(value):
+                        if isinstance(value, str):
+                            return value.replace(f'${{{param_name}}}', str(i))
+                        elif isinstance(value, dict):
+                            # Replace in both keys and values
+                            return {
+                                replace_template_var(k) if isinstance(k, str) else k: replace_template_var(v)
+                                for k, v in value.items()
+                            }
+                        elif isinstance(value, list):
+                            return [replace_template_var(item) for item in value]
+                        return value
 
-            # Handle tool vs LLM actions
-            action_kind = action.get('kind', 'llm')
-            if action_kind == 'tool':
-                # For tool actions, model_vendor should be 'tool' and model_name contains the implementation path
-                agent['model_vendor'] = 'tool'
-                agent['model_name'] = action.get('impl', action.get('name'))  # Use impl or fallback to action name
+                    # Core fields
+                    agent['agent_type'] = f"{action.get('name', 'unknown')}_{i}"
+                    agent['name'] = f"{action.get('name')}_{i}"
 
-            # Granularity
-            granularity = action.get('granularity', defaults.get('granularity'))
-            if granularity:
-                agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
+                    # Continue with rest of agent setup
+                    agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, replace_template_var))
+            else:
+                # No loop - create single agent
+                agent: AgentEntryDict = {}
 
-            # Data flow collections - only set for record-level actions
-            # File-level tools cannot have side_collection or remove_collection
-            current_granularity = agent.get('granularity', 'Record')
-            is_file_level = current_granularity == 'File'
-            is_tool_action = action_kind == 'tool'
+                # Core fields
+                agent['agent_type'] = action.get('name', 'unknown')
+                agent['name'] = action.get('name')
 
-            if not (is_file_level and is_tool_action):
-                # Only set collection fields for non-file-level tools or LLM actions
-                agent['side_collection'] = action.get('observe', [])
-                agent['remove_collection'] = action.get('drops', [])
-
-            # Dependencies - need to extract from plan
-            agent['dependencies'] = []  # Will be populated from plan
-            agent['parent'] = []
-
-            # Default empty collections
-            agent['chunk_config'] = {}
-            agent['conditional_clause'] = None
-            agent['skip_if'] = None
-            agent['ephemeral'] = None
-            agent['add_dispatch'] = None
-            agent['anthropic_version'] = None
-            agent['enable_prompt_caching'] = None
-
-            agents.append(agent)
+                agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, lambda x: x))
 
         # Extract dependencies from plan
         plan = new_config.get('plan', [])
-        action_name_to_index = {action.get('name'): i for i, action in enumerate(actions)}
+
+        # Create mapping of action names to agent indices (accounting for loops)
+        agent_name_to_indices = {}
+        agent_index = 0
+        for action in actions:
+            action_name = action.get('name')
+            loop_config = action.get('loop')
+
+            if loop_config:
+                # For looped actions, map to multiple indices
+                loop_range = loop_config.get('range', [1, 1])
+                if len(loop_range) == 2:
+                    start, end = loop_range
+                    num_iterations = end - start + 1
+                else:
+                    num_iterations = len(loop_range)
+
+                agent_name_to_indices[action_name] = list(range(agent_index, agent_index + num_iterations))
+                agent_index += num_iterations
+            else:
+                agent_name_to_indices[action_name] = [agent_index]
+                agent_index += 1
 
         for plan_item in plan:
             if '<-' in plan_item:
@@ -149,10 +225,19 @@ class WorkflowFormatConverter:
                 action_name = action_name.strip()
                 deps = [dep.strip() for dep in deps_str.split(',')]
 
-                # Find the corresponding agent and set dependencies
-                if action_name in action_name_to_index:
-                    agent_index = action_name_to_index[action_name]
-                    agents[agent_index]['dependencies'] = deps
+                # Find the corresponding agent(s) and set dependencies
+                if action_name in agent_name_to_indices:
+                    for agent_idx in agent_name_to_indices[action_name]:
+                        # For looped actions, dependencies should reference the expanded names
+                        expanded_deps = []
+                        for dep in deps:
+                            if dep in agent_name_to_indices:
+                                # If dependency is also looped, use all expanded names
+                                for dep_idx in agent_name_to_indices[dep]:
+                                    expanded_deps.append(agents[dep_idx]['agent_type'])
+                            else:
+                                expanded_deps.append(dep)
+                        agents[agent_idx]['dependencies'] = expanded_deps
 
         return {workflow_name: agents}
 
