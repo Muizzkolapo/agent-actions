@@ -1,0 +1,165 @@
+name: qanalabs-quiz-gen
+description: "Educational quiz generation workflow with fact extraction and validation"
+version: "2.0.0"
+
+defaults:
+  vendor: openai
+  model: gpt-4
+  json_mode: true
+  granularity: Record
+  run_mode: online
+
+actions:
+  - name: extract_facts
+    intent: "Identify candidate facts from source content"
+    schema: candidate_facts_list
+    reads: [id, url, page_content, bloom_details, platform_name, exam_name]
+    writes: [candidate_facts_list]
+    drops: [id, url, topic]
+    observe: [id, url, page_content, bloom_details, platform_name, exam_name]
+    prompt: $qanalabs-quiz-gen.Fact_extraction
+    idempotency_key: "hash(url,page_content)"
+
+  - name: cluster_list
+    kind: tool
+    impl: qanalabs-quiz-gen.final_clustering.cluster_list
+    reads: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name, candidate_facts_list]
+    writes: [clusters]
+    observe: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
+    intent: "Group facts into logical clusters"
+    guard: 'candidate_facts_list != "[]"'
+
+  - name: combine_by_cluster_and_id
+    kind: tool
+    impl: qanalabs-quiz-gen.combine_records_to_items.combine_records_to_items
+    reads: [clusters, id, url, page_content, bloom_details, platform_name, exam_name]
+    writes: [combined_items, flagged_items]
+    granularity: file
+    intent: "Combine records by cluster and ID"
+
+  - name: validate_clusters
+    intent: "Validate cluster quality and flag problematic items"
+    model: gpt-4
+    schema: cluster_validation
+    reads: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name, combined_items]
+    writes: [validation_result, needs_split]
+    observe: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name]
+
+  - name: create_new_clusters
+    kind: tool
+    impl: qanalabs-quiz-gen.combine_records_to_items.create_new_clusters
+    reads: [validation_result, combined_items]
+    writes: [refined_clusters]
+    guard: 'needs_split == true'
+    granularity: record
+    intent: "Create new clusters for items that need splitting"
+
+  - name: explain_facts
+    intent: "Generate explanations for extracted facts"
+    model: gpt-4
+    schema: {fact_explanation: string}
+    reads: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
+    writes: [fact_explanation]
+    observe: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
+    prompt: $qanalabs-quiz-gen.Fact_Explanation_Agent_new
+
+  - name: classify_feynman
+    intent: "Classify quiz type using Feynman technique"
+    model: gpt-4
+    schema: {quiz_type: string, rationale: string}
+    reads: [fact, quote, fact_explanation, technical_level, questionable]
+    writes: [quiz_type, rationale]
+    drops: [id, url, page_content, flagged_items, bloom_details]
+    observe: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, rewrite_instruction, needs_rewrite, excerpt, options_answer, question_type, flagged_items, target_word_counts, correct_answer_words]
+    few_shot: 6
+    prompt: $feynman.classifer_feynman
+    guard: 'questionable != "Low Value"'
+
+  - name: generate_scenarios
+    intent: "Generate quiz scenarios based on classified facts"
+    vendor: openai
+    model: gpt-4
+    schema: ScenarioGenerator_schema
+    reads: [id, url, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, quiz_type, rationale]
+    writes: [scenario, question, options_answer, question_type]
+    drops: [id, url, page_content, flagged_items, bloom_details]
+    observe: [id, url, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, flagged_items]
+    prompt: $feynman.application_prompt
+
+  - name: generate_distractors
+    intent: "Generate answer distractors for multiple choice questions"
+    vendor: openai
+    model: gpt-4
+    loop:
+      param: stage
+      range: [1, 3]
+    schema:
+      distractor_${stage}: string
+      why_incorrect_${stage}: string
+    reads: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, excerpt, page_content, options_answer, question_type]
+    writes: [distractor_${stage}, why_incorrect_${stage}]
+    prompt: $qanalabs-quiz-gen.AnswerLengthDistractorGenerator_prompt
+    guard: 'questionable != "Low Value"'
+    few_shot: 6
+
+  - name: reconstruct_options
+    kind: tool
+    impl: qanalabs-quiz-gen.test2.apply_edited_distractors
+    reads: [answer, distractor_1, distractor_2, distractor_3, question]
+    writes: [options]
+    intent: "Reconstruct answer options from correct answer and distractors"
+
+  - name: simulate_answer
+    intent: "Simulate quiz answering to validate question quality"
+    vendor: openai
+    model: gpt-4
+    schema:
+      my_answer_key: string
+      my_answer_text: string
+      my_reasoning: string
+      my_confidence_level: string
+    policy: "Ground strictly in fact_explanation; forbid external knowledge."
+    reads: [bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, distractor_1, distractor_2, distractor_3, answer, question_type, options, question]
+    writes: [my_answer_key, my_answer_text, my_reasoning, my_confidence_level]
+    drops: [id, url, platform_name, exam_name]
+    prompt: |
+      You are a quiz taker attempting to answer questions based solely on the provided fact explanation.
+      Do not use external knowledge beyond what's provided in the fact_explanation.
+
+  - name: mark_and_attach
+    kind: tool
+    impl: qanalabs-quiz-gen.quiztaker_maker.mark_and_attach
+    reads: [my_answer_key, my_confidence_level, questionable]
+    writes: [marked_result_is_correct, final_score]
+    guard: 'my_confidence_level == "High" and questionable == "High Value"'
+    intent: "Mark quiz answers and attach scoring metadata"
+
+  - name: merge_final_options
+    kind: tool
+    impl: qanalabs-quiz-gen.test_api.merge_correct_answer_with_distractors
+    reads: [question, options, options_answer, answer, marked_result_is_correct]
+    writes: [final_options]
+    intent: "Merge correct answers with distractors into final option set"
+
+  - name: package_output
+    kind: tool
+    impl: qanalabs-quiz-gen.test_api.process_file_content
+    reads: [final_options, question, fact_explanation, my_reasoning, final_score]
+    writes: [packaged_output]
+    intent: "Package final quiz content for output"
+
+plan:
+  - extract_facts
+  - cluster_list <- extract_facts
+  - combine_by_cluster_and_id <- cluster_list
+  - validate_clusters <- combine_by_cluster_and_id
+  - create_new_clusters <- validate_clusters
+  - explain_facts <- create_new_clusters
+  - classify_feynman <- explain_facts
+  - generate_scenarios <- classify_feynman
+  - generate_distractors <- generate_scenarios
+  - reconstruct_options <- generate_distractors
+  - simulate_answer <- reconstruct_options
+  - mark_and_attach <- simulate_answer
+  - merge_final_options <- mark_and_attach
+  - package_output <- merge_final_options

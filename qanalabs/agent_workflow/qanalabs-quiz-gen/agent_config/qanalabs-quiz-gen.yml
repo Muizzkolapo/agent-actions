@@ -1,0 +1,43 @@
+qanalabs-quiz-gen:
+  - agent_type: fact_extractor
+    dependencies: []
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: candidate_facts_list
+    use_few_shot_samples: 0
+    is_operational: True
+    json_mode: True
+    remove_collection: ["id","url","topic"]
+    side_collection: ["id","url","page_content","bloom_details"]
+    run_mode: "online"
+    granularity: Record
+    prompt_debug: False
+    prompt: $qanalabs-quiz-gen.Fact_extraction
+
+  - {{ tooling_workflow(
+        agent_type="flatten_quotes",
+        model_name="qanalabs-quiz-gen.flatten_quotes.flatten_quotes",
+        dependencies=["fact_extractor"],
+        side_collection=["id","url","topic","summary","page_content","bloom_details"],
+        is_operational=True,
+        granularity="Record",
+        description="Custom transformation tool"
+    ) }}  
+
+  - agent_type: fact_questionability
+    dependencies: ["flatten_quotes"]
+    api_key: OPENAI_API_KEY
+    model_vendor: "openai"
+    model_name: "gpt-4o-mini"
+    schema_name: fact_questionability
+    use_few_shot_samples: 0
+    is_operational: True
+    json_mode: True
+    remove_collection: ["id","url"]
+    side_collection: ["id","url","page_content","bloom_details","fact","quote","technical_level"]
+    run_mode: "online"
+    granularity: Record
+    prompt_debug: False
+    prompt: $qanalabs-quiz-gen.fact_questionability
+

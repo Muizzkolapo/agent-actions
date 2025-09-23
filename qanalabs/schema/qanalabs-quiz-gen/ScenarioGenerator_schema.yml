@@ -1,0 +1,20 @@
+name: question
+fields:
+  - id: question
+    type: string
+
+  - id: options
+    type: array
+    items:
+      type: string
+
+  - id: answer
+    type: string
+    pattern: ^([A-Z](,[A-Z])*)$  
+
+  - id: answer_explanation
+    type: string
+
+  - id: question_type
+    type: string
+    enum: [SA, MA]  

@@ -1,0 +1,168 @@
+qanalabs-quiz-gen:
+- agent_type: fact_extractor
+  dependencies: []
+  api_key: OPENAI_API_KEY
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  schema_name: candidate_facts_list
+  use_few_shot_samples: 0
+  is_operational: true
+  json_mode: true
+  remove_collection:
+  - id
+  - url
+  - topic
+  side_collection:
+  - id
+  - url
+  - page_content
+  - bloom_details
+  run_mode: online
+  granularity: Record
+  prompt_debug: false
+  prompt: "# Azure AI Engineer Certification - Intelligent Fact Extraction\n\nYou\
+    \ are a student preparing for the Azure AI Engineer certification exam. Extract\
+    \ **only high-value, testable facts** from the provided documentation that align\
+    \ with the exam's focus on practical application and implementation.\n\n## Core\
+    \ Requirements\n\n**Target Bloom's Taxonomy Levels 3-6** (Apply, Analyze, Evaluate,\
+    \ Create):\n- How to configure, implement, or troubleshoot\n- Specific technical\
+    \ requirements and constraints  \n- Decision criteria for choosing between options\n\
+    - Performance optimization and best practices\n\n## Extraction Criteria\n\n###\
+    \ \u2705 **EXTRACT facts that include:**\n- **Configuration specifics**: Required\
+    \ parameters, settings, authentication methods\n- **Implementation details**:\
+    \ API endpoints, request/response formats, code requirements\n- **Constraints\
+    \ & limitations**: Quotas, supported formats, size limits, regional availability\n\
+    - **Technical procedures**: Step-by-step processes, deployment workflows\n- **Performance\
+    \ considerations**: Scaling limits, optimization techniques, cost factors\n- **Error\
+    \ handling**: Specific error codes, troubleshooting steps, retry logic\n- **Security\
+    \ requirements**: Authentication flows, permissions, compliance standards\n- **Integration\
+    \ patterns**: How services connect, data flow requirements\n\n### \u274C **STRICTLY\
+    \ AVOID extracting:**\n\n#### Generic Use Cases & Examples\n- \"AI agents can\
+    \ retrieve customer information from CRM systems\"\n- \"Custom tools can automate\
+    \ inventory checks\"\n- \"Healthcare providers can use AI agents for appointment\
+    \ scheduling\"\n- Any statement describing what \"can be done\" without HOW it's\
+    \ technically implemented\n\n#### Non-Technical Business Scenarios\n- Operational\
+    \ efficiency improvements\n- Productivity enhancements\n- Business value propositions\n\
+    - Industry-specific applications without Azure-specific implementation details\n\
+    \n#### Vague Capability Statements\n- \"Custom tools enable X functionality\"\
+    \ without specific Azure service details\n- \"AI agents can access Y system\"\
+    \ without authentication/API specifics\n- \"Significantly enhance Z\" without\
+    \ measurable metrics or technical requirements\n\n#### Sample Usage Descriptions\n\
+    - Example scenarios without technical specifications\n- Illustrative use cases\
+    \ lacking implementation details\n- \"For instance\" or \"For example\" statements\
+    \ without concrete technical facts\n- Hypothetical applications without Azure-specific\
+    \ configuration\n\n## Critical Validation Tests\n\n**Each fact MUST pass ALL these\
+    \ tests:**\n\n1. **Azure Specificity Test**: Does it mention specific Azure services,\
+    \ APIs, or features?\n2. **Technical Precision Test**: Does it include numbers,\
+    \ parameters, method names, or exact requirements?\n3. **Standalone Test**: Can\
+    \ this fact be understood and applied without the surrounding context?\n4. **Certification\
+    \ Relevance Test**: Would knowing this fact help solve a technical problem on\
+    \ the exam?\n5. **Implementation Test**: Does it tell you HOW to do something,\
+    \ not just WHAT can be done?\n\n## Quality Filters\n\n**Skip this document entirely\
+    \ if it contains primarily:**\n- Introduction/overview content\n- Conceptual explanations\
+    \ without implementation details\n- Marketing or sales-oriented language\n- Tutorial\
+    \ setup without technical specifications\n- Business use cases without technical\
+    \ implementation details\n- Generic capability descriptions\n\n**Technical Depth\
+    \ Test**: Each fact should answer \"how exactly,\" \"what specific parameter,\"\
+    \ or \"which Azure service method\" rather than \"what capability exists\" or\
+    \ \"what business problem it solves.\"\n\n## Schema: `candidate_facts_list`\n\n\
+    ```json\n{\n  \"candidate_facts_list\": [\n    {\n      \"fact\": \"string (max\
+    \ 150 chars) - Specific, testable statement with technical details\",\n      \"\
+    quote\": \"string - Verbatim excerpt supporting the fact\",\n      \"technical_level\"\
+    : \"string - One of: configuration|implementation|constraint|procedure|integration\"\
+    \n    }\n  ]\n}\n```\n\n### Enhanced Fields:\n- **`technical_level`**: Categorizes\
+    \ the type of technical knowledge for better filtering\n\n## Examples\n\n### \u2705\
+    \ **GOOD Extractions (Azure-specific, technical, testable):**\n```json\n{\n  \"\
+    fact\": \"Custom vision models require minimum 15 images per tag for training\
+    \ effectiveness.\",\n  \"quote\": \"For optimal results, provide at least 15 images\
+    \ per tag when training custom vision models.\",\n  \"technical_level\": \"constraint\"\
+    \n}\n```\n\n```json\n{\n  \"fact\": \"Speech service authentication requires Ocp-Apim-Subscription-Key\
+    \ header with service region.\",\n  \"quote\": \"Include your subscription key\
+    \ in the Ocp-Apim-Subscription-Key header and specify your service region.\",\n\
+    \  \"technical_level\": \"configuration\"\n}\n```\n\n```json\n{\n  \"fact\": \"\
+    Azure OpenAI embedding models support maximum 8,191 tokens per request for text-embedding-ada-002.\"\
+    ,\n  \"quote\": \"The text-embedding-ada-002 model has a maximum token limit of\
+    \ 8,191 tokens per request.\",\n  \"technical_level\": \"constraint\"\n}\n```\n\
+    \n### \u274C **BAD Extractions (generic, use-case focused, non-technical):**\n\
+    ```json\n{\n  \"fact\": \"Custom tools enable Azure AI agents to retrieve information\
+    \ from CRM systems.\",\n  \"reason_bad\": \"Generic capability description without\
+    \ Azure-specific implementation details\"\n}\n```\n\n```json\n{\n  \"fact\": \"\
+    AI agents can automate inventory checks using historical data.\",\n  \"reason_bad\"\
+    : \"Business use case without technical specifications or Azure service details\"\
+    \n}\n```\n\n```json\n{\n  \"fact\": \"Healthcare providers can use custom tools\
+    \ for appointment scheduling.\",\n  \"reason_bad\": \"Industry example without\
+    \ HOW it's implemented in Azure\"\n}\n```\n\n```json\n{\n  \"fact\": \"Custom\
+    \ tools can significantly enhance operational efficiency.\",\n  \"reason_bad\"\
+    : \"Vague benefit statement without measurable technical requirements\"\n}\n```\n\
+    \n## Red Flag Phrases to Avoid\n\nIf a potential fact contains these phrases,\
+    \ it's likely NOT a good technical fact:\n- \"can be used to...\"\n- \"enables\
+    \ organizations to...\"\n- \"allows businesses to...\"\n- \"can help with...\"\
+    \n- \"provides the ability to...\"\n- \"makes it possible to...\"\n- \"enhances\
+    \ productivity by...\"\n- \"significantly improves...\"\n\n## Pre-Processing Check\n\
+    \nBefore extracting facts, evaluate the source:\n\n1. **Technical Density**: Does\
+    \ this document contain specific Azure service details, API calls, or configuration\
+    \ parameters?\n2. **Exam Relevance**: Would these details help answer technical\
+    \ implementation questions on the certification exam?\n3. **Actionable Content**:\
+    \ Does it provide specific steps, parameters, or requirements an engineer needs\
+    \ to know?\n\n**If the source fails these checks, return:**\n```json\n{\n  \"\
+    candidate_facts_list\": [],\n  \"skip_reason\": \"Document contains primarily\
+    \ use cases/conceptual content without testable Azure-specific technical details\"\
+    \n}\n```\n\n## Output Instructions\n\n- **Minimum 3 facts** from technical documents\
+    \ (or empty if no valid technical facts exist)\n- **Maximum 10 facts** to maintain\
+    \ quality over quantity\n- Prioritize facts containing specific Azure service\
+    \ names, API methods, or configuration parameters\n- Each fact must be verifiable\
+    \ through Azure documentation or hands-on testing\n- Ensure each fact represents\
+    \ knowledge that requires actual Azure AI implementation experience"
+- agent_type: flatten_quotes
+  dependencies:
+  - fact_extractor
+  model_vendor: tool
+  model_name: qanalabs-quiz-gen.flatten_quotes.flatten_quotes
+  is_operational: true
+  granularity: Record
+  side_collection:
+  - id
+  - url
+  - topic
+  - summary
+  - page_content
+  - bloom_details
+  description: Custom transformation tool
+- agent_type: fact_questionability
+  dependencies:
+  - flatten_quotes
+  api_key: OPENAI_API_KEY
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  schema_name: fact_questionability
+  use_few_shot_samples: 0
+  is_operational: true
+  json_mode: true
+  remove_collection:
+  - id
+  - url
+  side_collection:
+  - id
+  - url
+  - page_content
+  - bloom_details
+  - fact
+  - quote
+  - technical_level
+  run_mode: online
+  granularity: Record
+  prompt_debug: false
+  prompt: "## **Your Role**: MCQ Quality Evaluator\n\nYour task is to decide whether\
+    \ a given fact is **\"questionable\"**, meaning:\n\n> _Is this fact worth converting\
+    \ into a multiple-choice question and not just noise, we need to help student\
+    \ focus on the topics stated?_\n\nThe decision should be based on the Bloom\u2019\
+    s taxonomy level:  \n`{{ return_collection[bloom_details] }}`\n\n---\n\n### **Classification\
+    \ Rules**\n\n#### **Mark `questionable: true` if the fact:**\n\n- Is **concrete,\
+    \ factual, and explicitly stated** in the source text\n    \n- Can be answered\
+    \ by **someone who has read the source**\n    \n- Assesses a **relevant concept,\
+    \ skill, or capability** from the target domain\n    \n- Has a **clear, unambiguous\
+    \ scope** (e.g., definitions, features, use cases)\n    \n\n#### **Mark `questionable:\
+    \ false` if the fact:**\n\n- Is **too obvious**, trivial, or vague\n    \n- Is\
+    \ **not important** enough to assess\n    \n- Requires **outside knowledge** not\
+    \ provided in the source\n    \n- Cannot be **tested effectively** with a multiple-choice\
+    \ question"

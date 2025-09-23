@@ -1,0 +1,11 @@
+{
+    "fact_extractor": {
+        "status": "completed"
+    },
+    "flatten_quotes": {
+        "status": "completed"
+    },
+    "fact_questionability": {
+        "status": "completed"
+    }
+}

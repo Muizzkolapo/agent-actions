@@ -10,6 +10,7 @@ from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingEr
 from agent_actions.core.parser.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig
+from agent_actions.core.parser.format_converter import WorkflowFormatConverter
 
 
 
@@ -34,7 +35,10 @@ class ConfigManager:
     def load_configs(self):
         try:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
-            self.user_config = yaml.safe_load(config_data)
+            loaded_config = yaml.safe_load(config_data)
+
+            # Convert new format to old format if needed
+            self.user_config = WorkflowFormatConverter.ensure_old_format(loaded_config)
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(f"Error rendering or loading user config from {self.constructor_path}: {e}") from e
         except yaml.YAMLError as e:

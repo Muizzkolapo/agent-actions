@@ -1,0 +1,13 @@
+name: fact_questionability
+fields:
+  - id: questionable
+    type: string
+    enum: [High Value, Low Value, Unclear]
+    description: "Classify the fact's usefulness as an MCQ: High Value, Low Value, or Unclear"
+    required: true
+
+  - id: why_questionable
+    type: string
+    description: "Short justification (≤20 words) explaining the classification"
+    maxLength: 120
+    required: true

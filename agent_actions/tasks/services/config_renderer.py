@@ -24,6 +24,7 @@ from agent_actions.agents.validators.config_validator import ConfigValidator
 from pydantic import ValidationError
 from agent_actions.core.parser.config_schema import AgentConfig
 from agent_actions.core.parser.config_types import AgentEntryDict, AgentConfigMap
+from agent_actions.core.parser.format_converter import WorkflowFormatConverter
 from agent_actions.agents.handlers.agent_handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -340,7 +341,13 @@ class ConfigRenderingService:
             )
         if not data:
             raise ConfigurationError(f"Configuration results in empty data: {src}")
-        return cast(AgentConfigMap, data)
+
+        # Convert new format to old format if needed
+        try:
+            converted_data = WorkflowFormatConverter.ensure_old_format(data)
+            return cast(AgentConfigMap, converted_data)
+        except Exception as exc:
+            raise ConfigurationError(f"Configuration format error in {src}: {exc}") from None
     
     def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
         """
@@ -442,7 +449,12 @@ class ConfigRenderer:
     def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
         """Parse YAML, turning low-level YAMLError into our own exception."""
         try:
-            return cast(AgentConfigMap, yaml.safe_load(raw) or {})
+            loaded_config = yaml.safe_load(raw) or {}
+
+            # Convert new format to old format if needed
+            converted_config = WorkflowFormatConverter.ensure_old_format(loaded_config)
+
+            return cast(AgentConfigMap, converted_config)
         except yaml.MarkedYAMLError as exc:
             # Build a human sentence: file, 1-based line/col, parser complaint
             mark = exc.problem_mark            # has .line & .column (0-based)
@@ -450,6 +462,11 @@ class ConfigRenderer:
             raise ConfigValidationError(
                 f"YAML syntax error in {src.name} "
                 f"(line {mark.line+1}, col {mark.column+1}): {msg}"
+            ) from None
+        except Exception as exc:
+            # Handle conversion errors
+            raise ConfigValidationError(
+                f"Configuration format error in {src.name}: {exc}"
             ) from None    
     @as_validation_error(ConfigValidationError)
     def render_and_load_config(

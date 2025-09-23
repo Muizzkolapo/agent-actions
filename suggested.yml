@@ -1,0 +1,120 @@
+defaults:
+  vendor: openai
+  model: gpt-5-mini
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+
+actions:
+  - name: extract_facts
+    intent: "Identify candidate facts from source content"
+    vendor: $vendor
+    model: $model
+    schema: candidate_facts_list
+    reads:  [id, url, page_content, bloom_details, platform_name, exam_name]
+    writes: [candidate_facts_list]
+    drops:  [id, url, topic]        # (formerly remove_collection)
+    observe: [id, url, page_content, bloom_details, platform_name, exam_name]  # side_collection
+    prompt: $qanalabs-quiz-gen.Fact_extraction
+    idempotency_key: "hash(url,page_content)"
+
+  - name: flatten_quotes
+    kind: tool
+    impl: qanalabs-quiz-gen.flatten_quotes.flatten_quotes
+    reads:  [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
+    writes: [quote]                  # or whatever the tool outputs
+    description: "Custom transformation tool"
+
+  - name: score_questionability
+    intent: "Score how quiz-worthy each fact is"
+    vendor: $vendor
+    model: $model
+    schema: fact_questionability
+    reads:  [id, url, page_content, bloom_details, fact, quote, technical_level, platform_name, exam_name]
+    writes: [questionable, why_questionable]
+    drops:  [id, url]
+    prompt: $qanalabs-quiz-gen.fact_questionability
+
+  - name: explain_fact
+    guard: 'questionable != "Low Value"'
+    vendor: $vendor
+    model: $model
+    schema: { fact_explanation: string }
+    reads:  [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name]
+    writes: [fact_explanation]
+    prompt: $qanalabs-quiz-gen.fact_explanation
+
+  - name: generate_scenarios
+    guard: 'questionable != "Low Value"'
+    vendor: $vendor
+    model: $model
+    schema: ScenarioGenerator_schema
+    reads:  [id, url, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name]
+    writes: [scenario, question, options_answer, question_type]   # adjust to your schema
+    prompt: $qanalabs-quiz-gen.ScenarioGenerator_prompt
+    few_shot: 5
+
+  - name: generate_distractors
+    vendor: openai
+    model: gpt-5-mini
+    loop:
+      param: stage
+      range: [1, 3]
+    schema:
+      distractor_${stage}: string
+      why_incorrect_${stage}: string
+    reads:  [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, excerpt, page_content, options_answer, question_type]
+    writes: [distractor_${stage}, why_incorrect_${stage}]
+    prompt: $qanalabs-quiz-gen.AnswerLengthDistractorGenerator_prompt
+    guard: 'questionable != "Low Value"'
+    few_shot: 6
+
+  - name: reconstruct_options_from_answer
+    kind: tool
+    impl: qanalabs-quiz-gen.test2.apply_edited_distractors
+    reads:  [answer, distractor_1, distractor_2, distractor_3, question]
+    writes: [options]
+
+  - name: simulate_answer
+    vendor: openai
+    model: gpt-4.1-mini
+    schema:
+      my_answer_key: string
+      my_answer_text: string
+      my_reasoning: string
+      my_confidence_level: string
+    policy: "Ground strictly in fact_explanation; forbid external knowledge."
+    reads:  [bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, distractor_*, answer, question_type, options, question]
+    drops:  [id, url, platform_name, exam_name, ...]
+    prompt: |
+      You are a quiz taker... (same as your current prompt)
+
+  - name: mark_and_attach
+    kind: tool
+    impl: qanalabs-quiz-gen.quiztaker_maker.mark_and_attach
+    guard: 'marked_result_is_correct == "Correct" and my_confidence_level == "High" and questionable == "High Value"'
+
+  - name: merge_options
+    kind: tool
+    impl: qanalabs-quiz-gen.test_api.merge_correct_answer_with_distractors
+    reads:  [question, options, options_answer, answer, ...]
+    writes: [final_options]
+
+  - name: process_file_content
+    kind: tool
+    impl: qanalabs-quiz-gen.test_api.process_file_content
+    reads:  [final_options, question, explanation, ...]
+    writes: [packaged_output]
+
+plan:
+  - extract_facts
+  - flatten_quotes <- extract_facts
+  - score_questionability <- flatten_quotes
+  - explain_fact      <- score_questionability
+  - generate_scenarios<- explain_fact
+  - generate_distractors <- generate_scenarios
+  - reconstruct_options_from_answer <- generate_distractors
+  - simulate_answer   <- reconstruct_options_from_answer
+  - mark_and_attach   <- simulate_answer
+  - merge_options     <- mark_and_attach
+  - process_file_content <- merge_options
