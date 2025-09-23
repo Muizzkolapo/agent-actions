@@ -1,0 +1,11 @@
+type: object
+properties:
+  validation_result:
+    type: string
+    description: "Result of cluster validation with feedback or assessment"
+  needs_split:
+    type: boolean
+    description: "Whether the cluster needs to be split into smaller groups"
+required:
+  - validation_result
+  - needs_split

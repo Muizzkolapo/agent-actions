@@ -84,7 +84,11 @@ class WorkflowFormatConverter:
             if schema_value:
                 if isinstance(schema_value, str):
                     agent['schema_name'] = schema_value
+                elif isinstance(schema_value, dict):
+                    # Handle inline schema definitions
+                    agent['schema'] = schema_value
                 else:
+                    # Fallback for other types
                     agent['schema'] = schema_value
 
             # Conditional logic
