@@ -77,8 +77,7 @@ class WorkflowFormatConverter:
             agent['use_few_shot_samples'] = action.get('few_shot', 0)
 
             # Data flow - convert new format back to old
-            agent['side_collection'] = action.get('observe', [])
-            agent['remove_collection'] = action.get('drops', [])
+            # Note: side_collection and remove_collection will be set later based on granularity
 
             # Schema handling - check both 'schema' and 'output_schema' fields
             schema_value = action.get('schema') or action.get('output_schema')
@@ -109,6 +108,17 @@ class WorkflowFormatConverter:
             granularity = action.get('granularity', defaults.get('granularity'))
             if granularity:
                 agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
+
+            # Data flow collections - only set for record-level actions
+            # File-level tools cannot have side_collection or remove_collection
+            current_granularity = agent.get('granularity', 'Record')
+            is_file_level = current_granularity == 'File'
+            is_tool_action = action_kind == 'tool'
+
+            if not (is_file_level and is_tool_action):
+                # Only set collection fields for non-file-level tools or LLM actions
+                agent['side_collection'] = action.get('observe', [])
+                agent['remove_collection'] = action.get('drops', [])
 
             # Dependencies - need to extract from plan
             agent['dependencies'] = []  # Will be populated from plan
