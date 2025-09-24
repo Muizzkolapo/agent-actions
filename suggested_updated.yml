@@ -2,12 +2,14 @@ name: qanalabs-quiz-gen
 description: "Educational quiz generation workflow with fact extraction and validation"
 version: "2.0.0"
 
+# Global defaults applied to all actions unless overridden
 defaults:
   vendor: openai
   model: gpt-4o-mini
   json_mode: true
   granularity: Record
   run_mode: online
+  api_key: OPENAI_API_KEY
 
 actions:
   - name: extract_facts
@@ -20,6 +22,33 @@ actions:
     prompt: $qanalabs-quiz-gen.Fact_extraction
     idempotency_key: "hash(url,page_content)"
 
+    # Actually implemented features
+    is_operational: true  # Enable/disable this action
+    ephemeral: false  # Whether results should be persisted
+    add_dispatch: true  # Add dispatch metadata
+    output_field: "extracted_facts"  # Field name for non-JSON responses
+    prompt_debug: false  # Enable prompt debugging
+
+    # Chunking (chunk_config is implemented)
+    chunk_config:
+      enabled: true
+      chunk_size: 2000
+      chunk_overlap: 200
+
+    # Interceptors (actually implemented)
+    interceptors:
+      - type: validation
+        validator_function: "validators.check_fact_extraction_quality"
+        validator_args:
+          min_facts: 3
+          max_facts: 20
+        on_failure: retry
+
+      - type: reprompt
+        strategy: "simple"
+        max_attempts: 5
+        include_previous_response: true
+
   - name: cluster_list
     kind: tool
     impl: qanalabs-quiz-gen.final_clustering.cluster_list
@@ -28,6 +57,11 @@ actions:
     observe: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
     intent: "Group facts into logical clusters"
     guard: 'candidate_facts_list != "[]"'
+
+    # Tool-specific arguments (tool_args is implemented)
+    tool_args:
+      clustering_algorithm: "hierarchical"
+      distance_metric: "cosine"
 
   - name: combine_by_cluster_and_id
     kind: tool
@@ -44,6 +78,21 @@ actions:
     reads: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name, combined_items]
     writes: [validation_result, needs_split]
     observe: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name]
+
+    # Actually implemented interceptors
+    interceptors:
+      - type: validation
+        validator_function: "validators.validate_schema_compliance"
+        validator_args:
+          schema_name: "cluster_validation"
+          strict_mode: true
+        on_failure: retry
+
+      - type: reprompt
+        strategy: "llm"
+        max_attempts: 3
+        llm_config:
+          model: "gpt-3.5-turbo"
 
   - name: explain_facts
     intent: "Generate explanations for extracted facts"
@@ -62,7 +111,7 @@ actions:
     writes: [quiz_type, rationale]
     drops: [id, url, page_content, flagged_items, bloom_details]
     observe: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, rewrite_instruction, needs_rewrite, excerpt, options_answer, question_type, flagged_items, target_word_counts, correct_answer_words]
-    few_shot: 6
+    few_shot: 6  # Actually implemented few-shot examples
     prompt: $feynman.classifer_feynman
     guard: 'questionable != "Low Value"'
 
@@ -81,7 +130,7 @@ actions:
     intent: "Generate answer distractors for multiple choice questions"
     vendor: openai
     model: gpt-4o-mini
-    loop:
+    loop:  # Actually implemented loop feature
       param: stage
       range: [1, 3]
     schema:
@@ -127,6 +176,9 @@ actions:
     guard: 'my_confidence_level == "High" and questionable == "High Value"'
     intent: "Mark quiz answers and attach scoring metadata"
 
+    # Actually implemented conditional clause
+    conditional_clause: "validators.should_mark_answer"
+
   - name: merge_final_options
     kind: tool
     impl: qanalabs-quiz-gen.test_api.merge_correct_answer_with_distractors
@@ -151,3 +203,16 @@ plan:
   - generate_scenarios <- classify_feynman
   - generate_distractors <- generate_scenarios
   - reconstruct_options <- generate_distractors
+  - simulate_answer <- reconstruct_options
+  - mark_and_attach <- simulate_answer
+  - merge_final_options <- mark_and_attach
+  - package_output <- merge_final_options
+
+# Note: Additional features that ARE implemented but not shown above:
+# - anthropic_version: For Anthropic API version when using Claude
+# - enable_prompt_caching: For Anthropic's prompt caching feature
+# - where_clause: Alternative to guard for filtering (with behavior: skip/filter)
+# - skip_if: Legacy skip condition field
+# - use_few_shot_samples: Number of few-shot examples (alternative to few_shot)
+# - dependencies: Can be specified instead of plan section
+# - parent: Parent action dependencies

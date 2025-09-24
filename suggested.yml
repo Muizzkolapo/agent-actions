@@ -1,120 +1,581 @@
+name: qanalabs-quiz-gen
+description: "Educational quiz generation workflow with fact extraction and validation"
+version: "2.0.0"
+
+# Global defaults applied to all actions unless overridden
 defaults:
   vendor: openai
-  model: gpt-5-mini
+  model: gpt-4o-mini
   json_mode: true
   granularity: Record
-  run_mode: batch
+  run_mode: online  # Options: "online", "batch", "offline"
+
+  # API configuration defaults
+  api_key: OPENAI_API_KEY  # Can use env var reference
+  timeout: 120  # Request timeout in seconds
+  max_retries: 3  # Maximum retry attempts for API failures
+  retry_delay: 1.0  # Initial delay between retries
+
+  # Model parameters defaults
+  temperature: 0.7  # Sampling temperature (0-2)
+  max_tokens: 4096  # Maximum tokens in response
+  top_p: 0.95  # Nucleus sampling parameter
+  frequency_penalty: 0.0  # Penalize frequent tokens (-2 to 2)
+  presence_penalty: 0.0  # Penalize tokens based on presence (-2 to 2)
+  seed: null  # For reproducible outputs
+
+  # Performance defaults
+  enable_caching: true  # Cache responses for identical inputs
+  cache_ttl: 3600  # Cache time-to-live in seconds
+  parallel_requests: 5  # Max concurrent API requests
+  rate_limit: 100  # Requests per minute
+
+  # Debugging and monitoring
+  prompt_debug: false  # Enable detailed prompt debugging
+  log_level: "INFO"  # Logging verbosity
+  telemetry_enabled: true  # Send anonymous usage metrics
+
+  # Anthropic-specific defaults (when vendor is anthropic)
+  anthropic_version: "2023-06-01"  # API version header
+  enable_prompt_caching: true  # Use Anthropic's prompt caching
 
 actions:
   - name: extract_facts
-    intent: "Identify candidate facts from source content"
-    vendor: $vendor
-    model: $model
+    intent: "Identify candidate facts from source content with validation and chunking"
     schema: candidate_facts_list
-    reads:  [id, url, page_content, bloom_details, platform_name, exam_name]
+    reads: [id, url, page_content, bloom_details, platform_name, exam_name]
     writes: [candidate_facts_list]
-    drops:  [id, url, topic]        # (formerly remove_collection)
-    observe: [id, url, page_content, bloom_details, platform_name, exam_name]  # side_collection
+    drops: [id, url, topic]
+    observe: [id, url, page_content, bloom_details, platform_name, exam_name]
     prompt: $qanalabs-quiz-gen.Fact_extraction
     idempotency_key: "hash(url,page_content)"
 
-  - name: flatten_quotes
+    # Advanced model configuration
+    temperature: 0.3  # Lower for more deterministic extraction
+    max_tokens: 2000
+    top_p: 0.9
+    frequency_penalty: 0.2  # Reduce repetition
+    seed: 42  # For reproducible results
+
+    # Operational controls
+    is_operational: true  # Enable/disable this action
+    ephemeral: false  # Whether results should be persisted
+    add_dispatch: true  # Add dispatch metadata to results
+    skip_if: null  # Legacy skip condition (deprecated, use guard)
+    output_field: "extracted_facts"  # Field name for non-JSON responses
+
+    # System prompt configuration
+    system_prompt: |
+      You are a fact extraction specialist. Extract clear, verifiable facts
+      from educational content. Focus on accuracy and completeness.
+
+    # Response format configuration
+    response_format:
+      type: "json_schema"
+      strict: true  # Enforce strict schema validation
+      json_schema:
+        name: "fact_extraction"
+        schema:
+          type: "object"
+          properties:
+            facts:
+              type: "array"
+              items:
+                type: "object"
+                required: ["fact", "quote", "technical_level"]
+
+    # Chunking configuration for handling large documents
+    chunk_config:
+      enabled: true
+      chunk_size: 2000  # Characters per chunk
+      chunk_overlap: 200  # Character overlap between chunks
+      chunking_strategy: "semantic"  # Options: "fixed", "semantic", "paragraph"
+      max_chunks: 10  # Maximum number of chunks to process
+      combine_strategy: "merge"  # How to combine results: "merge", "concatenate", "deduplicate"
+      metadata_propagation: true  # Propagate metadata to all chunks
+
+    # Interceptors for validation and retry logic
+    interceptors:
+      # Validation interceptor - checks output quality
+      - type: validation
+        validator_function: "validators.check_fact_extraction_quality"
+        validator_args:
+          min_facts: 3
+          max_facts: 20
+          required_fields: ["fact", "quote", "technical_level"]
+          fact_min_length: 20
+          fact_max_length: 500
+        on_failure: retry  # Options: "retry", "fail", "warn"
+
+      # Word count validation
+      - type: validation
+        validator_function: "validators.check_word_count"
+        validator_args:
+          field: "fact"
+          min_words: 5
+          max_words: 100
+        on_failure: retry
+
+      # Reprompt interceptor - improves prompt on validation failure
+      - type: reprompt
+        strategy: "simple"  # Options: "simple", "llm", "template"
+        max_attempts: 5
+        include_previous_response: true
+        include_validation_error: true
+        backoff_multiplier: 1.5  # Delay multiplier between attempts
+        reprompt_template: |
+          Previous attempt failed validation. Please ensure:
+          - Extract between 3 and 20 facts
+          - Each fact should be 20-500 characters
+          - Include fact, quote, and technical_level for each item
+
+          Original prompt: {original_prompt}
+          Previous response issues: {validation_errors}
+
+  - name: cluster_list
     kind: tool
-    impl: qanalabs-quiz-gen.flatten_quotes.flatten_quotes
-    reads:  [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
-    writes: [quote]                  # or whatever the tool outputs
-    description: "Custom transformation tool"
+    impl: qanalabs-quiz-gen.final_clustering.cluster_list
+    reads: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name, candidate_facts_list]
+    writes: [clusters]
+    observe: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
+    intent: "Group facts into logical clusters"
+    guard: 'candidate_facts_list != "[]"'
 
-  - name: score_questionability
-    intent: "Score how quiz-worthy each fact is"
-    vendor: $vendor
-    model: $model
-    schema: fact_questionability
-    reads:  [id, url, page_content, bloom_details, fact, quote, technical_level, platform_name, exam_name]
-    writes: [questionable, why_questionable]
-    drops:  [id, url]
-    prompt: $qanalabs-quiz-gen.fact_questionability
+    # Tool execution configuration
+    tools:
+      path: "qanalabs/tools"  # Path to custom tool functions
+      timeout: 30  # Tool execution timeout
+      sandbox: true  # Run in sandboxed environment
+      memory_limit: "512MB"  # Memory limit for tool execution
+      cpu_limit: 1.0  # CPU cores limit
 
-  - name: explain_fact
-    guard: 'questionable != "Low Value"'
-    vendor: $vendor
-    model: $model
-    schema: { fact_explanation: string }
-    reads:  [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name]
+    # Tool-specific arguments
+    tool_args:
+      clustering_algorithm: "hierarchical"
+      distance_metric: "cosine"
+      linkage: "ward"
+      min_cluster_size: 3
+      max_cluster_size: 20
+
+    # Error handling for tools
+    error_handling:
+      strategy: "retry"  # Options: "retry", "fallback", "fail"
+      max_retries: 3
+      fallback_function: "qanalabs-quiz-gen.clustering.simple_cluster"
+      log_errors: true
+
+  - name: combine_by_cluster_and_id
+    kind: tool
+    impl: qanalabs-quiz-gen.combine_records_to_items.combine_records_to_items
+    reads: [clusters, id, url, page_content, bloom_details, platform_name, exam_name]
+    writes: [combined_items, flagged_items]
+    granularity: file
+    intent: "Combine records by cluster and ID"
+
+  - name: validate_clusters
+    intent: "Validate cluster quality and flag problematic items"
+    model: gpt-4o-mini
+    schema: cluster_validation
+    reads: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name, combined_items]
+    writes: [validation_result, needs_split]
+    observe: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name]
+
+    # Advanced validation with custom retry logic
+    interceptors:
+      # Schema validation
+      - type: validation
+        validator_function: "validators.validate_schema_compliance"
+        validator_args:
+          schema_name: "cluster_validation"
+          strict_mode: true
+        on_failure: retry
+
+      # Custom business logic validation
+      - type: validation
+        validator_function: "validators.check_cluster_coherence"
+        validator_args:
+          min_similarity: 0.7
+          max_divergence: 0.3
+        on_failure: warn  # Just warn, don't retry
+
+      # LLM-based reprompting with context
+      - type: reprompt
+        strategy: "llm"
+        max_attempts: 3
+        llm_config:
+          model: "gpt-3.5-turbo"
+          temperature: 0.3
+          system_prompt: |
+            You are helping to improve cluster validation prompts.
+            Analyze the validation error and suggest a more specific prompt.
+        include_context_fields: ["flagged_items", "validation_errors"]
+
+  - name: explain_facts
+    intent: "Generate explanations for extracted facts"
+    model: gpt-4o-mini
+    schema: {fact_explanation: string}
+    reads: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
     writes: [fact_explanation]
-    prompt: $qanalabs-quiz-gen.fact_explanation
+    observe: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
+    prompt: $qanalabs-quiz-gen.Fact_Explanation_Agent_new
+
+    # Batch processing with chunking for multiple facts
+    chunk_config:
+      enabled: true
+      chunk_by_field: "candidate_facts_list"  # Chunk by array field
+      items_per_chunk: 5  # Process 5 facts at a time
+      parallel_processing: false  # Process chunks sequentially
+      preserve_order: true  # Maintain original fact order
+      error_handling: "continue"  # Continue on chunk failure
+
+    # Simple validation with template reprompting
+    interceptors:
+      - type: validation
+        validator_function: "validators.check_explanation_quality"
+        validator_args:
+          min_length: 50
+          max_length: 500
+          required_keywords: ["because", "therefore", "means"]
+        on_failure: retry
+
+      - type: reprompt
+        strategy: "template"
+        max_attempts: 3
+        template_name: "explanation_improvement"
+        template_vars:
+          style: "educational"
+          target_audience: "intermediate learners"
+
+  - name: classify_feynman
+    intent: "Classify quiz type using Feynman technique"
+    model: gpt-4o-mini
+    schema: {quiz_type: string, rationale: string}
+    reads: [fact, quote, fact_explanation, technical_level, questionable]
+    writes: [quiz_type, rationale]
+    drops: [id, url, page_content, flagged_items, bloom_details]
+    observe: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, rewrite_instruction, needs_rewrite, excerpt, options_answer, question_type, flagged_items, target_word_counts, correct_answer_words]
+    few_shot: 6
+    prompt: $feynman.classifer_feynman
+    guard: 'questionable != "Low Value"'
+
+    # Batch processing configuration
+    batch_config:
+      enabled: true
+      batch_size: 100  # Records per batch
+      batch_window: 60  # Seconds to wait for batch to fill
+      batch_endpoint: "https://api.openai.com/v1/batches"
+      priority: "normal"  # Options: "low", "normal", "high"
+      cost_optimization: true  # Use cheaper batch pricing
+      completion_webhook: "https://webhook.site/batch-complete"
+
+    # Few-shot learning configuration
+    few_shot_config:
+      num_examples: 6
+      selection_strategy: "semantic_similarity"  # How to select examples
+      example_source: "examples/feynman_classification.json"
+      dynamic_selection: true  # Select examples based on input
+      include_reasoning: true  # Include reasoning in examples
+
+    # Prompt template variables
+    prompt_vars:
+      classification_guidelines: |
+        1. Conceptual: Tests understanding of concepts
+        2. Procedural: Tests step-by-step processes
+        3. Factual: Tests memorization of facts
+      difficulty_scale: "1-10"
+      target_audience: "undergraduate"
 
   - name: generate_scenarios
-    guard: 'questionable != "Low Value"'
-    vendor: $vendor
-    model: $model
+    intent: "Generate quiz scenarios based on classified facts"
+    vendor: openai
+    model: gpt-4o-mini
     schema: ScenarioGenerator_schema
-    reads:  [id, url, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name]
-    writes: [scenario, question, options_answer, question_type]   # adjust to your schema
-    prompt: $qanalabs-quiz-gen.ScenarioGenerator_prompt
-    few_shot: 5
+    reads: [id, url, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, quiz_type, rationale]
+    writes: [scenario, question, options_answer, question_type]
+    drops: [id, url, page_content, flagged_items, bloom_details]
+    observe: [id, url, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, flagged_items]
+    prompt: $feynman.application_prompt
 
   - name: generate_distractors
+    intent: "Generate answer distractors for multiple choice questions"
     vendor: openai
-    model: gpt-5-mini
+    model: gpt-4o-mini
     loop:
       param: stage
       range: [1, 3]
     schema:
       distractor_${stage}: string
       why_incorrect_${stage}: string
-    reads:  [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, excerpt, page_content, options_answer, question_type]
-    writes: [distractor_${stage}, why_incorrect_${stage}]
+    reads: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, excerpt, page_content, options_answer, question_type]
+    writes:
+      - distractor_${stage}
+      - why_incorrect_${stage}
     prompt: $qanalabs-quiz-gen.AnswerLengthDistractorGenerator_prompt
     guard: 'questionable != "Low Value"'
     few_shot: 6
 
-  - name: reconstruct_options_from_answer
+    # Advanced chunking for context window optimization
+    chunk_config:
+      enabled: true
+      chunk_size: 4000  # Tokens per chunk
+      chunk_unit: "tokens"  # Options: "characters", "tokens", "words"
+      tokenizer: "cl100k_base"  # OpenAI tokenizer
+      context_preservation:
+        leading_context: 500  # Tokens to keep from beginning
+        trailing_context: 200  # Tokens to keep from end
+      smart_boundaries: true  # Respect sentence/paragraph boundaries
+      compression:
+        enabled: true
+        method: "summarization"  # Compress chunks before processing
+        target_ratio: 0.3  # Compress to 30% of original size
+
+    # Multi-stage validation pipeline
+    interceptors:
+      # Stage 1: Format validation
+      - type: validation
+        validator_function: "validators.check_distractor_format"
+        validator_args:
+          check_uniqueness: true
+          check_plausibility: true
+          min_similarity_to_answer: 0.2
+          max_similarity_to_answer: 0.8
+        on_failure: retry
+
+      # Stage 2: Content quality validation
+      - type: validation
+        validator_function: "validators.check_distractor_quality"
+        validator_args:
+          check_grammar: true
+          check_relevance: true
+          difficulty_level: "medium"
+        on_failure: retry
+
+      # Sophisticated reprompting with memory
+      - type: reprompt
+        strategy: "adaptive"
+        max_attempts: 7
+        memory_enabled: true  # Remember previous attempts
+        adaptation_rules:
+          - if_error_contains: "too similar"
+            then_adjust: "increase_diversity"
+          - if_error_contains: "implausible"
+            then_adjust: "improve_realism"
+        exponential_backoff:
+          initial_delay: 1.0
+          max_delay: 30.0
+          multiplier: 2.0
+
+  - name: reconstruct_options
     kind: tool
     impl: qanalabs-quiz-gen.test2.apply_edited_distractors
-    reads:  [answer, distractor_1, distractor_2, distractor_3, question]
+    reads: [answer, distractor_1, distractor_2, distractor_3, question]
     writes: [options]
+    intent: "Reconstruct answer options from correct answer and distractors"
 
   - name: simulate_answer
+    intent: "Simulate quiz answering to validate question quality"
     vendor: openai
-    model: gpt-4.1-mini
+    model: gpt-4o-mini
     schema:
       my_answer_key: string
       my_answer_text: string
       my_reasoning: string
       my_confidence_level: string
     policy: "Ground strictly in fact_explanation; forbid external knowledge."
-    reads:  [bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, distractor_*, answer, question_type, options, question]
-    drops:  [id, url, platform_name, exam_name, ...]
+    reads: [bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, distractor_1, distractor_2, distractor_3, answer, question_type, options, question]
+    writes: [my_answer_key, my_answer_text, my_reasoning, my_confidence_level]
+    drops: [id, url, platform_name, exam_name]
     prompt: |
-      You are a quiz taker... (same as your current prompt)
+      You are a quiz taker attempting to answer questions based solely on the provided fact explanation.
+      Do not use external knowledge beyond what's provided in the fact_explanation.
+
+    # Streaming chunking for real-time processing
+    chunk_config:
+      enabled: true
+      mode: "streaming"  # Process data as it arrives
+      buffer_size: 1024  # Bytes to buffer before processing
+      flush_interval: 2.0  # Seconds to wait before flushing buffer
+      stream_delimiter: "\n\n"  # Delimiter for stream chunks
+      aggregation:
+        method: "incremental"  # Build results incrementally
+        deduplication: true  # Remove duplicate entries
+
+    # Minimal validation with fail-fast behavior
+    interceptors:
+      # Single validation with immediate failure
+      - type: validation
+        validator_function: "validators.check_answer_validity"
+        validator_args:
+          valid_keys: ["A", "B", "C", "D"]
+          confidence_levels: ["High", "Medium", "Low"]
+        on_failure: fail  # Fail immediately, no retry
+
+      # Basic reprompt without memory
+      - type: reprompt
+        strategy: "simple"
+        max_attempts: 2
+        include_previous_response: false
+        error_message_only: true
 
   - name: mark_and_attach
     kind: tool
     impl: qanalabs-quiz-gen.quiztaker_maker.mark_and_attach
-    guard: 'marked_result_is_correct == "Correct" and my_confidence_level == "High" and questionable == "High Value"'
+    reads: [my_answer_key, my_confidence_level, questionable]
+    writes: [marked_result_is_correct, final_score]
+    guard: 'my_confidence_level == "High" and questionable == "High Value"'
+    intent: "Mark quiz answers and attach scoring metadata"
 
-  - name: merge_options
+    # Conditional execution based on previous results
+    conditional_clause: "validators.should_mark_answer"  # Legacy UDF condition
+
+    # Logging and monitoring
+    logging:
+      level: "DEBUG"  # Override default log level
+      log_inputs: true  # Log input data
+      log_outputs: true  # Log output data
+      log_prompts: false  # Don't log prompts (sensitive)
+      structured_logging: true  # Use structured JSON logs
+      log_destination: "file:///logs/mark_attach.log"
+
+    # Telemetry and metrics
+    telemetry:
+      enabled: true
+      custom_dimensions:
+        workflow: "quiz_generation"
+        stage: "scoring"
+      metrics_to_track:
+        - execution_time
+        - input_size
+        - output_size
+        - success_rate
+      sampling_rate: 0.1  # Sample 10% for detailed telemetry
+
+  - name: merge_final_options
     kind: tool
     impl: qanalabs-quiz-gen.test_api.merge_correct_answer_with_distractors
-    reads:  [question, options, options_answer, answer, ...]
+    reads: [question, options, options_answer, answer, marked_result_is_correct]
     writes: [final_options]
+    intent: "Merge correct answers with distractors into final option set"
 
-  - name: process_file_content
+  - name: package_output
     kind: tool
     impl: qanalabs-quiz-gen.test_api.process_file_content
-    reads:  [final_options, question, explanation, ...]
+    reads: [final_options, question, fact_explanation, my_reasoning, final_score]
     writes: [packaged_output]
+    intent: "Package final quiz content for output"
 
 plan:
   - extract_facts
-  - flatten_quotes <- extract_facts
-  - score_questionability <- flatten_quotes
-  - explain_fact      <- score_questionability
-  - generate_scenarios<- explain_fact
+  - cluster_list <- extract_facts
+  - combine_by_cluster_and_id <- cluster_list
+  - validate_clusters <- combine_by_cluster_and_id
+  - explain_facts <- validate_clusters
+  - classify_feynman <- explain_facts
+  - generate_scenarios <- classify_feynman
   - generate_distractors <- generate_scenarios
-  - reconstruct_options_from_answer <- generate_distractors
-  - simulate_answer   <- reconstruct_options_from_answer
-  - mark_and_attach   <- simulate_answer
-  - merge_options     <- mark_and_attach
-  - process_file_content <- merge_options
+  - reconstruct_options <- generate_distractors
+  - simulate_answer <- reconstruct_options
+  - mark_and_attach <- simulate_answer
+  - merge_final_options <- mark_and_attach
+  - package_output <- merge_final_options
+
+# Advanced workflow configuration
+workflow_config:
+  # Execution strategy
+  execution:
+    mode: "sequential"  # Options: "sequential", "parallel", "dag"
+    max_parallel_actions: 5
+    timeout: 3600  # Overall workflow timeout in seconds
+    checkpoint_enabled: true  # Save progress between actions
+    checkpoint_interval: 5  # Actions between checkpoints
+
+  # Resource management
+  resources:
+    max_memory: "4GB"
+    max_cpu: 4
+    gpu_enabled: false
+    disk_space: "10GB"
+
+  # Error handling
+  error_handling:
+    on_action_failure: "retry"  # Options: "retry", "skip", "fail", "fallback"
+    max_workflow_retries: 2
+    partial_results_on_failure: true
+    dead_letter_queue: "failed_workflows"
+
+  # Data management
+  data_management:
+    staging_location: "s3://bucket/staging"
+    output_location: "s3://bucket/output"
+    intermediate_cleanup: true  # Clean intermediate data
+    compression: "gzip"  # Compress stored data
+    encryption: "AES256"  # Encrypt sensitive data
+
+  # Scheduling and triggers
+  scheduling:
+    enabled: false
+    cron: "0 2 * * *"  # Run daily at 2 AM
+    timezone: "UTC"
+    retry_on_schedule_miss: true
+
+  # Notifications
+  notifications:
+    on_success:
+      - type: "email"
+        recipients: ["team@example.com"]
+        template: "workflow_success"
+    on_failure:
+      - type: "slack"
+        webhook: "https://hooks.slack.com/services/..."
+        channel: "#alerts"
+    on_threshold:
+      - metric: "duration"
+        threshold: 1800  # 30 minutes
+        action: "alert"
+
+  # Cost management
+  cost_controls:
+    max_cost_per_run: 10.0  # USD
+    alert_at_percentage: 80
+    auto_stop_on_limit: true
+    prefer_batch_pricing: true
+
+  # Versioning and rollback
+  versioning:
+    track_versions: true
+    auto_rollback_on_error: false
+    keep_versions: 10
+    version_tag_pattern: "v{major}.{minor}.{patch}"
+
+  # Security
+  security:
+    api_key_rotation: true
+    rotation_interval: 30  # days
+    audit_logging: true
+    pii_detection: true
+    pii_redaction: "mask"  # Options: "mask", "remove", "encrypt"
+
+  # Performance optimization
+  optimization:
+    enable_caching: true
+    cache_strategy: "lru"  # Least recently used
+    prefetch_next_action: true
+    lazy_loading: true
+    result_streaming: false
+
+  # Monitoring and observability
+  observability:
+    tracing_enabled: true
+    trace_sample_rate: 0.1
+    metrics_enabled: true
+    custom_metrics:
+      - name: "facts_extracted_per_document"
+        type: "histogram"
+      - name: "cluster_quality_score"
+        type: "gauge"
+    dashboards:
+      - "https://dashboard.example.com/quiz-generation"
+    alerts:
+      - metric: "error_rate"
+        threshold: 0.05
+        window: "5m"
