@@ -10,7 +10,8 @@ from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingEr
 from agent_actions.core.parser.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig
-from agent_actions.core.parser.format_converter import WorkflowFormatConverter
+from agent_actions.core.context.path_config import load_project_config
+from agent_actions.core.context.path_manager import PathManager
 
 
 
@@ -37,8 +38,8 @@ class ConfigManager:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
             loaded_config = yaml.safe_load(config_data)
 
-            # Convert new format to old format if needed
-            self.user_config = WorkflowFormatConverter.ensure_old_format(loaded_config)
+            # Expect new format only
+            self.user_config = loaded_config
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(f"Error rendering or loading user config from {self.constructor_path}: {e}") from e
         except yaml.YAMLError as e:
@@ -73,14 +74,19 @@ class ConfigManager:
     def find_agent_name(self,config: Dict[str, Any]) -> str:
         """
         Find the name of the agent from the configuration.
-        
+
         Args:
             config: Agent configuration dictionary
-            
+
         Returns:
             str: Name of the agent
         """
-        return next(iter(config)) 
+        # Check if this is new format
+        if 'name' in config and 'actions' in config:
+            return config['name']
+        else:
+            # Old format - return first key (workflow name)
+            return next(iter(config)) 
     
     def validate_agent_name(self):
         self.agent_name = self.find_agent_name(self.user_config)
@@ -90,19 +96,124 @@ class ConfigManager:
             raise ValueError(error_msg)
 
     def check_child_pipeline(self):
-        for item in self.user_config[self.agent_name]:
-            if isinstance(item, dict) and 'child' in item:
-                self.child_pipeline = item['child'][0]
-                return
+        # Check if this is new format
+        if 'name' in self.user_config and 'actions' in self.user_config:
+            # New format - check actions for child pipelines
+            actions = self.user_config.get('actions', [])
+            for action in actions:
+                if isinstance(action, dict) and 'child' in action:
+                    self.child_pipeline = action['child'][0]
+                    return
+        else:
+            # Old format - original logic
+            agent_list = self.user_config.get(self.agent_name, [])
+            for item in agent_list:
+                if isinstance(item, dict) and 'child' in item:
+                    self.child_pipeline = item['child'][0]
+                    return
         self.child_pipeline = None
 
     def get_user_agents(self):
-        agents_section = self.user_config[self.agent_name]
-        if 'agents' in agents_section:
-            user_agents = agents_section['agents']
+        # Check if this is new format
+        if 'name' in self.user_config and 'actions' in self.user_config:
+            # New format - convert actions to agent format
+            actions = self.user_config.get('actions', [])
+
+            # Load project-level defaults from agent_actions.yml
+            try:
+                path_manager = PathManager()
+                project_root = path_manager.get_project_root()
+                project_config = load_project_config(project_root)
+                project_defaults = project_config.get('default_agent_config', {})
+            except Exception:
+                # If project config can't be loaded, continue without it
+                project_defaults = {}
+
+            # Get workflow-level defaults
+            workflow_defaults = self.user_config.get('defaults', {})
+
+            # Create merged defaults: project < workflow (workflow overrides project)
+            defaults = {**project_defaults, **workflow_defaults}
+
+            # Parse plan section to extract dependencies and planned actions
+            plan = self.user_config.get('plan', [])
+            dependencies_map = {}
+            actions_in_plan = set()
+
+            for plan_item in plan:
+                if '<-' in plan_item:
+                    # Format: "action_name <- dependency1, dependency2"
+                    action_name, deps_str = plan_item.split('<-', 1)
+                    action_name = action_name.strip()
+                    deps = [dep.strip() for dep in deps_str.split(',')]
+                    dependencies_map[action_name] = deps
+                    actions_in_plan.add(action_name)
+                else:
+                    # Format: "action_name" (no dependencies)
+                    action_name = plan_item.strip()
+                    dependencies_map[action_name] = []
+                    actions_in_plan.add(action_name)
+
+            # Only convert actions that are mentioned in the plan
+            user_agents = []
+            for action in actions:
+                action_name = action.get('name', 'unknown')
+                if action_name not in actions_in_plan:
+                    continue  # Skip actions not in plan
+                # Convert action to agent format
+                agent = {
+                    'agent_type': action_name,
+                    'name': action_name,
+                    'model_vendor': action.get('vendor', defaults.get('vendor', 'openai')),
+                    'model_name': action.get('model', defaults.get('model', 'gpt-4')),
+                    'is_operational': True,
+                    'dependencies': dependencies_map.get(action_name, []),
+                    'granularity': action.get('granularity', defaults.get('granularity', 'record')),
+                    'run_mode': action.get('run_mode', defaults.get('run_mode', 'online')),
+                    'use_few_shot_samples': action.get('few_shot', defaults.get('few_shot', 0)),
+                    'json_mode': action.get('json_mode', defaults.get('json_mode', False)),
+                    'chunk_config': action.get('chunk_config', defaults.get('chunk_config', {}))
+                }
+
+                # Handle tool vs LLM actions
+                if action.get('kind') == 'tool':
+                    agent['model_vendor'] = 'tool'
+                    agent['model_name'] = action.get('impl', action.get('name'))
+
+                # Add schema if present
+                if action.get('schema') or action.get('output_schema'):
+                    schema_value = action.get('schema') or action.get('output_schema')
+                    if isinstance(schema_value, str):
+                        agent['schema_name'] = schema_value
+                    else:
+                        agent['schema'] = schema_value
+
+                # Add prompt if present
+                if action.get('prompt'):
+                    agent['prompt'] = action.get('prompt')
+
+                # Add missing fields for compatibility
+                agent['parent'] = []
+                agent['side_collection'] = []
+                agent['remove_collection'] = []
+                agent['skip_if'] = None
+                agent['ephemeral'] = None
+                agent['add_dispatch'] = None
+                agent['anthropic_version'] = None
+                agent['enable_prompt_caching'] = None
+                agent['conditional_clause'] = None
+                agent['where_clause'] = None
+
+                user_agents.append(agent)
+            return user_agents
         else:
-            user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
-        return user_agents
+            # Old format - original logic
+            agents_section = self.user_config[self.agent_name]
+            if 'agents' in agents_section:
+                user_agents = agents_section['agents']
+            else:
+                user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
+            return user_agents
 
     def merge_agent_configs(self, user_agents: List[Dict[str, Any]]) -> None:
         default_model = DefaultAgentConfig.model_validate(

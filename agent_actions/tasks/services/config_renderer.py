@@ -24,7 +24,6 @@ from agent_actions.agents.validators.config_validator import ConfigValidator
 from pydantic import ValidationError
 from agent_actions.core.parser.config_schema import AgentConfig
 from agent_actions.core.parser.config_types import AgentEntryDict, AgentConfigMap
-from agent_actions.core.parser.format_converter import WorkflowFormatConverter
 from agent_actions.agents.handlers.agent_handlers import AgentManager
 
 logger = logging.getLogger(__name__)
@@ -342,30 +341,80 @@ class ConfigRenderingService:
         if not data:
             raise ConfigurationError(f"Configuration results in empty data: {src}")
 
-        # Convert new format to old format if needed
-        try:
-            converted_data = WorkflowFormatConverter.ensure_old_format(data)
-            return cast(AgentConfigMap, converted_data)
-        except Exception as exc:
-            raise ConfigurationError(f"Configuration format error in {src}: {exc}") from None
+        # Expect new format only
+        return cast(AgentConfigMap, data)
     
     def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
         """
-        Validate the full agent config using ConfigValidator.
+        Validate the config - handle both old and new formats.
         """
-        current_directory = Path.cwd() 
+        current_directory = Path.cwd()
         project_root_path = AgentManager.find_project_root(start_path=current_directory)
-        agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
-        validated_entries: List[AgentEntryDict] = []
-        for entry in agent_entries_list:
-            try:
-                entry_model = AgentConfig.model_validate(entry)
-                validated_entries.append(entry_model.model_dump(exclude_unset=True))
-            except ValidationError as e:
-                raise ConfigValidationError(f"Invalid agent configuration: {e}") from e
 
-        config[agent_name] = validated_entries
+        # Check if this is new format
+        if 'actions' in config and 'name' in config:
+            # New format - validate the actions
+            actions = config.get('actions', [])
+            validated_entries: List[AgentEntryDict] = []
 
+            for action in actions:
+                # Convert action to agent format for validation
+                agent_entry = {
+                    'agent_type': action.get('name', 'unknown'),
+                    'name': action.get('name'),
+                    'model_vendor': action.get('vendor', 'openai'),
+                    'model_name': action.get('model', 'gpt-4'),
+                    'is_operational': True,
+                    'dependencies': [],
+                    'granularity': action.get('granularity', 'record'),
+                    'run_mode': 'online',
+                    'use_few_shot_samples': action.get('few_shot', 0),
+                    'json_mode': action.get('json_mode', False)
+                }
+
+                # Handle tool vs LLM actions
+                if action.get('kind') == 'tool':
+                    agent_entry['model_vendor'] = 'tool'
+                    agent_entry['model_name'] = action.get('impl', action.get('name'))
+
+                # Add schema if present
+                if action.get('schema') or action.get('output_schema'):
+                    schema_value = action.get('schema') or action.get('output_schema')
+                    if isinstance(schema_value, str):
+                        agent_entry['schema_name'] = schema_value
+                    else:
+                        agent_entry['schema'] = schema_value
+
+                # Add prompt if present
+                if action.get('prompt'):
+                    agent_entry['prompt'] = action.get('prompt')
+
+                try:
+                    entry_model = AgentConfig.model_validate(agent_entry)
+                    validated_entries.append(entry_model.model_dump(exclude_unset=True))
+                except ValidationError as e:
+                    raise ConfigValidationError(f"Invalid action configuration for '{action.get('name')}': {e}") from e
+
+            # Store the validated entries for new format
+            config['_validated_actions'] = validated_entries
+
+        else:
+            # Old format - original logic
+            agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
+            if agent_entries_list is None:
+                raise ConfigValidationError(f"No agent configuration found for '{agent_name}'")
+
+            validated_entries: List[AgentEntryDict] = []
+            for entry in agent_entries_list:
+                try:
+                    entry_model = AgentConfig.model_validate(entry)
+                    validated_entries.append(entry_model.model_dump(exclude_unset=True))
+                except ValidationError as e:
+                    raise ConfigValidationError(f"Invalid agent configuration: {e}") from e
+
+            config[agent_name] = validated_entries
+
+        # Validate with ConfigValidator
         config_validator_instance = ConfigValidator()
         validation_payload = {
             "operation": "validate_agent_entries",
@@ -451,10 +500,8 @@ class ConfigRenderer:
         try:
             loaded_config = yaml.safe_load(raw) or {}
 
-            # Convert new format to old format if needed
-            converted_config = WorkflowFormatConverter.ensure_old_format(loaded_config)
-
-            return cast(AgentConfigMap, converted_config)
+            # Expect new format only
+            return cast(AgentConfigMap, loaded_config)
         except yaml.MarkedYAMLError as exc:
             # Build a human sentence: file, 1-based line/col, parser complaint
             mark = exc.problem_mark            # has .line & .column (0-based)
