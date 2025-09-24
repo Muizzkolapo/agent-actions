@@ -356,43 +356,52 @@ class BatchService:
             # Check for WHERE clause filtering (new secure method)
             where_clause_config = agent_config.get("where_clause")
             should_skip = False
-            
+
             if where_clause_config and where_clause_config.get("scope") == "item":
-                try:
-                    filter_service = get_global_filter()
-                    
-                    # Debug logging
-                    logger.info(f"WHERE clause filtering: '{where_clause_config['clause']}'")
-                    logger.info(f"Row content keys: {list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict'}")
-                    if isinstance(row_content, dict) and 'questionable' in row_content:
-                        logger.info(f"Row questionable value: {row_content['questionable']}")
-                    
-                    filter_result = filter_service.filter_item(
-                        row_content,
-                        where_clause_config["clause"]
-                    )
-                    
-                    logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")
-                    if filter_result.error:
-                        logger.warning(f"Filter error: {filter_result.error}")
-                    
-                    if not filter_result.success:
-                        # Handle filter error based on configuration
+                # Check behavior - only process filter behavior at batch level
+                behavior = where_clause_config.get("behavior", "filter")
+
+                if behavior == "filter":
+                    # Process filter behavior at batch level (remove records)
+                    try:
+                        filter_service = get_global_filter()
+
+                        # Debug logging
+                        logger.info(f"WHERE clause filtering: '{where_clause_config['clause']}'")
+                        logger.info(f"Row content keys: {list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict'}")
+                        if isinstance(row_content, dict) and 'questionable' in row_content:
+                            logger.info(f"Row questionable value: {row_content['questionable']}")
+
+                        filter_result = filter_service.filter_item(
+                            row_content,
+                            where_clause_config["clause"]
+                        )
+
+                        logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")
+                        if filter_result.error:
+                            logger.warning(f"Filter error: {filter_result.error}")
+
+                        if not filter_result.success:
+                            # Handle filter error based on configuration
+                            passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                            if not passthrough_on_error:
+                                should_skip = True
+                                logger.info("Filtering item due to filter error and passthrough_on_error=False")
+                            # If passthrough_on_error is True, continue processing
+                        elif not filter_result.matched:
+                            # Item doesn't match WHERE clause - filter it out
+                            should_skip = True
+                            logger.info(f"Filtering item - WHERE clause not matched")
+
+                    except Exception as e:
+                        logger.warning(f"Error in WHERE clause evaluation: {e}")
                         passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
                         if not passthrough_on_error:
                             should_skip = True
-                            logger.info("Skipping item due to filter error and passthrough_on_error=False")
-                        # If passthrough_on_error is True, continue processing
-                    elif not filter_result.matched:
-                        # Item doesn't match WHERE clause
-                        should_skip = True
-                        logger.info(f"Skipping item - WHERE clause not matched")
-                        
-                except Exception as e:
-                    logger.warning(f"Error in WHERE clause evaluation: {e}")
-                    passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
-                    if not passthrough_on_error:
-                        should_skip = True
+                else:
+                    # Skip behavior - let agent-level processing handle this
+                    logger.info(f"WHERE clause with skip behavior detected - will be handled at agent level")
+                    # Don't process where clause here, let it go to the agent
             
             # Legacy conditional clause support (deprecated but maintained for backwards compatibility)
             elif conditional_clause and not execute_user_defined_function(
@@ -400,8 +409,10 @@ class BatchService:
             ):
                 should_skip = True
             
-            # Skip this item if any filter condition failed
+            # Handle filtering behavior
             if should_skip:
+                # should_skip is only set for filter behavior now
+                # (skip behavior is handled at agent level)
                 continue
 
             # Apply remove_collection only for rows that pass the conditional check
@@ -430,7 +441,7 @@ class BatchService:
         
         # Use provider to prepare tasks
         tasks = provider.prepare_tasks(prepared_data, provider_config)
-        
+
         return tasks
 
     def submit_batch_job_from_data(self, agent_config, batch_name, data, output_directory=None, force=False):

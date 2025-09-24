@@ -77,12 +77,44 @@ class WorkflowFormatConverter:
             else:
                 agent['schema'] = schema_value
 
-        # Conditional logic
+        # Conditional logic - handle both consolidated and legacy guard formats
         if action.get('guard'):
-            agent['where_clause'] = {
-                'clause': action['guard'],
-                'scope': 'item'
-            }
+            from agent_actions.core.utils.guard_parser import GuardParser
+            from agent_actions.core.utils.consolidated_guard import GuardBehavior, parse_guard_config
+
+            guard_data = action['guard']
+
+            # Handle both legacy string format and new consolidated format
+            if isinstance(guard_data, str):
+                # Legacy format - parse using existing logic
+                guard_expr = GuardParser.parse(guard_data)
+
+                if guard_expr.type.value == 'udf':
+                    # UDF guard - use legacy conditional_clause for execution
+                    agent['conditional_clause'] = guard_expr.expression
+                else:
+                    # SQL guard - use where_clause
+                    agent['where_clause'] = {
+                        'clause': guard_expr.expression,
+                        'scope': 'item'
+                    }
+            else:
+                # New consolidated format
+                guard_config = parse_guard_config(guard_data)
+
+                if guard_config.is_udf_condition():
+                    # UDF conditions use conditional_clause (legacy support for skip behavior only)
+                    if guard_config.on_false == GuardBehavior.FILTER:
+                        raise ValueError("UDF conditions cannot use 'filter' behavior. UDF conditions only support 'skip' behavior.")
+                    agent['conditional_clause'] = guard_config.get_condition_expression()
+                else:
+                    # SQL conditions use where_clause with behavior specification
+                    agent['where_clause'] = {
+                        'clause': guard_config.get_condition_expression(),
+                        'scope': 'item',
+                        'behavior': guard_config.on_false.value  # 'filter' or 'skip'
+                    }
+                # Future: Add support for WRITE_TO, REPROCESS behaviors
 
         # Prompt
         agent['prompt'] = action.get('prompt')
@@ -119,12 +151,17 @@ class WorkflowFormatConverter:
 
         # Default empty collections
         agent['chunk_config'] = {}
-        agent['conditional_clause'] = None
         agent['skip_if'] = None
         agent['ephemeral'] = None
         agent['add_dispatch'] = None
         agent['anthropic_version'] = None
         agent['enable_prompt_caching'] = None
+
+        # Initialize conditional fields if not already set
+        if 'conditional_clause' not in agent:
+            agent['conditional_clause'] = None
+        if 'where_clause' not in agent:
+            agent['where_clause'] = None
 
         return agent
 

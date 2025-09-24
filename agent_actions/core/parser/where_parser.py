@@ -163,14 +163,34 @@ class WhereClauseParser:
 
 # Simple filter service for compatibility with existing code
 class SimpleWhereFilter:
-    """A simple WHERE clause filter for basic functionality."""
+    """A simple WHERE clause filter service for data filtering and guard evaluation."""
 
     def __init__(self):
         self.parser = WhereClauseParser()
 
+    def filter_item(self, data: Dict[str, Any], where_clause: str) -> bool:
+        """
+        Evaluate if a data item matches a WHERE clause condition.
+
+        Args:
+            data: Data to evaluate against the condition
+            where_clause: WHERE clause string (e.g., "status == 'active'")
+
+        Returns:
+            True if item matches the condition, False otherwise.
+            Defaults to True (include item) on parsing errors.
+        """
+        try:
+            conditions = self.parser.parse(where_clause)
+            if not conditions:  # No valid conditions parsed
+                return True  # Default to including item on parse failure
+            return self.parser.evaluate(data, conditions)
+        except Exception:
+            return True  # Default to including item on error
+
     def evaluate_safe_skip_condition(self, condition_config: Dict[str, Any], context: Dict[str, Any]) -> bool:
         """
-        Safely evaluate a skip condition.
+        Safely evaluate a skip condition for legacy compatibility.
 
         Args:
             condition_config: Skip condition configuration
@@ -189,25 +209,6 @@ class SimpleWhereFilter:
         except Exception:
             # Default to not skipping on error
             return False
-
-    def filter_item(self, data: Dict[str, Any], where_clause: str) -> bool:
-        """
-        Filter a single data item with a WHERE clause.
-
-        Args:
-            data: Data to filter
-            where_clause: WHERE clause string
-
-        Returns:
-            True if item matches the condition
-        """
-        try:
-            conditions = self.parser.parse(where_clause)
-            if not conditions:  # No valid conditions parsed
-                return True  # Default to including item on parse failure
-            return self.parser.evaluate(data, conditions)
-        except Exception:
-            return True  # Default to including item on error
 
 
 # Global filter instance for backward compatibility

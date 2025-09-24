@@ -44,7 +44,7 @@ class ActionConfig(BaseModel):
 
     # Execution settings
     granularity: Optional[Granularity] = Field(default=None, description="Execution granularity")
-    guard: Optional[str] = Field(default=None, description="Condition for action execution")
+    guard: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Condition for action execution")
     policy: Optional[str] = Field(default=None, description="Execution policy")
     few_shot: Optional[int] = Field(default=None, description="Number of few-shot examples")
 
@@ -60,16 +60,19 @@ class ActionConfig(BaseModel):
     def validate_guard(cls, v):
         """Validate guard expressions for safety."""
         if v:
-            # Basic safety checks
-            dangerous_patterns = [
-                '__import__', 'exec', 'eval', 'compile', 'open', 'file',
-                'input', 'raw_input', 'reload', 'vars', 'globals', 'locals'
-            ]
-
-            guard_lower = v.lower()
-            for pattern in dangerous_patterns:
-                if pattern in guard_lower:
-                    raise ValueError(f"Guard contains potentially dangerous operation: {pattern}")
+            try:
+                if isinstance(v, str):
+                    # Legacy string format
+                    from agent_actions.core.utils.guard_parser import GuardParser
+                    GuardParser.parse(v)
+                elif isinstance(v, dict):
+                    # New consolidated format
+                    from agent_actions.core.utils.consolidated_guard import parse_guard_config
+                    parse_guard_config(v)
+                else:
+                    raise ValueError(f"Guard must be string or dict, got {type(v)}")
+            except ValueError as e:
+                raise ValueError(f"Invalid guard: {e}")
         return v
 
 
