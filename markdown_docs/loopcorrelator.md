@@ -495,6 +495,39 @@ if not correlation_key:
 - **Predictable Behavior**: Position-based IDs are deterministic and debuggable
 - **Backwards Compatible**: Falls back to source_guid-based IDs for non-loop contexts
 
+## GitHub Issues Resolved
+
+### Issue #385: "Fix loop merge data loss: 5 records become 1 due to non-unique correlation key"
+
+**Problem Solved**: The position-based loop correlation ID system (v4.0) directly addresses this critical data loss issue.
+
+**Root Cause**: The original issue occurred because multiple records shared the same `source_guid`, causing the loop correlator to merge them into a single record during correlation.
+
+**Our Solution**: Position-based correlation IDs ensure each record gets a unique identifier based on its position in the input list, shared consistently across all loop iterations:
+
+```python
+# Before (data loss):
+correlation_key = record_copy.get('source_guid')  # Same for multiple records
+
+# After (preserves all records):
+correlation_key = record_copy.get('loop_correlation_id')  # Unique per position
+```
+
+**Impact**:
+- ✅ Preserves all records during loop correlation
+- ✅ Maintains record identity across loop iterations
+- ✅ Works correctly even when multiple records have identical source_guid
+- ✅ No data loss in parallel loop workflows
+
+### Related Issues Potentially Addressed
+
+The position-based correlation system also provides foundation for several other loop consumption patterns:
+
+- **Issue #386**: "Add aggregate consumption pattern" - Reliable correlation enables proper aggregation
+- **Issue #387**: "Add select consumption pattern" - Correct correlation ensures all records are available for selection
+- **Issue #388**: "Add independent consumption pattern" - Position-based IDs support independent tracking
+- **Issue #390**: "Add reduction consumption pattern" - Proper correlation enables complex reduction logic
+
 ## Future Enhancements
 
 - Support for nested loops
