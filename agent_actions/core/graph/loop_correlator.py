@@ -18,17 +18,20 @@ class LoopOutputCorrelator:
         self.agent_folder = agent_folder
         self.correlations_cache = {}
 
-    def detect_loop_dependencies(self, execution_order: List[str], agent_configs: Dict[str, Any]) -> Dict[str, List[str]]:
+    def detect_explicit_loop_consumption(self, execution_order: List[str], agent_configs: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         """
-        Detect which agents depend on loop outputs.
+        Detect agents with explicit loop consumption configurations.
 
         Returns:
-            Dict mapping agent_name -> list of loop agents it depends on
+            Dict mapping agent_name -> {
+                'source_base_name': str,
+                'pattern': str,
+                'loop_agents': List[str]
+            }
         """
-        loop_dependencies = {}
+        loop_consumption_map = {}
 
-        # First, identify which agents are part of loops
-        loop_agents = set()
+        # First, identify which agents are part of loops (still needed for mapping)
         loop_groups = {}  # base_name -> [agent_1, agent_2, agent_3]
 
         for agent_name in execution_order:
@@ -38,31 +41,32 @@ class LoopOutputCorrelator:
                 if len(parts) == 2:
                     base_name, suffix = parts
                     if suffix.isdigit():
-                        loop_agents.add(agent_name)
                         if base_name not in loop_groups:
                             loop_groups[base_name] = []
                         loop_groups[base_name].append(agent_name)
 
-        # Now check dependencies
+        # Check for explicit loop consumption configurations
         for agent_name in execution_order:
-            if agent_name in loop_agents:
-                continue  # Skip loop agents themselves
-
             agent_config = agent_configs.get(agent_name, {})
-            dependencies = agent_config.get('dependencies', [])
+            loop_consumption_config = agent_config.get('loop_consumption_config')
 
-            loop_deps = []
-            for dep in dependencies:
-                # Check if dependency is a loop base name
-                if dep in loop_groups:
-                    loop_deps.extend(loop_groups[dep])
-                elif dep in loop_agents:
-                    loop_deps.append(dep)
+            if loop_consumption_config:
+                source_base_name = loop_consumption_config.get('source')
+                pattern = loop_consumption_config.get('pattern', 'merge')
 
-            if loop_deps:
-                loop_dependencies[agent_name] = loop_deps
+                # Find the corresponding loop agents
+                loop_agents = loop_groups.get(source_base_name, [])
 
-        return loop_dependencies
+                if loop_agents:
+                    loop_consumption_map[agent_name] = {
+                        'source_base_name': source_base_name,
+                        'pattern': pattern,
+                        'loop_agents': loop_agents
+                    }
+                else:
+                    print(f"Warning: Agent '{agent_name}' consumes loop '{source_base_name}' but no loop agents found")
+
+        return loop_consumption_map
 
     def prepare_correlated_input(self, agent_name: str, loop_sources: List[str],
                                  current_idx: int) -> Optional[str]:
@@ -73,6 +77,7 @@ class LoopOutputCorrelator:
             agent_name: Name of the agent that needs correlated input
             loop_sources: List of loop agent names this agent depends on
             current_idx: Current execution index
+            pattern: Merge pattern to use (only 'merge' supported)
 
         Returns:
             Path to correlated input directory, or None if correlation failed
@@ -110,7 +115,7 @@ class LoopOutputCorrelator:
                         file_loop_outputs[loop_agent] = file_outputs
 
                 if file_loop_outputs:
-                    # Correlate outputs by source record
+                    # Correlate outputs by source record using merge pattern
                     correlated_data = self._correlate_by_source_record(file_loop_outputs)
 
                     # Write correlated data with original filename
@@ -174,12 +179,15 @@ class LoopOutputCorrelator:
 
     def _correlate_by_source_record(self, loop_outputs: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """
-        Correlate loop outputs by source record ID.
+        Correlate loop outputs by source record ID using merge pattern.
 
         Handles the agent-actions data structure where actual content is nested
         in a 'content' field and correlation is done by 'source_guid'.
+
+        Args:
+            loop_outputs: Dict mapping loop agent names to their outputs
         """
-        # Group records by source_guid
+        # Group records by loop_correlation_id
         correlation_groups = defaultdict(dict)
 
         for loop_agent, outputs in loop_outputs.items():
@@ -188,10 +196,15 @@ class LoopOutputCorrelator:
                 record_copy = record.copy()
                 record_copy.pop('_source_file', None)
 
-                # Use source_guid as correlation key
-                correlation_key = record_copy.get('source_guid')
-                if correlation_key:
-                    correlation_groups[correlation_key][loop_agent] = record_copy
+                # In loop context, records MUST have loop_correlation_id
+                correlation_key = record_copy.get('loop_correlation_id')
+                if not correlation_key:
+                    # This should never happen in proper loop processing
+                    source_guid = record_copy.get('source_guid', 'unknown')
+                    raise ValueError(f"Loop record missing required loop_correlation_id (source_guid: {source_guid})")
+
+                # Group records by their loop_correlation_id
+                correlation_groups[correlation_key][loop_agent] = record_copy
 
         # Merge correlated records
         correlated_records = []
@@ -206,15 +219,13 @@ class LoopOutputCorrelator:
                     'target_id': base_record.get('target_id'),
                     'node_id': base_record.get('node_id'),
                     'lineage': base_record.get('lineage'),
+                    'loop_correlation_id': base_record.get('loop_correlation_id'),  # Preserve loop correlation ID
                     'content': {},
                     '_correlation_sources': list(agent_records.keys())  # Track which loops contributed
                 }
 
-                # Merge all content fields from all loop iterations
-                for loop_agent, record in agent_records.items():
-                    content = record.get('content', {})
-                    # Optionally prefix fields if there's a conflict risk
-                    merged_record['content'].update(content)
+                # Merge content fields using merge pattern
+                merged_record['content'] = self._merge_with_pattern(agent_records)
 
                 # Add metadata about missing loop iterations if any
                 all_expected_loops = set(loop_outputs.keys())
@@ -227,6 +238,25 @@ class LoopOutputCorrelator:
 
         return correlated_records
 
+    def _merge_with_pattern(self, agent_records: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Merge content from multiple loop agent records using merge pattern.
+
+        Args:
+            agent_records: Dict mapping loop agent names to their records
+
+        Returns:
+            Merged content dictionary
+        """
+        merged_content = {}
+
+        # Simple dictionary update - last wins on conflicts
+        for record in agent_records.values():
+            content = record.get('content', {})
+            merged_content.update(content)
+
+        return merged_content
+
     def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:
         """
         Extract a correlation key from a record to match it across loop iterations.
@@ -237,14 +267,18 @@ class LoopOutputCorrelator:
         if 'id' in record:
             return str(record['id'])
 
-        # Strategy 2: Use combination of fields that should be unique
+        # Strategy 2: Use source_guid (primary correlation key)
+        if 'source_guid' in record:
+            return str(record['source_guid'])
+
+        # Strategy 3: Use combination of fields that should be unique
         key_fields = ['url', 'question', 'fact', 'content']
         available_fields = [field for field in key_fields if field in record]
         if available_fields:
             key_parts = [str(record[field]) for field in available_fields[:2]]  # Use first 2 available
             return '|'.join(key_parts)
 
-        # Strategy 3: Use hash of stable content
+        # Strategy 4: Use hash of stable content
         stable_fields = {k: v for k, v in record.items()
                         if not any(k.endswith(f"_{i}") for i in range(1, 10))}  # Exclude loop-specific fields
         if stable_fields:
@@ -318,20 +352,6 @@ class LoopOutputCorrelator:
 
         except Exception as e:
             print(f"Warning: Could not create correlation source data: {e}")
-
-    def should_use_correlation(self, agent_name: str, agent_configs: Dict[str, Any]) -> bool:
-        """
-        Check if an agent should use correlation instead of normal input.
-        """
-        agent_config = agent_configs.get(agent_name, {})
-        dependencies = agent_config.get('dependencies', [])
-
-        # Check if any dependency looks like a loop agent
-        for dep in dependencies:
-            if '_' in dep and dep.rsplit('_', 1)[1].isdigit():
-                return True
-
-        return False
 
 
 __all__ = ["LoopOutputCorrelator"]

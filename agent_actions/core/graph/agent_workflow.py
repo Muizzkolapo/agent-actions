@@ -224,19 +224,22 @@ class AgentWorkflow:
         # Check if current agent needs loop correlation
         current_agent = self.execution_order[idx]
 
-        loop_dependencies = self.loop_correlator.detect_loop_dependencies(
+        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
             self.execution_order, self.agent_configs
         )
 
-        if current_agent in loop_dependencies:
-            # Use correlated input for agents that depend on loop outputs
-            loop_sources = loop_dependencies[current_agent]
+        if current_agent in loop_consumption_map:
+            # Use correlated input for agents with explicit loop consumption
+            consumption_config = loop_consumption_map[current_agent]
+            loop_sources = consumption_config['loop_agents']
+            pattern = consumption_config['pattern']
+
             correlated_dir = self.loop_correlator.prepare_correlated_input(
                 current_agent, loop_sources, idx
             )
 
             if correlated_dir:
-                self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources[/blue]")
+                self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources (pattern: {pattern})[/blue]")
                 return correlated_dir
             else:
                 self.console.print(f"[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, falling back to standard input[/yellow]")
@@ -251,13 +254,15 @@ class AgentWorkflow:
         overriding the AgentRunner's setup_directories method.
         """
         current_agent = self.execution_order[idx]
-        loop_dependencies = self.loop_correlator.detect_loop_dependencies(
+        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
             self.execution_order, self.agent_configs
         )
 
-        if current_agent in loop_dependencies:
+        if current_agent in loop_consumption_map:
             # This agent needs correlation - override setup_directories
-            loop_sources = loop_dependencies[current_agent]
+            consumption_config = loop_consumption_map[current_agent]
+            loop_sources = consumption_config['loop_agents']
+            pattern = consumption_config['pattern']
 
             # Store original method
             original_setup_directories = self.agent_runner.setup_directories
@@ -269,7 +274,7 @@ class AgentWorkflow:
                 )
 
                 if correlated_dir:
-                    self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources[/blue]")
+                    self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources (pattern: {pattern})[/blue]")
                     input_directory = correlated_dir
                 else:
                     self.console.print(f"[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, falling back to standard input[/yellow]")

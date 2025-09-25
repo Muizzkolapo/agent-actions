@@ -46,26 +46,36 @@ class TestLoopOutputCorrelator:
             "generate_distractors_1": {"agent_type": "generate_distractors", "dependencies": ["generate_scenarios"]},
             "generate_distractors_2": {"agent_type": "generate_distractors", "dependencies": ["generate_scenarios"]},
             "generate_distractors_3": {"agent_type": "generate_distractors", "dependencies": ["generate_scenarios"]},
-            "reconstruct_options": {"agent_type": "reconstruct_options", "dependencies": ["generate_distractors"]},
+            "reconstruct_options": {
+                "agent_type": "reconstruct_options",
+                "dependencies": [],
+                "loop_consumption_config": {
+                    "source": "generate_distractors",
+                    "pattern": "merge"
+                }
+            },
             "validate_quiz": {"agent_type": "validate_quiz", "dependencies": ["reconstruct_options"]}
         }
 
-    def test_detect_loop_dependencies(self, correlator, sample_execution_order, sample_agent_configs):
-        """Test detection of loop dependencies."""
-        dependencies = correlator.detect_loop_dependencies(
+    def test_detect_explicit_loop_consumption(self, correlator, sample_execution_order, sample_agent_configs):
+        """Test detection of explicit loop consumption."""
+        consumption_map = correlator.detect_explicit_loop_consumption(
             sample_execution_order, sample_agent_configs
         )
 
-        assert "reconstruct_options" in dependencies
-        assert set(dependencies["reconstruct_options"]) == {
+        assert "reconstruct_options" in consumption_map
+        config = consumption_map["reconstruct_options"]
+        assert config["source_base_name"] == "generate_distractors"
+        assert config["pattern"] == "merge"
+        assert set(config["loop_agents"]) == {
             "generate_distractors_1",
             "generate_distractors_2",
             "generate_distractors_3"
         }
-        assert "validate_quiz" not in dependencies  # Doesn't directly depend on loop
+        assert "validate_quiz" not in consumption_map  # Doesn't have loop consumption config
 
-    def test_detect_loop_dependencies_no_loops(self, correlator):
-        """Test when no loop agents exist."""
+    def test_detect_explicit_loop_consumption_no_consumption(self, correlator):
+        """Test when no agents have loop consumption config."""
         execution_order = ["agent_a", "agent_b", "agent_c"]
         agent_configs = {
             "agent_a": {"dependencies": []},
@@ -73,8 +83,8 @@ class TestLoopOutputCorrelator:
             "agent_c": {"dependencies": ["agent_b"]}
         }
 
-        dependencies = correlator.detect_loop_dependencies(execution_order, agent_configs)
-        assert dependencies == {}
+        consumption_map = correlator.detect_explicit_loop_consumption(execution_order, agent_configs)
+        assert consumption_map == {}
 
     def test_filename_preservation(self, correlator, temp_agent_folder):
         """Test that original filenames are preserved during correlation."""
@@ -90,6 +100,7 @@ class TestLoopOutputCorrelator:
             # Create test data
             test_data = [{
                 "source_guid": "test-guid-1",
+                "loop_correlation_id": "test-corr-1",
                 "target_id": "target-1",
                 "content": {f"distractor_{i}": f"Wrong answer {i}"}
             }]
@@ -127,18 +138,18 @@ class TestLoopOutputCorrelator:
         # Record 3: exists only in loop 1
 
         data_loop1 = [
-            {"source_guid": "guid-1", "content": {"field_1": "value1"}},
-            {"source_guid": "guid-2", "content": {"field_1": "value2"}},
-            {"source_guid": "guid-3", "content": {"field_1": "value3"}}
+            {"source_guid": "guid-1", "loop_correlation_id": "corr-1", "content": {"field_1": "value1"}},
+            {"source_guid": "guid-2", "loop_correlation_id": "corr-2", "content": {"field_1": "value2"}},
+            {"source_guid": "guid-3", "loop_correlation_id": "corr-3", "content": {"field_1": "value3"}}
         ]
 
         data_loop2 = [
-            {"source_guid": "guid-1", "content": {"field_2": "value1"}},
-            {"source_guid": "guid-2", "content": {"field_2": "value2"}}
+            {"source_guid": "guid-1", "loop_correlation_id": "corr-1", "content": {"field_2": "value1"}},
+            {"source_guid": "guid-2", "loop_correlation_id": "corr-2", "content": {"field_2": "value2"}}
         ]
 
         data_loop3 = [
-            {"source_guid": "guid-1", "content": {"field_3": "value1"}}
+            {"source_guid": "guid-1", "loop_correlation_id": "corr-1", "content": {"field_3": "value1"}}
         ]
 
         # Write test data
@@ -197,6 +208,7 @@ class TestLoopOutputCorrelator:
             # Loop 1 data
             data1 = [{
                 "source_guid": f"{filename}-guid-1",
+                "loop_correlation_id": f"{filename}-corr-1",
                 "content": {"loop1_data": f"data_from_{filename}"}
             }]
             with open(loop1_dir / filename, 'w') as f:
@@ -205,6 +217,7 @@ class TestLoopOutputCorrelator:
             # Loop 2 data
             data2 = [{
                 "source_guid": f"{filename}-guid-1",
+                "loop_correlation_id": f"{filename}-corr-1",
                 "content": {"loop2_data": f"data_from_{filename}"}
             }]
             with open(loop2_dir / filename, 'w') as f:
@@ -273,16 +286,16 @@ class TestLoopOutputCorrelator:
         """Test the correlation logic for merging records."""
         loop_outputs = {
             "loop_1": [
-                {"source_guid": "guid-a", "content": {"f1": "v1"}},
-                {"source_guid": "guid-b", "content": {"f1": "v2"}}
+                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f1": "v1"}},
+                {"source_guid": "guid-b", "loop_correlation_id": "corr-2", "content": {"f1": "v2"}}
             ],
             "loop_2": [
-                {"source_guid": "guid-a", "content": {"f2": "v3"}},
-                {"source_guid": "guid-b", "content": {"f2": "v4"}}
+                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f2": "v3"}},
+                {"source_guid": "guid-b", "loop_correlation_id": "corr-2", "content": {"f2": "v4"}}
             ],
             "loop_3": [
-                {"source_guid": "guid-a", "content": {"f3": "v5"}}
-                # guid-b missing from loop_3
+                {"source_guid": "guid-a", "loop_correlation_id": "corr-1", "content": {"f3": "v5"}}
+                # guid-b (corr-2) missing from loop_3
             ]
         }
 
@@ -408,6 +421,7 @@ class TestLoopOutputCorrelatorIntegration:
 
             data = [{
                 "source_guid": "test-guid",
+                "loop_correlation_id": "test-corr",
                 "content": {f"field_{i}": f"value_{i}"}
             }]
 

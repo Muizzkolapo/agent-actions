@@ -1,9 +1,8 @@
 """
-Format converter for handling both old and new workflow formats.
+Workflow format converter for expanding action-based configurations.
 
-This module provides detection and conversion between:
-- Old format: {"workflow-name": [agent1, agent2, ...]}
-- New format: {"name": "workflow-name", "actions": [action1, action2, ...]}
+This module converts action-based workflow configurations into agent configurations,
+handling loop expansion, template variables, and dependency mapping.
 """
 
 from typing import Dict, Any, List, Optional, Union
@@ -13,8 +12,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class WorkflowFormatConverter:
-    """Handles detection and conversion between old and new workflow formats."""
+class ActionExpander:
+    """Converts action-based workflow configurations to agent configurations with loop expansion support."""
 
     @staticmethod
     def detect_format(config: Dict[str, Any]) -> str:
@@ -125,6 +124,20 @@ class WorkflowFormatConverter:
             agent['model_vendor'] = 'tool'
             agent['model_name'] = action.get('impl', action.get('name'))
 
+            # Tool actions cannot use batch mode - override to online
+            if agent.get('run_mode') == 'batch':
+                # Check if batch was explicitly set on this action (not inherited)
+                if action.get('run_mode') == 'batch':
+                    from agent_actions.cli.exceptions import ConfigurationError
+                    action_name = action.get('name', 'unknown')
+                    raise ConfigurationError(
+                        f"Action '{action_name}' has kind='tool' but run_mode='batch'. "
+                        "Tool actions do not support batch processing. "
+                        "Please set run_mode='online' or remove the run_mode setting to use the default."
+                    )
+                # If inherited from defaults, silently override
+                agent['run_mode'] = 'online'
+
         # Granularity
         granularity = action.get('granularity', defaults.get('granularity'))
         if granularity:
@@ -163,25 +176,35 @@ class WorkflowFormatConverter:
         if 'where_clause' not in agent:
             agent['where_clause'] = None
 
+        # Loop consumption configuration
+        loop_consumption = action.get('loop_consumption')
+        if loop_consumption:
+            agent['loop_consumption_config'] = {
+                'source': loop_consumption.get('source'),
+                'pattern': loop_consumption.get('pattern', 'merge')
+            }
+        else:
+            agent['loop_consumption_config'] = None
+
         return agent
 
     @staticmethod
-    def convert_new_to_old(new_config: Dict[str, Any]) -> AgentConfigMap:
+    def expand_actions_to_agents(action_config: Dict[str, Any]) -> AgentConfigMap:
         """
-        Convert new format to old format for execution.
+        Convert action-based configuration to agent-based configuration with loop expansion.
 
         Args:
-            new_config: New format configuration
+            action_config: Configuration with actions that may contain loops
 
         Returns:
-            Old format configuration (AgentConfigMap)
+            Expanded agent configuration ready for execution (AgentConfigMap)
         """
-        workflow_name = new_config.get('name', 'workflow')
-        actions = new_config.get('actions', [])
-        defaults = new_config.get('defaults', {})
+        workflow_name = action_config.get('name', 'workflow')
+        actions = action_config.get('actions', [])
+        defaults = action_config.get('defaults', {})
 
         # Extract actions that are in the plan
-        plan = new_config.get('plan', [])
+        plan = action_config.get('plan', [])
         actions_in_plan = set()
         for plan_item in plan:
             if '<-' in plan_item:
@@ -234,8 +257,13 @@ class WorkflowFormatConverter:
                     agent['agent_type'] = f"{action.get('name', 'unknown')}_{i}"
                     agent['name'] = f"{action.get('name')}_{i}"
 
+                    # Mark as loop agent with loop metadata
+                    agent['is_loop_agent'] = True
+                    agent['loop_base_name'] = action.get('name', 'unknown')
+                    agent['loop_iteration'] = i
+
                     # Continue with rest of agent setup
-                    agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_in_plan))
+                    agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_in_plan))
             else:
                 # No loop - create single agent
                 agent: AgentEntryDict = {}
@@ -244,10 +272,10 @@ class WorkflowFormatConverter:
                 agent['agent_type'] = action.get('name', 'unknown')
                 agent['name'] = action.get('name')
 
-                agents.append(WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_in_plan))
+                agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_in_plan))
 
         # Extract dependencies from plan
-        plan = new_config.get('plan', [])
+        plan = action_config.get('plan', [])
 
         # Create mapping of action names to agent indices (accounting for loops)
         agent_name_to_indices = {}
@@ -304,14 +332,14 @@ class WorkflowFormatConverter:
         Returns:
             Configuration in old format
         """
-        format_type = WorkflowFormatConverter.detect_format(config)
+        format_type = ActionExpander.detect_format(config)
 
         if format_type == "new":
             logger.info("Detected new workflow format, converting to old format for execution")
-            return WorkflowFormatConverter.convert_new_to_old(config)
+            return ActionExpander.convert_new_to_old(config)
         else:
             logger.debug("Using existing old format configuration")
             return config  # Already in old format
 
 
-__all__ = ["WorkflowFormatConverter"]
+__all__ = ["ActionExpander"]

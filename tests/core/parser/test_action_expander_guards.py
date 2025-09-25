@@ -1,7 +1,7 @@
 """Tests for format converter guard handling."""
 
 import pytest
-from agent_actions.core.parser.format_converter import WorkflowFormatConverter
+from agent_actions.core.parser.action_expander import ActionExpander
 
 
 class TestFormatConverterGuards:
@@ -22,7 +22,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should set where_clause for SQL guards
         assert result.get('where_clause') is not None
@@ -45,7 +45,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should set conditional_clause for UDF guards
         assert result.get('conditional_clause') == 'topic_to_quiz_pipeline.get_answer_length_flag_value'
@@ -65,7 +65,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should not set either conditional field
         assert result.get('conditional_clause') is None
@@ -86,7 +86,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         assert result['where_clause']['clause'] == 'questionable == "High Value" AND confidence > 0.8'
         assert result.get('conditional_clause') is None
@@ -106,7 +106,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should trim whitespace from UDF expression
         assert result.get('conditional_clause') == 'module.function'
@@ -128,7 +128,7 @@ class TestFormatConverterGuards:
         template_replacer = lambda x: x
 
         with pytest.raises(ValueError, match="Invalid UDF expression format"):
-            WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+            ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_dangerous_udf_guard_raises_error(self):
         """Test that dangerous UDF expressions raise errors."""
@@ -146,7 +146,7 @@ class TestFormatConverterGuards:
         template_replacer = lambda x: x
 
         with pytest.raises(ValueError, match="potentially dangerous pattern"):
-            WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+            ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_dangerous_sql_guard_raises_error(self):
         """Test that dangerous SQL expressions raise errors."""
@@ -164,7 +164,7 @@ class TestFormatConverterGuards:
         template_replacer = lambda x: x
 
         with pytest.raises(ValueError, match="potentially dangerous pattern"):
-            WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+            ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_tool_action_with_udf_guard(self):
         """Test conversion of tool action with UDF guard."""
@@ -181,7 +181,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_tool'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(action, defaults, agent, template_replacer)
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         assert result.get('conditional_clause') == 'validators.should_run_tool'
         assert result['model_vendor'] == 'tool'

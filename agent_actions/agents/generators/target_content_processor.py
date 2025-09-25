@@ -146,9 +146,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             
             processed_data = []
 
-            for item in filtered_data:
+            for idx, item in enumerate(filtered_data):
                 try:
-                    processed_item = self._process_single_item(item, source_data)
+                    processed_item = self._process_single_item(item, source_data, record_index=idx)
                     processed_data.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
@@ -328,6 +328,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
                     obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # When conditional clause is False, return the original data unchanged
@@ -447,9 +448,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 raise ValidationError(f"WHERE clause filtering failed: {str(e)}", cause=e)
     
     def _process_single_item(
-        self, 
-        item: Dict, 
-        source_data: List[Dict]
+        self,
+        item: Dict,
+        source_data: List[Dict],
+        record_index: Optional[int] = None
     ) -> List[Dict]:
         """
         Process a single data item synchronously (kept for backward compatibility).
@@ -482,19 +484,23 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
                     obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # When conditional clause is False, return the original data unchanged
                 # Create a single item with the original content structure
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 lineage = ProcessorUtils.build_lineage(item, node_id)
-                    
-                processed = [ProcessorUtils.create_processed_item(
+
+                processed_item = ProcessorUtils.create_processed_item(
                     source_guid=source_guid,
                     content=generated_data,  # This is the original context
                     node_id=node_id,
                     lineage=lineage
-                )]
+                )
+                # Add loop correlation ID at the same level as node_id
+                processed_item = ProcessorUtils.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
+                processed = [processed_item]
             return processed
         except Exception as e:
             raise ValueError(f"Failed to process item: {str(e)}")

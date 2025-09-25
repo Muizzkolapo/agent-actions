@@ -23,6 +23,17 @@ class LoopConfig(BaseModel):
     range: List[int] = Field(..., description="Range of values for loop parameter")
 
 
+class MergePattern(str, Enum):
+    """Patterns for merging loop outputs."""
+    MERGE = "merge"  # Dict.update() behavior (last wins)
+
+
+class LoopConsumptionConfig(BaseModel):
+    """Configuration for consuming loop outputs."""
+    source: str = Field(..., description="Base name of the loop action to consume")
+    pattern: MergePattern = Field(default=MergePattern.MERGE, description="Pattern for merging loop outputs")
+
+
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
 
@@ -50,6 +61,7 @@ class ActionConfig(BaseModel):
 
     # Advanced features
     loop: Optional[LoopConfig] = Field(default=None, description="Loop configuration")
+    loop_consumption: Optional[LoopConsumptionConfig] = Field(default=None, description="Loop output consumption configuration")
     idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
 
     # Prompt and execution

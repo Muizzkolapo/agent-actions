@@ -412,6 +412,10 @@ class TestNewFormatConfigHandlerIntegration:
 
     def test_tool_actions_handling(self, temp_dir):
         """Test handling of tool-type actions (kind: tool)."""
+        # Create templates directory to avoid FileNotFoundError
+        templates_dir = temp_dir / "templates"
+        templates_dir.mkdir(exist_ok=True)
+
         workflow = {
             "name": "tool_test",
             "description": "Test tool action handling",
@@ -431,10 +435,11 @@ class TestNewFormatConfigHandlerIntegration:
 
         workflow_path, default_path = self.create_test_files(temp_dir, workflow, workflow)
 
-        config_manager = ConfigManager(workflow_path, default_path)
-        config_manager.load_configs()
+        with patch('pathlib.Path.cwd', return_value=temp_dir):
+            config_manager = ConfigManager(workflow_path, default_path)
+            config_manager.load_configs()
 
-        user_agents = config_manager.get_user_agents()
+            user_agents = config_manager.get_user_agents()
 
         assert len(user_agents) == 1
         agent = user_agents[0]
@@ -442,6 +447,88 @@ class TestNewFormatConfigHandlerIntegration:
         # Should set tool-specific properties
         assert agent['model_vendor'] == 'tool'
         assert agent['model_name'] == 'custom_tool'
+
+    def test_tool_action_batch_mode_override(self, temp_dir):
+        """Test that tool actions with batch defaults get overridden to online mode."""
+        # Create templates directory to avoid FileNotFoundError
+        templates_dir = temp_dir / "templates"
+        templates_dir.mkdir(exist_ok=True)
+
+        workflow = {
+            "name": "tool_batch_test",
+            "description": "Test tool action with batch mode defaults",
+            "version": "2.0.0",
+            "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4",
+                "run_mode": "batch"  # Default to batch mode
+            },
+            "actions": [
+                {
+                    "name": "tool_action",
+                    "intent": "Tool-based action",
+                    "kind": "tool",
+                    "impl": "custom_tool",
+                    "reads": ["input"],
+                    "writes": ["output"]
+                }
+            ],
+            "plan": ["tool_action"]
+        }
+
+        workflow_path, default_path = self.create_test_files(temp_dir, workflow, workflow)
+
+        with patch('pathlib.Path.cwd', return_value=temp_dir):
+            config_manager = ConfigManager(workflow_path, default_path)
+            config_manager.load_configs()
+
+            user_agents = config_manager.get_user_agents()
+
+        assert len(user_agents) == 1
+        agent = user_agents[0]
+
+        # Tool action should have run_mode overridden to 'online' even with batch defaults
+        assert agent['model_vendor'] == 'tool'
+        assert agent['model_name'] == 'custom_tool'
+        assert agent['run_mode'] == 'online', "Tool actions should override batch mode to online"
+
+    def test_tool_action_explicit_batch_mode_raises_error(self, temp_dir):
+        """Test that explicitly setting batch mode on a tool action raises an error."""
+        # Create templates directory to avoid FileNotFoundError
+        templates_dir = temp_dir / "templates"
+        templates_dir.mkdir(exist_ok=True)
+
+        workflow = {
+            "name": "tool_batch_error_test",
+            "description": "Test tool action with explicit batch mode",
+            "version": "2.0.0",
+            "actions": [
+                {
+                    "name": "tool_action",
+                    "intent": "Tool-based action",
+                    "kind": "tool",
+                    "impl": "custom_tool",
+                    "run_mode": "batch",  # Explicitly set batch mode on tool action
+                    "reads": ["input"],
+                    "writes": ["output"]
+                }
+            ],
+            "plan": ["tool_action"]
+        }
+
+        workflow_path, default_path = self.create_test_files(temp_dir, workflow, workflow)
+
+        with patch('pathlib.Path.cwd', return_value=temp_dir):
+            config_manager = ConfigManager(workflow_path, default_path)
+            config_manager.load_configs()
+
+            # Should raise ConfigurationError when trying to get user agents
+            with pytest.raises(ConfigurationError) as exc_info:
+                config_manager.get_user_agents()
+
+        error_message = str(exc_info.value)
+        assert "kind='tool' but run_mode='batch'" in error_message
+        assert "Tool actions do not support batch processing" in error_message
 
     def test_schema_handling(self, temp_dir):
         """Test handling of output schemas in actions."""

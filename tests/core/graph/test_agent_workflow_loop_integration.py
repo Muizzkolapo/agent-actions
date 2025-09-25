@@ -51,7 +51,7 @@ class TestAgentWorkflowLoopIntegration:
             "actions": [
                 {"name": "extract", "tool": "mock_tool"},
                 {"name": "process", "tool": "mock_tool", "loop": {"param": "idx", "range": [1, 3]}},
-                {"name": "aggregate", "tool": "mock_tool"},
+                {"name": "aggregate", "tool": "mock_tool", "loop_consumption": {"source": "process", "pattern": "merge"}},
                 {"name": "validate", "tool": "mock_tool"}
             ]
         }
@@ -71,10 +71,10 @@ class TestAgentWorkflowLoopIntegration:
             mock_config_manager = MagicMock()
             mock_config_manager.agent_configs = {
                 "extract": {"agent_type": "extract", "dependencies": []},
-                "process_1": {"agent_type": "process", "dependencies": ["extract"]},
-                "process_2": {"agent_type": "process", "dependencies": ["extract"]},
-                "process_3": {"agent_type": "process", "dependencies": ["extract"]},
-                "aggregate": {"agent_type": "aggregate", "dependencies": ["process"]},
+                "process_1": {"agent_type": "process_1", "dependencies": ["extract"], "is_loop_agent": True, "loop_base_name": "process"},
+                "process_2": {"agent_type": "process_2", "dependencies": ["extract"], "is_loop_agent": True, "loop_base_name": "process"},
+                "process_3": {"agent_type": "process_3", "dependencies": ["extract"], "is_loop_agent": True, "loop_base_name": "process"},
+                "aggregate": {"agent_type": "aggregate", "dependencies": [], "loop_consumption_config": {"source": "process", "pattern": "merge"}},
                 "validate": {"agent_type": "validate", "dependencies": ["aggregate"]}
             }
             mock_config_manager.agent_config_map = MagicMock(agent_configs=mock_config_manager.agent_configs)
@@ -422,13 +422,19 @@ class TestAgentWorkflowCorrelationEdgeCases:
             "consumer": {"dependencies": ["loop"]},
         }
 
-        loop_deps = workflow.loop_correlator.detect_loop_dependencies(
+        # Add explicit loop consumption config to consumer for the new system
+        workflow.agent_configs["consumer"]["loop_consumption_config"] = {
+            "source": "loop",
+            "pattern": "merge"
+        }
+
+        loop_deps = workflow.loop_correlator.detect_explicit_loop_consumption(
             workflow.execution_order, workflow.agent_configs
         )
 
         # consumer should depend on loop_1 and loop_2
         assert "consumer" in loop_deps
-        assert set(loop_deps["consumer"]) == {"loop_1", "loop_2"}
+        assert set(loop_deps["consumer"]["loop_agents"]) == {"loop_1", "loop_2"}
 
         # process_data should not be detected as depending on loops
         assert "process_data" not in loop_deps

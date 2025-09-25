@@ -12,6 +12,7 @@ from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig
 from agent_actions.core.context.path_config import load_project_config
 from agent_actions.core.context.path_manager import PathManager
+from agent_actions.core.parser.action_expander import ActionExpander
 
 
 
@@ -114,11 +115,8 @@ class ConfigManager:
         self.child_pipeline = None
 
     def get_user_agents(self):
-        # Check if this is new format
+        # Check if this is action-based format
         if 'name' in self.user_config and 'actions' in self.user_config:
-            # New format - convert actions to agent format
-            actions = self.user_config.get('actions', [])
-
             # Load project-level defaults from agent_actions.yml
             try:
                 path_manager = PathManager()
@@ -133,78 +131,21 @@ class ConfigManager:
             workflow_defaults = self.user_config.get('defaults', {})
 
             # Create merged defaults: project < workflow (workflow overrides project)
-            defaults = {**project_defaults, **workflow_defaults}
+            merged_defaults = {**project_defaults, **workflow_defaults}
 
-            # Parse plan section to extract dependencies and planned actions
-            plan = self.user_config.get('plan', [])
-            dependencies_map = {}
-            actions_in_plan = set()
+            # Create a modified config with merged defaults for the converter
+            config_with_merged_defaults = {
+                **self.user_config,
+                'defaults': merged_defaults
+            }
 
-            for plan_item in plan:
-                if '<-' in plan_item:
-                    # Format: "action_name <- dependency1, dependency2"
-                    action_name, deps_str = plan_item.split('<-', 1)
-                    action_name = action_name.strip()
-                    deps = [dep.strip() for dep in deps_str.split(',')]
-                    dependencies_map[action_name] = deps
-                    actions_in_plan.add(action_name)
-                else:
-                    # Format: "action_name" (no dependencies)
-                    action_name = plan_item.strip()
-                    dependencies_map[action_name] = []
-                    actions_in_plan.add(action_name)
+            # Use ActionExpander to handle loop expansion and action conversion
+            agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
 
-            # Only convert actions that are mentioned in the plan
-            user_agents = []
-            for action in actions:
-                action_name = action.get('name', 'unknown')
-                if action_name not in actions_in_plan:
-                    continue  # Skip actions not in plan
-                # Convert action to agent format
-                agent = {
-                    'agent_type': action_name,
-                    'name': action_name,
-                    'model_vendor': action.get('vendor', defaults.get('vendor', 'openai')),
-                    'model_name': action.get('model', defaults.get('model', 'gpt-4')),
-                    'is_operational': True,
-                    'dependencies': dependencies_map.get(action_name, []),
-                    'granularity': action.get('granularity', defaults.get('granularity', 'record')),
-                    'run_mode': action.get('run_mode', defaults.get('run_mode', 'online')),
-                    'use_few_shot_samples': action.get('few_shot', defaults.get('few_shot', 0)),
-                    'json_mode': action.get('json_mode', defaults.get('json_mode', False)),
-                    'chunk_config': action.get('chunk_config', defaults.get('chunk_config', {}))
-                }
+            # Extract the agents list from the returned map (workflow_name -> agents)
+            workflow_name = self.user_config.get('name', 'workflow')
+            user_agents = agent_config_map.get(workflow_name, [])
 
-                # Handle tool vs LLM actions
-                if action.get('kind') == 'tool':
-                    agent['model_vendor'] = 'tool'
-                    agent['model_name'] = action.get('impl', action.get('name'))
-
-                # Add schema if present
-                if action.get('schema') or action.get('output_schema'):
-                    schema_value = action.get('schema') or action.get('output_schema')
-                    if isinstance(schema_value, str):
-                        agent['schema_name'] = schema_value
-                    else:
-                        agent['schema'] = schema_value
-
-                # Add prompt if present
-                if action.get('prompt'):
-                    agent['prompt'] = action.get('prompt')
-
-                # Add missing fields for compatibility
-                agent['parent'] = []
-                agent['side_collection'] = []
-                agent['remove_collection'] = []
-                agent['skip_if'] = None
-                agent['ephemeral'] = None
-                agent['add_dispatch'] = None
-                agent['anthropic_version'] = None
-                agent['enable_prompt_caching'] = None
-                agent['conditional_clause'] = None
-                agent['where_clause'] = None
-
-                user_agents.append(agent)
             return user_agents
         else:
             # Old format - original logic

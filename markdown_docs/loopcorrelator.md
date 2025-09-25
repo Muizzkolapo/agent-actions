@@ -297,10 +297,207 @@ ls agent_io/source/*.json
  {"source_guid": "record-2", "content": {"field_1": "value1", "field_2": "value2"}}]  # Still included!
 ```
 
+## Breaking Changes (v3.0) - Explicit Loop Consumption
+
+### New Pattern Required
+
+As of v3.0, the Loop Output Correlator requires **explicit consumption declarations**. The previous automatic dependency detection has been removed to provide better control and clarity.
+
+#### New Required Configuration
+
+Consumers must now explicitly declare loop consumption:
+
+```yaml
+- name: reconstruct_options
+  kind: tool
+  impl: qanalabs-quiz-gen.test2.apply_edited_distractors
+  loop_consumption:
+    source: "generate_distractors"
+    pattern: "merge"
+```
+
+#### What Changed
+
+**Before (Automatic Detection):**
+```yaml
+plan:
+  - generate_distractors <- generate_scenarios
+  - reconstruct_options <- generate_distractors  # Auto-detected loop dependency
+```
+
+**After (Explicit Declaration):**
+```yaml
+plan:
+  - generate_distractors <- generate_scenarios
+  - reconstruct_options  # No automatic dependency expansion
+
+actions:
+  - name: reconstruct_options
+    loop_consumption:      # REQUIRED for loop consumption
+      source: "generate_distractors"
+      pattern: "merge"
+```
+
+### Merge Pattern
+
+The system supports the `"merge"` pattern:
+
+#### `"merge"` (Default)
+Dictionary update behavior - later values overwrite earlier ones:
+```json
+{
+  "distractor_1": "Wrong answer A",
+  "distractor_2": "Wrong answer B",
+  "distractor_3": "Wrong answer C"
+}
+```
+
+### Important Behavioral Change
+
+**Without `loop_consumption` configuration**, agents now receive **standard sequential input** (output from immediately preceding agent), not merged loop outputs.
+
+**Example:**
+For execution order: `['loop_1', 'loop_2', 'loop_3', 'consumer']`
+
+- **Without loop_consumption**: `consumer` gets input from `node_2_loop_3` (only last loop's output)
+- **With loop_consumption**: `consumer` gets merged input from all loop agents
+
+### Loop Correlation IDs
+
+The system now automatically generates unique `loop_correlation_id` values for robust record correlation:
+
+#### Automatic Generation
+- When records enter loop correlation without a `loop_correlation_id`, the system automatically generates one
+- Each unique `source_guid` gets a consistent `loop_correlation_id` across all loop iterations
+- This provides more reliable correlation than relying solely on `source_guid`
+
+#### Example Flow
+```json
+// Input to loop (no correlation ID yet)
+{"source_guid": "record-1", "content": {"question": "What is 2+2?"}}
+
+// After loop correlation processing
+{"source_guid": "record-1", "loop_correlation_id": "abc-123-def", "content": {...}}
+
+// All loop iterations for this record will share the same loop_correlation_id
+```
+
+#### Benefits
+- **Reliability**: Works even if `source_guid` changes during processing
+- **Consistency**: Same record gets same correlation ID across all loops
+- **Debugging**: Easy to trace record flow through loop iterations
+- **Partial Failures**: Records missing from some loops are still properly correlated
+
+### Migration Required
+
+All workflows using loop dependencies must add explicit `loop_consumption` configuration to consuming agents. There is no automatic migration or backward compatibility.
+
+## Position-Based Loop Correlation IDs (v4.0)
+
+### The Problem Solved
+
+Previously, when multiple records shared the same `source_guid` (e.g., multiple questions from the same source), they would be incorrectly merged into a single record during loop correlation. This happened because the correlator used `source_guid` as the grouping key.
+
+### Solution: Position-Based Correlation IDs
+
+The system now generates unique `loop_correlation_id` values based on the **position** of each record in the input list, ensuring each record maintains its identity across loop iterations.
+
+#### How It Works
+
+1. **Record Processing**: When loop agents process input data, each record gets a position-based `loop_correlation_id`
+   ```python
+   # Record 0 gets: loop_correlation_id = "generate_distractors:position_0:"
+   # Record 1 gets: loop_correlation_id = "generate_distractors:position_1:"
+   # Record 2 gets: loop_correlation_id = "generate_distractors:position_2:"
+   # Record 3 gets: loop_correlation_id = "generate_distractors:position_3:"
+   ```
+
+2. **Consistent Across Loops**: The same position gets the same correlation ID in all loop iterations
+   ```python
+   # All loop iterations (1, 2, 3) assign the same correlation ID to position 0
+   ProcessorUtils.get_or_create_position_based_loop_correlation_id(0, "generate_distractors")
+   ```
+
+3. **Correlation**: Records are grouped by `loop_correlation_id` instead of `source_guid`
+   ```python
+   # Groups records by their position-based correlation ID
+   correlation_key = record_copy.get('loop_correlation_id')
+   correlation_groups[correlation_key][loop_agent] = record_copy
+   ```
+
+#### Example Flow
+
+**Input** (4 questions, same source_guid):
+```json
+[
+  {"source_guid": "same-guid", "content": {"question": "Question 1"}},
+  {"source_guid": "same-guid", "content": {"question": "Question 2"}},
+  {"source_guid": "same-guid", "content": {"question": "Question 3"}},
+  {"source_guid": "same-guid", "content": {"question": "Question 4"}}
+]
+```
+
+**After Position-Based Processing**:
+```json
+[
+  {"source_guid": "same-guid", "loop_correlation_id": "abc-123", "content": {"question": "Question 1"}},
+  {"source_guid": "same-guid", "loop_correlation_id": "def-456", "content": {"question": "Question 2"}},
+  {"source_guid": "same-guid", "loop_correlation_id": "ghi-789", "content": {"question": "Question 3"}},
+  {"source_guid": "same-guid", "loop_correlation_id": "jkl-012", "content": {"question": "Question 4"}}
+]
+```
+
+**Final Output** (all 4 questions preserved):
+```json
+[
+  {"source_guid": "same-guid", "loop_correlation_id": "abc-123", "content": {"question": "Question 1", "distractor_1": "...", "distractor_2": "...", "distractor_3": "..."}},
+  {"source_guid": "same-guid", "loop_correlation_id": "def-456", "content": {"question": "Question 2", "distractor_1": "...", "distractor_2": "...", "distractor_3": "..."}},
+  {"source_guid": "same-guid", "loop_correlation_id": "ghi-789", "content": {"question": "Question 3", "distractor_1": "...", "distractor_2": "...", "distractor_3": "..."}},
+  {"source_guid": "same-guid", "loop_correlation_id": "jkl-012", "content": {"question": "Question 4", "distractor_1": "...", "distractor_2": "...", "distractor_3": "..."}}
+]
+```
+
+### Implementation Details
+
+#### ProcessorUtils Methods
+```python
+# Generate position-based correlation ID
+ProcessorUtils.get_or_create_position_based_loop_correlation_id(
+    record_index=0,
+    loop_base_name="generate_distractors"
+)
+
+# Add correlation ID to record during processing
+ProcessorUtils.add_loop_correlation_id(
+    obj,
+    agent_config,
+    record_index=0  # Position-based when provided
+)
+```
+
+#### Loop Correlator Requirements
+- Records entering loop correlation **MUST** have `loop_correlation_id`
+- No fallback to `source_guid` - correlation fails if ID is missing
+- Correlation groups by `loop_correlation_id` exclusively
+
+#### Error Handling
+```python
+# Strict validation in loop correlator
+correlation_key = record_copy.get('loop_correlation_id')
+if not correlation_key:
+    raise ValueError(f"Loop record missing required loop_correlation_id")
+```
+
+### Benefits
+
+- **Preserves Record Identity**: Multiple records with same source_guid stay separate
+- **Consistent Correlation**: Same position correlates across all loop iterations
+- **Predictable Behavior**: Position-based IDs are deterministic and debuggable
+- **Backwards Compatible**: Falls back to source_guid-based IDs for non-loop contexts
+
 ## Future Enhancements
 
 - Support for nested loops
-- Configurable correlation keys beyond `source_guid`
 - Performance optimizations for large datasets
 - Cross-workflow correlation capabilities
 - Field conflict resolution strategies

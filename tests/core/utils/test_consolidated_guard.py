@@ -126,7 +126,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_conditional_clause(self):
         """Test that skip behavior routes to conditional_clause."""
-        from agent_actions.core.parser.format_converter import WorkflowFormatConverter
+        from agent_actions.core.parser.action_expander import ActionExpander
 
         action = {
             'name': 'test_action',
@@ -143,7 +143,7 @@ class TestFormatConverterIntegration:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(
+        result = ActionExpander._create_agent_from_action(
             action, defaults, agent, template_replacer
         )
 
@@ -153,7 +153,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_filter_behavior_to_where_clause(self):
         """Test that filter behavior routes to where_clause."""
-        from agent_actions.core.parser.format_converter import WorkflowFormatConverter
+        from agent_actions.core.parser.action_expander import ActionExpander
 
         action = {
             'name': 'test_action',
@@ -170,7 +170,7 @@ class TestFormatConverterIntegration:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(
+        result = ActionExpander._create_agent_from_action(
             action, defaults, agent, template_replacer
         )
 
@@ -183,7 +183,7 @@ class TestFormatConverterIntegration:
 
     def test_convert_skip_behavior_to_where_clause(self):
         """Test that SQL conditions with skip behavior route to where_clause with skip behavior."""
-        from agent_actions.core.parser.format_converter import WorkflowFormatConverter
+        from agent_actions.core.parser.action_expander import ActionExpander
 
         action = {
             'name': 'test_action',
@@ -200,7 +200,7 @@ class TestFormatConverterIntegration:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        result = WorkflowFormatConverter._create_agent_from_action(
+        result = ActionExpander._create_agent_from_action(
             action, defaults, agent, template_replacer
         )
 
