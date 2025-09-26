@@ -32,6 +32,10 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "test_workflow",
             "description": "Test workflow in new format",
             "version": "2.0.0",
+            "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4"
+            },
             "actions": [
                 {
                     "name": "extract_data",

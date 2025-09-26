@@ -57,8 +57,9 @@ class ActionExpander:
             Completed agent configuration
         """
         # Model configuration - with fallback defaults
-        agent['model_vendor'] = action.get('vendor', defaults.get('vendor'))
-        agent['model_name'] = action.get('model', defaults.get('model'))
+        # Support both 'vendor' (workflow/action level) and 'model_vendor' (project level)
+        agent['model_vendor'] = action.get('vendor', defaults.get('vendor', defaults.get('model_vendor')))
+        agent['model_name'] = action.get('model', defaults.get('model', defaults.get('model_name')))
         agent['api_key'] = action.get('api_key', defaults.get('api_key'))
 
         # Execution settings

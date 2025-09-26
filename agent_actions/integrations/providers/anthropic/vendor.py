@@ -21,14 +21,13 @@ class ClaudeHandler(BaseVendorHandler):
             <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
         """
         prompt_dedent: str = dedent(prompt)
-        # Prepare API call arguments
+
         api_args = {
             "model": model_name,
             "max_tokens": 1024,
             "messages": [{"role": "user", "content": prompt_dedent}]
         }
 
-        # Only add tools if schema is provided and valid
         if schema is not None:
             api_args["tools"] = schema
 
@@ -39,8 +38,14 @@ class ClaudeHandler(BaseVendorHandler):
             None
         )
         if response_content is None:
-            # Handle cases where no suitable content block is found
-            raise ValueError("No valid content with 'input' found in response")
+            text_content = next(
+                (block.text for block in response.content if hasattr(block, 'text')),
+                "No text content available"
+            )
+            raise ValueError(
+                f"No valid content with 'input' found in response. "
+                f"Claude returned text instead: {text_content[:200]}"
+            )
         return response_content
 
     @staticmethod
