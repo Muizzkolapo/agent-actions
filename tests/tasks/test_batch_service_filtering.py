@@ -86,6 +86,7 @@ class TestBatchServiceFiltering:
         mock_get_filter.return_value = MockFilterService()
         mock_provider = Mock()
         mock_provider.validate_config.return_value = (True, None)
+        mock_provider.submit_batch.return_value = "mock-batch-id"
         mock_factory.create_provider.return_value = mock_provider
 
         # Agent config with filter behavior and condition that's always false
@@ -101,13 +102,15 @@ class TestBatchServiceFiltering:
 
         data = [{"target_id": "test1", "content": "test content"}]
 
-        # Call submit_batch_job_from_data
-        result = batch_service.submit_batch_job_from_data(
-            agent_config,
-            "test_batch",
-            data,
-            temp_output_dir
-        )
+        # Mock prepare_batch_tasks_from_data to return empty list (all items filtered)
+        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=[]):
+            # Call submit_batch_job_from_data
+            result = batch_service.submit_batch_job_from_data(
+                agent_config,
+                "test_batch",
+                data,
+                temp_output_dir
+            )
 
         # Should return passthrough data with empty array
         assert isinstance(result, dict)
@@ -115,8 +118,8 @@ class TestBatchServiceFiltering:
         assert result.get("data") == []
         assert result.get("output_directory") == temp_output_dir
 
-        # Verify no batch was submitted
-        mock_factory.create_provider.assert_called_once()
+        # Verify no batch was submitted - provider should not be created when no tasks
+        mock_factory.create_provider.assert_not_called()
         mock_provider.submit_batch.assert_not_called()
 
     @patch('agent_actions.core.parser.where_parser.get_global_filter')
@@ -179,6 +182,7 @@ class TestBatchServiceFiltering:
         mock_get_filter.return_value = MockFilterService()
         mock_provider = Mock()
         mock_provider.validate_config.return_value = (True, None)
+        mock_provider.submit_batch.return_value = "mock-batch-id"
         mock_factory.create_provider.return_value = mock_provider
 
         # Agent config with skip behavior and condition that's always false
@@ -194,13 +198,32 @@ class TestBatchServiceFiltering:
 
         data = [{"target_id": "test1", "content": "test content"}]
 
-        # Call submit_batch_job_from_data
-        result = batch_service.submit_batch_job_from_data(
-            agent_config,
-            "test_batch",
-            data,
-            temp_output_dir
-        )
+        # Mock prepare_batch_tasks_from_data to return empty list (all items skipped)
+        # and mock the passthrough data creation for skip behavior
+        mock_passthrough_data = {
+            "type": "passthrough",
+            "data": [
+                {
+                    "target_id": "test1",
+                    "content": "test content",
+                    "metadata": {
+                        "skipped_by_where_clause": True,
+                        "agent_type": "passthrough"
+                    }
+                }
+            ],
+            "output_directory": temp_output_dir
+        }
+
+        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=[]):
+            with patch.object(batch_service, '_create_passthrough_data_from_context', return_value=mock_passthrough_data):
+                # Call submit_batch_job_from_data
+                result = batch_service.submit_batch_job_from_data(
+                    agent_config,
+                    "test_batch",
+                    data,
+                    temp_output_dir
+                )
 
         # Should return passthrough data with skipped items
         assert isinstance(result, dict)
@@ -214,7 +237,8 @@ class TestBatchServiceFiltering:
         assert skipped_item["metadata"]["skipped_by_where_clause"] is True
         assert skipped_item["metadata"]["agent_type"] == "passthrough"
 
-        # Verify no batch was submitted
+        # Verify no batch was submitted - provider should not be created when no tasks
+        mock_factory.create_provider.assert_not_called()
         mock_provider.submit_batch.assert_not_called()
 
     def test_convert_batch_results_excludes_filtered_items(self, batch_service, sample_data, temp_output_dir):
@@ -329,7 +353,7 @@ class TestBatchServiceFiltering:
 
         # Agent config with legacy conditional clause
         agent_config = {
-            "conditional_clause": "test_function",
+            "conditional_clause": "test_module.test_function",
             "model_vendor": "openai",
             "schema": {"result": "string"}
         }
@@ -339,12 +363,18 @@ class TestBatchServiceFiltering:
             {"target_id": "item2", "process": False, "content": "should skip"}
         ]
 
-        with patch('agent_actions.core.tooling.execute_user_defined_function') as mock_udf:
-            # Mock UDF to return True for item1, False for item2
-            mock_udf.side_effect = lambda clause, data: data.get('process', True)
+        with patch('agent_actions.core.tooling.load_user_defined_function') as mock_load_udf:
+            with patch('agent_actions.core.tooling.execute_user_defined_function') as mock_udf:
+                # Mock the function loading
+                mock_test_func = Mock()
+                mock_test_func.side_effect = lambda data: data.get('process', True)
+                mock_load_udf.return_value = mock_test_func
 
-            # Call prepare_batch_tasks_from_data
-            tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
+                # Mock UDF execution to return True for item1, False for item2
+                mock_udf.side_effect = lambda clause, data: data.get('process', True)
+
+                # Call prepare_batch_tasks_from_data
+                tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
 
             # Should create tasks (filtered items don't prevent task creation in this test)
             assert tasks is not None

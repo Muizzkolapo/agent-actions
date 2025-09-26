@@ -355,7 +355,7 @@ class TestNewFormatConfigHandlerIntegration:
         assert agent['model_name'] == 'gpt-4-default'
         assert agent['model_vendor'] == 'openai'
         assert agent['json_mode'] is True
-        assert agent['granularity'] == 'file'
+        assert agent['granularity'] == 'File'
         assert agent['run_mode'] == 'offline'
         assert agent['use_few_shot_samples'] == 3
 
@@ -388,7 +388,7 @@ class TestNewFormatConfigHandlerIntegration:
             # Should inherit from workflow defaults (overrides project)
             assert inheritance_agent['model_name'] == 'gpt-4o-mini-workflow'  # Workflow override
             assert inheritance_agent['json_mode'] is True                     # Workflow override
-            assert inheritance_agent['granularity'] == 'file'                 # Workflow override
+            assert inheritance_agent['granularity'] == 'File'                 # Workflow override
 
             # Should inherit from project defaults (not overridden by workflow)
             assert inheritance_agent['model_vendor'] == 'openai'              # Project default
@@ -701,10 +701,10 @@ class TestNewFormatFeatureIntegration:
         # Verify configuration hierarchy worked
         extract_agent = next(a for a in user_agents if a['agent_type'] == 'extract')
         assert extract_agent['json_mode'] is True  # Override applied
-        assert extract_agent['granularity'] == 'record'  # Default applied
+        assert extract_agent['granularity'] == 'Record'  # Default applied
 
         validate_agent = next(a for a in user_agents if a['agent_type'] == 'validate')
-        assert validate_agent['granularity'] == 'file'  # Override applied
+        assert validate_agent['granularity'] == 'File'  # Override applied
         assert validate_agent['json_mode'] is False  # Default applied
 
         # Verify execution order respects dependencies

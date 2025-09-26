@@ -56,14 +56,20 @@ class ActionExpander:
         Returns:
             Completed agent configuration
         """
-        # Model configuration
+        # Model configuration - with fallback defaults
         agent['model_vendor'] = action.get('vendor', defaults.get('vendor'))
         agent['model_name'] = action.get('model', defaults.get('model'))
+        agent['api_key'] = action.get('api_key', defaults.get('api_key'))
 
         # Execution settings
         agent['is_operational'] = is_operational
-        agent['run_mode'] = defaults.get('run_mode', 'online')
-        agent['use_few_shot_samples'] = action.get('few_shot', 0)
+        # Set run_mode from action first, then defaults - needed for tool validation
+        run_mode = action.get('run_mode', defaults.get('run_mode', 'online'))
+        agent['run_mode'] = run_mode
+        agent['use_few_shot_samples'] = action.get('few_shot', defaults.get('few_shot', 0))
+
+        # Configuration settings
+        agent['json_mode'] = action.get('json_mode', defaults.get('json_mode', False))
 
         # Schema handling - apply template replacement
         schema_value = action.get('schema') or action.get('output_schema')
@@ -125,7 +131,7 @@ class ActionExpander:
             agent['model_name'] = action.get('impl', action.get('name'))
 
             # Tool actions cannot use batch mode - override to online
-            if agent.get('run_mode') == 'batch':
+            if run_mode == 'batch':
                 # Check if batch was explicitly set on this action (not inherited)
                 if action.get('run_mode') == 'batch':
                     from agent_actions.cli.exceptions import ConfigurationError
@@ -139,7 +145,7 @@ class ActionExpander:
                 agent['run_mode'] = 'online'
 
         # Granularity
-        granularity = action.get('granularity', defaults.get('granularity'))
+        granularity = action.get('granularity', defaults.get('granularity', 'record'))
         if granularity:
             agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
 
@@ -162,8 +168,17 @@ class ActionExpander:
         agent['dependencies'] = []
         agent['parent'] = []
 
-        # Default empty collections
-        agent['chunk_config'] = {}
+        # Chunk configuration
+        chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
+        if chunk_config:
+            agent['chunk_config'] = chunk_config
+        else:
+            # Build from individual chunk settings
+            agent['chunk_config'] = {}
+            if action.get('chunk_size') or defaults.get('chunk_size'):
+                agent['chunk_config']['chunk_size'] = action.get('chunk_size', defaults.get('chunk_size', 300))
+            if action.get('chunk_overlap') or defaults.get('chunk_overlap'):
+                agent['chunk_config']['chunk_overlap'] = action.get('chunk_overlap', defaults.get('chunk_overlap', 10))
         agent['skip_if'] = None
         agent['ephemeral'] = None
         agent['add_dispatch'] = None
@@ -221,6 +236,10 @@ class ActionExpander:
             action_name = action.get('name')
             is_in_plan = action_name in actions_in_plan
 
+            # Skip actions not in the plan entirely
+            if not is_in_plan:
+                continue
+
             # Check if this action has a loop configuration
             loop_config = action.get('loop')
             if loop_config:
@@ -272,7 +291,7 @@ class ActionExpander:
                 agent['agent_type'] = action.get('name', 'unknown')
                 agent['name'] = action.get('name')
 
-                agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_in_plan))
+                agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=True))
 
         # Extract dependencies from plan
         plan = action_config.get('plan', [])

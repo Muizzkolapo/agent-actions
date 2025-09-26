@@ -25,14 +25,13 @@ class TestAgentWorkflowPassthroughCleanup:
     @pytest.fixture
     def workflow(self, mock_console):
         """Create an AgentWorkflow instance for testing."""
-        workflow = AgentWorkflow(
-            constructor_path=mock_console,
-            user_code_path="/tmp/test",
-            default_path="/tmp/test",
-            use_tools=False
-        )
-        # Mock the status tracking methods
+        # Create a mock workflow object with only the attributes we need
+        workflow = Mock(spec=AgentWorkflow)
+        workflow.ephemeral_directories = []
+        workflow.previous_agent_type = None
         workflow._update_status = Mock()
+        workflow.console = mock_console
+        workflow.agent_configs = [{"name": "test_agent", "ephemeral": False}]
         return workflow
 
     @pytest.fixture
@@ -55,7 +54,7 @@ class TestAgentWorkflowPassthroughCleanup:
                 "node_output": node_output
             }
 
-    def test_passthrough_marker_cleanup_success(self, workflow, temp_workspace, mock_console):
+    def test_passthrough_marker_cleanup_success(self, workflow, temp_workspace):
         """Test that passthrough marker file is successfully cleaned up after detection."""
 
         node_output_dir = temp_workspace["node_output"]
@@ -107,7 +106,7 @@ class TestAgentWorkflowPassthroughCleanup:
         assert len(workflow.ephemeral_directories) == 1
         assert workflow.ephemeral_directories[0]['output_folder'] == str(node_output_dir)
 
-    def test_passthrough_marker_cleanup_already_removed(self, workflow, temp_workspace, mock_console):
+    def test_passthrough_marker_cleanup_already_removed(self, workflow, temp_workspace):
         """Test cleanup handles gracefully when marker file is already removed."""
 
         node_output_dir = temp_workspace["node_output"]

@@ -125,6 +125,7 @@ class TestAgentWorkflowLoopIntegration:
 
             test_data = [{
                 "source_guid": "test-1",
+                "loop_correlation_id": "test-correlation-1",
                 "content": {f"field_{i}": f"value_{i}"}
             }]
 
@@ -233,6 +234,7 @@ class TestAgentWorkflowLoopIntegration:
 
             test_data = [{
                 "source_guid": "test-1",
+                "loop_correlation_id": "test-correlation-1",
                 "content": {f"field_{i}": f"value_{i}"}
             }]
 
@@ -265,6 +267,7 @@ class TestAgentWorkflowLoopIntegration:
 
             test_data = [{
                 "source_guid": "test-1",
+                "loop_correlation_id": "test-correlation-1",
                 "content": {f"field_{i}": f"value_{i}"}
             }]
 
@@ -290,6 +293,7 @@ class TestAgentWorkflowLoopIntegration:
             for filename in files:
                 test_data = [{
                     "source_guid": f"{filename}-guid",
+                    "loop_correlation_id": f"{filename}-correlation",
                     "content": {f"field_{i}": f"{filename}-value_{i}"}
                 }]
 
