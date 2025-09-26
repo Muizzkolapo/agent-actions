@@ -509,6 +509,13 @@ class AgentWorkflow:
                         workflow_complete = True
                         self.console.print(f"\n[green]All items filtered by conditional clause - passthrough data processed for '{agent_name}'.[/green]")
                         self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
+
+                        # Cleanup: Remove marker file to prevent interference with subsequent file processing
+                        try:
+                            passthrough_marker.unlink()
+                        except FileNotFoundError:
+                            pass  # Already removed, ignore
+
                         continue
                     else:
                         self._update_status(agent_name, 'failed')

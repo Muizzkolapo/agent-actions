@@ -89,6 +89,61 @@ class BatchService:
         # Return a special marker indicating this is passthrough data
         return {"type": "passthrough", "data": processed_data, "output_directory": output_directory}
 
+    def _create_passthrough_data_from_context(self, agent_config, output_directory):
+        """
+        Create passthrough data from context map, respecting filter statuses.
+        Only items marked as 'skipped' will be included as passthrough.
+        """
+        # Extract node index from output directory (e.g., "node_0_summary")
+        node_idx = None
+        if output_directory:
+            import re
+            match = re.search(r'node_(\d+)_(\w+)', str(output_directory))
+            if match:
+                node_idx = int(match.group(1))
+
+        processed_data = []
+
+        for custom_id, original_row in self.context_map.items():
+            filter_status = original_row.get("_batch_filter_status", "included")
+
+            if filter_status == "skipped":
+                # Only pass through items that were skipped (not filtered)
+                target_id = original_row.get("target_id", custom_id)
+                original_source_guid = original_row.get("source_guid", target_id)
+
+                # Create a passthrough item that preserves all original data
+                passthrough_item = original_row.copy()
+
+                # Remove internal metadata before output
+                passthrough_item.pop("_batch_filter_status", None)
+
+                # Ensure required fields are set
+                if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+                    passthrough_item['target_id'] = target_id
+                if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+                    passthrough_item['source_guid'] = original_source_guid
+
+                # Add node_id and lineage tracking for consistency
+                if node_idx is not None:
+                    item_node_id = ProcessorUtils.generate_node_id(node_idx)
+                    passthrough_item["node_id"] = item_node_id
+
+                    # Use ProcessorUtils for lineage tracking
+                    passthrough_item["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
+
+                # Add metadata to indicate this was skipped by WHERE clause
+                passthrough_item["metadata"] = {
+                    "skipped_by_where_clause": True,
+                    "agent_type": "passthrough",
+                    "reason": "where_clause_not_matched"
+                }
+
+                processed_data.append(passthrough_item)
+
+        # Return the same format as regular passthrough data (workflow expects this)
+        return {"type": "passthrough", "data": processed_data, "output_directory": output_directory}
+
     def _save_task_source(self, src_text, file_path, base_directory, output_directory):
         """
         Save or merge a single task's source data into the appropriate file in the source directory.
@@ -333,7 +388,7 @@ class BatchService:
         
         # Prepare data for the provider
         prepared_data = []
-        
+
         for row in data:
             # Always use target_id as the custom_id; if missing, generate a new UUID and assign it
             custom_id = row.get("target_id")
@@ -342,7 +397,10 @@ class BatchService:
                 row["target_id"] = custom_id
 
             # Store the full row to preserve source_guid and other metadata
-            self.context_map[custom_id] = row
+            # Add metadata to track filtering behavior
+            row_with_meta = row.copy()
+            row_with_meta["_batch_filter_status"] = "included"  # Default status
+            self.context_map[custom_id] = row_with_meta
 
             # Extract the actual content from wrapped structure for processing
             # This ensures dispatch functions receive the same data structure as online mode
@@ -377,37 +435,121 @@ class BatchService:
                             where_clause_config["clause"]
                         )
 
-                        logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")
-                        if filter_result.error:
-                            logger.warning(f"Filter error: {filter_result.error}")
+                        # Handle both FilterResult objects and boolean returns
+                        if hasattr(filter_result, 'success'):
+                            # FilterResult object
+                            logger.info(f"Filter result - success: {filter_result.success}, matched: {filter_result.matched}")
+                            if filter_result.error:
+                                logger.warning(f"Filter error: {filter_result.error}")
 
-                        if not filter_result.success:
-                            # Handle filter error based on configuration
-                            passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
-                            if not passthrough_on_error:
+                            if not filter_result.success:
+                                # Handle filter error based on configuration
+                                passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                                if not passthrough_on_error:
+                                    should_skip = True
+                                    # Mark as filtered on error when passthrough_on_error=False
+                                    if custom_id in self.context_map:
+                                        self.context_map[custom_id]["_batch_filter_status"] = "filtered"
+                                    logger.info("Filtering item due to filter error and passthrough_on_error=False")
+                                # If passthrough_on_error is True, continue processing
+                            elif not filter_result.matched:
+                                # Item doesn't match WHERE clause - filter it out
                                 should_skip = True
-                                logger.info("Filtering item due to filter error and passthrough_on_error=False")
-                            # If passthrough_on_error is True, continue processing
-                        elif not filter_result.matched:
-                            # Item doesn't match WHERE clause - filter it out
-                            should_skip = True
-                            logger.info(f"Filtering item - WHERE clause not matched")
+                                # Mark this item as filtered in context map
+                                if custom_id in self.context_map:
+                                    self.context_map[custom_id]["_batch_filter_status"] = "filtered"
+                                logger.info(f"Filtering item - WHERE clause not matched")
+                        else:
+                            # Boolean result (legacy or simplified filter)
+                            matched = bool(filter_result)
+                            logger.info(f"Filter result (boolean): {matched}")
+
+                            if not matched:
+                                # Item doesn't match WHERE clause - filter it out
+                                should_skip = True
+                                # Mark this item as filtered in context map
+                                if custom_id in self.context_map:
+                                    self.context_map[custom_id]["_batch_filter_status"] = "filtered"
+                                logger.info(f"Filtering item - WHERE clause not matched (boolean result)")
 
                     except Exception as e:
                         logger.warning(f"Error in WHERE clause evaluation: {e}")
                         passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
                         if not passthrough_on_error:
                             should_skip = True
-                else:
-                    # Skip behavior - let agent-level processing handle this
-                    logger.info(f"WHERE clause with skip behavior detected - will be handled at agent level")
-                    # Don't process where clause here, let it go to the agent
+                            # Mark as filtered on error when passthrough_on_error=False
+                            if custom_id in self.context_map:
+                                self.context_map[custom_id]["_batch_filter_status"] = "filtered"
+                elif behavior == "skip":
+                    # Process skip behavior at batch level (same filtering as filter behavior)
+                    try:
+                        filter_service = get_global_filter()
+
+                        # Debug logging
+                        logger.info(f"WHERE clause skipping: '{where_clause_config['clause']}'")
+                        logger.info(f"Row content keys: {list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict'}")
+                        if isinstance(row_content, dict) and 'questionable' in row_content:
+                            logger.info(f"Row questionable value: {row_content['questionable']}")
+
+                        filter_result = filter_service.filter_item(
+                            row_content,
+                            where_clause_config["clause"]
+                        )
+
+                        # Handle both FilterResult objects and boolean returns
+                        if hasattr(filter_result, 'success'):
+                            # FilterResult object
+                            logger.info(f"Skip filter result - success: {filter_result.success}, matched: {filter_result.matched}")
+                            if filter_result.error:
+                                logger.warning(f"Skip filter error: {filter_result.error}")
+
+                            if not filter_result.success:
+                                # Handle filter error based on configuration
+                                passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                                if not passthrough_on_error:
+                                    should_skip = True
+                                    # Mark as skipped on error when passthrough_on_error=False
+                                    if custom_id in self.context_map:
+                                        self.context_map[custom_id]["_batch_filter_status"] = "skipped"
+                                    logger.info("Skipping item due to filter error and passthrough_on_error=False")
+                                # If passthrough_on_error is True, continue processing
+                            elif not filter_result.matched:
+                                # Item doesn't match WHERE clause - skip it (don't send to batch)
+                                should_skip = True
+                                # Mark this item as skipped in context map
+                                if custom_id in self.context_map:
+                                    self.context_map[custom_id]["_batch_filter_status"] = "skipped"
+                                logger.info(f"Skipping item - WHERE clause not matched")
+                        else:
+                            # Boolean result (legacy or simplified filter)
+                            matched = bool(filter_result)
+                            logger.info(f"Skip filter result (boolean): {matched}")
+
+                            if not matched:
+                                # Item doesn't match WHERE clause - skip it (don't send to batch)
+                                should_skip = True
+                                # Mark this item as skipped in context map
+                                if custom_id in self.context_map:
+                                    self.context_map[custom_id]["_batch_filter_status"] = "skipped"
+                                logger.info(f"Skipping item - WHERE clause not matched (boolean result)")
+
+                    except Exception as e:
+                        logger.warning(f"Error in WHERE clause evaluation: {e}")
+                        passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                        if not passthrough_on_error:
+                            should_skip = True
+                            # Mark as skipped on error when passthrough_on_error=False
+                            if custom_id in self.context_map:
+                                self.context_map[custom_id]["_batch_filter_status"] = "skipped"
             
             # Legacy conditional clause support (deprecated but maintained for backwards compatibility)
             elif conditional_clause and not execute_user_defined_function(
                 conditional_clause, row_content
             ):
                 should_skip = True
+                # Mark as skipped (not filtered) for legacy conditional clause
+                if custom_id in self.context_map:
+                    self.context_map[custom_id]["_batch_filter_status"] = "skipped"
             
             # Handle filtering behavior
             if should_skip:
@@ -453,12 +595,29 @@ class BatchService:
                 print(f"Found existing in-flight batch job for {batch_name}: {existing_batch_id}")
                 print("Skipping new batch submission. Use --batch_continue to process completed batches.")
                 return existing_batch_id
-        
+
         tasks = self.prepare_batch_tasks_from_data(agent_config, data)
         if not tasks:
-            print("No batch tasks to submit. All items filtered out by conditional clause.")
-            # Return passthrough data when no tasks are created
-            return self._create_passthrough_data(data, agent_config, output_directory)
+            print("No batch tasks to submit. All items filtered out by WHERE clause or conditional clause.")
+
+            # Check behavior type - but always return the same format the workflow expects
+            where_clause_config = agent_config.get("where_clause")
+            if where_clause_config:
+                behavior = where_clause_config.get("behavior", "filter")
+                if behavior == "filter":
+                    # For filter behavior, return empty passthrough data
+                    print("Filter behavior detected - returning empty result set.")
+                    return {"type": "passthrough", "data": [], "output_directory": output_directory}
+                elif behavior == "skip":
+                    # For skip behavior, return skipped items as passthrough
+                    print("Skip behavior detected - returning skipped items as passthrough.")
+                    return self._create_passthrough_data_from_context(agent_config, output_directory)
+                else:
+                    # Unknown behavior, default to passthrough
+                    return self._create_passthrough_data(data, agent_config, output_directory)
+            else:
+                # Legacy conditional clause - return passthrough data
+                return self._create_passthrough_data(data, agent_config, output_directory)
 
         # Save context map before submitting
         self._save_context_map(self.context_map, agent_config, output_directory, batch_name)
@@ -961,38 +1120,48 @@ class BatchService:
                 processed_custom_ids.add(custom_id)
         #===end here===#
         
-        # Process records that were filtered out by conditional clause
+        # Process records that were skipped (not filtered) by conditional clause
         # These are in context_map but not in batch_results
         for custom_id, original_row in context_map.items():
             if custom_id not in processed_custom_ids:
-                # This record was skipped due to conditional clause
-                # Pass it through unmodified to maintain the full data flow
-                original_source_guid = original_row.get("source_guid", custom_id)
-                
-                # Create a passthrough item that preserves all original data
-                passthrough_item = original_row.copy()
-                
-                # Ensure required fields are set
-                if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
-                    passthrough_item['target_id'] = custom_id
-                if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
-                    passthrough_item['source_guid'] = original_source_guid
-                
-                # Add node_id and lineage tracking for consistency
-                if node_idx is not None:
-                    item_node_id = ProcessorUtils.generate_node_id(node_idx)
-                    passthrough_item["node_id"] = item_node_id
-                    
-                    # Use ProcessorUtils for lineage tracking
-                    passthrough_item["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
-                
-                # Add metadata to indicate this was skipped by conditional
-                passthrough_item["metadata"] = {
-                    "skipped_by_conditional": True,
-                    "agent_type": "passthrough"
-                }
-                
-                processed_data.append(passthrough_item)
+                # Check filter status to determine if we should include this item
+                filter_status = original_row.get("_batch_filter_status", "included")
+
+                if filter_status == "filtered":
+                    # Items with filter behavior should be completely excluded from output
+                    continue
+                elif filter_status in ["skipped", "included"]:
+                    # This record was skipped (not filtered) due to conditional clause
+                    # Pass it through unmodified to maintain the full data flow
+                    original_source_guid = original_row.get("source_guid", custom_id)
+
+                    # Create a passthrough item that preserves all original data
+                    passthrough_item = original_row.copy()
+
+                    # Remove internal metadata before output
+                    passthrough_item.pop("_batch_filter_status", None)
+
+                    # Ensure required fields are set
+                    if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
+                        passthrough_item['target_id'] = custom_id
+                    if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
+                        passthrough_item['source_guid'] = original_source_guid
+
+                    # Add node_id and lineage tracking for consistency
+                    if node_idx is not None:
+                        item_node_id = ProcessorUtils.generate_node_id(node_idx)
+                        passthrough_item["node_id"] = item_node_id
+
+                        # Use ProcessorUtils for lineage tracking
+                        passthrough_item["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
+
+                    # Add metadata to indicate this was skipped by conditional
+                    passthrough_item["metadata"] = {
+                        "skipped_by_conditional": True,
+                        "agent_type": "passthrough"
+                    }
+
+                    processed_data.append(passthrough_item)
         
         return processed_data
 
