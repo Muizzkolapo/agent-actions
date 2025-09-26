@@ -10,6 +10,9 @@ from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingEr
 from agent_actions.core.parser.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig
+from agent_actions.core.context.path_config import load_project_config
+from agent_actions.core.context.path_manager import PathManager
+from agent_actions.core.parser.action_expander import ActionExpander
 
 
 
@@ -34,7 +37,10 @@ class ConfigManager:
     def load_configs(self):
         try:
             config_data = render_pipeline_with_templates(self.constructor_path, self.template_dir)
-            self.user_config = yaml.safe_load(config_data)
+            loaded_config = yaml.safe_load(config_data)
+
+            # Expect new format only
+            self.user_config = loaded_config
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(f"Error rendering or loading user config from {self.constructor_path}: {e}") from e
         except yaml.YAMLError as e:
@@ -69,14 +75,19 @@ class ConfigManager:
     def find_agent_name(self,config: Dict[str, Any]) -> str:
         """
         Find the name of the agent from the configuration.
-        
+
         Args:
             config: Agent configuration dictionary
-            
+
         Returns:
             str: Name of the agent
         """
-        return next(iter(config)) 
+        # Check if this is new format
+        if 'name' in config and 'actions' in config:
+            return config['name']
+        else:
+            # Old format - return first key (workflow name)
+            return next(iter(config)) 
     
     def validate_agent_name(self):
         self.agent_name = self.find_agent_name(self.user_config)
@@ -86,19 +97,64 @@ class ConfigManager:
             raise ValueError(error_msg)
 
     def check_child_pipeline(self):
-        for item in self.user_config[self.agent_name]:
-            if isinstance(item, dict) and 'child' in item:
-                self.child_pipeline = item['child'][0]
-                return
+        # Check if this is new format
+        if 'name' in self.user_config and 'actions' in self.user_config:
+            # New format - check actions for child pipelines
+            actions = self.user_config.get('actions', [])
+            for action in actions:
+                if isinstance(action, dict) and 'child' in action:
+                    self.child_pipeline = action['child'][0]
+                    return
+        else:
+            # Old format - original logic
+            agent_list = self.user_config.get(self.agent_name, [])
+            for item in agent_list:
+                if isinstance(item, dict) and 'child' in item:
+                    self.child_pipeline = item['child'][0]
+                    return
         self.child_pipeline = None
 
     def get_user_agents(self):
-        agents_section = self.user_config[self.agent_name]
-        if 'agents' in agents_section:
-            user_agents = agents_section['agents']
+        # Check if this is action-based format
+        if 'name' in self.user_config and 'actions' in self.user_config:
+            # Load project-level defaults from agent_actions.yml
+            try:
+                path_manager = PathManager()
+                project_root = path_manager.get_project_root()
+                project_config = load_project_config(project_root)
+                project_defaults = project_config.get('default_agent_config', {})
+            except Exception:
+                # If project config can't be loaded, continue without it
+                project_defaults = {}
+
+            # Get workflow-level defaults
+            workflow_defaults = self.user_config.get('defaults', {})
+
+            # Create merged defaults: project < workflow (workflow overrides project)
+            merged_defaults = {**project_defaults, **workflow_defaults}
+
+            # Create a modified config with merged defaults for the converter
+            config_with_merged_defaults = {
+                **self.user_config,
+                'defaults': merged_defaults
+            }
+
+            # Use ActionExpander to handle loop expansion and action conversion
+            agent_config_map = ActionExpander.expand_actions_to_agents(config_with_merged_defaults)
+
+            # Extract the agents list from the returned map (workflow_name -> agents)
+            workflow_name = self.user_config.get('name', 'workflow')
+            user_agents = agent_config_map.get(workflow_name, [])
+
+            return user_agents
         else:
-            user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
-        return user_agents
+            # Old format - original logic
+            agents_section = self.user_config[self.agent_name]
+            if 'agents' in agents_section:
+                user_agents = agents_section['agents']
+            else:
+                user_agents = [agent for agent in agents_section if isinstance(agent, dict) and 'agent_type' in agent]
+            return user_agents
 
     def merge_agent_configs(self, user_agents: List[Dict[str, Any]]) -> None:
         default_model = DefaultAgentConfig.model_validate(

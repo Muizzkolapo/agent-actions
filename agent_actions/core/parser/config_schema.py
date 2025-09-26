@@ -9,6 +9,12 @@ class FilterScope(str, Enum):
     AGENT = "agent"
 
 
+class WhereClauseBehavior(str, Enum):
+    """Behavior when WHERE clause condition fails."""
+    SKIP = "skip"    # Records pass through with metadata
+    FILTER = "filter"  # Records are removed entirely
+
+
 class WhereClauseConfig(BaseModel):
     """Configuration for WHERE clause filtering."""
     
@@ -32,6 +38,10 @@ class WhereClauseConfig(BaseModel):
     cache_enabled: bool = Field(
         default=True,
         description="Enable caching of parsed WHERE clauses for performance"
+    )
+    behavior: WhereClauseBehavior = Field(
+        default=WhereClauseBehavior.FILTER,
+        description="Behavior when condition fails: 'skip' (passthrough) or 'filter' (remove)"
     )
     
     @field_validator('clause')

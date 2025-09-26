@@ -16,6 +16,7 @@ from agent_actions.artifacts.manifest import ManifestArtifact
 from agent_actions.core.contracts.base import SecurityError as ArtifactSecurityError
 from agent_actions.core.context import context as artifact_context
 from agent_actions.core.parser.where_parser import WhereClauseParser
+from agent_actions.core.graph.loop_correlator import LoopOutputCorrelator
 
 from rich.console import Console
 
@@ -133,6 +134,10 @@ class AgentWorkflow:
         self.batch_service = BatchService()
         self.where_parser = WhereClauseParser()
 
+        # Initialize loop correlator for parallel map-reduce support
+        agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+        self.loop_correlator = LoopOutputCorrelator(agent_folder)
+
         self.status_file = Path(self.agent_runner.get_agent_folder(self.agent_name)) / ".agent_status.json"
         self._load_status()
 
@@ -212,10 +217,88 @@ class AgentWorkflow:
 
     def _get_input_directory(self, idx: int) -> str:
         agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
+
         if idx == 0:
             return str(agent_folder / "staging")
+
+        # Check if current agent needs loop correlation
+        current_agent = self.execution_order[idx]
+
+        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
+            self.execution_order, self.agent_configs
+        )
+
+        if current_agent in loop_consumption_map:
+            # Use correlated input for agents with explicit loop consumption
+            consumption_config = loop_consumption_map[current_agent]
+            loop_sources = consumption_config['loop_agents']
+            pattern = consumption_config['pattern']
+
+            correlated_dir = self.loop_correlator.prepare_correlated_input(
+                current_agent, loop_sources, idx
+            )
+
+            if correlated_dir:
+                self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources (pattern: {pattern})[/blue]")
+                return correlated_dir
+            else:
+                self.console.print(f"[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, falling back to standard input[/yellow]")
+
+        # Standard input directory (existing behavior)
         prev_agent = self.execution_order[idx - 1]
         return str(agent_folder / "target" / f"node_{idx-1}_{prev_agent}")
+
+    def _setup_correlation_if_needed(self, idx: int):
+        """
+        Set up correlation for agents that depend on loop outputs by temporarily
+        overriding the AgentRunner's setup_directories method.
+        """
+        current_agent = self.execution_order[idx]
+        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
+            self.execution_order, self.agent_configs
+        )
+
+        if current_agent in loop_consumption_map:
+            # This agent needs correlation - override setup_directories
+            consumption_config = loop_consumption_map[current_agent]
+            loop_sources = consumption_config['loop_agents']
+            pattern = consumption_config['pattern']
+
+            # Store original method
+            original_setup_directories = self.agent_runner.setup_directories
+
+            def correlation_setup_directories(agent_folder, agent_config, previous_agent_type, agent_idx):
+                # Use correlation logic for input directory
+                correlated_dir = self.loop_correlator.prepare_correlated_input(
+                    current_agent, loop_sources, agent_idx
+                )
+
+                if correlated_dir:
+                    self.console.print(f"[blue]🔗 Using correlated input for {current_agent} from {len(loop_sources)} loop sources (pattern: {pattern})[/blue]")
+                    input_directory = correlated_dir
+                else:
+                    self.console.print(f"[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, falling back to standard input[/yellow]")
+                    # Fall back to original logic
+                    input_dir, output_dir = original_setup_directories(agent_folder, agent_config, previous_agent_type, agent_idx)
+                    input_directory = input_dir
+
+                # Set up output directory normally
+                from pathlib import Path
+                indexed_agent_type = f"node_{agent_idx}_{agent_config['agent_type']}"
+                output_directory = Path(agent_folder) / 'target' / indexed_agent_type
+                output_directory.mkdir(parents=True, exist_ok=True)
+
+                return str(input_directory), str(output_directory)
+
+            # Temporarily replace the method
+            self.agent_runner.setup_directories = correlation_setup_directories
+
+            # Store a reference to restore it later
+            self._original_setup_directories = original_setup_directories
+        else:
+            # Restore original method if it was overridden
+            if hasattr(self, '_original_setup_directories'):
+                self.agent_runner.setup_directories = self._original_setup_directories
 
     def _get_previous_outputs(self, idx: int) -> Dict[str, Any]:
         outputs: Dict[str, Any] = {}
@@ -369,6 +452,9 @@ class AgentWorkflow:
                 agent_error_occurred = False
                 
                 try:
+                    # Check if this agent needs custom input directory for loop correlation
+                    self._setup_correlation_if_needed(idx)
+
                     output_folder = self.agent_runner.run_agent(
                         agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
                     )
@@ -423,6 +509,13 @@ class AgentWorkflow:
                         workflow_complete = True
                         self.console.print(f"\n[green]All items filtered by conditional clause - passthrough data processed for '{agent_name}'.[/green]")
                         self.console.print(f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
+
+                        # Cleanup: Remove marker file to prevent interference with subsequent file processing
+                        try:
+                            passthrough_marker.unlink()
+                        except FileNotFoundError:
+                            pass  # Already removed, ignore
+
                         continue
                     else:
                         self._update_status(agent_name, 'failed')

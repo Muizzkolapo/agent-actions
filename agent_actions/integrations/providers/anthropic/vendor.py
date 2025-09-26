@@ -9,9 +9,10 @@ from agent_actions.core.constants import MODEL_NAME_KEY
 
 class ClaudeHandler(BaseVendorHandler):
     @staticmethod
-    def call_json(api_key: Optional[str], agent_config: Dict[str, Any], 
-                  prompt_config: Dict[str, Any], context_data: Dict[str, Any], 
+    def call_json(api_key: Optional[str], agent_config: Dict[str, Any],
+                  prompt_config: Dict[str, Any], context_data: Dict[str, Any],
                   schema: Optional[Dict[str, Any]]) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+
         model_name: str = agent_config[MODEL_NAME_KEY]
         client = anthropic.Anthropic(api_key=api_key)
         context_data_str: str = StringProcessor.process_as_string(context_data)
@@ -19,21 +20,32 @@ class ClaudeHandler(BaseVendorHandler):
             <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>
             <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>
         """
-        prompt_dedent: str = dedent(prompt)      
-        response = client.messages.create(
-            model=model_name,
-            max_tokens=1024,
-            tools= schema,
-            messages=[{"role": "user", "content":prompt_dedent}]
-        )
+        prompt_dedent: str = dedent(prompt)
+
+        api_args = {
+            "model": model_name,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt_dedent}]
+        }
+
+        if schema is not None:
+            api_args["tools"] = schema
+
+        response = client.messages.create(**api_args)
 
         response_content: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = next(
             (block.input for block in response.content if hasattr(block, 'input')),
             None
         )
         if response_content is None:
-            # Handle cases where no suitable content block is found
-            raise ValueError("No valid content with 'input' found in response")
+            text_content = next(
+                (block.text for block in response.content if hasattr(block, 'text')),
+                "No text content available"
+            )
+            raise ValueError(
+                f"No valid content with 'input' found in response. "
+                f"Claude returned text instead: {text_content[:200]}"
+            )
         return response_content
 
     @staticmethod
