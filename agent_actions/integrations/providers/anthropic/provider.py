@@ -636,17 +636,6 @@ class AnthropicBatchProvider(BatchProvider):
                 "description": "Structured response"
             }
     
-    def get_supported_models(self) -> List[str]:
-        """List of Anthropic models that support batch processing."""
-        return [
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-sonnet-20240620", 
-            "claude-3-5-haiku-20241022",
-            "claude-3-opus-20240229",
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
-        ]
-    
     def supports_schema_validation(self) -> bool:
         """
         Whether Anthropic supports JSON schema validation.
@@ -679,10 +668,5 @@ class AnthropicBatchProvider(BatchProvider):
         enable_prompt_caching = agent_config.get("enable_prompt_caching")
         if enable_prompt_caching is not None and not isinstance(enable_prompt_caching, bool):
             return False, "enable_prompt_caching must be a boolean"
-        
-        # Validate model name is supported
-        model_name = agent_config.get('model_name')
-        if model_name and model_name not in self.get_supported_models():
-            return False, f"Model '{model_name}' is not supported by Anthropic batch processing. Supported models: {', '.join(self.get_supported_models())}"
         
         return True, None

@@ -390,16 +390,6 @@ class GeminiBatchProvider(BatchProvider):
         # Gemini expects the schema directly in OpenAPI/JSON Schema format
         return schema_dict
     
-    def get_supported_models(self) -> List[str]:
-        """List of Gemini models that support batch processing."""
-        return [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
-            "gemini-2.5-pro",
-            "gemini-2.0-flash",
-            "gemini-2.0-flash-preview-image-generation"
-        ]
-    
     def supports_schema_validation(self) -> bool:
         """Gemini supports native schema validation via response_schema."""
         return True
@@ -414,8 +404,5 @@ class GeminiBatchProvider(BatchProvider):
         if model_name:
             # Store for use in submit_batch
             self._last_model_name = model_name
-            
-            if model_name not in self.get_supported_models():
-                return False, f"Model '{model_name}' not supported by Gemini batch API"
-        
+
         return True, None

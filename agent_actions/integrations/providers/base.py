@@ -217,16 +217,14 @@ class BatchProvider(ABC):
     def validate_config(self, agent_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         """
         Validate that the agent configuration is compatible with this provider.
-        
+
+        Model validation is delegated to the API provider itself, which will
+        return appropriate errors for invalid model names.
+
         Args:
             agent_config: Agent configuration to validate
-            
+
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Default implementation - providers can override for specific validation
-        model_name = agent_config.get('model_name')
-        if model_name and self.get_supported_models():
-            if model_name not in self.get_supported_models():
-                return False, f"Model '{model_name}' not supported by this provider"
         return True, None
