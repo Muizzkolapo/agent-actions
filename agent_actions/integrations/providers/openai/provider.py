@@ -313,23 +313,7 @@ class OpenAIBatchProvider(BatchProvider):
         """Compile schema to OpenAI's format."""
         # Use the existing compile_unified_schema function
         return compile_unified_schema(schema_dict, 'openai')
-    
-    def get_supported_models(self) -> List[str]:
-        """List of OpenAI models that support batch processing."""
-        return [
-            "gpt-4o",
-            "gpt-4o-mini", 
-            "gpt-4-turbo",
-            "gpt-4-turbo-preview",
-            "gpt-3.5-turbo",
-            "gpt-3.5-turbo-16k",
-            "gpt-4.1-mini",
-            "gpt-4.1",
-            "gpt-5-mini",
-            "gpt-5-nano",
-            "gpt-5"
-        ]
-    
+
     def supports_schema_validation(self) -> bool:
         """OpenAI supports JSON schema validation."""
         return True
