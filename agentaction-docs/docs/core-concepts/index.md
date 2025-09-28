@@ -267,6 +267,7 @@ Dive deeper into specific concepts:
 - **[Agents Guide](./agents.md)** - Learn about agent configuration and best practices
 - **[Workflow Design](./workflows.md)** - Master DAG patterns and execution
 - **[Schema Validation](./schemas.md)** - Design effective JSON schemas
+- **[Custom Tokenizers](./tokenizers.md)** - Implement custom text chunking logic
 
 Or explore practical applications:
 

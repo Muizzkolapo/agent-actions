@@ -52,6 +52,9 @@ dev = [
     "ipython>=8.0.0",
     "ipdb>=0.13.0",
 ]
+nlp = [
+    "spacy>=3.0.0",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -37,8 +37,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
             chunk_size = chunk_config.get("chunk_size", 1000)
             chunk_overlap = chunk_config.get("overlap", 200)
-            tokenizer_model = agent_config.get("tokenizer_model", "cl100k_base")
-            split_method = agent_config.get("split_method", "tiktoken")
+            tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
+            split_method = chunk_config.get("split_method", "tiktoken")
             chunks = Tokenizer.split_text_content(
                 content, chunk_size, chunk_overlap, tokenizer_model=tokenizer_model, split_method=split_method
             )
@@ -156,8 +156,8 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
         chunk_size = chunk_config.get("chunk_size", 1000)
         chunk_overlap = chunk_config.get("overlap", 200)
-        tokenizer_model = agent_config.get("tokenizer_model", "cl100k_base")
-        split_method = agent_config.get("split_method", "tiktoken")
+        tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
+        split_method = chunk_config.get("split_method", "tiktoken")
         chunks = Tokenizer.split_text_content(
             content, chunk_size, chunk_overlap, tokenizer_model=tokenizer_model, split_method=split_method
         )

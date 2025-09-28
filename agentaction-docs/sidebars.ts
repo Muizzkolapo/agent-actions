@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'core-concepts/agents',
         'core-concepts/workflows',
         'core-concepts/schemas',
+        'core-concepts/tokenizers',
       ],
     },
     // Future categories can be added here
