@@ -176,8 +176,10 @@ class ConfigManager:
             merged_dict = {**default_agent_config}
             for key, value in agent_dict.items():
                 if key == 'chunk_config' and isinstance(value, dict):
-                    # Deep merge chunk_config
-                    default_chunk = merged_dict.get(key, {})
+                    # Deep merge chunk_config - ensure default_chunk is always a dict
+                    default_chunk = merged_dict.get(key)
+                    if not isinstance(default_chunk, dict):
+                        default_chunk = {}
                     merged_dict[key] = {**default_chunk, **value}
                 else:
                     merged_dict[key] = value

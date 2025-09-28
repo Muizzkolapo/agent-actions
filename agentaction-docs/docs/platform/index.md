@@ -188,25 +188,23 @@ Build once, use across multiple workflows:
 ## Getting Started with the Platform
 
 1. **[Project Structure](./project-structure.md)** - Organize for platform approach
-2. **[Component Library](../components/index.md)** - Build reusable pieces
-3. **[Multiple Workflows](../workflows/creating-workflows.md)** - Create different pipeline types
-4. **[Examples](../examples/content-generation-platform.md)** - Learn from real implementations
+2. **[Examples](../examples/index.md)** - Learn from real implementations and configurations
 
 ## Platform Examples
 
-### Complex Production Pipeline
-**15-agent content generation platform** with extraction, validation, transformation, and output generation.
+### Educational Quiz Generation Pipeline
+**15-step educational content processing workflow** with fact extraction, clustering, validation, and quiz generation.
 
-[→ See full implementation](../examples/content-generation-platform.md)
+[→ See full implementation](../examples/configurations/index.md)
 
-### Multi-Workflow Project
-**Single platform supporting**:
-- Content extraction workflows
-- Data validation pipelines
-- Quality assurance processes
-- Batch processing systems
+### Advanced Configuration Patterns
+**Production-ready examples featuring**:
+- Additive defaults for maintainable configurations
+- Loop actions for complex generation tasks
+- Quality validation and processing pipelines
+- Modern workflow architecture patterns
 
-[→ Learn the patterns](../examples/multi-workflow-project.md)
+[→ Explore configurations](../examples/index.md)
 
 ---
 

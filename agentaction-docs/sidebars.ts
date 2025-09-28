@@ -39,13 +39,21 @@ const sidebars: SidebarsConfig = {
         'core-concepts/tokenizers',
       ],
     },
-    // Future categories can be added here
-    /*
     {
       type: 'category',
       label: 'Examples',
-      items: ['examples/basic', 'examples/advanced'],
+      collapsed: false,
+      items: [
+        'examples/index',
+        {
+          type: 'category',
+          label: 'Configuration Examples',
+          items: ['examples/configurations/index'],
+        },
+      ],
     },
+    // Future categories can be added here
+    /*
     {
       type: 'category',
       label: 'API Reference',

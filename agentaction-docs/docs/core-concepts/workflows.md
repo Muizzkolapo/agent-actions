@@ -366,21 +366,96 @@ defaults:
 actions:
   - name: action1
     schema: {output: string}
-    # Inherits: drops=[internal_id, temp_metadata]
-    #           observe=[user_id, request_id, timestamp]
+    # Uses defaults: drops=[internal_id, temp_metadata]
+    #                observe=[user_id, request_id, timestamp]
     prompt: "Process data"
 
   - name: action2
     schema: {output: string}
-    drops: [different_field]              # Overrides defaults
-    observe: [correlation_id]             # Overrides defaults
+    drops: [different_field]              # Extends defaults
+    observe: [correlation_id]             # Extends defaults
     prompt: "Process more data"
+    # Final result: drops=[internal_id, temp_metadata, different_field]
+    #               observe=[user_id, request_id, timestamp, correlation_id]
+
+  - name: action3
+    schema: {output: string}
+    drops: [internal_id, special_field]   # Extends with deduplication
+    observe: [user_id, session_id]        # Extends with deduplication
+    prompt: "Process final data"
+    # Final result: drops=[internal_id, temp_metadata, special_field]
+    #               observe=[user_id, request_id, timestamp, session_id]
 ```
 
 **Inheritance Rules:**
 - Actions **inherit** `drops` and `observe` from defaults
-- Action-level values **completely override** defaults (no merging)
-- Same pattern as other default fields (`vendor`, `model`, `json_mode`, etc.)
+- Action-level values are **additive** - they extend defaults rather than replace them
+- Duplicate fields are automatically removed (first occurrence preserved)
+- Order is preserved: defaults first, then unique action-level additions
+- Other default fields (`vendor`, `model`, `json_mode`, etc.) still follow replacement behavior
+
+#### Benefits of Additive Behavior
+
+The additive approach for `drops` and `observe` provides significant advantages:
+
+**🎯 Composability**: Build workflows by incrementally adding field controls
+```yaml
+defaults:
+  observe: [id, url, platform_name, exam_name]  # Core tracking fields
+  drops: [temp_metadata, processing_flags]      # Common noise
+
+actions:
+  - name: extract_facts
+    observe: [page_content, bloom_details]      # Add domain-specific context
+    drops: [topic]                              # Add action-specific exclusion
+    # Result: observe=[id, url, platform_name, exam_name, page_content, bloom_details]
+    #         drops=[temp_metadata, processing_flags, topic]
+```
+
+**📝 Maintainability**: Define common patterns once, extend only where needed
+```yaml
+# Educational content workflow
+defaults:
+  observe: [document_id, source_platform, exam_type]
+  drops: [raw_html, debug_info]
+
+actions:
+  - name: extract_questions    # Uses defaults + specific additions
+    observe: [question_metadata]
+
+  - name: generate_answers     # Uses defaults + different additions
+    observe: [answer_context]
+
+  - name: validate_quality     # Uses only defaults
+    # No additional drops/observe needed
+```
+
+**🔄 Migration Friendly**: Easy to refactor existing workflows
+```yaml
+# Before: Each action had full field lists
+actions:
+  - name: action1
+    drops: [temp_data, debug_info, action1_specific]
+    observe: [id, url, platform, action1_metadata]
+
+  - name: action2
+    drops: [temp_data, debug_info, action2_specific]
+    observe: [id, url, platform, action2_metadata]
+
+# After: Extract common patterns to defaults
+defaults:
+  drops: [temp_data, debug_info]
+  observe: [id, url, platform]
+
+actions:
+  - name: action1
+    drops: [action1_specific]     # Only unique additions
+    observe: [action1_metadata]
+
+  - name: action2
+    drops: [action2_specific]     # Only unique additions
+    observe: [action2_metadata]
+```
 
 :::info Migration Note
 **Deprecated: `reads` and `writes` fields**

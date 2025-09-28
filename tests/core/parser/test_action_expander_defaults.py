@@ -32,8 +32,8 @@ class TestActionExpanderDefaults:
         assert result['remove_collection'] == ['internal_id', 'temp_metadata']
         assert result['side_collection'] == ['user_id', 'request_id', 'timestamp']
 
-    def test_action_level_drops_observe_override_defaults(self):
-        """Test that action-level drops/observe completely override defaults."""
+    def test_action_level_drops_observe_extend_defaults(self):
+        """Test that action-level drops/observe extend defaults additively."""
         action = {
             'name': 'test_action',
             'intent': 'Test action with own drops/observe',
@@ -55,12 +55,12 @@ class TestActionExpanderDefaults:
 
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
-        # Should use action-level values, not defaults
-        assert result['remove_collection'] == ['action_field']
-        assert result['side_collection'] == ['action_metadata']
+        # Should combine defaults + action-level values
+        assert result['remove_collection'] == ['default_field', 'action_field']
+        assert result['side_collection'] == ['default_metadata', 'action_metadata']
 
-    def test_empty_action_level_drops_observe_override_defaults(self):
-        """Test that empty action-level drops/observe still override defaults."""
+    def test_empty_action_level_drops_observe_with_defaults(self):
+        """Test that empty action-level drops/observe combined with defaults results in just defaults."""
         action = {
             'name': 'test_action',
             'intent': 'Test action with empty drops/observe',
@@ -82,9 +82,9 @@ class TestActionExpanderDefaults:
 
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
-        # Should use empty action-level values, not defaults
-        assert result['remove_collection'] == []
-        assert result['side_collection'] == []
+        # Should use defaults since empty + defaults = defaults
+        assert result['remove_collection'] == ['default_field']
+        assert result['side_collection'] == ['default_metadata']
 
     def test_no_defaults_drops_observe_uses_empty_lists(self):
         """Test that when no defaults are provided, empty lists are used."""
@@ -244,6 +244,33 @@ class TestActionExpanderDefaults:
         assert result['remove_collection'] == ['test_field']
         assert result['side_collection'] == ['test_metadata']
 
+    def test_additive_behavior_with_deduplication(self):
+        """Test that additive behavior removes duplicates while preserving order."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test deduplication',
+            'vendor': 'openai',
+            'model': 'gpt-4o-mini',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt',
+            'drops': ['shared_field', 'action_field'],
+            'observe': ['shared_metadata', 'action_metadata']
+        }
+
+        defaults = {
+            'drops': ['default_field', 'shared_field'],
+            'observe': ['default_metadata', 'shared_metadata']
+        }
+
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should combine with deduplication (defaults first, then unique action fields)
+        assert result['remove_collection'] == ['default_field', 'shared_field', 'action_field']
+        assert result['side_collection'] == ['default_metadata', 'shared_metadata', 'action_metadata']
+
 
 class TestActionExpanderFullWorkflow:
     """Test full workflow expansion with defaults."""
@@ -291,10 +318,10 @@ class TestActionExpanderFullWorkflow:
         assert action1['remove_collection'] == ['internal_id', 'temp_data']
         assert action1['side_collection'] == ['user_id', 'session_id']
 
-        # Second action should use its own values
+        # Second action should combine defaults + its own values
         action2 = next(a for a in agents if a['name'] == 'action2')
-        assert action2['remove_collection'] == ['other_field']
-        assert action2['side_collection'] == ['correlation_id']
+        assert action2['remove_collection'] == ['internal_id', 'temp_data', 'other_field']
+        assert action2['side_collection'] == ['user_id', 'session_id', 'correlation_id']
 
 
 if __name__ == "__main__":
