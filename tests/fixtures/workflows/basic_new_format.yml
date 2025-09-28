@@ -6,20 +6,16 @@ actions:
   - name: extract_data
     intent: Extract structured data from content
     kind: llm
-    reads:
-      - content
-    writes:
-      - extracted_data
     prompt: "Extract data from the content"
+    schema:
+      extracted_data: string
 
   - name: process_data
     intent: Process extracted data
     kind: llm
-    reads:
-      - extracted_data
-    writes:
-      - processed_data
     prompt: "Process the extracted data"
+    schema:
+      processed_data: string
 
 plan:
   - extract_data

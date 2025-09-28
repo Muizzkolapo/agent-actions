@@ -189,13 +189,17 @@ class ProcessorUtils:
     def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
         """
         Apply remove_collection transformations consistently.
-        
+
+        remove_collection (from config 'drops') specifies fields that should be:
+        - Excluded from the LLM prompt
+        - Removed from the final output
+
         Args:
             contents: Content to transform
             agent_config: Agent configuration containing remove_collection
-            
+
         Returns:
-            Transformed content
+            Transformed content with removed fields
         """
         remove_collection = agent_config.get("remove_collection", [])
         if remove_collection and isinstance(contents, dict):
@@ -212,16 +216,20 @@ class ProcessorUtils:
     ) -> List:
         """
         Apply side_collection logic to generated data consistently.
-        
+
+        side_collection (from config 'observe') specifies fields that should be:
+        - Excluded from the LLM prompt
+        - Included in the final output (passthrough from context)
+
         Args:
             data: Generated data list
-            context_data: Context data dictionary
+            context_data: Context data dictionary containing observe fields
             source_guid: Source GUID
-            agent_config: Agent configuration
+            agent_config: Agent configuration containing side_collection
             idx: Index for node generation
-            
+
         Returns:
-            Transformed data list
+            Transformed data list with side_collection fields merged
         """
         # Ensure data is a list for consistent processing
         if not isinstance(data, list):

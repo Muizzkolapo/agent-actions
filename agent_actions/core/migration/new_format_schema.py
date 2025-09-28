@@ -48,10 +48,8 @@ class ActionConfig(BaseModel):
 
     # Schema and data handling
     output_schema: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Output schema", alias="schema")
-    reads: List[str] = Field(default_factory=list, description="Fields to read from input")
-    writes: List[str] = Field(default_factory=list, description="Fields to write to output")
-    drops: List[str] = Field(default_factory=list, description="Fields to drop from output")
-    observe: List[str] = Field(default_factory=list, description="Fields to observe but not consume")
+    drops: List[str] = Field(default_factory=list, description="Fields to exclude from LLM prompt and final output")
+    observe: List[str] = Field(default_factory=list, description="Fields to exclude from LLM prompt but include in output (passthrough)")
 
     # Execution settings
     granularity: Optional[Granularity] = Field(default=None, description="Execution granularity")
@@ -96,6 +94,8 @@ class DefaultsConfig(BaseModel):
     json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
     granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
     run_mode: Optional[str] = Field(default=None, description="Default run mode")
+    drops: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt and output")
+    observe: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt but include in output")
 
 
 class DependencyEdge(BaseModel):

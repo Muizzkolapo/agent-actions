@@ -257,6 +257,159 @@ workflow:
 # }
 ```
 
+### Field-Level Data Flow Control
+
+Control precisely which fields are exposed to the LLM and which appear in the output using `drops` and `observe`:
+
+#### `drops` - Hide from LLM and Output
+
+Fields in `drops` are:
+- **Excluded from the LLM prompt** (not visible to the model)
+- **Removed from the action's output** (not passed to next actions)
+
+Use `drops` for:
+- Sensitive internal metadata
+- Temporary processing fields
+- Fields that should not propagate
+
+```yaml
+actions:
+  - name: extract_facts
+    schema: candidate_facts_list
+    drops: [id, url, internal_metadata]
+    # id, url, internal_metadata won't be sent to LLM
+    # and won't appear in output
+    prompt: $fact_extraction
+```
+
+#### `observe` - Hide from LLM, Pass to Output
+
+Fields in `observe` are:
+- **Excluded from the LLM prompt** (not visible to the model)
+- **Included in the action's output** (passed through to next actions)
+
+Use `observe` for:
+- Context fields needed downstream but not for processing
+- Passthrough metadata
+- Correlation IDs and tracking information
+
+```yaml
+actions:
+  - name: classify_content
+    schema: {content_type: string, confidence: number}
+    observe: [document_id, timestamp, source_url]
+    # document_id, timestamp, source_url hidden from LLM
+    # but passed through to output for next actions
+    prompt: "Classify the content type"
+```
+
+#### Schema Defines Output Fields
+
+The `schema` field defines what the LLM **generates**:
+
+```yaml
+actions:
+  - name: analyze_sentiment
+    schema: {sentiment: string, score: number}
+    observe: [user_id, session_id]
+    drops: [temp_token_count]
+```
+
+**Data Flow:**
+1. **Input**: Contains all fields from previous action
+2. **LLM Prompt**: Excludes `observe` and `drops` fields
+3. **LLM Output**: Only fields defined in `schema`
+4. **Action Output**: `schema` fields + `observe` fields (passthrough)
+
+#### Complete Example
+
+```yaml
+actions:
+  - name: extract_entities
+    intent: "Extract named entities from text"
+    schema: entity_list
+    drops: [page_metadata, processing_flags]
+    observe: [document_id, created_at, source_type]
+    prompt: |
+      Extract all named entities from the following text.
+      Return a structured list of entities with their types.
+
+  - name: classify_entities
+    intent: "Classify extracted entities by category"
+    schema: entity_classification
+    observe: [document_id, created_at]  # Still available from previous action
+    drops: [source_type]  # No longer needed
+    prompt: |
+      Classify the following entities into categories.
+      Entities: {entity_list}
+      # document_id, created_at not visible here
+      # but will be in output
+```
+
+**Key Benefits:**
+- ✅ **Reduce prompt size** by excluding unnecessary fields
+- ✅ **Preserve context** for downstream actions with `observe`
+- ✅ **Clean up** temporary data with `drops`
+- ✅ **Explicit control** over what LLM sees vs what propagates
+
+#### Using Defaults for Common Fields
+
+Both `drops` and `observe` can be defined in workflow `defaults` to apply across all actions:
+
+```yaml
+defaults:
+  vendor: openai
+  model: gpt-4o-mini
+  drops: [internal_id, temp_metadata]     # Applied to all actions
+  observe: [user_id, request_id, timestamp]  # Applied to all actions
+
+actions:
+  - name: action1
+    schema: {output: string}
+    # Inherits: drops=[internal_id, temp_metadata]
+    #           observe=[user_id, request_id, timestamp]
+    prompt: "Process data"
+
+  - name: action2
+    schema: {output: string}
+    drops: [different_field]              # Overrides defaults
+    observe: [correlation_id]             # Overrides defaults
+    prompt: "Process more data"
+```
+
+**Inheritance Rules:**
+- Actions **inherit** `drops` and `observe` from defaults
+- Action-level values **completely override** defaults (no merging)
+- Same pattern as other default fields (`vendor`, `model`, `json_mode`, etc.)
+
+:::info Migration Note
+**Deprecated: `reads` and `writes` fields**
+
+Previous versions included `reads` and `writes` fields in action configuration. These are now **deprecated** and should be removed:
+
+- ❌ **`reads`**: No longer needed - all input fields are automatically available
+- ❌ **`writes`**: Replaced by `schema` - which defines LLM output fields
+
+**Before (Deprecated):**
+```yaml
+actions:
+  - name: analyze
+    reads: [text, metadata]
+    writes: [sentiment, score]
+    drops: [temp_data]
+```
+
+**After (Current):**
+```yaml
+actions:
+  - name: analyze
+    schema: {sentiment: string, score: number}
+    drops: [temp_data]
+```
+
+The `schema` field now fully replaces `writes` by defining what the LLM generates, while all input fields are implicitly available unless excluded via `drops` or `observe`.
+:::
+
 ## Execution Control
 
 ### Parallel Optimization
