@@ -94,6 +94,8 @@ class DefaultsConfig(BaseModel):
     json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
     granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
     run_mode: Optional[str] = Field(default=None, description="Default run mode")
+    drops: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt and output")
+    observe: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt but include in output")
 
 
 class DependencyEdge(BaseModel):

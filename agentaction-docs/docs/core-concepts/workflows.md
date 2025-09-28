@@ -352,6 +352,36 @@ actions:
 - ✅ **Clean up** temporary data with `drops`
 - ✅ **Explicit control** over what LLM sees vs what propagates
 
+#### Using Defaults for Common Fields
+
+Both `drops` and `observe` can be defined in workflow `defaults` to apply across all actions:
+
+```yaml
+defaults:
+  vendor: openai
+  model: gpt-4o-mini
+  drops: [internal_id, temp_metadata]     # Applied to all actions
+  observe: [user_id, request_id, timestamp]  # Applied to all actions
+
+actions:
+  - name: action1
+    schema: {output: string}
+    # Inherits: drops=[internal_id, temp_metadata]
+    #           observe=[user_id, request_id, timestamp]
+    prompt: "Process data"
+
+  - name: action2
+    schema: {output: string}
+    drops: [different_field]              # Overrides defaults
+    observe: [correlation_id]             # Overrides defaults
+    prompt: "Process more data"
+```
+
+**Inheritance Rules:**
+- Actions **inherit** `drops` and `observe` from defaults
+- Action-level values **completely override** defaults (no merging)
+- Same pattern as other default fields (`vendor`, `model`, `json_mode`, etc.)
+
 :::info Migration Note
 **Deprecated: `reads` and `writes` fields**
 
