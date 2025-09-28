@@ -160,12 +160,30 @@ class ActionExpander:
             # - observe -> side_collection: Fields excluded from LLM prompt but included in output (passthrough)
             # - drops -> remove_collection: Fields excluded from LLM prompt AND from output
             # Note: Schema defines LLM output fields (replaces deprecated 'writes')
-            # Both observe and drops inherit from defaults, following same pattern as other fields
-            observe = template_replacer(action.get('observe', defaults.get('observe', [])))
-            drops = template_replacer(action.get('drops', defaults.get('drops', [])))
+            # Both observe and drops are ADDITIVE - action-level fields extend defaults rather than replace them
 
-            agent['side_collection'] = observe if isinstance(observe, list) else [observe]
-            agent['remove_collection'] = drops if isinstance(drops, list) else [drops]
+            # Get defaults and action-level fields
+            defaults_observe = defaults.get('observe', [])
+            defaults_drops = defaults.get('drops', [])
+            action_observe = action.get('observe', [])
+            action_drops = action.get('drops', [])
+
+            # Ensure all are lists
+            defaults_observe = defaults_observe if isinstance(defaults_observe, list) else [defaults_observe]
+            defaults_drops = defaults_drops if isinstance(defaults_drops, list) else [defaults_drops]
+            action_observe = action_observe if isinstance(action_observe, list) else [action_observe]
+            action_drops = action_drops if isinstance(action_drops, list) else [action_drops]
+
+            # Combine additively (defaults + action-specific) with deduplication
+            combined_observe = list(dict.fromkeys(defaults_observe + action_observe))  # Preserves order, removes duplicates
+            combined_drops = list(dict.fromkeys(defaults_drops + action_drops))
+
+            # Apply template replacement to combined results
+            observe = template_replacer(combined_observe)
+            drops = template_replacer(combined_drops)
+
+            agent['side_collection'] = observe
+            agent['remove_collection'] = drops
 
         # Dependencies - will be populated from plan
         agent['dependencies'] = []

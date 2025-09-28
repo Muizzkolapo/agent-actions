@@ -1,6 +1,74 @@
 # Changes
 
-## Conditional Reprompting Feature Implementation (August 2025)
+## Additive Defaults for `drops` and `observe` Fields (September 2024)
+
+### Overview
+Changed inheritance behavior for `drops` and `observe` fields from **replacement** to **additive**, making workflow configurations more composable and maintainable.
+
+### Breaking Change Details
+
+**Previous Behavior (Replacement):**
+```yaml
+defaults:
+  drops: [temp_data, debug_info]
+  observe: [id, url]
+
+actions:
+  - name: test_action
+    drops: [specific_field]     # Result: [specific_field] (replaced defaults)
+    observe: [metadata]         # Result: [metadata] (replaced defaults)
+```
+
+**New Behavior (Additive):**
+```yaml
+defaults:
+  drops: [temp_data, debug_info]
+  observe: [id, url]
+
+actions:
+  - name: test_action
+    drops: [specific_field]     # Result: [temp_data, debug_info, specific_field]
+    observe: [metadata]         # Result: [id, url, metadata]
+```
+
+### Key Features
+
+**✅ Deduplication**: Duplicate fields are automatically removed (preserves first occurrence)
+**✅ Order Preservation**: Defaults appear first, then unique action-level additions
+**✅ Backward Compatible**: Actions without `drops`/`observe` still inherit defaults
+**✅ Template Support**: Template replacement works on combined results
+
+### Benefits
+
+1. **Composability**: Build workflows by incrementally adding field controls
+2. **Maintainability**: Define common patterns once, extend only where needed
+3. **Migration Friendly**: Easy to refactor existing workflows by extracting common patterns
+
+### Implementation Details
+
+- Modified `ActionExpander._create_agent_from_action()` in `agent_actions/core/parser/action_expander.py`
+- Updated test suite in `tests/core/parser/test_action_expander_defaults.py`
+- Updated documentation in `agentaction-docs/docs/core-concepts/workflows.md`
+- Other default fields (`vendor`, `model`, `json_mode`, etc.) remain replacement-based
+
+### Migration Guide
+
+**No action required** - existing workflows continue to work, but now benefit from additive behavior:
+
+- Actions with no `drops`/`observe` → unchanged (inherit defaults)
+- Actions with `drops`/`observe` → now extend defaults instead of replacing them
+
+**To restore old replacement behavior** (if needed), specify complete field lists:
+```yaml
+# If you need replacement behavior, include all desired fields explicitly
+actions:
+  - name: action_with_replacement
+    drops: [field1, field2]  # Complete list, no inheritance desired
+```
+
+---
+
+## Conditional Reprompting Feature Implementation (August 2024)
 
 ### Overview
 Complete implementation of conditional reprompting system that validates LLM outputs and automatically retries with improved prompts when validation fails. This feature transforms agent-actions from a "one-shot" system to an intelligent, self-improving system.
