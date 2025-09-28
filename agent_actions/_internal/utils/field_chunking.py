@@ -97,41 +97,29 @@ class FieldAnalyzer:
         return token_count > threshold
 
     def detect_text_fields(self, record: Dict[str, Any]) -> List[str]:
-        """Automatically detect text fields using patterns and size heuristics."""
+        """
+        Automatically detect text fields based on content size.
+
+        Returns all string fields that could potentially need chunking.
+        The actual chunking decision is made by should_chunk_field() based on token count.
+        """
         if not self.auto_detect_enabled:
             return []
-        
+
         detected_fields = []
-        patterns = self.auto_detection.get("patterns", [])
-        size_thresholds = self.auto_detection.get("size_thresholds", [])
-        
+
+        # Auto-detect all string fields (filtering happens in should_chunk_field)
         for field_name, value in record.items():
             if not isinstance(value, str):
                 continue
-                
+
             # Skip if already in preserve_fields
             if field_name in self.preserve_fields:
                 continue
-                
-            field_detected = False
-            
-            # Check pattern-based detection
-            for pattern_config in patterns:
-                pattern = pattern_config.get("pattern", "")
-                if self._matches_pattern(field_name, pattern):
-                    detected_fields.append(field_name)
-                    field_detected = True
-                    break
-            
-            # Check size-based detection if not detected by pattern
-            if not field_detected and size_thresholds:
-                char_count = len(value)
-                for size_config in size_thresholds:
-                    min_chars = size_config.get("min_chars", 0)
-                    if char_count >= min_chars:
-                        detected_fields.append(field_name)
-                        break
-        
+
+            # Add all string fields - threshold check happens later
+            detected_fields.append(field_name)
+
         return detected_fields
     
     def _matches_pattern(self, field_name: str, pattern: str) -> bool:
@@ -159,33 +147,9 @@ class FieldAnalyzer:
         field_chunking = self.chunk_config.get("field_chunking", {})
         if field_chunking.get("enabled") and not self.chunk_fields and not self.auto_detect_enabled:
             errors.append("chunk_fields must be specified when field_chunking is enabled and auto_detection is disabled")
-        
-        # Validate auto_detection configuration
-        if self.auto_detect_enabled:
-            patterns = self.auto_detection.get("patterns", [])
-            size_thresholds = self.auto_detection.get("size_thresholds", [])
-            
-            # Validate patterns
-            for i, pattern_config in enumerate(patterns):
-                if not isinstance(pattern_config, dict):
-                    errors.append(f"auto_detection.patterns[{i}] must be a dictionary")
-                    continue
-                    
-                if "pattern" not in pattern_config:
-                    errors.append(f"auto_detection.patterns[{i}] must have a 'pattern' field")
-                elif not isinstance(pattern_config["pattern"], str):
-                    errors.append(f"auto_detection.patterns[{i}].pattern must be a string")
-            
-            # Validate size thresholds
-            for i, size_config in enumerate(size_thresholds):
-                if not isinstance(size_config, dict):
-                    errors.append(f"auto_detection.size_thresholds[{i}] must be a dictionary")
-                    continue
-                    
-                if "min_chars" not in size_config:
-                    errors.append(f"auto_detection.size_thresholds[{i}] must have a 'min_chars' field")
-                elif not isinstance(size_config["min_chars"], int) or size_config["min_chars"] < 0:
-                    errors.append(f"auto_detection.size_thresholds[{i}].min_chars must be a non-negative integer")
+
+        # Auto-detection no longer requires patterns or size_thresholds
+        # It will detect all string fields and use chunk_threshold to decide what to chunk
         
         # Validate field_rules
         if self.field_rules:
@@ -329,7 +293,7 @@ class FieldChunker:
         overlap = field_rule.get("overlap", self.overlap)
         tokenizer_model = field_rule.get("tokenizer_model", self.tokenizer_model)
         split_method = field_rule.get("split_method", self.split_method)
-        
+
         return Tokenizer.split_text_content(
             field_value,
             chunk_size,

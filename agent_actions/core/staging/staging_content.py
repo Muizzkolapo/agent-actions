@@ -61,12 +61,12 @@ class StagingContentLoader:
             agent_config = getattr(self.prompt_processor, 'agent_config', {})
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
         field_chunking_config = chunk_config.get('field_chunking', {})
-        
+
         if field_chunking_config.get('enabled') and isinstance(processed_content, list):
             # Apply field chunking in online mode
             field_chunker = FieldChunker(chunk_config)
             field_analyzer = FieldAnalyzer(chunk_config)
-            
+
             chunked_content = []
             for idx, record in enumerate(processed_content):
                 analysis = field_analyzer.analyze_record(record)

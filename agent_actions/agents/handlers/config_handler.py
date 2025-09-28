@@ -170,7 +170,18 @@ class ConfigManager:
 
             agent_type = agent_model.agent_type
             # Merge default config with agent-specific config
-            merged_dict = {**default_agent_config, **agent_model.model_dump(exclude_unset=True)}
+            agent_dict = agent_model.model_dump(exclude_unset=True)
+
+            # Deep merge for nested configs like chunk_config
+            merged_dict = {**default_agent_config}
+            for key, value in agent_dict.items():
+                if key == 'chunk_config' and isinstance(value, dict):
+                    # Deep merge chunk_config
+                    default_chunk = merged_dict.get(key, {})
+                    merged_dict[key] = {**default_chunk, **value}
+                else:
+                    merged_dict[key] = value
+
             # Create a validated AgentConfig from the merged dictionary
             merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config

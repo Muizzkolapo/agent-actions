@@ -172,12 +172,27 @@ class Tokenizer:
 
     @staticmethod
     def _split_with_spacy(text: str, chunk_size: int, overlap: int, tokenizer_model: str) -> List[str]:
+        """
+        Split text using spaCy's sentence tokenization.
+
+        Requires spaCy to be installed: pip install agent-actions[nlp]
+        And the language model: python -m spacy download en_core_web_sm
+        """
         try:
-            nlp = "None"  # spacy.load("en_core_web_sm")
+            import spacy
+        except ImportError:
+            raise ConfigurationError(
+                "spaCy is not installed. Install with: pip install agent-actions[nlp] "
+                "or pip install spacy>=3.0.0"
+            ) from None
+
+        try:
+            nlp = spacy.load("en_core_web_sm")
         except OSError:
             raise ConfigurationError(
-                "spaCy model 'en_core_web_sm' is not installed. Please install it to use 'spacy' split_method."
-            )
+                "spaCy model 'en_core_web_sm' is not installed. "
+                "Download with: python -m spacy download en_core_web_sm"
+            ) from None
 
         encoding = tiktoken.get_encoding(tokenizer_model)
         doc = nlp(text)
