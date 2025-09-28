@@ -15,11 +15,9 @@ actions:
   - name: action_with_project_inheritance
     intent: Action inheriting from project + workflow defaults
     kind: llm
-    reads:
-      - content
-    writes:
-      - extracted_data
     prompt: "Extract using hierarchy: project < workflow < action"
+    schema:
+      extracted_data: string
     # Should get: model=gpt-4o-mini-workflow, vendor=openai, chunk_size=800, few_shot=2, json_mode=true
 
   - name: action_with_overrides
@@ -29,11 +27,9 @@ actions:
     vendor: anthropic           # Override project default
     json_mode: false           # Override workflow default
     few_shot: 5                # Override project default
-    reads:
-      - extracted_data
-    writes:
-      - processed_data
     prompt: "Process with action-level overrides"
+    schema:
+      processed_data: string
     # Should get: model=claude-3-sonnet, vendor=anthropic, json_mode=false, few_shot=5
 
 plan:

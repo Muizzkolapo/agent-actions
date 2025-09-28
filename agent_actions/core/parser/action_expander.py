@@ -156,11 +156,12 @@ class ActionExpander:
         is_tool_action = action_kind == 'tool'
 
         if not (is_file_level and is_tool_action):
-            # Apply template replacement to collection fields
+            # Data flow field mappings:
+            # - observe -> side_collection: Fields excluded from LLM prompt but included in output (passthrough)
+            # - drops -> remove_collection: Fields excluded from LLM prompt AND from output
+            # Note: Schema defines LLM output fields (replaces deprecated 'writes')
             observe = template_replacer(action.get('observe', []))
             drops = template_replacer(action.get('drops', []))
-            writes = template_replacer(action.get('writes', []))
-            reads = template_replacer(action.get('reads', []))
 
             agent['side_collection'] = observe if isinstance(observe, list) else [observe]
             agent['remove_collection'] = drops if isinstance(drops, list) else [drops]

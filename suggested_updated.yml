@@ -15,8 +15,6 @@ actions:
   - name: extract_facts
     intent: "Identify candidate facts from source content"
     schema: candidate_facts_list
-    reads: [id, url, page_content, bloom_details, platform_name, exam_name]
-    writes: [candidate_facts_list]
     drops: [id, url, topic]
     observe: [id, url, page_content, bloom_details, platform_name, exam_name]
     prompt: $qanalabs-quiz-gen.Fact_extraction
@@ -52,8 +50,6 @@ actions:
   - name: cluster_list
     kind: tool
     impl: qanalabs-quiz-gen.final_clustering.cluster_list
-    reads: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name, candidate_facts_list]
-    writes: [clusters]
     observe: [id, url, topic, summary, page_content, bloom_details, platform_name, exam_name]
     intent: "Group facts into logical clusters"
     guard: 'candidate_facts_list != "[]"'
@@ -66,8 +62,6 @@ actions:
   - name: combine_by_cluster_and_id
     kind: tool
     impl: qanalabs-quiz-gen.combine_records_to_items.combine_records_to_items
-    reads: [clusters, id, url, page_content, bloom_details, platform_name, exam_name]
-    writes: [combined_items, flagged_items]
     granularity: file
     intent: "Combine records by cluster and ID"
 
@@ -75,8 +69,6 @@ actions:
     intent: "Validate cluster quality and flag problematic items"
     model: gpt-4o-mini
     schema: cluster_validation
-    reads: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name, combined_items]
-    writes: [validation_result, needs_split]
     observe: [flagged_items, id, url, page_content, bloom_details, platform_name, exam_name]
 
     # Actually implemented interceptors
@@ -98,8 +90,6 @@ actions:
     intent: "Generate explanations for extracted facts"
     model: gpt-4o-mini
     schema: {fact_explanation: string}
-    reads: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
-    writes: [fact_explanation]
     observe: [id, url, page_content, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, platform_name, exam_name, flagged_items]
     prompt: $qanalabs-quiz-gen.Fact_Explanation_Agent_new
 
@@ -107,8 +97,6 @@ actions:
     intent: "Classify quiz type using Feynman technique"
     model: gpt-4o-mini
     schema: {quiz_type: string, rationale: string}
-    reads: [fact, quote, fact_explanation, technical_level, questionable]
-    writes: [quiz_type, rationale]
     drops: [id, url, page_content, flagged_items, bloom_details]
     observe: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, rewrite_instruction, needs_rewrite, excerpt, options_answer, question_type, flagged_items, target_word_counts, correct_answer_words]
     few_shot: 6  # Actually implemented few-shot examples
@@ -120,8 +108,6 @@ actions:
     vendor: openai
     model: gpt-4o-mini
     schema: ScenarioGenerator_schema
-    reads: [id, url, bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, quiz_type, rationale]
-    writes: [scenario, question, options_answer, question_type]
     drops: [id, url, page_content, flagged_items, bloom_details]
     observe: [id, url, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, platform_name, exam_name, flagged_items]
     prompt: $feynman.application_prompt
@@ -136,10 +122,6 @@ actions:
     schema:
       distractor_${stage}: string
       why_incorrect_${stage}: string
-    reads: [id, url, platform_name, exam_name, summary, question, options, answer_explanation, fact, quote, fact_explanation, technical_level, questionable, answer, excerpt, page_content, options_answer, question_type]
-    writes:
-      - distractor_${stage}
-      - why_incorrect_${stage}
     prompt: $qanalabs-quiz-gen.AnswerLengthDistractorGenerator_prompt
     guard: 'questionable != "Low Value"'
     few_shot: 6
@@ -147,8 +129,6 @@ actions:
   - name: reconstruct_options
     kind: tool
     impl: qanalabs-quiz-gen.test2.apply_edited_distractors
-    reads: [answer, distractor_1, distractor_2, distractor_3, question]
-    writes: [options]
     intent: "Reconstruct answer options from correct answer and distractors"
 
   - name: simulate_answer
@@ -161,8 +141,6 @@ actions:
       my_reasoning: string
       my_confidence_level: string
     policy: "Ground strictly in fact_explanation; forbid external knowledge."
-    reads: [bloom_details, candidate_facts_list, fact, quote, technical_level, questionable, why_questionable, fact_explanation, distractor_1, distractor_2, distractor_3, answer, question_type, options, question]
-    writes: [my_answer_key, my_answer_text, my_reasoning, my_confidence_level]
     drops: [id, url, platform_name, exam_name]
     prompt: |
       You are a quiz taker attempting to answer questions based solely on the provided fact explanation.
@@ -171,8 +149,6 @@ actions:
   - name: mark_and_attach
     kind: tool
     impl: qanalabs-quiz-gen.quiztaker_maker.mark_and_attach
-    reads: [my_answer_key, my_confidence_level, questionable]
-    writes: [marked_result_is_correct, final_score]
     guard: 'my_confidence_level == "High" and questionable == "High Value"'
     intent: "Mark quiz answers and attach scoring metadata"
 
@@ -182,15 +158,11 @@ actions:
   - name: merge_final_options
     kind: tool
     impl: qanalabs-quiz-gen.test_api.merge_correct_answer_with_distractors
-    reads: [question, options, options_answer, answer, marked_result_is_correct]
-    writes: [final_options]
     intent: "Merge correct answers with distractors into final option set"
 
   - name: package_output
     kind: tool
     impl: qanalabs-quiz-gen.test_api.process_file_content
-    reads: [final_options, question, fact_explanation, my_reasoning, final_score]
-    writes: [packaged_output]
     intent: "Package final quiz content for output"
 
 plan:
