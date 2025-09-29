@@ -222,6 +222,11 @@ class ActionExpander:
         else:
             agent['loop_consumption_config'] = None
 
+        # Interceptors configuration
+        interceptors = action.get('interceptors')
+        if interceptors:
+            agent['interceptors'] = interceptors
+
         return agent
 
     @staticmethod
