@@ -61,7 +61,9 @@ class StatusCommand:
             self.console.print(table)
 
         except Exception as e:
-            raise click.ClickException(f"Failed to get status for agent {self.agent_name}: {str(e)}")
+            from agent_actions.core.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'status', 'agent': self.agent_name})
+            raise click.ClickException(error_message)
 
 
 @click.command()
@@ -76,4 +78,6 @@ def status(agent: str) -> None:
         command = StatusCommand(args)
         command.execute()
     except ValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'status'})
+        raise click.ClickException(error_message)

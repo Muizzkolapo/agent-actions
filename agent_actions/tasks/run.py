@@ -89,10 +89,29 @@ class RunCommand:
             click.echo(f"Successfully completed agent run for: {self.args.agent}")
             
         except (ValidationError, FileNotFoundError, ConfigurationError, AgentExecutionError) as e:
-            raise click.ClickException(str(e))
-            
+            # Known errors - use user-friendly formatting
+            from agent_actions.core.user_errors import format_user_error
+
+            context = {
+                'agent': self.args.agent,
+                'command': 'run',
+                'error_type': type(e).__name__
+            }
+
+            error_message = format_user_error(e, context)
+            raise click.ClickException(error_message)
+
         except Exception as e:
-            raise click.ClickException(f"Failed to run agent {self.args.agent}: {str(e)}")
+            # Unexpected errors - still use user-friendly formatting
+            from agent_actions.core.user_errors import format_user_error
+
+            context = {
+                'agent': self.args.agent,
+                'command': 'run'
+            }
+
+            error_message = format_user_error(e, context)
+            raise click.ClickException(error_message)
 
 @click.command()
 @click.option('-a', '--agent', required=True,

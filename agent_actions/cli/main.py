@@ -88,7 +88,7 @@ class CLI:
         elif verbose_mode:
             level = logging.INFO
         else:
-            level = logging.WARNING
+            level = logging.CRITICAL  # Only show critical system errors to users
 
         logging.basicConfig(level=level)
         self.logger.setLevel(level)
@@ -145,12 +145,26 @@ class CLI:
             return 2
             
         except Exception as e:
-            # Unexpected error
+            # Unexpected error - use user-friendly formatting
+            from agent_actions.core.user_errors import format_user_error
+
             self.logger.error("CLI execution failed", extra={'error': str(e)}, exc_info=True)
-            print(f"Error: {str(e)}", file=sys.stderr)
-            if '--debug' in argv:
+
+            # Format user-friendly error message
+            context = {
+                'command': argv[0] if argv else 'agent-actions',
+                'operation': 'cli_execution'
+            }
+
+            error_message = format_user_error(e, context)
+            print(f"Error: {error_message}", file=sys.stderr)
+
+            # Show debug info if requested
+            if '--debug' in (argv or []):
+                print("\n--- Debug Information ---", file=sys.stderr)
                 import traceback
                 traceback.print_exc()
+
             return 1
 
 

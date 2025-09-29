@@ -1,0 +1,1 @@
+- The design pattern folder contains the patterns we use to develop in this project, always go there to see if you can get any recommended pattern

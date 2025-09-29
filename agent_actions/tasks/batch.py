@@ -24,9 +24,13 @@ def status(batch_id: str = None):
         status = service.check_status(args.batch_id)
         click.echo(f"Batch job status: {status}")
     except ValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'batch status'})
+        raise click.ClickException(error_message)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'batch status'})
+        click.echo(f"Error: {error_message}", err=True)
 
 @batch.command()
 @click.option('--batch-id', help='The ID of the batch job to retrieve. If not provided, the last submitted job ID will be used.')
@@ -45,6 +49,10 @@ def retrieve(batch_id: str = None, output_dir: str = '.'):
         result = service.retrieve_results(args.batch_id, str(args.output_dir))
         click.echo(result)
     except ValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'batch retrieve'})
+        raise click.ClickException(error_message)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'batch retrieve'})
+        click.echo(f"Error: {error_message}", err=True)

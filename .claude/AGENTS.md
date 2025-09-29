@@ -1,2 +1,0 @@
-- Always be objective dont just always agree with me 
-- ALwyas create plan in jsonc for implementation before runs
