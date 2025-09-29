@@ -239,8 +239,8 @@ def _execute_with_interceptors(
 ) -> List[Any]:
     """Execute the agent with validation and reprompt interceptors."""
 
-    from ..interceptors.factory import InterceptorFactory
-    from ..interceptors.reprompt_interceptor import RepromptInterceptor
+    from agent_actions.integrations.interceptors.factory import InterceptorFactory
+    from agent_actions.integrations.interceptors.reprompt_interceptor import RepromptInterceptor
 
     # Separate reprompt interceptor from others
     non_reprompt_configs: List[Dict[str, Any]] = [

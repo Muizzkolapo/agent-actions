@@ -23,11 +23,11 @@ class RepromptInterceptor(ResponseInterceptor):
 
     def configure(self, config: Dict) -> None:
         self.prompt_debug = config.get("prompt_debug", False)
-        
+
         if self.prompt_debug:
             print(f"🔄 REPROMPT INTERCEPTOR CONFIGURE:")
             print(f"   Config received: {config}")
-        
+
         strategy_type = config.get("strategy", "llm")
         self.max_attempts = config.get("max_attempts", 3)
 
@@ -69,7 +69,7 @@ class RepromptInterceptor(ResponseInterceptor):
             print(f"🧠 REPROMPT INTERCEPTOR INTERCEPT:")
             print(f"   Context keys: {list(context.keys())}")
             print(f"   Has validation_error: {'validation_error' in context}")
-        
+
         if "validation_error" not in context:
             if self.prompt_debug:
                 print(f"   ⚠️ No validation error - continuing")

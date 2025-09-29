@@ -324,5 +324,177 @@ class TestActionExpanderFullWorkflow:
         assert action2['side_collection'] == ['user_id', 'session_id', 'correlation_id']
 
 
+class TestActionExpanderInterceptors:
+    """Test interceptors field mapping in ActionExpander."""
+
+    def test_action_with_interceptors_maps_correctly(self):
+        """Test that action-level interceptors are mapped to agent config."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action with interceptors',
+            'vendor': 'openai',
+            'model': 'gpt-4o-mini',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt',
+            'interceptors': [
+                {
+                    'type': 'validation',
+                    'validator_function': 'test.validator',
+                    'validator_args': {'expected': 10},
+                    'on_failure': 'retry'
+                },
+                {
+                    'type': 'reprompt',
+                    'strategy': 'llm',
+                    'max_attempts': 3
+                }
+            ]
+        }
+
+        defaults = {}
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should map interceptors field correctly
+        assert 'interceptors' in result
+        assert len(result['interceptors']) == 2
+        assert result['interceptors'][0]['type'] == 'validation'
+        assert result['interceptors'][0]['validator_function'] == 'test.validator'
+        assert result['interceptors'][1]['type'] == 'reprompt'
+        assert result['interceptors'][1]['strategy'] == 'llm'
+
+    def test_action_without_interceptors_has_no_interceptors_field(self):
+        """Test that actions without interceptors don't have interceptors field."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action without interceptors',
+            'vendor': 'openai',
+            'model': 'gpt-4o-mini',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt'
+        }
+
+        defaults = {}
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should not have interceptors field when not specified
+        assert 'interceptors' not in result
+
+    def test_empty_interceptors_list_not_mapped(self):
+        """Test that empty interceptors list is not mapped."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action with empty interceptors',
+            'vendor': 'openai',
+            'model': 'gpt-4o-mini',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt',
+            'interceptors': []
+        }
+
+        defaults = {}
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should not map empty interceptors list
+        assert 'interceptors' not in result
+
+    def test_interceptors_with_defaults_and_other_fields(self):
+        """Test that interceptors work alongside other field mappings."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test comprehensive action',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt',
+            'drops': ['temp_field'],
+            'observe': ['tracking_id'],
+            'interceptors': [
+                {
+                    'type': 'validation',
+                    'validator_function': 'test.validator'
+                }
+            ]
+        }
+
+        defaults = {
+            'vendor': 'openai',
+            'model': 'gpt-4o-mini',
+            'drops': ['default_drop'],
+            'observe': ['default_observe']
+        }
+
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should map all fields correctly
+        assert result['model_vendor'] == 'openai'
+        assert result['model_name'] == 'gpt-4o-mini'
+        assert result['remove_collection'] == ['default_drop', 'temp_field']
+        assert result['side_collection'] == ['default_observe', 'tracking_id']
+        assert 'interceptors' in result
+        assert len(result['interceptors']) == 1
+        assert result['interceptors'][0]['type'] == 'validation'
+
+    def test_full_workflow_with_interceptors(self):
+        """Test complete workflow expansion with interceptors."""
+        workflow_config = {
+            'name': 'test_workflow',
+            'description': 'Test workflow with interceptors',
+            'version': '2.0.0',
+            'defaults': {
+                'vendor': 'openai',
+                'model': 'gpt-4o-mini'
+            },
+            'actions': [
+                {
+                    'name': 'validated_action',
+                    'intent': 'Action with validation',
+                    'schema': {'output': 'string'},
+                    'prompt': 'Generate validated output',
+                    'interceptors': [
+                        {
+                            'type': 'validation',
+                            'validator_function': 'validators.test_validator',
+                            'on_failure': 'retry'
+                        },
+                        {
+                            'type': 'reprompt',
+                            'strategy': 'llm',
+                            'max_attempts': 3
+                        }
+                    ]
+                },
+                {
+                    'name': 'regular_action',
+                    'intent': 'Action without interceptors',
+                    'schema': {'output': 'string'},
+                    'prompt': 'Generate regular output'
+                }
+            ],
+            'plan': ['validated_action', 'regular_action']
+        }
+
+        result = ActionExpander.expand_actions_to_agents(workflow_config)
+        agents = result['test_workflow']
+
+        # Find the validated action
+        validated_action = next(a for a in agents if a['name'] == 'validated_action')
+        assert 'interceptors' in validated_action
+        assert len(validated_action['interceptors']) == 2
+
+        # Find the regular action
+        regular_action = next(a for a in agents if a['name'] == 'regular_action')
+        assert 'interceptors' not in regular_action
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

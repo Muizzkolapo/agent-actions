@@ -1,14 +1,20 @@
 from __future__ import annotations
 
-"""Interceptor that validates responses against configured criteria."""
+"""Interceptor that validates responses using user-defined functions.
+
+User-defined validators must:
+1. Accept (response: Any, **kwargs) where response is the raw API response
+2. Extract content from the response structure as needed
+3. Return Tuple[bool, str | None] - (success, error_message)
+"""
 
 from typing import Any, Dict
 
-from agent_actions.agents.base.base import InterceptorResult, ResponseInterceptor
-from ..core.tooling import load_user_defined_function, _split_udf_name
-from ..artifacts import context as artifact_context
-from ..artifacts.base import SecurityError
-from ..cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.integrations.interceptors.base import InterceptorResult, ResponseInterceptor
+from agent_actions.core.tooling import load_user_defined_function, _split_udf_name
+from agent_actions.core.context import context as artifact_context
+from agent_actions.core.contracts.base import SecurityError
+from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
 
 
 class ValidationInterceptor(ResponseInterceptor):
@@ -22,11 +28,11 @@ class ValidationInterceptor(ResponseInterceptor):
 
     def configure(self, config: Dict) -> None:
         self.prompt_debug = config.get("prompt_debug", False)
-        
+
         if self.prompt_debug:
             print(f"🔧 VALIDATION INTERCEPTOR CONFIGURE:")
             print(f"   Config received: {config}")
-        
+
         self.validator_function = config.get("validator_function")
         self.validator_args = config.get("validator_args", {})
         self.on_failure = config.get("on_failure", "retry")
@@ -35,7 +41,7 @@ class ValidationInterceptor(ResponseInterceptor):
             print(f"   Parsed validator_function: {self.validator_function}")
             print(f"   Parsed validator_args: {self.validator_args}")
             print(f"   Parsed on_failure: {self.on_failure}")
-        
+
         if not self.validator_function:
             raise ValueError("validator_function is required")
 
@@ -44,22 +50,25 @@ class ValidationInterceptor(ResponseInterceptor):
             print(f"🔍 VALIDATION INTERCEPTOR INTERCEPT:")
             print(f"   Response type: {type(response)}")
             print(f"   Context attempt: {context.get('attempt', 'unknown')}")
-        
+            print(f"   Raw response: {response}")
+
         if not self.validator_function:
             if self.prompt_debug:
                 print(f"   ⚠️ No validator function - continuing")
             return InterceptorResult(continue_processing=True)
 
         if self.prompt_debug:
-            print(f"   Raw response: {response}")
-            print(f"   Running validator function '{self.validator_function}' with args: {self.validator_args}")
-        
+            print(f"   🔍 Running validator function '{self.validator_function}' with args: {self.validator_args}")
+
         try:
-            # Load and call the validator function directly using the tool loading system
-            # The validator function expects (response: Any, **kwargs) -> Tuple[bool, str | None]
+            # Load and call the user-defined validator function
+            # The validator function must:
+            # 1. Accept (response: Any, **kwargs) where response is the raw API response
+            # 2. Extract content from the response structure (e.g., response["poem"] for poem field)
+            # 3. Return Tuple[bool, str | None] - (success, error_message)
             module_name, func_name = _split_udf_name(self.validator_function)
             validator_func = load_user_defined_function(module_name, func_name)
-            
+
             # Merge validator args with context data so validator can access target_word_counts
             merged_kwargs = {**self.validator_args, **context}
             success, error_message = validator_func(response, **merged_kwargs)
@@ -68,21 +77,24 @@ class ValidationInterceptor(ResponseInterceptor):
                 print(f"   ❌ Error loading/executing validator function: {e}")
             # Treat as validation failure
             success, error_message = False, f"Validator function error: {str(e)}"
-        
+
         if self.prompt_debug:
-            print(f"   Validation result: success={success}, error='{error_message}'")
-        
+            print(f"   📊 VALIDATION RESULT: success={success}")
+            if error_message:
+                print(f"      Error: {error_message}")
+
         # ARTIFACT SYSTEM INTEGRATION: Record validation attempt
         self._record_validation_attempt(context, success, error_message, str(response)[:500])
 
         if success:
             if self.prompt_debug:
-                print(f"   ✅ VALIDATION PASSED - continuing")
+                print(f"   ✅ VALIDATION PASSED - continuing with response")
             return InterceptorResult(continue_processing=True)
 
         if self.on_failure == "retry":
             if self.prompt_debug:
-                print(f"   ❌ VALIDATION FAILED - setting up retry")
+                print(f"   ❌ VALIDATION FAILED - setting up retry with reprompt interceptor")
+                print(f"      Will trigger reprompt to generate improved prompt")
             return InterceptorResult(
                 continue_processing=False,
                 retry_context={
@@ -147,22 +159,3 @@ class ValidationInterceptor(ResponseInterceptor):
             if self.prompt_debug:
                 print(f"   ⚠️ Error recording validation attempt: {e}")
 
-    def _extract_content(self, response: Any) -> str:
-        if isinstance(response, list) and response:
-            first_item = response[0]
-            if isinstance(first_item, dict):
-                # Try multiple keys: content, text, summary, and all values
-                content = (first_item.get("content", "") or 
-                          first_item.get("text", "") or 
-                          first_item.get("summary", "") or
-                          " ".join(str(v) for v in first_item.values() if v))
-                return content
-            return str(first_item)
-        if isinstance(response, dict):
-            # Try multiple keys: content, text, summary, and all values  
-            content = (response.get("content", "") or 
-                      response.get("text", "") or 
-                      response.get("summary", "") or
-                      " ".join(str(v) for v in response.values() if v))
-            return content
-        return str(response)
