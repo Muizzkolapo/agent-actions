@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "generated_at": "2025-09-29T08:46:56.486369Z",
+    "agent_actions_version": "1.2.0",
+    "invocation_id": "286fc9c5-e972-47f0-802a-d81b907e46f6",
+    "schema_version": "1.0.0",
+    "project_name": "repromt_test",
+    "project_path": "/Users/muizz/Documents/codeshop/agent-actions/repromt_test/agent_config"
+  },
+  "agents": {
+    "explain_facts": {
+      "unique_id": "explain_facts",
+      "name": "explain_facts",
+      "agent_type": "explain_facts",
+      "model_vendor": "openai",
+      "model_name": "gpt-4o",
+      "config": {
+        "agent_type": "explain_facts",
+        "name": "explain_facts",
+        "model_name": "gpt-4o",
+        "model_vendor": "openai",
+        "api_key": null,
+        "code_path": "",
+        "dependencies": [],
+        "parent": [],
+        "prompt": "generate a short with only 10 words about the input data provided",
+        "schema_name": "",
+        "chunk_config": {},
+        "side_collection": [],
+        "is_operational": true,
+        "use_few_shot_samples": 0,
+        "ephemeral": null,
+        "add_dispatch": null,
+        "run_mode": "online",
+        "data_source": "",
+        "anthropic_version": "",
+        "enable_prompt_caching": null,
+        "conditional_clause": "",
+        "skip_if": null,
+        "where_clause": null,
+        "skip_condition": null,
+        "max_execution_time": 300,
+        "enable_caching": true,
+        "json_mode": true,
+        "schema": {
+          "poem": "string"
+        },
+        "granularity": "Record",
+        "remove_collection": [],
+        "loop_consumption_config": null
+      },
+      "depends_on": [],
+      "tags": [],
+      "meta": {},
+      "interceptors": []
+    }
+  },
+  "workflows": {},
+  "dependencies": {},
+  "project_config": {}
+}

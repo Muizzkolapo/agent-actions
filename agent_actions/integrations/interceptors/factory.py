@@ -6,7 +6,7 @@ from typing import Dict, List, Type
 
 from .base import InterceptorChain, ResponseInterceptor
 from .reprompt_interceptor import RepromptInterceptor
-from .validation_interceptor import ValidationInterceptor
+from agent_actions.agents.validators.validation_interceptor import ValidationInterceptor
 
 
 class InterceptorFactory:

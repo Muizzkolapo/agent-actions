@@ -1,0 +1,6 @@
+defaults:
+  vendor: openai
+  model: gpt-4o-mini
+  json_mode: true
+  granularity: Record
+  run_mode: online
