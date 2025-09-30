@@ -69,11 +69,30 @@ class AgentActionsException(Exception):
         
     def __str__(self) -> str:
         """Return a string representation including context if available."""
-        base_msg = super().__str__()
-        if self.context:
-            context_str = ", ".join(f"{k}={v}" for k, v in self.context.items())
-            return f"{base_msg} [Context: {context_str}]"
-        return base_msg
+        try:
+            from agent_actions.core.safe_format import format_exception_context
+
+            # Safely get base message
+            try:
+                base_msg = super().__str__()
+            except Exception:
+                # Fallback to message attribute or class name
+                base_msg = getattr(self, 'message', f"{type(self).__name__}")
+
+            if self.context:
+                # Use safe context formatting
+                context_str = format_exception_context(self.context)
+                if context_str:
+                    return f"{base_msg} [Context: {context_str}]"
+
+            return base_msg
+
+        except Exception:
+            # Ultimate fallback - should never fail
+            try:
+                return getattr(self, 'message', f"{type(self).__name__}: formatting failed")
+            except Exception:
+                return "Exception occurred (formatting completely failed)"
 
 
 # Configuration-related exceptions

@@ -37,4 +37,6 @@ def clean_cli(agent: str, force: bool, all: bool) -> None:
         args = CleanCommandArgs(agent=agent, force=force, all=all)
         Cleaner(agent=args.agent, force=args.force, remove_all=args.all).run()
     except ValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'clean', 'agent': agent})
+        raise click.ClickException(error_message)

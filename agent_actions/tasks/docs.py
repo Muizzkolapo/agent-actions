@@ -110,10 +110,14 @@ class DocsCommand:
             run_app(self.args.host, self.args.port, self.args.debug)
             
         except PermissionError as e:
-            raise click.ClickException(f"Permission denied: {str(e)}")
-            
+            from agent_actions.core.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'docs serve'})
+            raise click.ClickException(error_message)
+
         except Exception as e:
-            raise click.ClickException(f"Failed to run documentation server: {str(e)}")
+            from agent_actions.core.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'docs serve'})
+            raise click.ClickException(error_message)
 
 
 @click.command()
@@ -140,4 +144,6 @@ def docs(host: str, port: int, debug: bool, open_browser: bool) -> None:
         command = DocsCommand(args)
         command.execute()
     except ValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'docs'})
+        raise click.ClickException(error_message)

@@ -111,10 +111,14 @@ class InitCommand:
             click.echo("  agent-actions run -a sample_agent")
             
         except (ValidationError, PermissionError, ConfigurationError) as e:
-            raise click.ClickException(str(e))
-            
+            from agent_actions.core.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
+            raise click.ClickException(error_message)
+
         except Exception as e:
-            raise click.ClickException(f"Failed to initialize project {self.args.project_name}: {str(e)}")
+            from agent_actions.core.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
+            raise click.ClickException(error_message)
 
 
 @click.command()
@@ -144,4 +148,6 @@ def init(project_name: str, output_dir: Optional[str] = None,
         command = InitCommand(args)
         command.execute()
     except PydanticValidationError as e:
-        raise click.ClickException(str(e))
+        from agent_actions.core.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'init'})
+        raise click.ClickException(error_message)
