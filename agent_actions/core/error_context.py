@@ -61,28 +61,44 @@ def with_error_context(**context_kwargs):
                 **context_kwargs
             }
 
-            # Extract relevant parameters from function arguments
+            # Extract all parameters from function arguments
             try:
                 sig = inspect.signature(func)
                 bound_args = sig.bind(*args, **kwargs)
                 bound_args.apply_defaults()
 
-                # Extract commonly used parameters
-                relevant_params = [
-                    'agent_name', 'file_path', 'config_name',
-                    'model', 'provider', 'agent', 'config'
-                ]
+                # Extract all parameters (excluding 'self' and 'cls' for methods)
+                for param_name, value in bound_args.arguments.items():
+                    # Skip self/cls for methods
+                    if param_name in ('self', 'cls'):
+                        continue
 
-                for param_name in relevant_params:
-                    if param_name in bound_args.arguments:
-                        value = bound_args.arguments[param_name]
-                        # Only include non-None, non-empty values
-                        if value is not None and value != "":
-                            # For complex objects, just include their string representation
-                            if isinstance(value, (str, int, float, bool)):
-                                context[param_name] = value
-                            else:
-                                context[param_name] = str(value)[:100]  # Truncate long objects
+                    # If this is a **kwargs parameter, unpack it into context
+                    param = sig.parameters.get(param_name)
+                    if param and param.kind == inspect.Parameter.VAR_KEYWORD:
+                        # Unpack **kwargs into context
+                        if isinstance(value, dict):
+                            for k, v in value.items():
+                                if v is not None and v != "":
+                                    if isinstance(v, (str, int, float, bool, type(None))):
+                                        context[k] = v
+                                    elif isinstance(v, (list, tuple, dict, set)):
+                                        context[k] = v
+                                    else:
+                                        context[k] = str(v)[:100]
+                        continue
+
+                    # Only include non-None, non-empty values
+                    if value is not None and value != "":
+                        # For simple types, include directly
+                        if isinstance(value, (str, int, float, bool, type(None))):
+                            context[param_name] = value
+                        # For collections, include up to a reasonable size
+                        elif isinstance(value, (list, tuple, dict, set)):
+                            context[param_name] = value
+                        # For complex objects, include string representation
+                        else:
+                            context[param_name] = str(value)[:100]  # Truncate long objects
 
             except Exception as e:
                 # If context extraction fails, log it but don't break the function
@@ -92,9 +108,12 @@ def with_error_context(**context_kwargs):
                 return func(*args, **kwargs)
             except Exception as e:
                 # Attach context to the exception
-                if not hasattr(e, 'error_context'):
-                    e.error_context = {}
-                e.error_context.update(context)
+                if not hasattr(e, 'context'):
+                    e.context = {}
+                # Only add keys that don't already exist (inner decorators take precedence)
+                for key, value in context.items():
+                    if key not in e.context:
+                        e.context[key] = value
                 raise
 
         return wrapper
@@ -146,6 +165,22 @@ def with_config_context(func: Callable) -> Callable:
     return with_error_context(operation=func.__name__, resource_type="config")(func)
 
 
+def with_command_context(command: str):
+    """
+    Shorthand decorator for command operations.
+
+    Args:
+        command: The command name (e.g., "init", "run", "render")
+
+    Usage:
+        @with_command_context("init")
+        def initialize_project(project_name):
+            # Command logic
+            pass
+    """
+    return with_error_context(command=command, resource_type="command")
+
+
 def get_context_from_exception(exc: Exception) -> Dict[str, Any]:
     """
     Extract error context from an exception.
@@ -156,7 +191,7 @@ def get_context_from_exception(exc: Exception) -> Dict[str, Any]:
     Returns:
         Dictionary of context information, empty if no context found
     """
-    return getattr(exc, 'error_context', {})
+    return getattr(exc, 'context', {})
 
 
 def add_context_to_exception(exc: Exception, context: Dict[str, Any]) -> None:
@@ -167,6 +202,6 @@ def add_context_to_exception(exc: Exception, context: Dict[str, Any]) -> None:
         exc: Exception to add context to
         context: Context dictionary to add
     """
-    if not hasattr(exc, 'error_context'):
-        exc.error_context = {}
-    exc.error_context.update(context)
+    if not hasattr(exc, 'context'):
+        exc.context = {}
+    exc.context.update(context)

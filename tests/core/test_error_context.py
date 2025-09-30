@@ -102,7 +102,6 @@ class TestWithErrorContext:
             complex_function(
                 {"key": "value"},
                 config={"setting": True},
-                "extra_arg",
                 flag=True
             )
 
