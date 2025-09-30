@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agent_actions.core.exceptions import (
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     ConfigurationError,
     AgentActionsException
 )
@@ -39,7 +39,7 @@ class TestUserFriendlyErrorFormatting:
 
     def test_file_not_found_user_friendly(self):
         """Test file not found error produces user-friendly output."""
-        exc = FileNotFoundError("Config file not found: /path/to/config.yml")
+        exc = FileLoadError("/path/to/config.yml", "Config file not found")
         result = format_user_error(exc, {"command": "run", "agent": "test_agent"})
 
         # Should be user-friendly
@@ -168,9 +168,9 @@ class TestRealWorldScenarios:
         """Test the common scenario of missing config file."""
         def simulate_missing_config():
             config_path = "/agents/nonexistent.yml"
-            raise FileNotFoundError(f"No such file or directory: '{config_path}'")
+            raise FileLoadError(config_path, "No such file or directory")
 
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(FileLoadError) as exc_info:
             simulate_missing_config()
 
         result = format_user_error(exc_info.value, {
@@ -231,7 +231,7 @@ class TestErrorMessageQuality:
         """Test that error messages contain actionable guidance."""
         test_cases = [
             (ValidationError("Invalid config"), {"command": "init"}),
-            (FileNotFoundError("File not found"), {"command": "run"}),
+            (FileLoadError("/path/to/file", "File not found"), {"command": "run"}),
             (ConfigurationError("Syntax error"), {"command": "render"}),
         ]
 
@@ -265,7 +265,7 @@ class TestErrorMessageQuality:
         """Test that different error types have consistent formatting."""
         errors = [
             ValidationError("Validation failed"),
-            FileNotFoundError("File missing"),
+            FileLoadError("/path/to/file", "File missing"),
             ConfigurationError("Config invalid"),
         ]
 

@@ -2,7 +2,7 @@ import json
 from groq import Groq  # Assuming this is the official Groq API Python package
 from agent_actions.agents.transformers.string_transformer import StringProcessor
 from textwrap import dedent
-from agent_actions.cli.exceptions import VendorAPIError
+from agent_actions.core.exceptions import VendorAPIError
 from agent_actions.agents.transformers.data_transformer import DataTransformer
 from agent_actions.integrations.providers.vendor_base import BaseVendorHandler
 from agent_actions.core.constants import MODEL_NAME_KEY

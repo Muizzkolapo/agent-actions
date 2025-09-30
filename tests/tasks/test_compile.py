@@ -16,9 +16,9 @@ from click.testing import CliRunner
 
 from agent_actions.tasks.compile import RenderCommand, render
 from agent_actions.agents.validators.render_validator import RenderCommandArgs
-from agent_actions.cli.exceptions import (
+from agent_actions.core.exceptions import (
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     TemplateRenderingError
 )
 from pydantic import ValidationError as PydanticValidationError
@@ -304,7 +304,7 @@ class TestRenderCommandExecution:
             mock_factory.create_project_paths.return_value = mock_paths
 
             with patch.object(command, '_render_template') as mock_render:
-                mock_render.side_effect = FileNotFoundError("Config file not found")
+                mock_render.side_effect = FileLoadError("Config file not found")
 
                 with pytest.raises(Exception):  # Should be wrapped in ClickException
                     command.execute()

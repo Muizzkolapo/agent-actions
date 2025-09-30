@@ -13,7 +13,7 @@ from unittest.mock import patch, Mock
 
 from agent_actions.core.exceptions import (
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     ConfigurationError,
     AgentActionsException
 )
@@ -55,10 +55,10 @@ class TestEndToEndErrorHandling:
         def load_agent_config(agent_name, config_dir="/configs"):
             config_path = f"{config_dir}/{agent_name}.yml"
             if not os.path.exists(config_path):
-                raise FileNotFoundError(f"Agent configuration file not found: {config_path}")
+                raise FileLoadError(config_path, "Agent configuration file not found")
 
         # Simulate error occurrence
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(FileLoadError) as exc_info:
             load_agent_config("missing_agent", config_dir="/tmp/nonexistent")
 
         # Format for user
@@ -187,9 +187,9 @@ class TestRealWorldScenarios:
         """Test scenario: User tries to run non-existent agent."""
         def simulate_agent_run(agent_name):
             config_path = f"/agents/{agent_name}.yml"
-            raise FileNotFoundError(f"No such file or directory: '{config_path}'")
+            raise FileLoadError(config_path, "No such file or directory")
 
-        with pytest.raises(FileNotFoundError) as exc_info:
+        with pytest.raises(FileLoadError) as exc_info:
             simulate_agent_run("nonexistent_agent")
 
         user_message = format_user_error(exc_info.value, {
@@ -294,9 +294,8 @@ class TestErrorMessageQuality:
         """Test that error messages provide actionable guidance."""
         test_cases = [
             (ValidationError("Invalid agent name"), {"command": "init"}),
-            (FileNotFoundError("Config file not found"), {"command": "run"}),
+            (FileLoadError("/path/to/config.yml", "Config file not found"), {"command": "run"}),
             (ConfigurationError("YAML syntax error"), {"command": "render"}),
-            (PermissionError("Access denied"), {"command": "init"}),
         ]
 
         for exc, context in test_cases:

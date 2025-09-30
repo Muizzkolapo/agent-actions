@@ -3,7 +3,7 @@ import shutil
 from typing import Callable, Optional, Dict, Any
 from agent_actions.agents.handlers.file_handler import FileHandler
 from pathlib import Path
-from agent_actions.cli.exceptions import AgentNotFoundError
+from agent_actions.core.exceptions import AgentNotFoundError
 import logging
 import os
 from pathlib import Path

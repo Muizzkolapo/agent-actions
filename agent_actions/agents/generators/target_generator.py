@@ -6,7 +6,7 @@ from agent_actions.agents.handlers.file_reader import FileReader
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.agents.generators.target_content_processor import TargetContentProcessor
 from agent_actions.agents.handlers.output_handler import OutputHandler
-from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError, DependencyError
+from agent_actions.core.exceptions import AgentActionsException, ConfigurationError, DependencyError
 from agent_actions.core.constants import MODEL_VENDOR_KEY
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.graph.dependency_injection import ProcessorFactory
@@ -134,11 +134,11 @@ class TargetGenerator:
             # Return the output file path for compatibility
             relative_path = Path(file_path).relative_to(base_directory)
             return str(Path(output_directory) / relative_path)
-        except (AgentActionsError, ConfigurationError, ValueError) as e: # Catch known specific errors
+        except (AgentActionsException, ConfigurationError, ValueError) as e: # Catch known specific errors
             # Log e if necessary, or let it propagate if it's already informative
-            raise AgentActionsError(f"Error generating target for {file_path}: {str(e)}") from e
+            raise AgentActionsException(f"Error generating target for {file_path}: {str(e)}") from e
         except Exception as e:
-            raise AgentActionsError(f"Unexpected error generating target for {file_path}: {str(e)}") from e
+            raise AgentActionsException(f"Unexpected error generating target for {file_path}: {str(e)}") from e
     
     def _read_input_data(self, file_path):
         """Read data from input file."""

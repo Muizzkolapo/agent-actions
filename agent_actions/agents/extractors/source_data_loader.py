@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 from agent_actions.core.contracts.interfaces import ISourceDataLoader, ProcessingMode
 from ...core.path_manager import PathManager, PathManagerError
 from ...core.graph.dependency_injection import registry
-from agent_actions.cli.exceptions import DependencyError
+from agent_actions.core.exceptions import DependencyError
 
 @registry.register_loader("source_data")
 class SourceDataLoader(ISourceDataLoader):

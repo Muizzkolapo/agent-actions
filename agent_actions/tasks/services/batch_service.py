@@ -240,7 +240,11 @@ class BatchService:
             
         except Exception as e:
             from agent_actions.core.exceptions import ConfigurationError
-            raise ConfigurationError(f"batch_provider_{provider_type}", f"Failed to create provider: {e}", cause=e)
+            raise ConfigurationError(
+                f"Failed to create provider for batch_provider_{provider_type}: {e}",
+                context={"provider_type": provider_type},
+                cause=e
+            )
 
     def _process_batch(self, *args, **kwargs):
         """Placeholder batch processing method for testing/mocking."""

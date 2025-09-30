@@ -14,7 +14,7 @@ from typing import Dict, List, Set, Any, Optional, Tuple
 from agent_actions.agents.base.base_validator import BaseValidator
 # Assuming PromptLoader and custom exceptions exist.
 # PromptValidationError will no longer be raised by validate(), but its message format can inspire error strings.
-# from agent_actions.cli.exceptions import (
+# from agent_actions.core.exceptions import (
 #     PromptValidationError,
 #     FileNotFoundError,
 #     ValidationError

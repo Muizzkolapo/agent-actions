@@ -6,7 +6,7 @@ from agent_actions.core.core_utils import Utils
 from agent_actions.core.graph.render_workflow import render_pipeline_with_templates
 from agent_actions.agents.validators.config_validator import ConfigValidator
 from typing import Dict, Any, Optional, List
-from agent_actions.cli.exceptions import ConfigurationError, TemplateRenderingError
+from agent_actions.core.exceptions import ConfigurationError, TemplateRenderingError
 from agent_actions.core.parser.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig

@@ -19,7 +19,7 @@ from click.testing import CliRunner
 
 from agent_actions.tasks.init import InitCommand, init
 from agent_actions.agents.validators.init_validator import InitCommandArgs
-from agent_actions.cli.exceptions import ValidationError, PermissionError, ConfigurationError
+from agent_actions.core.exceptions import ValidationError, FileSystemError, ConfigurationError
 from pydantic import ValidationError as PydanticValidationError
 
 
@@ -173,8 +173,8 @@ class TestInitCommand:
         command = InitCommand(args)
 
         # Mock permission error
-        with patch('pathlib.Path.mkdir', side_effect=PermissionError("Permission denied")):
-            with pytest.raises(PermissionError, match="Permission denied when creating project directory"):
+        with patch('pathlib.Path.mkdir', side_effect=FileSystemError("Permission denied")):
+            with pytest.raises(FileSystemError, match="Permission denied when creating project directory"):
                 command._create_project_directory()
 
     def test_initialize_project_success(self, tmp_path):
@@ -284,7 +284,7 @@ class TestInitCommandExecution:
 
         # Mock to pass validation but fail on directory creation
         with patch('agent_actions.tasks.init.ProjectValidator'):
-            with patch('pathlib.Path.mkdir', side_effect=PermissionError("Permission denied")):
+            with patch('pathlib.Path.mkdir', side_effect=FileSystemError("Permission denied")):
                 with pytest.raises(Exception):  # Should be wrapped in ClickException
                     command.execute()
 

@@ -17,7 +17,7 @@ from agent_actions.agents.base.base_validator import BaseValidator
 # SchemaLoader might be used to discover schema files, or we might use glob.
 # from agent_actions.agents.handlers.schema_handler import SchemaLoader
 # Original exceptions are no longer directly raised.
-# from agent_actions.cli.exceptions import (
+# from agent_actions.core.exceptions import (
 #     SchemaValidationError,
 #     FileNotFoundError,
 #     ValidationError

@@ -7,7 +7,7 @@ from agent_actions.agents.handlers.file_reader import FileReader
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.core.constants import CHUNK_CONFIG_KEY
 from agent_actions.tasks.services.batch_service import BatchService
-from agent_actions.cli.exceptions import AgentActionsError
+from agent_actions.core.exceptions import AgentActionsException
 import json
 import uuid
 
@@ -108,7 +108,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 data_chunk = [{"content": rows, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}]
             src_text = []
         else:
-            raise AgentActionsError(f"Unsupported file type: {file_type}")
+            raise AgentActionsException(f"Unsupported file type: {file_type}")
         # Patch: Ensure every record has a unique target_id before batch submission
         for row in data_chunk:
             if 'target_id' not in row or not row['target_id']:
@@ -169,7 +169,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     elif file_type == '.xml':
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
     else:
-        raise AgentActionsError(f"Unsupported file type: {file_type}")
+        raise AgentActionsException(f"Unsupported file type: {file_type}")
     # ... (rest of the original non-batch output logic follows)
 
     relative_path = Path(file_path).relative_to(base_directory)

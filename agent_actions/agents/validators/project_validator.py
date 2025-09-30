@@ -16,7 +16,7 @@ from agent_actions.agents.base.base_validator import BaseValidator
 # Assuming these custom exceptions exist in a known location.
 # If not, they might need to be defined or handled differently.
 # For this refactoring, errors will be added via self.add_error()
-# from agent_actions.cli.exceptions import ValidationError, PermissionError
+# from agent_actions.core.exceptions import ValidationError, PermissionError
 
 logger = logging.getLogger(__name__)
 

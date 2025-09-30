@@ -4,7 +4,7 @@ import re
 import json
 import textwrap
 from agent_actions.agents.transformers.string_transformer import StringProcessor
-from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.core.exceptions import AgentActionsException, ConfigurationError
 
 
 class PromptUtils:
@@ -196,12 +196,12 @@ class PromptUtils:
                     single_text = single_text.replace(f"dispatch_task({call_args})",
                                                     transformed_text,
                                                     1)
-                except (AgentActionsError, ConfigurationError) as e:
+                except (AgentActionsException, ConfigurationError) as e:
                     # Re-raise the specific error to be caught by the main error handler
                     raise e
                 except Exception as e:
                     # Wrap other exceptions in a standard error type
-                    raise AgentActionsError(
+                    raise AgentActionsException(
                         f"An unexpected error occurred in function '{function_name}': {str(e)}"
                     ) from e
 

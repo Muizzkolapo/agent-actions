@@ -13,10 +13,10 @@ from agent_actions.agents.validators.prompt_validator import PromptValidator
 from agent_actions.tasks.services.config_renderer import ConfigRenderer
 from agent_actions.tasks.services.project_paths_factory import ProjectPathsFactory
 from agent_actions.core.graph.agent_workflow import AgentWorkflow
-from agent_actions.cli.exceptions import (
+from agent_actions.core.exceptions import (
     ConfigurationError, 
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     AgentExecutionError
 )
 from agent_actions.agents.validators.run_validator import RunCommandArgs
@@ -38,7 +38,7 @@ class RunCommand:
         """Find the configuration file."""
         full_path = config_dir / filename
         if not full_path.exists():
-            raise FileNotFoundError(f"Configuration file not found at {full_path}")
+            raise FileLoadError(f"Configuration file not found at {full_path}")
         return full_path
 
     def execute(self) -> None:
@@ -88,7 +88,7 @@ class RunCommand:
             
             click.echo(f"Successfully completed agent run for: {self.args.agent}")
             
-        except (ValidationError, FileNotFoundError, ConfigurationError, AgentExecutionError) as e:
+        except (ValidationError, FileLoadError, ConfigurationError, AgentExecutionError) as e:
             # Known errors - use user-friendly formatting
             from agent_actions.core.user_errors import format_user_error
 

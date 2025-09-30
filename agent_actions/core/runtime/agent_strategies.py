@@ -74,7 +74,7 @@ class AgentStrategy(ABC):
         """
         # Processor factory is required - no fallback
         if self.processor_factory is None:
-            from agent_actions.cli.exceptions import DependencyError
+            from agent_actions.core.exceptions import DependencyError
             raise DependencyError("BaseAgentStrategy", "processor_factory")
             
         generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory)
