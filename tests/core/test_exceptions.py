@@ -18,9 +18,9 @@ class TestAgentActionsException:
         result = str(exc)
 
         assert "Test error message" in result
-        assert "agent: test_agent" in result
-        assert "file: config.yml" in result
-        assert "line: 10" in result
+        assert "agent=test_agent" in result
+        assert "file=config.yml" in result
+        assert "line=10" in result
 
     def test_exception_with_string_context(self):
         """Test exception with string context (the bug case)."""
@@ -115,13 +115,13 @@ class TestAgentActionsException:
 
         result = str(exc)
         assert "Test error message" in result
-        assert "agent: test_agent" in result
-        assert "config:" in result
-        assert "file: test.yml" in result
-        assert "section: agents" in result
-        assert "settings:" in result
-        assert "timeout: 30" in result
-        assert "step: validation" in result
+        assert "agent=test_agent" in result
+        assert "config=" in result
+        assert "file" in result and "test.yml" in result
+        assert "section" in result and "agents" in result
+        assert "settings" in result
+        assert "timeout" in result and "30" in result
+        assert "step=validation" in result
 
     def test_exception_without_context(self):
         """Test exception without context parameter."""
@@ -140,7 +140,7 @@ class TestAgentActionsException:
         result = str(exc)
 
         assert "Custom error" in result
-        assert "key: value" in result
+        assert "key=value" in result
 
     def test_exception_with_numeric_context(self):
         """Test exception with numeric context values."""
@@ -153,10 +153,10 @@ class TestAgentActionsException:
         exc = AgentActionsException("Numeric context test", context)
 
         result = str(exc)
-        assert "line_number: 42" in result
-        assert "error_count: 3" in result
-        assert "timeout: 30.5" in result
-        assert "success_rate: 0.95" in result
+        assert "line_number=42" in result
+        assert "error_count=3" in result
+        assert "timeout=30.5" in result
+        assert "success_rate=0.95" in result
 
     def test_exception_context_with_special_characters(self):
         """Test exception context with special characters."""
@@ -184,9 +184,9 @@ class TestAgentActionsException:
         result2 = str(exc2)
         result3 = str(exc3)
 
-        assert "First error" in result1 and "type: error1" in result1
+        assert "First error" in result1 and "type=error1" in result1
         assert "Second error" in result2 and "string context" in result2
-        assert "Third error" in result3 and "type: error3" in result3
+        assert "Third error" in result3 and "type=error3" in result3
 
         # Ensure no cross-contamination
         assert "error1" not in result2

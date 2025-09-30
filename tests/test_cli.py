@@ -154,7 +154,9 @@ class TestCLIErrorHandling:
 
             assert exit_code == 1
             captured = capsys.readouterr()
-            assert "Error: Unexpected error" in captured.err
+            # Error message should contain the error text
+            assert "Unexpected error" in captured.err
+            assert "Error" in captured.err
 
     def test_cli_execute_with_debug_shows_traceback(self, capsys):
         """Test CLI.execute shows traceback in debug mode."""

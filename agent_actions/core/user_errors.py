@@ -26,9 +26,9 @@ class UserError:
 
     category: str  # Configuration, Model, Provider, File, Network, Authentication
     title: str     # Brief description
-    details: str   # What went wrong
-    fix: str       # How to fix it
-    context: Dict[str, Any]  # agent, file, field, etc.
+    details: Optional[str] = None   # What went wrong
+    fix: Optional[str] = None       # How to fix it
+    context: Optional[Dict[str, Any]] = None  # agent, file, field, etc.
     docs_url: Optional[str] = None
 
     def format_for_cli(self) -> str:
@@ -39,6 +39,7 @@ class UserError:
             lines.extend(["", f"  Problem: {self.details}"])
 
         # Add context information
+        # Display specific important fields first
         if self.context:
             if 'agent' in self.context:
                 lines.append(f"  Agent: {self.context['agent']}")
@@ -50,6 +51,20 @@ class UserError:
                 lines.append(f"  Model: {self.context['model']}")
             if 'provider' in self.context:
                 lines.append(f"  Provider: {self.context['provider']}")
+
+            # Display other context fields (for debugging and completeness)
+            # Skip internal/technical fields and already-displayed fields
+            displayed_fields = {'agent', 'file_path', 'field', 'model', 'provider'}
+            skip_fields = {'function', 'module', 'resource_type'}  # Internal technical fields
+
+            other_context = {k: v for k, v in self.context.items()
+                           if k not in displayed_fields and k not in skip_fields}
+
+            if other_context:
+                lines.append("")
+                lines.append("  Context:")
+                for key, value in sorted(other_context.items()):
+                    lines.append(f"    {key}: {value}")
 
         if self.fix:
             lines.extend(["", f"  Fix: {self.fix}"])
@@ -74,7 +89,26 @@ class ErrorTranslator:
         Returns:
             UserError with user-friendly message
         """
-        context = context or {}
+        # Merge exception context with passed context
+        merged_context = {}
+        if hasattr(exc, 'context') and isinstance(exc.context, dict):
+            merged_context.update(exc.context)
+
+        # Also extract other exception attributes that might be useful
+        for attr_name in dir(exc):
+            if not attr_name.startswith('_') and attr_name not in ['args', 'with_traceback', 'context']:
+                try:
+                    attr_value = getattr(exc, attr_name)
+                    # Only include simple types (not methods/callables)
+                    if not callable(attr_value) and isinstance(attr_value, (str, int, float, bool, type(None))):
+                        merged_context[attr_name] = attr_value
+                except Exception:
+                    pass  # Skip attributes that can't be accessed
+
+        if context:
+            merged_context.update(context)  # Passed context takes precedence
+
+        context = merged_context
 
         # Extract root cause for better error detection
         root_cause = extract_root_cause(exc)
@@ -462,7 +496,30 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
 
     try:
         translator = ErrorTranslator()
-        user_error = translator.translate(exc, context)
+
+        # Merge exception context with passed context
+        # Exception context (from decorators) is added first, then passed context
+        # can override if there are conflicts
+        merged_context = {}
+        if hasattr(exc, 'context') and isinstance(exc.context, dict):
+            merged_context.update(exc.context)
+
+        # Also extract other exception attributes that might be useful
+        # (e.g., line_number, column, template_file, error_count, etc.)
+        for attr_name in dir(exc):
+            if not attr_name.startswith('_') and attr_name not in ['args', 'with_traceback', 'context']:
+                try:
+                    attr_value = getattr(exc, attr_name)
+                    # Only include simple types (not methods/callables)
+                    if not callable(attr_value) and isinstance(attr_value, (str, int, float, bool, type(None))):
+                        merged_context[attr_name] = attr_value
+                except Exception:
+                    pass  # Skip attributes that can't be accessed
+
+        if context:
+            merged_context.update(context)  # Passed context takes precedence
+
+        user_error = translator.translate(exc, merged_context)
         return user_error.format_for_cli()
     except Exception as format_error:
         # If formatting fails, log and use safe fallback
