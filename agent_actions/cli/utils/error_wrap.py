@@ -1,6 +1,6 @@
 from functools import wraps
 from typing import Callable, Type
-from agent_actions.cli.exceptions import ConfigurationError
+from agent_actions.core.exceptions import ConfigurationError
 
 def as_validation_error(exc_cls: Type[ConfigurationError] = ConfigurationError) -> Callable:
     """

@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 from typing import Dict, Any
 
 from agent_actions.agents.handlers.config_handler import ConfigManager
-from agent_actions.cli.exceptions import ConfigurationError
+from agent_actions.core.exceptions import ConfigurationError
 
 
 class TestNewFormatConfigHandlerIntegration:

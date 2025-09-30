@@ -7,7 +7,7 @@ import sys
 from typing import List
 import tiktoken
 from pathlib import Path
-from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.core.exceptions import AgentActionsException, ConfigurationError
 
 class StringProcessor:
     """
@@ -71,7 +71,7 @@ class StringProcessor:
             raise ConfigurationError(f"Could not find function '{function_name}' in its module: {e}") from e
         except Exception as e: # Catch other errors during UDF execution
             # Consider a more specific UDFExecutionError
-            raise AgentActionsError(f"Error executing user function '{function_name}': {str(e)}") from e
+            raise AgentActionsException(f"Error executing user function '{function_name}': {str(e)}") from e
 
 
 class Tokenizer:
@@ -90,7 +90,7 @@ class Tokenizer:
             raise ConfigurationError(f"Invalid tiktoken encoding name '{encoding_name}': {e}") from e
         except Exception as e: # Other unexpected tokenization errors
             # Log the error, but re-raise as it's a critical failure for this method's purpose
-            raise AgentActionsError(f"Tokenization error for string '{string[:100]}...': {str(e)}") from e
+            raise AgentActionsException(f"Tokenization error for string '{string[:100]}...': {str(e)}") from e
 
     @staticmethod
     def split_text_content(
@@ -139,7 +139,7 @@ class Tokenizer:
         except ValueError:
             raise
         except Exception as e:  # General catch-all for unexpected issues
-            raise AgentActionsError(f"Text splitting error for text '{text[:100]}...': {str(e)}") from e
+            raise AgentActionsException(f"Text splitting error for text '{text[:100]}...': {str(e)}") from e
 
     @staticmethod
     def _split_with_tiktoken(text: str, chunk_size: int, overlap: int, tokenizer_model: str) -> List[str]:
@@ -147,7 +147,7 @@ class Tokenizer:
         try:
             tokens = encoding.encode(text)
         except Exception as e:
-            raise AgentActionsError(f"Error encoding text with tiktoken model '{tokenizer_model}': {e}") from e
+            raise AgentActionsException(f"Error encoding text with tiktoken model '{tokenizer_model}': {e}") from e
 
         chunks = []
         start_idx = 0
@@ -241,4 +241,4 @@ class Tokenizer:
                 f"Could not find custom split_method function '{split_method}' in its module: {e}"
             ) from e
         except Exception as e:
-            raise AgentActionsError(f"Error executing custom split_method '{split_method}': {str(e)}") from e
+            raise AgentActionsException(f"Error executing custom split_method '{split_method}': {str(e)}") from e

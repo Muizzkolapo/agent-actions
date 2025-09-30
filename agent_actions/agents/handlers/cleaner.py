@@ -6,9 +6,9 @@ from typing import Iterable
 import click
 
 from agent_actions.agents.handlers.agent_handlers import AgentManager
-from agent_actions.cli.exceptions import (
+from agent_actions.core.exceptions import (
     AgentNotFoundError,
-    PermissionError as AgentPermissionError,
+    FileSystemError as AgentFileSystemError,
 )
 
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ class Cleaner:
             self._run()
         except AgentNotFoundError as exc:
             raise click.ClickException(f"Agent '{self.agent}' was not found.") from exc
-        except AgentPermissionError as exc:
+        except AgentFileSystemError as exc:
             raise click.ClickException(str(exc)) from exc
         except Exception as exc:
             logger.exception("Unexpected error while cleaning directories")

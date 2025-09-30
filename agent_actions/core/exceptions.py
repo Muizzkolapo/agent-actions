@@ -309,18 +309,31 @@ class AgentExecutionError(OperationalError):
 
 class TemplateRenderingError(OperationalError):
     """Raised when an error occurs during template rendering."""
-    
-    def __init__(self, template_name: str, reason: str, **kwargs):
-        message = f"Failed to render template '{template_name}': {reason}"
+
+    def __init__(self, template_name: str, reason: str = None, **kwargs):
+        # Backward compatibility: if reason is None, template_name is the full message
+        if reason is None:
+            message = template_name  # Old usage: TemplateRenderingError("message")
+        else:
+            message = f"Failed to render template '{template_name}': {reason}"
         super().__init__(message, **kwargs)
 
 
 class SerializationError(OperationalError):
     """Raised when data serialization/deserialization fails."""
-    
+
     def __init__(self, operation: str, data_type: str, reason: str, **kwargs):
         message = f"Serialization {operation} failed for {data_type}: {reason}"
         super().__init__(message, **kwargs)
+
+
+class AgentNotFoundError(ConfigurationError):
+    """Raised when a specified agent cannot be found."""
+
+    def __init__(self, agent_name: str, reason: str = "not found", **kwargs):
+        message = f"Agent '{agent_name}' {reason}"
+        super().__init__(message, **kwargs)
+        self.agent_name = agent_name
 
 
 # Backward compatibility aliases
@@ -329,6 +342,6 @@ ProcessorError = ProcessingError
 LoaderError = FileSystemError
 DataParseError = ValidationError
 UnsupportedFormatError = ValidationError
-FileNotFoundError = FileLoadError
-DirectoryNotFoundError = DirectoryError
-PermissionError = FileSystemError
+# NOTE: FileNotFoundError, PermissionError, and MemoryError aliases removed
+# to avoid shadowing Python built-ins. Use FileLoadError, FileSystemError,
+# and ResourceError directly, or import from builtins if needed.

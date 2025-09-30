@@ -14,7 +14,7 @@ from typing import List, Dict, Set, Any, Optional
 from agent_actions.agents.base.base_validator import BaseValidator
 # Original exceptions are no longer directly raised by the validation logic
 # but are mentioned here for context if error messages are derived from them.
-# from agent_actions.cli.exceptions import (
+# from agent_actions.core.exceptions import (
 #     DirectoryNotFoundError,
 #     PermissionError,
 #     ValidationError

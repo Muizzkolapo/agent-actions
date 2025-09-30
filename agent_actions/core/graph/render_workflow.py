@@ -2,7 +2,7 @@ import os
 import yaml
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.agents.handlers.prompt_handler import PromptLoader
-from agent_actions.cli.exceptions import TemplateRenderingError, ConfigurationError
+from agent_actions.core.exceptions import TemplateRenderingError, ConfigurationError
 import jinja2 # For specific Jinja2 exceptions
 
 def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):

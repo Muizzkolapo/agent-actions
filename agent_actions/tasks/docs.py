@@ -11,7 +11,7 @@ from typing import Optional
 import webbrowser
 
 from agent_actions.docs.app import run_app
-from agent_actions.cli.exceptions import PermissionError
+from agent_actions.core.exceptions import FileSystemError
 from agent_actions.agents.validators.docs_validator import DocsCommandArgs
 from pydantic import ValidationError
 
@@ -109,7 +109,7 @@ class DocsCommand:
             # Run the documentation server
             run_app(self.args.host, self.args.port, self.args.debug)
             
-        except PermissionError as e:
+        except FileSystemError as e:
             from agent_actions.core.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'docs serve'})
             raise click.ClickException(error_message)

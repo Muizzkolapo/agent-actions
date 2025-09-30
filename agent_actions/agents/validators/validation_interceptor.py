@@ -14,7 +14,7 @@ from agent_actions.integrations.interceptors.base import InterceptorResult, Resp
 from agent_actions.core.tooling import load_user_defined_function, _split_udf_name
 from agent_actions.core.context import context as artifact_context
 from agent_actions.core.contracts.base import SecurityError
-from agent_actions.cli.exceptions import AgentActionsError, ConfigurationError
+from agent_actions.core.exceptions import AgentActionsException, ConfigurationError
 
 
 class ValidationInterceptor(ResponseInterceptor):
@@ -72,7 +72,7 @@ class ValidationInterceptor(ResponseInterceptor):
             # Merge validator args with context data so validator can access target_word_counts
             merged_kwargs = {**self.validator_args, **context}
             success, error_message = validator_func(response, **merged_kwargs)
-        except (ConfigurationError, AgentActionsError) as e:
+        except (ConfigurationError, AgentActionsException) as e:
             if self.prompt_debug:
                 print(f"   ❌ Error loading/executing validator function: {e}")
             # Treat as validation failure

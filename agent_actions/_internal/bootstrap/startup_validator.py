@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 from pydantic import ValidationError
 
 from agent_actions.core.context.environment_config import EnvironmentConfig, Environment
-from agent_actions.cli.exceptions import ConfigurationError
+from agent_actions.core.exceptions import ConfigurationError
 from agent_actions.agents.handlers.config_handler import ConfigManager
 
 

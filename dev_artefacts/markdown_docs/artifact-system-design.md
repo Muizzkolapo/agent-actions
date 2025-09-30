@@ -656,7 +656,7 @@ class EnhancedErrorHandler(ErrorHandler):
             print(f"\n💡 Run with --debug for detailed error information")
         
         # Still raise for proper error handling upstream
-        from agent_actions.cli.exceptions import TemplateRenderingError
+        from agent_actions.core.exceptions import TemplateRenderingError
         raise TemplateRenderingError(f"Template operation '{operation}' failed for {template_name}") from error
     
     def handle_file_error(

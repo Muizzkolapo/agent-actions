@@ -11,9 +11,9 @@ from typing import Optional, List
 
 from agent_actions.core.init import ProjectInitializer
 from agent_actions.agents.validators.project_validator import ProjectValidator
-from agent_actions.cli.exceptions import (
+from agent_actions.core.exceptions import (
     ValidationError,
-    PermissionError,
+    FileSystemError,
     ConfigurationError
 )
 from agent_actions.agents.validators.init_validator import InitCommandArgs
@@ -50,7 +50,7 @@ class InitCommand:
         Create the project directory.
         
         Raises:
-            PermissionError: If there's a permission issue.
+            FileSystemError: If there's a permission issue.
         """
         try:
             # Remove existing directory if force is True
@@ -61,8 +61,8 @@ class InitCommand:
             # Create the directory
             self.project_dir.mkdir(exist_ok=self.args.force)
             
-        except PermissionError as e:
-            raise PermissionError(f"Permission denied when creating project directory: {str(e)}")
+        except FileSystemError as e:
+            raise FileSystemError(f"Permission denied when creating project directory: {str(e)}")
         except Exception as e:
             raise ValidationError(f"Failed to create project directory: {str(e)}")
     
@@ -110,7 +110,7 @@ class InitCommand:
             click.echo(f"  cd {self.args.project_name}")
             click.echo("  agent-actions run -a sample_agent")
             
-        except (ValidationError, PermissionError, ConfigurationError) as e:
+        except (ValidationError, FileSystemError, ConfigurationError) as e:
             from agent_actions.core.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
             raise click.ClickException(error_message)

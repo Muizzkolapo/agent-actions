@@ -1,1 +1,2 @@
 - The design pattern folder contains the patterns we use to develop in this project, always go there to see if you can get any recommended pattern
+- we dont need backwards compatibility always forward dev 

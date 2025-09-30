@@ -14,7 +14,7 @@ from agent_actions.core.user_errors import (
 from agent_actions.core.exceptions import (
     AgentActionsException,
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     ConfigurationError
 )
 
@@ -96,9 +96,9 @@ class TestErrorTranslator:
         assert result.fix is not None
 
     def test_file_not_found_error_handling(self):
-        """Test handling FileNotFoundError."""
+        """Test handling FileLoadError."""
         translator = ErrorTranslator()
-        exc = FileNotFoundError("Agent configuration file not found: test_agent.yml")
+        exc = FileLoadError("test_agent.yml", "Agent configuration file not found")
         context = {"command": "run", "agent": "test_agent"}
 
         result = translator.translate(exc, context)
@@ -123,11 +123,11 @@ class TestErrorTranslator:
         assert result.fix is not None
 
     def test_permission_error_handling(self):
-        """Test handling PermissionError (which is FileSystemError in our code)."""
+        """Test handling permission errors (FileSystemError in our code)."""
         translator = ErrorTranslator()
-        # In our code, PermissionError is aliased to FileSystemError
-        from agent_actions.core.exceptions import PermissionError as AAPermissionError
-        exc = AAPermissionError("Permission denied: cannot write to output directory")
+        # PermissionError alias was removed to avoid shadowing Python built-in
+        from agent_actions.core.exceptions import FileSystemError
+        exc = FileSystemError("Permission denied: cannot write to output directory")
         context = {"command": "init", "directory": "/protected/dir"}
 
         result = translator.translate(exc, context)
@@ -214,8 +214,8 @@ class TestFormatUserError:
         assert "invalid@name" in result
 
     def test_format_file_not_found(self):
-        """Test formatting FileNotFoundError."""
-        exc = FileNotFoundError("/path/to/missing/file.yml")
+        """Test formatting FileLoadError."""
+        exc = FileLoadError("/path/to/missing/file.yml")
         context = {"command": "run", "agent": "missing_agent"}
 
         result = format_user_error(exc, context)
@@ -299,7 +299,7 @@ class TestFormatUserError:
 
     def test_format_with_pathlib_paths(self):
         """Test formatting with pathlib.Path objects in context."""
-        exc = FileNotFoundError("Config file not found")
+        exc = FileLoadError("/path/to/config.yml", "Config file not found")
         context = {
             "command": "run",
             "config_file": Path("/path/to/config.yml"),

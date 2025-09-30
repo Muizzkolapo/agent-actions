@@ -8,7 +8,7 @@ from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.graph.dependency_injection import registry
 from agent_actions.core.utils.processor_utils import ProcessorUtils
 from agent_actions.core.contracts.base_async_processor import BaseAsyncProcessor
-from agent_actions.cli.exceptions import DependencyError
+from agent_actions.core.exceptions import DependencyError
 
 @registry.register_processor("target_content")
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):

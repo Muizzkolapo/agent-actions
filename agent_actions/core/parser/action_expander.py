@@ -135,7 +135,7 @@ class ActionExpander:
             if run_mode == 'batch':
                 # Check if batch was explicitly set on this action (not inherited)
                 if action.get('run_mode') == 'batch':
-                    from agent_actions.cli.exceptions import ConfigurationError
+                    from agent_actions.core.exceptions import ConfigurationError
                     action_name = action.get('name', 'unknown')
                     raise ConfigurationError(
                         f"Action '{action_name}' has kind='tool' but run_mode='batch'. "

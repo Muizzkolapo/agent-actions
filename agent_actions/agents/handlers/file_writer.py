@@ -2,7 +2,7 @@
 import json
 import csv
 from pathlib import Path
-from agent_actions.cli.exceptions import AgentActionsError
+from agent_actions.core.exceptions import AgentActionsException
 
 class FileWriter:
     def __init__(self, file_path):
@@ -23,11 +23,11 @@ class FileWriter:
                     writer = csv.writer(file)
                     writer.writerows(data)
                 else:
-                    raise AgentActionsError(f"Unsupported file type for staging: {self.file_type} for file {self.file_path}")
+                    raise AgentActionsException(f"Unsupported file type for staging: {self.file_type} for file {self.file_path}")
         except IOError as e:
-            raise AgentActionsError(f"IOError writing staging file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"IOError writing staging file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            raise AgentActionsError(f"Error writing staging file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"Error writing staging file {self.file_path}: {str(e)}") from e
 
     def write_target(self, data):
         try:
@@ -35,15 +35,15 @@ class FileWriter:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            raise AgentActionsError(f"IOError writing target file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"IOError writing target file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            raise AgentActionsError(f"Error writing target file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"Error writing target file {self.file_path}: {str(e)}") from e
 
     def write_source(self, data):
         try:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            raise AgentActionsError(f"IOError writing source file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"IOError writing source file {self.file_path}: {str(e)}") from e
         except Exception as e:
-            raise AgentActionsError(f"Error writing source file {self.file_path}: {str(e)}") from e
+            raise AgentActionsException(f"Error writing source file {self.file_path}: {str(e)}") from e

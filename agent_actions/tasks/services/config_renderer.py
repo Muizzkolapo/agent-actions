@@ -16,8 +16,8 @@ from agent_actions.core.graph.render_workflow import render_pipeline_with_templa
 from agent_actions.agents.validators.path_validator import PathValidator
 from agent_actions.cli.utils.service_logger import ServiceLogger
 from agent_actions.cli.utils.error_handler import ErrorHandler
-from agent_actions.cli.exceptions import ConfigurationError
-from agent_actions.cli.exceptions import ConfigValidationError
+from agent_actions.core.exceptions import ConfigurationError
+from agent_actions.core.exceptions import ConfigValidationError
 from agent_actions.cli.utils.error_wrap import as_validation_error     # 🆕
 from agent_actions.agents.validators.schema_validator import SchemaValidator
 from agent_actions.agents.validators.config_validator import ConfigValidator

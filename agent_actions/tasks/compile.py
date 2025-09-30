@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Optional
 
 from agent_actions.core.graph.render_workflow import render_pipeline_with_templates
-from agent_actions.cli.exceptions import (
+from agent_actions.core.exceptions import (
     ValidationError,
-    FileNotFoundError,
+    FileLoadError,
     TemplateRenderingError
 )
 from agent_actions.agents.validators.render_validator import RenderCommandArgs
@@ -79,7 +79,7 @@ class RenderCommand:
                 })
                 click.echo(f"Template rendered successfully and saved to {self.args.output_file}")
             
-        except (FileNotFoundError, ValidationError, TemplateRenderingError) as e:
+        except (FileLoadError, ValidationError, TemplateRenderingError) as e:
             logger.error(f"{e.__class__.__name__}: {str(e)}")
             from agent_actions.core.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'render', 'agent': self.args.agent_name})

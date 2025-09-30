@@ -66,8 +66,8 @@ class AnthropicBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import ConfigurationError
             raise ConfigurationError(
-                "anthropic_client",
-                f"Failed to initialize: {str(e)}. Make sure your ANTHROPIC_API_KEY environment variable is set or pass api_key parameter.",
+                f"Failed to initialize anthropic_client: {str(e)}. Make sure your ANTHROPIC_API_KEY environment variable is set or pass api_key parameter.",
+                context={"provider": "anthropic"},
                 cause=e
             ) from e
         

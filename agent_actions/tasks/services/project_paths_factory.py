@@ -10,10 +10,10 @@ from dataclasses import dataclass
 from typing import Dict, Tuple
 
 from agent_actions.agents.handlers.file_handler import FileHandler
-from agent_actions.cli.exceptions import (
-    DirectoryNotFoundError,
+from agent_actions.core.exceptions import (
+    DirectoryError,
     ValidationError,
-    FileNotFoundError
+    FileLoadError
 )
 from agent_actions.agents.validators.path_validator import PathValidator
 from agent_actions.core.context.path_manager import PathManager, PathType
@@ -170,6 +170,6 @@ class ProjectPathsFactory:
             
         except Exception as e:
             logger.error(f"Failed to create project paths for agent {agent_name}: {str(e)}")
-            if isinstance(e, (DirectoryNotFoundError, ValidationError, FileNotFoundError)):
+            if isinstance(e, (DirectoryError, ValidationError, FileLoadError)):
                 raise
             raise ValidationError(f"Failed to create project paths for agent {agent_name}: {str(e)}") from e
