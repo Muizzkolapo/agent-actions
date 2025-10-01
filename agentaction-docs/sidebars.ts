@@ -52,7 +52,16 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Configuration Examples',
-          items: ['examples/configurations/index'],
+          items: [
+            'examples/configurations/index',
+            'examples/configurations/project-only',
+            'examples/configurations/workflow-overrides',
+            'examples/configurations/action-overrides',
+            'examples/configurations/mixed-hierarchy',
+            'examples/configurations/environment-variables',
+            'examples/configurations/tool-actions',
+            'examples/configurations/batch-mode',
+          ],
         },
       ],
     },
