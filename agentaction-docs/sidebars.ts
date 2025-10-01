@@ -38,6 +38,7 @@ const sidebars: SidebarsConfig = {
         'core-concepts/workflows',
         'core-concepts/schemas',
         'core-concepts/tokenizers',
+        'core-concepts/error-handling',
       ],
     },
     {
