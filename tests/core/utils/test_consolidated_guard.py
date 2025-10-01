@@ -137,7 +137,8 @@ class TestFormatConverterIntegration:
                 'on_false': 'skip'
             },
             'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model': 'gpt-4o-mini',
+            'api_key': 'TEST_API_KEY'
         }
 
         defaults = {}
@@ -164,7 +165,8 @@ class TestFormatConverterIntegration:
                 'on_false': 'filter'
             },
             'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model': 'gpt-4o-mini',
+            'api_key': 'TEST_API_KEY'
         }
 
         defaults = {}
@@ -194,7 +196,8 @@ class TestFormatConverterIntegration:
                 'on_false': 'skip'
             },
             'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model': 'gpt-4o-mini',
+            'api_key': 'TEST_API_KEY'
         }
 
         defaults = {}

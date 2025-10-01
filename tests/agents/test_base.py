@@ -62,6 +62,7 @@ class TestAgentBuilder:
         # Test valid configuration
         valid_config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt",
             "schema": {"type": "object"},
@@ -92,6 +93,7 @@ class TestAgentBuilder:
         """Test agent_builder rejects unknown vendor types."""
         invalid_config = {
             "model_vendor": "unknown_vendor",
+            "api_key": "TEST_API_KEY",
             "model_name": "some-model",
             "prompt": "Test prompt"
         }
@@ -136,14 +138,15 @@ class TestAgentBuilder:
                             context_data_str="test context"
                         )
                         # If no exception is raised, the validation should still work
-                    except (KeyError, ValueError, TypeError) as e:
-                        # Should provide helpful error messages
+                    except (KeyError, ValueError, TypeError, Exception) as e:
+                        # Should provide helpful error messages (including ConfigurationError)
                         assert len(str(e)) > 0
 
     def test_create_dynamic_agent_with_interceptors(self):
         """Test agent builder with interceptors configuration."""
         config_with_interceptors = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt",
             "interceptors": [
@@ -167,6 +170,7 @@ class TestAgentBuilder:
         """Test agent builder with function output injection."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt with {{function_result}}"
         }
@@ -452,6 +456,7 @@ class TestAgentBuilderIdempotency:
         """Test agent_builder idempotent build does not duplicate singletons."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt"
         }
@@ -500,6 +505,7 @@ class TestAgentBuilderIdempotency:
         """Test agent builder with same config but different context data."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt: {{context}}"
         }
@@ -537,6 +543,7 @@ class TestAgentBuilderErrorHandling:
         """Test agent builder handles vendor handler errors gracefully."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt"
         }
@@ -558,6 +565,7 @@ class TestAgentBuilderErrorHandling:
         """Test agent builder handles prompt preparation errors."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "$nonexistent_file.txt"
         }
@@ -576,6 +584,7 @@ class TestAgentBuilderErrorHandling:
         """Test agent builder handles schema preparation errors."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt",
             "schema": {"invalid": "schema"}
@@ -598,6 +607,7 @@ class TestAgentBuilderErrorHandling:
         """Test agent builder handles invalid context data gracefully."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Test prompt"
         }
@@ -633,6 +643,7 @@ class TestAgentBuilderIntegration:
         """Test end-to-end agent creation with minimal mocking."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Create a summary of: {{context}}",
             "schema": {
@@ -670,6 +681,7 @@ class TestAgentBuilderIntegration:
         """Test agent builder with all optional parameters."""
         config = {
             "model_vendor": "openai",
+            "api_key": "TEST_API_KEY",
             "model_name": "gpt-4",
             "prompt": "Process: {{context}} with {{tool_result}}"
         }

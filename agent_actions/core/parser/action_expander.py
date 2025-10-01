@@ -8,6 +8,7 @@ handling loop expansion, template variables, and dependency mapping.
 from typing import Dict, Any, List, Optional, Union
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,103 @@ class ActionExpander:
         return "old"
 
     @staticmethod
+    def _check_deprecated_field_names(defaults: Dict[str, Any], action: Dict[str, Any]) -> None:
+        """
+        Check for deprecated or inconsistent field names and warn users.
+
+        Warns when workflow/action level uses project-level field names (model_vendor/model_name)
+        instead of the recommended vendor/model.
+
+        Args:
+            defaults: Workflow defaults (merged project + workflow)
+            action: Action configuration
+        """
+        # Check workflow defaults for deprecated names
+        if 'model_vendor' in defaults and 'vendor' not in defaults:
+            warnings.warn(
+                "Using 'model_vendor' at workflow defaults level is inconsistent. "
+                "Use 'vendor' instead for workflow and action-level configuration. "
+                "See: https://github.com/Muizzkolapo/agent-actions/issues/416",
+                DeprecationWarning,
+                stacklevel=4
+            )
+
+        if 'model_name' in defaults and 'model' not in defaults:
+            warnings.warn(
+                "Using 'model_name' at workflow defaults level is inconsistent. "
+                "Use 'model' instead for workflow and action-level configuration. "
+                "See: https://github.com/Muizzkolapo/agent-actions/issues/416",
+                DeprecationWarning,
+                stacklevel=4
+            )
+
+        # Check action level for deprecated names
+        if 'model_vendor' in action and 'vendor' not in action:
+            warnings.warn(
+                f"Action '{action.get('name', 'unknown')}' uses 'model_vendor' which is inconsistent. "
+                "Use 'vendor' instead for action-level configuration. "
+                "See: https://github.com/Muizzkolapo/agent-actions/issues/416",
+                DeprecationWarning,
+                stacklevel=4
+            )
+
+        if 'model_name' in action and 'model' not in action:
+            warnings.warn(
+                f"Action '{action.get('name', 'unknown')}' uses 'model_name' which is inconsistent. "
+                "Use 'model' instead for action-level configuration. "
+                "See: https://github.com/Muizzkolapo/agent-actions/issues/416",
+                DeprecationWarning,
+                stacklevel=4
+            )
+
+    @staticmethod
+    def _validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
+        """
+        Validate that required configuration fields are present after hierarchy resolution.
+
+        This validation ensures that essential fields (vendor, model, api_key) are defined
+        at least once across the 3-level hierarchy (project → workflow → action).
+
+        Args:
+            agent: Agent configuration dict after hierarchy resolution
+            action_name: Name of the action being validated (for error messages)
+
+        Raises:
+            ConfigValidationError: If any required field is missing
+        """
+        from agent_actions.core.exceptions import ConfigValidationError
+
+        required_fields = {
+            'model_vendor': agent.get('model_vendor'),
+            'model_name': agent.get('model_name'),
+            'api_key': agent.get('api_key')
+        }
+
+        missing_fields = [field for field, value in required_fields.items() if not value]
+
+        if missing_fields:
+            # Create user-friendly field names for error message
+            field_display_names = {
+                'model_vendor': 'vendor/model_vendor',
+                'model_name': 'model/model_name',
+                'api_key': 'api_key'
+            }
+
+            missing_display = [field_display_names.get(f, f) for f in missing_fields]
+
+            raise ConfigValidationError(
+                config_key=', '.join(missing_fields),
+                reason=f"Required configuration fields are missing after hierarchy resolution",
+                context={
+                    'action_name': action_name,
+                    'missing_fields': missing_fields,
+                    'missing_display': missing_display,
+                    'operation': 'expand_actions_to_agents',
+                    'hint': 'Add missing fields to agent_actions.yml (project-level), workflow defaults, or action config'
+                }
+            )
+
+    @staticmethod
     def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer, is_operational: bool = True) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
@@ -56,11 +154,20 @@ class ActionExpander:
         Returns:
             Completed agent configuration
         """
+        # Check for deprecated field names and warn users
+        ActionExpander._check_deprecated_field_names(defaults, action)
+
         # Model configuration - with fallback defaults
         # Support both 'vendor' (workflow/action level) and 'model_vendor' (project level)
         agent['model_vendor'] = action.get('vendor', defaults.get('vendor', defaults.get('model_vendor')))
         agent['model_name'] = action.get('model', defaults.get('model', defaults.get('model_name')))
         agent['api_key'] = action.get('api_key', defaults.get('api_key'))
+
+        # Validate required fields are present after hierarchy resolution
+        # Skip validation for tool actions since they have different requirements
+        action_kind = action.get('kind', 'llm')
+        if action_kind != 'tool':
+            ActionExpander._validate_required_fields(agent, action.get('name', 'unknown'))
 
         # Execution settings
         agent['is_operational'] = is_operational

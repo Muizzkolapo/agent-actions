@@ -34,6 +34,7 @@ class TestNewFormatConfigHandlerIntegration:
             "version": "2.0.0",
             "defaults": {
                 "vendor": "openai",
+                'api_key': 'TEST_API_KEY',
                 "model": "gpt-4"
             },
             "actions": [
@@ -67,6 +68,7 @@ class TestNewFormatConfigHandlerIntegration:
             "default_agent_config": {
                 "model_name": "gpt-4-project-default",
                 "model_vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "chunk_config": {
                     "chunk_size": 800,
                     "chunk_overlap": 150
@@ -89,6 +91,8 @@ class TestNewFormatConfigHandlerIntegration:
             "version": "2.0.0",
             "defaults": {
                 "model": "gpt-4o-mini-workflow",
+                "vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file"
             },
@@ -107,6 +111,7 @@ class TestNewFormatConfigHandlerIntegration:
                     "kind": "llm",
                     "model": "claude-3-sonnet",
                     "vendor": "anthropic",
+                    "api_key": "TEST_API_KEY",
                     "json_mode": False,
                     "few_shot": 5,
                     "reads": ["extracted_data"],
@@ -182,6 +187,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "dependency_test",
             "description": "Test dependency parsing",
             "version": "2.0.0",
+            "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "step1",
@@ -240,6 +250,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "filter_test",
             "description": "Test action filtering",
             "version": "2.0.0",
+            "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "included_action",
@@ -281,6 +296,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test chunking config support",
             "version": "2.0.0",
             "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4",
+                "api_key": "TEST_API_KEY",
                 "chunk_config": {
                     "chunk_size": 1000,
                     "chunk_overlap": 200
@@ -327,6 +345,7 @@ class TestNewFormatConfigHandlerIntegration:
             "defaults": {
                 "model": "gpt-4-default",
                 "vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file",
                 "run_mode": "offline",
@@ -464,6 +483,7 @@ class TestNewFormatConfigHandlerIntegration:
             "version": "2.0.0",
             "defaults": {
                 "vendor": "openai",
+                'api_key': 'TEST_API_KEY',
                 "model": "gpt-4",
                 "run_mode": "batch"  # Default to batch mode
             },
@@ -542,6 +562,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "schema_test",
             "description": "Test schema handling",
             "version": "2.0.0",
+            "defaults": {
+                "vendor": "openai",
+                "model": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "schema_action",
@@ -648,6 +673,7 @@ class TestNewFormatFeatureIntegration:
             "defaults": {
                 "model": "gpt-4",
                 "vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": False,
                 "granularity": "record"
             },
