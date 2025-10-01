@@ -222,3 +222,64 @@ def format_exception_context(context: Any) -> str:
             return safe_format_error(context)
 
     return safe_format_error(context)
+
+
+def format_exception_chain_for_debug(exc: Exception, max_depth: int = 10) -> str:
+    """
+    Format the complete exception chain for debugging purposes.
+
+    This function creates a detailed, structured representation of the entire
+    exception chain, including all context at each level. This is intended
+    for logging and debugging, NOT for user-facing messages.
+
+    Args:
+        exc: The exception to format
+        max_depth: Maximum depth to traverse
+
+    Returns:
+        Formatted string with full exception chain details
+
+    Example output:
+        Exception Chain (3 levels):
+
+        [1] ConfigurationError: Invalid agent configuration
+            Context: agent=my-agent, file=config.yml
+
+        [2] ValidationError: Missing required field 'model'
+            Context: field=model, section=agents
+
+        [3] ValueError: Model name cannot be empty
+            (Root Cause)
+    """
+    try:
+        chain = get_error_chain(exc, max_depth)
+
+        if not chain:
+            return safe_format_error(exc)
+
+        lines = [f"Exception Chain ({len(chain)} level{'s' if len(chain) != 1 else ''}):"]
+        lines.append("")
+
+        for idx, current_exc in enumerate(chain, 1):
+            # Exception type and message
+            exc_type = type(current_exc).__name__
+            exc_msg = safe_get_exception_message(current_exc)
+            lines.append(f"[{idx}] {exc_type}: {exc_msg}")
+
+            # Add context if available
+            if hasattr(current_exc, 'context') and current_exc.context:
+                context_str = format_exception_context(current_exc.context)
+                if context_str:
+                    lines.append(f"    Context: {context_str}")
+
+            # Mark root cause
+            if idx == len(chain):
+                lines.append("    (Root Cause)")
+
+            lines.append("")
+
+        return "\n".join(lines)
+
+    except Exception as format_error:
+        logger.error(f"Failed to format exception chain: {format_error}")
+        return f"Exception chain formatting failed. Original error: {safe_format_error(exc)}"

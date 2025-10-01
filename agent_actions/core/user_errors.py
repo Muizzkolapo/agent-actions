@@ -14,7 +14,8 @@ from typing import Dict, Any, Optional
 from agent_actions.core.safe_format import (
     safe_format_error,
     extract_root_cause,
-    safe_get_exception_message
+    safe_get_exception_message,
+    format_exception_chain_for_debug
 )
 
 logger = logging.getLogger(__name__)
@@ -487,12 +488,14 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
     Returns:
         User-friendly error message string
     """
-    # ALWAYS log full error for debugging
+    # ALWAYS log full error for debugging with complete exception chain
     logger.error(
         "Error occurred during operation",
         exc_info=exc,
         extra={'context': context or {}}
     )
+    # Log the detailed exception chain for debugging (not shown to users)
+    logger.debug(f"Exception chain details:\n{format_exception_chain_for_debug(exc)}")
 
     try:
         translator = ErrorTranslator()

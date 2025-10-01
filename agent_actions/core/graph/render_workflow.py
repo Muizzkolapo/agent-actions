@@ -4,6 +4,7 @@ from jinja2 import Environment, FileSystemLoader
 from agent_actions.agents.handlers.prompt_handler import PromptLoader
 from agent_actions.core.exceptions import TemplateRenderingError, ConfigurationError
 import jinja2 # For specific Jinja2 exceptions
+from agent_actions.core.safe_format import safe_format_error
 
 def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
     """
@@ -32,7 +33,11 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         except jinja2.TemplateSyntaxError as e:
             raise TemplateRenderingError(f"Syntax error in template '{template_file}': {e.message} (line {e.lineno})") from e
         except Exception as e: # Catch other unexpected errors during template loading
-            raise TemplateRenderingError(f"Unexpected error loading template '{template_file}': {str(e)}") from e
+            raise TemplateRenderingError(
+                f"Unexpected error loading template '{template_file}': {safe_format_error(e)}",
+                context={'template_file': template_file, 'templates_folder': templates_folder},
+                cause=e
+            ) from e
     
     try:
         with open(yaml_path, 'r', encoding='utf-8') as yaml_file:
@@ -96,7 +101,15 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
         raise ConfigurationError(f"Error parsing YAML from '{yaml_path}'{location}: {problem}") from e
     except jinja2.TemplateError as e: # Catches TemplateSyntaxError, UndefinedError, etc.
-        raise TemplateRenderingError(f"Error rendering YAML template from '{yaml_path}': {str(e)}") from e
+        raise TemplateRenderingError(
+            f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",
+            context={'yaml_path': yaml_path, 'templates_folder': templates_folder},
+            cause=e
+        ) from e
     except Exception as e:
         # General catch-all for unexpected issues during rendering or file operations
-        raise TemplateRenderingError(f"Unexpected error rendering YAML from '{yaml_path}': {str(e)}") from e
+        raise TemplateRenderingError(
+            f"Unexpected error rendering YAML from '{yaml_path}': {safe_format_error(e)}",
+            context={'yaml_path': yaml_path, 'templates_folder': templates_folder, 'output_file': output_file},
+            cause=e
+        ) from e

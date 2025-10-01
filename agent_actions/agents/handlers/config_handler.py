@@ -13,6 +13,7 @@ from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineCo
 from agent_actions.core.context.path_config import load_project_config
 from agent_actions.core.context.path_manager import PathManager
 from agent_actions.core.parser.action_expander import ActionExpander
+from agent_actions.core.safe_format import safe_format_error
 
 
 
@@ -42,21 +43,45 @@ class ConfigManager:
             # Expect new format only
             self.user_config = loaded_config
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
-            raise ConfigurationError(f"Error rendering or loading user config from {self.constructor_path}: {e}") from e
+            raise ConfigurationError(
+                f"Error rendering or loading user config from {self.constructor_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.constructor_path), 'operation': 'load_user_config'},
+                cause=e
+            ) from e
         except yaml.YAMLError as e:
-            raise ConfigurationError(f"Error parsing YAML for user config from {self.constructor_path}: {e}") from e
+            raise ConfigurationError(
+                f"Error parsing YAML for user config from {self.constructor_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.constructor_path), 'operation': 'parse_yaml'},
+                cause=e
+            ) from e
         except Exception as e: # Catch other unexpected errors
-            raise ConfigurationError(f"Unexpected error loading user config from {self.constructor_path}: {str(e)}") from e
+            raise ConfigurationError(
+                f"Unexpected error loading user config from {self.constructor_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.constructor_path), 'operation': 'load_user_config'},
+                cause=e
+            ) from e
 
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
-            raise ConfigurationError(f"Error rendering or loading default config from {self.default_path}: {e}") from e
+            raise ConfigurationError(
+                f"Error rendering or loading default config from {self.default_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.default_path), 'operation': 'load_default_config'},
+                cause=e
+            ) from e
         except yaml.YAMLError as e:
-            raise ConfigurationError(f"Error parsing YAML for default config from {self.default_path}: {e}") from e
+            raise ConfigurationError(
+                f"Error parsing YAML for default config from {self.default_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.default_path), 'operation': 'parse_yaml'},
+                cause=e
+            ) from e
         except Exception as e: # Catch other unexpected errors
-            raise ConfigurationError(f"Unexpected error loading default config from {self.default_path}: {str(e)}") from e
+            raise ConfigurationError(
+                f"Unexpected error loading default config from {self.default_path}: {safe_format_error(e)}",
+                context={'config_path': str(self.default_path), 'operation': 'load_default_config'},
+                cause=e
+            ) from e
 
         # Prioritize tool_path from user_config, then fallback to default_config
         user_tool_path = None

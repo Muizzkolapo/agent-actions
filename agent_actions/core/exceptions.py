@@ -50,14 +50,14 @@ class AgentActionsException(Exception):
     """
     
     def __init__(
-        self, 
-        message: str, 
+        self,
+        message: str,
         context: Optional[Dict[str, Any]] = None,
         cause: Optional[Exception] = None
     ):
         """
         Initialize the exception with optional context and cause.
-        
+
         Args:
             message: The error message
             context: Optional dictionary containing contextual information
@@ -66,6 +66,11 @@ class AgentActionsException(Exception):
         super().__init__(message)
         self.context = context or {}
         self.cause = cause
+
+        # Set __cause__ to maintain proper exception chain for get_error_chain
+        # This allows both exc.cause and exc.__cause__ to work
+        if cause is not None:
+            self.__cause__ = cause
         
     def __str__(self) -> str:
         """Return a string representation including context if available."""
