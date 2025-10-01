@@ -1,0 +1,843 @@
+{
+  "title": "Review and improve configuration hierarchy and validation",
+  "issue": "#392",
+  "priority": "high",
+  "description": "Review and improve the configuration hierarchy system to ensure proper inheritance and validation across all levels: project → workflow → action. Add clear documentation, improved validation, and consider field name consistency. EXPANDED after codebase review to include: model/vendor validation, API key handling, environment variable interpolation, VendorRegistry integration, configuration examples, and JSON schema generation.",
+
+  "background": {
+    "description": "Recent changes improved the configuration hierarchy to properly support project-level config (agent_actions.yml), workflow-level config (defaults section), and action-level config (individual action settings). However, there are opportunities to improve validation and clarity.",
+    "current_support": [
+      "Project-level config (agent_actions.yml)",
+      "Workflow-level config (defaults section)",
+      "Action-level config (individual action settings)"
+    ],
+    "field_name_differences": {
+      "project_level": ["model_vendor", "model_name"],
+      "workflow_action_level": ["vendor", "model"]
+    }
+  },
+
+  "phases": {
+    "phase_1_configuration_hierarchy_documentation": {
+      "priority": "critical",
+      "description": "Document the 3-level hierarchy clearly with examples and explanations",
+      "status": "completed",
+      "completion_date": "2025-10-01",
+      "tasks": [
+        {
+          "id": "document_3_level_hierarchy",
+          "title": "Document the 3-level hierarchy structure",
+          "description": "Create clear documentation explaining project → workflow → action hierarchy",
+          "sections_to_create": [
+            "Overview of 3-level hierarchy",
+            "How inheritance works at each level",
+            "Precedence order (action > workflow > project)"
+          ],
+          "suggested_location": "agentaction-docs/docs/core-concepts/configuration-hierarchy.md",
+          "status": "completed",
+          "implementation_summary": "Created comprehensive documentation with visual diagram showing 3-level hierarchy and precedence order"
+        },
+        {
+          "id": "document_field_name_differences",
+          "title": "Explain field name differences (vendor vs model_vendor, model vs model_name)",
+          "description": "Document why different field names exist and when to use each",
+          "content_to_cover": [
+            "Project-level uses model_vendor/model_name",
+            "Workflow/Action-level uses vendor/model",
+            "Historical reasons for the difference",
+            "Backward compatibility considerations"
+          ],
+          "status": "completed",
+          "implementation_summary": "Added dedicated section explaining field naming conventions with table comparing levels. Created GitHub issue #416 to standardize naming in future"
+        },
+        {
+          "id": "provide_hierarchy_examples",
+          "title": "Provide examples showing how inheritance works",
+          "description": "Create comprehensive examples demonstrating config inheritance",
+          "examples_needed": [
+            {
+              "scenario": "Project defaults only",
+              "example": "All actions inherit project-level vendor/model"
+            },
+            {
+              "scenario": "Workflow defaults override project",
+              "example": "Workflow defaults override project settings for all actions in workflow"
+            },
+            {
+              "scenario": "Action-level overrides workflow",
+              "example": "Individual action overrides both workflow and project defaults"
+            },
+            {
+              "scenario": "Mixed inheritance",
+              "example": "Some fields from project, some from workflow, some from action"
+            }
+          ],
+          "status": "completed",
+          "implementation_summary": "Created 4 complete examples (Example 1-4) with full YAML configurations showing each inheritance pattern. Each example includes detailed comments explaining the final merged configuration"
+        },
+        {
+          "id": "document_required_fields",
+          "title": "Document which fields are required at which level",
+          "description": "Clarify which configuration fields must be present at each level",
+          "fields_to_document": [
+            {
+              "field": "vendor/model_vendor",
+              "required_at": "At least one level (project, workflow, or action)",
+              "note": "Required after hierarchy resolution"
+            },
+            {
+              "field": "model/model_name",
+              "required_at": "At least one level (project, workflow, or action)",
+              "note": "Required after hierarchy resolution"
+            },
+            {
+              "field": "api_key",
+              "required_at": "At least one level (project, workflow, or action)",
+              "note": "Can be environment variable reference. Required after hierarchy resolution"
+            }
+          ],
+          "status": "completed",
+          "implementation_summary": "Created comprehensive 'Required Fields' section with table, explanation of 'after hierarchy resolution', and valid/invalid configuration examples"
+        }
+      ],
+      "deliverables": {
+        "files_created": [
+          "agentaction-docs/docs/core-concepts/configuration-hierarchy.md (~525 lines)"
+        ],
+        "files_modified": [
+          "agentaction-docs/sidebars.ts (added to navigation)"
+        ],
+        "verification": [
+          "Verified merge logic against config_handler.py:161",
+          "Verified precedence logic against action_expander.py:61-63",
+          "Verified examples against test_config_handler_new_format.py",
+          "Docusaurus build successful - no broken links"
+        ],
+        "related_issues": [
+          "Created issue #416 for field name standardization"
+        ]
+      },
+      "key_achievements": [
+        "Clear visual representation of 3-level hierarchy",
+        "4 realistic examples covering all inheritance patterns",
+        "Comprehensive required fields documentation",
+        "Best practices and FAQ section",
+        "Successfully integrated into Docusaurus navigation"
+      ]
+    },
+
+    "phase_2_validation_improvements": {
+      "priority": "critical",
+      "description": "Add validation to ensure required fields are present after hierarchy resolution",
+      "tasks": [
+        {
+          "id": "validate_required_fields",
+          "title": "Add validation to ensure required fields (vendor, model, api_key) are present after hierarchy resolution",
+          "files_to_modify": [
+            "agent_actions/core/parser/action_expander.py",
+            "agent_actions/agents/handlers/config_handler.py"
+          ],
+          "description": "Add validation logic that checks for required fields after config hierarchy is resolved",
+          "validation_points": [
+            "After merging project → workflow → action configs",
+            "Before passing config to vendor/provider"
+          ],
+          "required_fields": ["vendor", "model", "api_key"],
+          "status": "pending"
+        },
+        {
+          "id": "validate_api_key_env_vars",
+          "title": "Validate that API key environment variables actually exist",
+          "files_to_modify": [
+            "agent_actions/integrations/providers/vendor_base.py"
+          ],
+          "description": "Check if referenced environment variables exist before attempting to use them",
+          "validation_logic": [
+            "If api_key starts with ${...}, extract env var name",
+            "Check if env var is set in environment",
+            "Raise clear error if env var doesn't exist"
+          ],
+          "error_message_template": "Environment variable '${VAR_NAME}' referenced in api_key is not set. Please set it or update your configuration.",
+          "status": "pending"
+        },
+        {
+          "id": "clear_error_messages",
+          "title": "Provide clear error messages when required config is missing",
+          "description": "Create user-friendly error messages that guide users to fix configuration issues",
+          "error_scenarios": [
+            {
+              "scenario": "Missing vendor after hierarchy resolution",
+              "error_message": "Configuration Error: Missing required field 'vendor'\n\n  Action: {action_name}\n  Issue: No vendor specified at project, workflow, or action level\n\n  Fix: Add vendor to one of:\n  1. agent_actions.yml (project-level)\n  2. Workflow defaults section\n  3. Action-level config\n\n  Example:\n  model_vendor: anthropic\n  model_name: claude-3-5-sonnet-20241022"
+            },
+            {
+              "scenario": "Missing model after hierarchy resolution",
+              "error_message": "Configuration Error: Missing required field 'model'\n\n  Action: {action_name}\n  Issue: No model specified at project, workflow, or action level"
+            },
+            {
+              "scenario": "Missing API key environment variable",
+              "error_message": "Configuration Error: API key environment variable not found\n\n  Action: {action_name}\n  Variable: ${ANTHROPIC_API_KEY}\n  Issue: Environment variable is not set\n\n  Fix: Set the environment variable:\n  export ANTHROPIC_API_KEY=your-key-here"
+            },
+            {
+              "scenario": "Invalid vendor value",
+              "error_message": "Configuration Error: Invalid vendor specified\n\n  Action: {action_name}\n  Vendor: {invalid_vendor}\n  Supported vendors: anthropic, openai, gemini, groq"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "deprecated_field_warnings",
+          "title": "Add warnings for deprecated field names",
+          "description": "Warn users if they're using deprecated or inconsistent field names",
+          "implementation": "Add deprecation warnings when old field names are detected",
+          "warning_template": "Warning: Field name '{old_name}' is deprecated. Please use '{new_name}' instead.",
+          "status": "pending"
+        }
+      ]
+    },
+
+    "phase_3_field_name_consistency": {
+      "priority": "medium",
+      "description": "Consider standardizing on one naming convention or provide clear migration path",
+      "tasks": [
+        {
+          "id": "evaluate_naming_options",
+          "title": "Evaluate naming convention options",
+          "description": "Assess the three options for field name consistency",
+          "options": [
+            {
+              "option": "A",
+              "description": "Always use vendor/model (current workflow/action level)",
+              "pros": [
+                "Shorter field names",
+                "Already used in most places",
+                "More concise"
+              ],
+              "cons": [
+                "Breaking change for project-level configs",
+                "Need migration for existing agent_actions.yml files"
+              ]
+            },
+            {
+              "option": "B",
+              "description": "Always use model_vendor/model_name (current project level)",
+              "pros": [
+                "More explicit field names",
+                "Clear what each field represents",
+                "No ambiguity with 'vendor' (could mean different things)"
+              ],
+              "cons": [
+                "Breaking change for workflow/action configs",
+                "Longer field names",
+                "Need migration for all workflow files"
+              ]
+            },
+            {
+              "option": "C",
+              "description": "Support both with clear migration path",
+              "pros": [
+                "No breaking changes",
+                "Gradual migration possible",
+                "Backward compatibility"
+              ],
+              "cons": [
+                "More complex implementation",
+                "Two ways to do the same thing (confusing for users)",
+                "Longer support burden"
+              ]
+            }
+          ],
+          "recommendation": "To be determined after team discussion",
+          "status": "pending"
+        },
+        {
+          "id": "implement_chosen_naming_strategy",
+          "title": "Implement chosen naming strategy",
+          "description": "Based on the evaluation, implement the selected naming convention",
+          "dependencies": ["evaluate_naming_options"],
+          "implementation_steps": [
+            "Update config parsing logic",
+            "Add migration helpers if needed",
+            "Update validation to support chosen approach",
+            "Update documentation with new convention"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "add_migration_guide",
+          "title": "If keeping both, add clear documentation on when to use which",
+          "description": "Create migration guide and usage documentation",
+          "content_to_create": [
+            "Migration guide from old to new field names",
+            "When to use which field name convention",
+            "Examples of both conventions",
+            "Deprecation timeline if applicable"
+          ],
+          "suggested_location": "agentaction-docs/docs/guides/configuration-migration.md",
+          "status": "pending"
+        }
+      ]
+    },
+
+    "phase_4_additional_validation": {
+      "priority": "high",
+      "description": "Additional validation improvements discovered from codebase review",
+      "tasks": [
+        {
+          "id": "validate_model_vendor_compatibility",
+          "title": "Validate model is compatible with specified vendor",
+          "files": [
+            "agent_actions/core/parser/vendor_config.py - Contains model validators per vendor",
+            "agent_actions/core/parser/action_expander.py - Add validation after hierarchy resolution"
+          ],
+          "description": "Leverage existing Pydantic validators in vendor_config.py to validate model/vendor compatibility",
+          "current_state": "vendor_config.py has validators (validate_openai_model, validate_claude_model, etc.) but they're not integrated into config hierarchy validation",
+          "implementation": [
+            "After config hierarchy resolution, validate model against vendor",
+            "Use VendorConfig validators from vendor_config.py",
+            "Provide clear error with supported models for that vendor"
+          ],
+          "error_example": "Configuration Error: Model 'gpt-4' not compatible with vendor 'anthropic'\n\n  Supported Anthropic models:\n  • claude-3-5-sonnet-20241022\n  • claude-3-5-haiku-20241022\n  • claude-3-opus-20240229",
+          "status": "pending"
+        },
+        {
+          "id": "api_key_alias_handling",
+          "title": "Handle API key environment variable aliases consistently",
+          "files": [
+            "agent_actions/integrations/providers/factory.py",
+            "agent_actions/core/context/environment_config.py"
+          ],
+          "description": "Anthropic supports both CLAUDE_API_KEY and ANTHROPIC_API_KEY - need consistent handling",
+          "current_issues": [
+            "factory.py checks CLAUDE_API_KEY (line 84)",
+            "anthropic/provider.py expects ANTHROPIC_API_KEY (line 59)",
+            "environment_config.py has alias support (line 49) but not everywhere",
+            "Inconsistent between different parts of codebase"
+          ],
+          "implementation": [
+            "Standardize on checking both aliases with fallback",
+            "Document which env var names are supported for each vendor",
+            "Add validation that shows all supported env var names in error messages"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "batch_config_hierarchy_alignment",
+          "title": "Align batch service configuration with hierarchy system",
+          "file": "agent_actions/tasks/services/batch_service.py",
+          "description": "Batch service uses different config approach - needs alignment with hierarchy",
+          "current_state": "Batch service gets config differently than main agent flow (lines 240-250)",
+          "alignment_needed": [
+            "Batch service should respect project → workflow → action hierarchy",
+            "API key resolution should be consistent",
+            "Model/vendor validation should use same logic"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "vendor_registry_integration",
+          "title": "Integrate VendorRegistry into config validation flow",
+          "file": "agent_actions/core/parser/vendor_config.py",
+          "description": "VendorRegistry class exists but is not used in main config flow",
+          "current_state": "vendor_config.py has VendorRegistry with get_vendor_config() and validation but it's unused",
+          "implementation": [
+            "Use VendorRegistry to validate vendor names",
+            "Use VendorRegistry to get default API key env var names",
+            "Use VendorRegistry for model validation"
+          ],
+          "benefits": [
+            "Centralized vendor configuration",
+            "Easier to add new vendors",
+            "Consistent validation across codebase"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "tool_action_special_cases",
+          "title": "Document and validate tool action special cases",
+          "files": [
+            "agent_actions/core/parser/action_expander.py (lines 134-150)"
+          ],
+          "description": "Tool actions (kind='tool') have special handling that needs documentation and validation",
+          "special_behaviors": [
+            "Tool actions set model_vendor='tool' (line 136)",
+            "Tool actions cannot use batch mode (lines 139-150)",
+            "Tool actions use 'impl' or 'name' as model_name (line 137)"
+          ],
+          "documentation_needed": [
+            "When to use kind='tool' vs kind='llm'",
+            "What configuration fields apply to tool actions",
+            "Why tool actions can't use batch mode"
+          ],
+          "validation_needed": [
+            "Prevent batch mode on tool actions (already exists)",
+            "Validate 'impl' field is present for tool actions",
+            "Clear error if tool action tries to specify vendor/model"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "env_var_interpolation_validation",
+          "title": "Validate environment variable interpolation (${VAR} syntax)",
+          "description": "System supports ${VAR} syntax in configs but doesn't validate vars exist",
+          "current_usage": "Used in api_key field (e.g., api_key: ${ANTHROPIC_API_KEY})",
+          "validation_needed": [
+            "Detect ${...} pattern in config values",
+            "Extract variable name",
+            "Check if environment variable is set",
+            "Provide clear error with variable name if missing"
+          ],
+          "error_example": "Configuration Error: Environment variable not set\n\n  Action: my-action\n  Field: api_key\n  Variable: ${ANTHROPIC_API_KEY}\n  Issue: Environment variable 'ANTHROPIC_API_KEY' is not set\n\n  Fix: export ANTHROPIC_API_KEY=your-key-here",
+          "status": "pending"
+        }
+      ]
+    },
+
+    "phase_5_examples_and_templates": {
+      "priority": "medium",
+      "description": "Create configuration examples and templates for users",
+      "tasks": [
+        {
+          "id": "create_agent_actions_yml_template",
+          "title": "Create template for project-level agent_actions.yml",
+          "suggested_location": "templates/agent_actions.yml.template",
+          "content": [
+            "Commented template showing all project-level options",
+            "Examples of default_agent_config with all fields",
+            "Comments explaining each field",
+            "Examples for different vendors (OpenAI, Anthropic, Gemini)"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "create_workflow_templates",
+          "title": "Create workflow templates for common patterns",
+          "suggested_location": "templates/workflows/",
+          "templates_to_create": [
+            "basic-workflow.yml - Simple single-action workflow",
+            "multi-step-workflow.yml - Workflow with dependencies",
+            "hierarchy-example.yml - Shows project/workflow/action hierarchy",
+            "multi-vendor-workflow.yml - Different vendors in same workflow"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "create_configuration_examples",
+          "title": "Create comprehensive configuration examples in docs",
+          "suggested_location": "agentaction-docs/docs/examples/configuration/",
+          "examples_needed": [
+            "Example 1: Project-only configuration",
+            "Example 2: Workflow defaults override project",
+            "Example 3: Action-level overrides",
+            "Example 4: Mixed hierarchy (some fields from each level)",
+            "Example 5: Environment variable usage",
+            "Example 6: Tool actions configuration",
+            "Example 7: Batch mode configuration"
+          ],
+          "status": "pending"
+        }
+      ]
+    },
+
+    "phase_6_schema_documentation": {
+      "priority": "medium",
+      "description": "Document configuration schema and its relationship to YAML structure",
+      "tasks": [
+        {
+          "id": "document_pydantic_yaml_mapping",
+          "title": "Document how Pydantic schemas map to YAML configuration",
+          "files": [
+            "agent_actions/core/parser/config_schema.py - AgentConfig, DefaultAgentConfig",
+            "agent_actions/core/parser/vendor_config.py - VendorConfig classes"
+          ],
+          "description": "Explain relationship between Python Pydantic models and YAML config files",
+          "content_to_create": [
+            "Table mapping YAML fields to Pydantic model fields",
+            "Explanation of field validators and what they check",
+            "How to read Pydantic validation errors in context of YAML",
+            "Type information for each field"
+          ],
+          "suggested_location": "agentaction-docs/docs/reference/configuration-schema.md",
+          "status": "pending"
+        },
+        {
+          "id": "generate_json_schema",
+          "title": "Generate JSON Schema for configuration files",
+          "description": "Generate JSON Schema from Pydantic models for IDE autocomplete",
+          "implementation": [
+            "Use Pydantic's schema_json() method",
+            "Generate schema for agent_actions.yml",
+            "Generate schema for workflow YAML files",
+            "Include in documentation or as downloadable file"
+          ],
+          "benefits": [
+            "IDE autocomplete in VS Code, PyCharm, etc.",
+            "Real-time validation in editors",
+            "Better developer experience"
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "document_all_config_fields",
+          "title": "Create comprehensive field reference documentation",
+          "description": "Document every configuration field with type, default, description, examples",
+          "suggested_location": "agentaction-docs/docs/reference/configuration-fields.md",
+          "fields_to_document": [
+            "Core fields: vendor/model_vendor, model/model_name, api_key",
+            "Execution fields: run_mode, granularity, is_operational",
+            "LLM fields: json_mode, few_shot, temperature, max_tokens",
+            "Data flow: observe, drops, schema",
+            "Advanced: chunk_config, interceptors, loop_consumption",
+            "Tool-specific: impl, kind"
+          ],
+          "format": "Each field should have: name, type, default, required/optional, description, example, notes",
+          "status": "pending"
+        }
+      ]
+    },
+
+    "phase_7_testing": {
+      "priority": "critical",
+      "description": "Add comprehensive tests for configuration validation and hierarchy",
+      "tasks": [
+        {
+          "id": "test_missing_required_config",
+          "title": "Add tests for missing required config scenarios",
+          "file": "tests/agents/handlers/test_config_handler_new_format.py",
+          "test_cases": [
+            {
+              "test_name": "test_missing_vendor_all_levels",
+              "description": "Test error when vendor is not specified at any level",
+              "expected_error": "ConfigValidationError",
+              "error_message_contains": "Missing required field 'vendor'"
+            },
+            {
+              "test_name": "test_missing_model_all_levels",
+              "description": "Test error when model is not specified at any level",
+              "expected_error": "ConfigValidationError",
+              "error_message_contains": "Missing required field 'model'"
+            },
+            {
+              "test_name": "test_missing_api_key_all_levels",
+              "description": "Test error when api_key is not specified at any level",
+              "expected_error": "ConfigValidationError",
+              "error_message_contains": "Missing required field 'api_key'"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "test_invalid_api_key_env_vars",
+          "title": "Add tests for invalid API key environment variables",
+          "file": "tests/integrations/providers/test_vendor_base.py",
+          "test_cases": [
+            {
+              "test_name": "test_api_key_env_var_not_set",
+              "description": "Test error when referenced env var doesn't exist",
+              "setup": "api_key: ${NONEXISTENT_KEY}",
+              "expected_error": "ConfigValidationError",
+              "error_message_contains": "Environment variable 'NONEXISTENT_KEY' is not set"
+            },
+            {
+              "test_name": "test_api_key_env_var_empty",
+              "description": "Test error when env var is set but empty",
+              "setup": "os.environ['EMPTY_KEY'] = ''",
+              "expected_error": "ConfigValidationError",
+              "error_message_contains": "Environment variable 'EMPTY_KEY' is empty"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "test_mixed_naming_conventions",
+          "title": "Add tests for mixed naming conventions",
+          "file": "tests/agents/handlers/test_config_handler_new_format.py",
+          "test_cases": [
+            {
+              "test_name": "test_model_vendor_and_vendor_same_time",
+              "description": "Test behavior when both model_vendor and vendor are specified",
+              "expected_behavior": "Action-level vendor takes precedence over project-level model_vendor"
+            },
+            {
+              "test_name": "test_model_name_and_model_same_time",
+              "description": "Test behavior when both model_name and model are specified",
+              "expected_behavior": "Action-level model takes precedence over project-level model_name"
+            },
+            {
+              "test_name": "test_project_uses_model_vendor_action_uses_vendor",
+              "description": "Test that different naming conventions work across levels",
+              "expected_behavior": "Hierarchy resolution works correctly regardless of field name convention"
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "test_error_messages_helpful",
+          "title": "Test error messages are helpful and actionable",
+          "file": "tests/core/test_config_validation_errors.py",
+          "test_cases": [
+            {
+              "test_name": "test_missing_vendor_error_message_includes_fix",
+              "description": "Verify error message includes how to fix the issue",
+              "assertions": [
+                "Error message contains action name",
+                "Error message contains 'Fix:' section",
+                "Error message contains example configuration"
+              ]
+            },
+            {
+              "test_name": "test_invalid_env_var_error_shows_variable_name",
+              "description": "Verify error message shows which env var is missing",
+              "assertions": [
+                "Error message contains env var name",
+                "Error message shows how to set env var",
+                "Error message is user-friendly (no Python internals)"
+              ]
+            }
+          ],
+          "status": "pending"
+        },
+        {
+          "id": "test_hierarchy_resolution",
+          "title": "Add comprehensive hierarchy resolution tests",
+          "file": "tests/core/parser/test_action_expander_hierarchy.py",
+          "test_cases": [
+            {
+              "test_name": "test_project_only_config",
+              "description": "Test config inheritance with only project-level settings",
+              "expected": "All actions use project-level vendor/model/api_key"
+            },
+            {
+              "test_name": "test_workflow_overrides_project",
+              "description": "Test workflow defaults override project settings",
+              "expected": "Workflow defaults take precedence over project settings"
+            },
+            {
+              "test_name": "test_action_overrides_workflow_and_project",
+              "description": "Test action-level config overrides both workflow and project",
+              "expected": "Action-level settings have highest precedence"
+            },
+            {
+              "test_name": "test_partial_overrides",
+              "description": "Test that only specified fields are overridden",
+              "scenario": "Action specifies model but not vendor",
+              "expected": "Action's model used, but vendor inherited from workflow/project"
+            },
+            {
+              "test_name": "test_all_three_levels_different_fields",
+              "description": "Test complex scenario with different fields at each level",
+              "scenario": "Project has vendor, workflow has model, action has api_key",
+              "expected": "Final config merges all three levels correctly"
+            }
+          ],
+          "status": "pending"
+        }
+      ]
+    }
+  },
+
+  "related_files": {
+    "core_config_hierarchy": [
+      "agent_actions/core/parser/action_expander.py - Handles config hierarchy and action expansion",
+      "agent_actions/agents/handlers/config_handler.py - Loads and merges configs",
+      "agent_actions/core/context/path_config.py - Loads project-level config (agent_actions.yml)"
+    ],
+    "provider_integration": [
+      "agent_actions/integrations/providers/vendor_base.py - Base API key resolution",
+      "agent_actions/integrations/providers/factory.py - Batch provider factory",
+      "agent_actions/integrations/providers/anthropic/provider.py - Anthropic implementation",
+      "agent_actions/core/parser/vendor_config.py - Vendor configuration models with validators"
+    ],
+    "config_schemas": [
+      "agent_actions/core/parser/config_schema.py - AgentConfig, DefaultAgentConfig Pydantic models",
+      "agent_actions/core/parser/vendor_config.py - VendorConfig classes and VendorRegistry",
+      "agent_actions/core/context/environment_config.py - Environment variables configuration"
+    ],
+    "batch_service": [
+      "agent_actions/tasks/services/batch_service.py - Batch processing configuration"
+    ],
+    "existing_tests": [
+      "tests/agents/handlers/test_config_handler_new_format.py - Config hierarchy tests",
+      "tests/core/parser/test_action_expander_defaults.py - Action expander default tests",
+      "tests/core/parser/test_action_expander_guards.py - Guard condition tests"
+    ],
+    "documentation_files": [
+      "agentaction-docs/docs/core-concepts/configuration-hierarchy.md - To be created",
+      "agentaction-docs/docs/reference/configuration-schema.md - To be created",
+      "agentaction-docs/docs/reference/configuration-fields.md - To be created",
+      "agentaction-docs/docs/examples/configuration/ - To be created",
+      "agentaction-docs/docs/guides/configuration-migration.md - To be created if needed"
+    ],
+    "templates": [
+      "templates/agent_actions.yml.template - To be created",
+      "templates/workflows/ - To be created"
+    ]
+  },
+
+  "success_criteria": [
+    "✅ Clear documentation on configuration hierarchy exists",
+    "✅ Users understand when to use vendor vs model_vendor",
+    "✅ Validation catches missing required fields with clear error messages",
+    "✅ Environment variable validation catches missing/empty vars",
+    "✅ Model/vendor compatibility is validated before execution",
+    "✅ API key aliases (CLAUDE_API_KEY/ANTHROPIC_API_KEY) handled consistently",
+    "✅ Environment variable interpolation (${VAR}) is validated",
+    "✅ Error messages are actionable and user-friendly (leveraging issue #394 improvements)",
+    "✅ All tests pass including new validation tests",
+    "✅ No breaking changes for existing workflows",
+    "✅ Comprehensive test coverage for hierarchy resolution",
+    "✅ VendorRegistry integrated into config validation flow",
+    "✅ Batch service respects configuration hierarchy",
+    "✅ Tool actions are documented and validated properly",
+    "✅ Configuration examples and templates available for users",
+    "✅ JSON Schema available for IDE autocomplete",
+    "✅ Complete field reference documentation exists",
+    "✅ Documentation includes migration guide if needed"
+  ],
+
+  "user_experience_examples": {
+    "missing_vendor": {
+      "before": {
+        "user_sees": "KeyError: 'vendor'",
+        "user_action": "??? Confused - where should vendor be specified?"
+      },
+      "after": {
+        "user_sees": "Configuration Error: Missing required field 'vendor'\n\n  Action: my-action\n  Issue: No vendor specified at project, workflow, or action level\n\n  Fix: Add vendor to one of:\n  1. agent_actions.yml (project-level): model_vendor: anthropic\n  2. Workflow defaults: vendor: anthropic\n  3. Action config: vendor: anthropic",
+        "user_action": "Clear - add vendor to one of the three levels"
+      }
+    },
+    "missing_env_var": {
+      "before": {
+        "user_sees": "KeyError: 'ANTHROPIC_API_KEY'",
+        "user_action": "??? Where should this be set?"
+      },
+      "after": {
+        "user_sees": "Configuration Error: API key environment variable not found\n\n  Action: my-action\n  Variable: ANTHROPIC_API_KEY\n  Issue: Environment variable is not set\n\n  Fix: Set the environment variable:\n  export ANTHROPIC_API_KEY=your-key-here\n\n  Or add to .env file:\n  ANTHROPIC_API_KEY=your-key-here",
+        "user_action": "Clear - set the environment variable"
+      }
+    },
+    "field_name_confusion": {
+      "before": {
+        "user_sees": "Config works in workflow but not in agent_actions.yml",
+        "user_action": "??? Why is vendor not working in project config?"
+      },
+      "after": {
+        "user_sees": "Documentation clearly explains:\n  - Project-level: use model_vendor and model_name\n  - Workflow/Action-level: use vendor and model\n\nOr after standardization:\n  - All levels: use vendor and model (consistent everywhere)",
+        "user_action": "Clear - knows which field names to use at each level"
+      }
+    }
+  },
+
+  "risk_assessment": {
+    "breaking_changes": "Medium - Depends on field naming decision (Option A/B has breaking changes, Option C doesn't)",
+    "compatibility": "High - Can maintain backward compatibility with Option C",
+    "testing_required": "Critical - Configuration hierarchy is core functionality"
+  },
+
+  "estimated_effort": {
+    "phase_1_documentation": "6-8 hours",
+    "phase_2_validation": "8-10 hours",
+    "phase_3_field_consistency": "4-6 hours (depends on chosen option)",
+    "phase_4_additional_validation": "10-12 hours",
+    "phase_5_examples_and_templates": "4-6 hours",
+    "phase_6_schema_documentation": "6-8 hours",
+    "phase_7_testing": "12-15 hours",
+    "total": "50-65 hours (expanded from 28-36 after codebase review)"
+  },
+
+  "dependencies": {
+    "issue_394": "Error handling improvements (#394) should be completed first for better error messages",
+    "existing_hierarchy": "Current config hierarchy implementation in action_expander.py and config_handler.py"
+  },
+
+  "notes": [
+    "Current implementation supports both vendor/model_vendor and model/model_name for backward compatibility",
+    "Project-level defaults were added to enable org-wide configuration",
+    "No vendor-specific hardcoded defaults (removed OpenAI defaults)",
+    "Decision on field naming (Option A/B/C) should be made early to guide implementation",
+    "Documentation is critical since this affects all users configuring agents"
+  ],
+
+  "codebase_discoveries": {
+    "description": "Additional issues discovered during codebase review",
+    "findings": [
+      {
+        "area": "Model Validation",
+        "issue": "vendor_config.py has Pydantic validators for each vendor's models (validate_openai_model, validate_claude_model, etc.) but they're not integrated into the main config validation flow",
+        "impact": "Users can specify invalid model names and won't get validation errors until runtime",
+        "files": ["agent_actions/core/parser/vendor_config.py"]
+      },
+      {
+        "area": "API Key Aliases",
+        "issue": "Anthropic supports both CLAUDE_API_KEY and ANTHROPIC_API_KEY but handling is inconsistent across codebase",
+        "impact": "Confusion about which env var to use, inconsistent behavior",
+        "files": [
+          "agent_actions/integrations/providers/factory.py (line 84 - uses CLAUDE_API_KEY)",
+          "agent_actions/integrations/providers/anthropic/provider.py (line 59 - expects ANTHROPIC_API_KEY)",
+          "agent_actions/core/context/environment_config.py (line 49 - has alias support)"
+        ]
+      },
+      {
+        "area": "VendorRegistry Unused",
+        "issue": "vendor_config.py has VendorRegistry class with useful methods but it's never instantiated or used",
+        "impact": "Missing opportunity for centralized vendor configuration and validation",
+        "files": ["agent_actions/core/parser/vendor_config.py (lines 231-269)"]
+      },
+      {
+        "area": "Environment Variable Interpolation",
+        "issue": "System supports ${VAR} syntax in configs but doesn't validate that vars exist before runtime",
+        "impact": "Cryptic errors when env vars are missing",
+        "current_usage": "Used in api_key field throughout configs"
+      },
+      {
+        "area": "Batch Service Config",
+        "issue": "Batch service uses different config approach than main agent flow",
+        "impact": "Inconsistent configuration experience, hierarchy may not be respected",
+        "files": ["agent_actions/tasks/services/batch_service.py (lines 240-250)"]
+      },
+      {
+        "area": "Tool Actions",
+        "issue": "Tool actions have special behaviors (vendor='tool', no batch mode) but limited documentation",
+        "impact": "Users don't understand when to use tool vs llm actions",
+        "files": ["agent_actions/core/parser/action_expander.py (lines 134-150)"]
+      },
+      {
+        "area": "Configuration Examples",
+        "issue": "No example agent_actions.yml or workflow templates found in codebase",
+        "impact": "Users have no reference for how to structure configs",
+        "searched": "**/*example*.yml, **/agent_actions.yml - found none"
+      },
+      {
+        "area": "JSON Schema Generation",
+        "issue": "Pydantic models exist but no JSON Schema generated for IDE autocomplete",
+        "impact": "Users miss out on IDE validation and autocomplete",
+        "opportunity": "Can generate from AgentConfig and VendorConfig models"
+      }
+    ],
+    "positive_findings": [
+      {
+        "area": "Error Handling",
+        "note": "Issue #394 has been completed - comprehensive error handling system in place",
+        "benefit": "New validation can leverage format_user_error() for consistent user-friendly messages"
+      },
+      {
+        "area": "Test Infrastructure",
+        "note": "test_config_handler_new_format.py has good foundation for hierarchy tests",
+        "benefit": "Can extend existing test structure for new validation"
+      },
+      {
+        "area": "Pydantic Models",
+        "note": "Strong Pydantic model foundation with validators already written",
+        "benefit": "Just need to integrate validators into config flow, not write from scratch"
+      }
+    ]
+  },
+
+  "implementation_status": {
+    "overall_status": "pending",
+    "start_date": null,
+    "completion_date": null,
+    "phases_started": [],
+    "phases_completed": [],
+    "blockers": []
+  }
+}

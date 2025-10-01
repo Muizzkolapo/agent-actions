@@ -37,6 +37,7 @@ const sidebars: SidebarsConfig = {
         'core-concepts/agents',
         'core-concepts/workflows',
         'core-concepts/schemas',
+        'core-concepts/configuration-hierarchy',
         'core-concepts/tokenizers',
         'core-concepts/error-handling',
       ],
