@@ -44,44 +44,44 @@ class ConfigManager:
             self.user_config = loaded_config
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(
-                f"Error rendering or loading user config from {self.constructor_path}: {safe_format_error(e)}",
+                "Error rendering or loading user config",
                 context={'config_path': str(self.constructor_path), 'operation': 'load_user_config'},
                 cause=e
-            ) from e
+            )
         except yaml.YAMLError as e:
             raise ConfigurationError(
-                f"Error parsing YAML for user config from {self.constructor_path}: {safe_format_error(e)}",
+                "Error parsing YAML for user config",
                 context={'config_path': str(self.constructor_path), 'operation': 'parse_yaml'},
                 cause=e
-            ) from e
+            )
         except Exception as e: # Catch other unexpected errors
             raise ConfigurationError(
-                f"Unexpected error loading user config from {self.constructor_path}: {safe_format_error(e)}",
+                "Unexpected error loading user config",
                 context={'config_path': str(self.constructor_path), 'operation': 'load_user_config'},
                 cause=e
-            ) from e
+            )
 
         try:
             default_config_data = render_pipeline_with_templates(self.default_path, self.template_dir)
             self.default_config = yaml.safe_load(default_config_data)
         except (TemplateRenderingError, ConfigurationError) as e: # Catch specific errors from render_pipeline
             raise ConfigurationError(
-                f"Error rendering or loading default config from {self.default_path}: {safe_format_error(e)}",
+                "Error rendering or loading default config",
                 context={'config_path': str(self.default_path), 'operation': 'load_default_config'},
                 cause=e
-            ) from e
+            )
         except yaml.YAMLError as e:
             raise ConfigurationError(
-                f"Error parsing YAML for default config from {self.default_path}: {safe_format_error(e)}",
+                "Error parsing YAML for default config",
                 context={'config_path': str(self.default_path), 'operation': 'parse_yaml'},
                 cause=e
-            ) from e
+            )
         except Exception as e: # Catch other unexpected errors
             raise ConfigurationError(
-                f"Unexpected error loading default config from {self.default_path}: {safe_format_error(e)}",
+                "Unexpected error loading default config",
                 context={'config_path': str(self.default_path), 'operation': 'load_default_config'},
                 cause=e
-            ) from e
+            )
 
         # Prioritize tool_path from user_config, then fallback to default_config
         user_tool_path = None
@@ -118,8 +118,10 @@ class ConfigManager:
         self.agent_name = self.find_agent_name(self.user_config)
         config_filename = Path(self.constructor_path).stem
         if self.agent_name != config_filename:
-            error_msg = f"Top-level key '{self.agent_name}' does not match the filename '{config_filename}'"
-            raise ValueError(error_msg)
+            raise ConfigurationError(
+                "Top-level key does not match the filename",
+                context={'agent_name': self.agent_name, 'config_filename': config_filename, 'operation': 'validate_agent_name'}
+            )
 
     def check_child_pipeline(self):
         # Check if this is new format
@@ -191,7 +193,11 @@ class ConfigManager:
             try:
                 agent_model = AgentConfig.model_validate(agent)
             except ValidationError as e:
-                raise ConfigurationError(f"Invalid agent configuration: {e}") from e
+                raise ConfigurationError(
+                    "Invalid agent configuration",
+                    context={'agent_type': agent.get('agent_type', 'unknown'), 'operation': 'merge_agent_configs'},
+                    cause=e
+                )
 
             agent_type = agent_model.agent_type
             # Merge default config with agent-specific config
@@ -243,7 +249,11 @@ class ConfigManager:
             self.environment_config = EnvironmentConfig()
             return self.environment_config
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid environment configuration: {e}") from e
+            raise ConfigurationError(
+                "Invalid environment configuration",
+                context={'operation': 'load_environment_config'},
+                cause=e
+            )
     
     def get_agent_config(self, agent_type: str) -> Optional[AgentConfig]:
         """Get typed agent configuration by agent type."""
@@ -287,7 +297,11 @@ class ConfigManager:
             self.workflow_config = WorkflowConfig.model_validate(workflow_data)
             return self.workflow_config
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid workflow configuration: {e}") from e
+            raise ConfigurationError(
+                "Invalid workflow configuration",
+                context={'workflow_name': workflow_data.get('name', 'unknown'), 'operation': 'create_workflow_config'},
+                cause=e
+            )
     
     def create_pipeline_config(self, pipeline_data: Dict[str, Any]) -> PipelineConfig:
         """Create a typed pipeline configuration from dictionary data."""
@@ -295,7 +309,11 @@ class ConfigManager:
             self.pipeline_config = PipelineConfig.model_validate(pipeline_data)
             return self.pipeline_config
         except ValidationError as e:
-            raise ConfigurationError(f"Invalid pipeline configuration: {e}") from e
+            raise ConfigurationError(
+                "Invalid pipeline configuration",
+                context={'pipeline_name': pipeline_data.get('name', 'unknown'), 'operation': 'create_pipeline_config'},
+                cause=e
+            )
     
     def validate_all_configs(self) -> None:
         """Validate all loaded configurations."""
@@ -308,7 +326,11 @@ class ConfigManager:
                 # Re-validate to ensure consistency
                 AgentConfig.model_validate(config.model_dump())
             except ValidationError as e:
-                raise ConfigurationError(f"Agent '{agent_type}' configuration is invalid: {e}") from e
+                raise ConfigurationError(
+                    "Agent configuration is invalid",
+                    context={'agent_type': agent_type, 'operation': 'validate_all_configs'},
+                    cause=e
+                )
     
     def get_configuration_summary(self) -> Dict[str, Any]:
         """Get a summary of all loaded configurations."""

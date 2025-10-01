@@ -200,8 +200,14 @@ class LoopOutputCorrelator:
                 correlation_key = record_copy.get('loop_correlation_id')
                 if not correlation_key:
                     # This should never happen in proper loop processing
+                    from agent_actions.core.exceptions import DataValidationError
                     source_guid = record_copy.get('source_guid', 'unknown')
-                    raise ValueError(f"Loop record missing required loop_correlation_id (source_guid: {source_guid})")
+                    raise DataValidationError(
+                        "loop_correlation_id",
+                        "required",
+                        "missing",
+                        context={'source_guid': source_guid, 'loop_agent': loop_agent, 'operation': 'correlate_loop_outputs'}
+                    )
 
                 # Group records by their loop_correlation_id
                 correlation_groups[correlation_key][loop_agent] = record_copy

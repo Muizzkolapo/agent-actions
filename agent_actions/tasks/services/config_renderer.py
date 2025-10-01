@@ -233,13 +233,17 @@ class YAMLConfigParser(ConfigParser):
             ServiceLogger.log_operation_start(logger, "parse YAML configuration")
             
             if not config_data:
-                raise ConfigurationError("Empty configuration data")
+                raise ConfigurationError(
+                    "Empty configuration data",
+                    context={'operation': 'parse_yaml'}
+                )
                 
             config = yaml.safe_load(config_data)
             
             if not isinstance(config, dict):
                 raise ConfigurationError(
-                    f"Expected configuration to be a dictionary, got {type(config)}"
+                    "Expected configuration to be a dictionary",
+                    context={'operation': 'parse_yaml', 'actual_type': type(config).__name__}
                 )
                 
             ServiceLogger.log_operation_success(logger, "parse YAML configuration")
@@ -328,7 +332,10 @@ class ConfigRenderingService:
     def _safe_load_yaml(self, raw: str, src: Path) -> AgentConfigMap:
         """Parse YAML and fail instantly on syntax OR empty content."""
         if not raw.strip():
-            raise ConfigurationError(f"Configuration file is empty: {src}")
+            raise ConfigurationError(
+                "Configuration file is empty",
+                context={'file_path': str(src), 'operation': 'load_yaml'}
+            )
         try:
             data = yaml.safe_load(raw)
         except YAMLError as exc:
@@ -336,10 +343,20 @@ class ConfigRenderingService:
             where = f"(line {mark.line+1}, col {mark.column+1})" if mark else ""
             problem = getattr(exc, "problem", "syntax error")
             raise ConfigurationError(
-                f"YAML syntax error in {src} {where}: {problem}"
+                "YAML syntax error",
+                context={
+                    'file_path': str(src),
+                    'line': mark.line + 1 if mark else None,
+                    'column': mark.column + 1 if mark else None,
+                    'problem': problem,
+                    'operation': 'parse_yaml'
+                }
             )
         if not data:
-            raise ConfigurationError(f"Configuration results in empty data: {src}")
+            raise ConfigurationError(
+                "Configuration results in empty data",
+                context={'file_path': str(src), 'operation': 'parse_yaml'}
+            )
 
         # Expect new format only
         return cast(AgentConfigMap, data)
@@ -393,7 +410,11 @@ class ConfigRenderingService:
                     entry_model = AgentConfig.model_validate(agent_entry)
                     validated_entries.append(entry_model.model_dump(exclude_unset=True))
                 except ValidationError as e:
-                    raise ConfigValidationError(f"Invalid action configuration for '{action.get('name')}': {e}") from e
+                    raise ConfigValidationError(
+                        "Invalid action configuration",
+                        context={'action_name': action.get('name', 'unknown'), 'agent_name': agent_name},
+                        cause=e
+                    )
 
             # Store the validated entries for new format
             config['_validated_actions'] = validated_entries
@@ -402,7 +423,10 @@ class ConfigRenderingService:
             # Old format - original logic
             agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
             if agent_entries_list is None:
-                raise ConfigValidationError(f"No agent configuration found for '{agent_name}'")
+                raise ConfigValidationError(
+                    "No agent configuration found",
+                    context={'agent_name': agent_name, 'operation': 'validate_config'}
+                )
 
             validated_entries: List[AgentEntryDict] = []
             for entry in agent_entries_list:
@@ -410,7 +434,11 @@ class ConfigRenderingService:
                     entry_model = AgentConfig.model_validate(entry)
                     validated_entries.append(entry_model.model_dump(exclude_unset=True))
                 except ValidationError as e:
-                    raise ConfigValidationError(f"Invalid agent configuration: {e}") from e
+                    raise ConfigValidationError(
+                        "Invalid agent configuration",
+                        context={'agent_name': agent_name, 'operation': 'validate_config'},
+                        cause=e
+                    )
 
             config[agent_name] = validated_entries
 
@@ -427,7 +455,8 @@ class ConfigRenderingService:
             errors = config_validator_instance.get_errors()
             if errors:
                 raise ConfigValidationError(
-                    f"Agent configuration validation failed for '{agent_name}': {errors}"
+                    "Agent configuration validation failed",
+                    context={'agent_name': agent_name, 'errors': errors, 'operation': 'validate_config'}
                 )
 
     @as_validation_error(ConfigurationError)
@@ -468,9 +497,15 @@ class ConfigRenderingService:
         
         cfg_path = Path(config_path)
         if not cfg_path.exists():
-           raise ConfigurationError(f"Configuration file not found: {cfg_path}")
+            raise ConfigurationError(
+                "Configuration file not found",
+                context={'file_path': str(cfg_path), 'operation': 'render_and_load_config'}
+            )
         if cfg_path.is_dir():
-            raise ConfigurationError(f"Expected a YAML/JSON file, got a directory: {cfg_path}")       
+            raise ConfigurationError(
+                "Expected a YAML/JSON file, got a directory",
+                context={'file_path': str(cfg_path), 'operation': 'render_and_load_config'}
+            )       
         # Render the template
         rendered_template = self.template_renderer.render(
             config_path_str,
@@ -482,7 +517,11 @@ class ConfigRenderingService:
             schema_validate_instance = SchemaValidator()
             schema_validate_instance.validate(agent_name, Path(template_dir))
         except Exception as e:
-            raise ConfigurationError(f"Schema validation failed: {e}") from None
+            raise ConfigurationError(
+                "Schema validation failed",
+                context={'agent_name': agent_name, 'template_dir': str(template_dir), 'operation': 'validate_schema'},
+                cause=e
+            )
         self._validate_agent_config_block(config, agent_name)
             
         ServiceLogger.log_operation_success(logger, "render and load config",
@@ -507,14 +546,22 @@ class ConfigRenderer:
             mark = exc.problem_mark            # has .line & .column (0-based)
             msg  = exc.problem or "syntax error"
             raise ConfigValidationError(
-                f"YAML syntax error in {src.name} "
-                f"(line {mark.line+1}, col {mark.column+1}): {msg}"
-            ) from None
+                "YAML syntax error",
+                context={
+                    'file_name': src.name,
+                    'line': mark.line + 1,
+                    'column': mark.column + 1,
+                    'problem': msg,
+                    'operation': 'parse_yaml'
+                }
+            )
         except Exception as exc:
             # Handle conversion errors
             raise ConfigValidationError(
-                f"Configuration format error in {src.name}: {exc}"
-            ) from None    
+                "Configuration format error",
+                context={'file_name': src.name, 'operation': 'parse_yaml'},
+                cause=exc
+            )    
     @as_validation_error(ConfigValidationError)
     def render_and_load_config(
         agent_name: str,

@@ -31,7 +31,11 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
             # This might be acceptable if some templates are optional, log and continue
             print(f"Warning: Template file '{template_file}' not found in {templates_folder}.")
         except jinja2.TemplateSyntaxError as e:
-            raise TemplateRenderingError(f"Syntax error in template '{template_file}': {e.message} (line {e.lineno})") from e
+            raise TemplateRenderingError(
+                "Syntax error in template",
+                context={'template_file': template_file, 'line': e.lineno, 'message': e.message, 'templates_folder': templates_folder},
+                cause=e
+            )
         except Exception as e: # Catch other unexpected errors during template loading
             raise TemplateRenderingError(
                 f"Unexpected error loading template '{template_file}': {safe_format_error(e)}",
@@ -49,7 +53,11 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
             try:
                 yaml_content = PromptLoader.load_prompt(prompt_key)
             except ValueError as e: # PromptLoader.load_prompt raises ValueError
-                raise ConfigurationError(f"Failed to load prompt '{prompt_key}' referenced in '{yaml_path}': {e}") from e
+                raise ConfigurationError(
+                    "Failed to load prompt",
+                    context={'prompt_key': prompt_key, 'yaml_path': yaml_path, 'operation': 'load_prompt'},
+                    cause=e
+                )
         
         template = env.from_string(yaml_content)
         rendered_yaml_content = template.render()
@@ -92,14 +100,31 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
                 out_file.write(rendered_yaml_content)
         return rendered_yaml_content
     except FileNotFoundError as e:
-        raise ConfigurationError(f"YAML configuration file not found: {yaml_path}") from e
+        raise ConfigurationError(
+            "YAML configuration file not found",
+            context={'yaml_path': yaml_path, 'operation': 'render_template'},
+            cause=e
+        )
     except IOError as e:
-        raise ConfigurationError(f"IO error reading or writing YAML file '{yaml_path}' or output '{output_file}': {e}") from e
+        raise ConfigurationError(
+            "IO error reading or writing YAML file",
+            context={'yaml_path': yaml_path, 'output_file': output_file, 'operation': 'file_io'},
+            cause=e
+        )
     except yaml.YAMLError as e:
         problem = getattr(e, 'problem', '')
         mark = getattr(e, 'problem_mark', None)
-        location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
-        raise ConfigurationError(f"Error parsing YAML from '{yaml_path}'{location}: {problem}") from e
+        raise ConfigurationError(
+            "Error parsing YAML",
+            context={
+                'yaml_path': yaml_path,
+                'line': mark.line + 1 if mark else None,
+                'column': mark.column + 1 if mark else None,
+                'problem': problem,
+                'operation': 'parse_yaml'
+            },
+            cause=e
+        )
     except jinja2.TemplateError as e: # Catches TemplateSyntaxError, UndefinedError, etc.
         raise TemplateRenderingError(
             f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}",

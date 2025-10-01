@@ -37,6 +37,7 @@ from agent_actions._internal.utils.path_utils import (
     COMMON_EXTENSIONS,
     SIDE_OUTPUT_DIR_NAME
 )
+from agent_actions.core.exceptions import FileSystemError
 
 
 class TestPathUtilityFunctions:
@@ -355,7 +356,7 @@ class TestRelativePathOperations:
         with patch('agent_actions._internal.utils.path_utils.resolve_absolute_path') as mock_resolve:
             mock_resolve.side_effect = lambda p: Path(p).resolve()
 
-            with pytest.raises(ValueError):
+            with pytest.raises(FileSystemError):
                 get_relative_path(outside_file, base_dir)
 
 
@@ -440,7 +441,7 @@ class TestSafePathJoining:
                 dangerous_path = Path("/etc/passwd")
                 mock_resolve.return_value = dangerous_path
 
-                with pytest.raises(ValueError, match="outside project bounds"):
+                with pytest.raises(FileSystemError, match="outside project bounds"):
                     safe_path_join("..", "..", "..", "etc", "passwd")
 
     def test_safe_path_join_relative_path_components(self, tmp_path):

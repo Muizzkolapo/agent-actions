@@ -60,6 +60,8 @@ class OpenAIConfig(BaseVendorConfig):
     @classmethod
     def validate_openai_model(cls, v):
         """Validate OpenAI model names."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         valid_models = [
             "gpt-4", "gpt-4-turbo", "gpt-4o", "gpt-4o-mini",
             "gpt-3.5-turbo", "gpt-3.5-turbo-16k"
@@ -68,7 +70,11 @@ class OpenAIConfig(BaseVendorConfig):
             # Allow any model name starting with known prefixes for flexibility
             valid_prefixes = ["gpt-4", "gpt-3.5", "o1"]
             if not any(v.startswith(prefix) for prefix in valid_prefixes):
-                raise ValueError(f"Unsupported OpenAI model: {v}")
+                raise ConfigValidationError(
+                    "openai_model_name",
+                    f"Unsupported OpenAI model: {v}",
+                    context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'openai'}
+                )
         return v
 
 
@@ -87,9 +93,15 @@ class AnthropicConfig(BaseVendorConfig):
     @classmethod
     def validate_claude_model(cls, v):
         """Validate Claude model names."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         valid_prefixes = ["claude-3", "claude-2", "claude-instant"]
         if not any(v.startswith(prefix) for prefix in valid_prefixes):
-            raise ValueError(f"Unsupported Claude model: {v}")
+            raise ConfigValidationError(
+                "claude_model_name",
+                f"Unsupported Claude model: {v}",
+                context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'anthropic'}
+            )
         return v
 
 
@@ -107,9 +119,15 @@ class GoogleConfig(BaseVendorConfig):
     @classmethod
     def validate_gemini_model(cls, v):
         """Validate Gemini model names."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         valid_prefixes = ["gemini-", "models/gemini"]
         if not any(v.startswith(prefix) for prefix in valid_prefixes):
-            raise ValueError(f"Unsupported Gemini model: {v}")
+            raise ConfigValidationError(
+                "gemini_model_name",
+                f"Unsupported Gemini model: {v}",
+                context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'google'}
+            )
         return v
 
 
@@ -123,6 +141,8 @@ class GroqConfig(BaseVendorConfig):
     @classmethod
     def validate_groq_model(cls, v):
         """Validate Groq model names."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         valid_models = [
             "llama-3.1-70b-versatile", "llama-3.1-8b-instant",
             "mixtral-8x7b-32768", "gemma-7b-it"
@@ -130,7 +150,11 @@ class GroqConfig(BaseVendorConfig):
         if v not in valid_models:
             # Allow flexibility for new models
             if not any(keyword in v.lower() for keyword in ["llama", "mixtral", "gemma"]):
-                raise ValueError(f"Unsupported Groq model: {v}")
+                raise ConfigValidationError(
+                    "groq_model_name",
+                    f"Unsupported Groq model: {v}",
+                    context={'model_name': v, 'valid_keywords': ["llama", "mixtral", "gemma"], 'vendor': 'groq'}
+                )
         return v
 
 
@@ -155,9 +179,15 @@ class MistralConfig(BaseVendorConfig):
     @classmethod
     def validate_mistral_model(cls, v):
         """Validate Mistral model names."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         valid_prefixes = ["mistral-", "codestral-"]
         if not any(v.startswith(prefix) for prefix in valid_prefixes):
-            raise ValueError(f"Unsupported Mistral model: {v}")
+            raise ConfigValidationError(
+                "mistral_model_name",
+                f"Unsupported Mistral model: {v}",
+                context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'mistral'}
+            )
         return v
 
 

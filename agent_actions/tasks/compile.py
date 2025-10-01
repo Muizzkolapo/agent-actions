@@ -51,9 +51,13 @@ class RenderCommand:
             return rendered_template
             
         except Exception as e:
-            logger.error(f"Template rendering failed: {str(e)}", 
+            logger.error(f"Template rendering failed: {str(e)}",
                         extra={'agent_name': self.args.agent_name}, exc_info=True)
-            raise TemplateRenderingError(f"Failed to render template: {str(e)}") from e
+            raise TemplateRenderingError(
+                "Failed to render template",
+                context={'agent_name': self.args.agent_name, 'config_file': str(agent_config_file), 'template_dir': str(self.template_dir), 'operation': '_render_template'},
+                cause=e
+            ) from e
     
     def execute(self) -> None:
         """Execute the render command."""

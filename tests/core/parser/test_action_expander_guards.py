@@ -2,6 +2,7 @@
 
 import pytest
 from agent_actions.core.parser.action_expander import ActionExpander
+from agent_actions.core.exceptions import ValidationError
 
 
 class TestFormatConverterGuards:
@@ -127,7 +128,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        with pytest.raises(ValueError, match="Invalid UDF expression format"):
+        with pytest.raises(ValidationError, match="Invalid UDF expression format"):
             ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_dangerous_udf_guard_raises_error(self):
@@ -145,7 +146,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        with pytest.raises(ValueError, match="potentially dangerous pattern"):
+        with pytest.raises(ValidationError, match="potentially dangerous pattern"):
             ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_dangerous_sql_guard_raises_error(self):
@@ -163,7 +164,7 @@ class TestFormatConverterGuards:
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
 
-        with pytest.raises(ValueError, match="potentially dangerous pattern"):
+        with pytest.raises(ValidationError, match="potentially dangerous pattern"):
             ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
     def test_convert_tool_action_with_udf_guard(self):

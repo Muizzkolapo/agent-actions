@@ -103,8 +103,11 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
         }
 
     else:
-        raise ValueError(
-            "Unknown target system. Choose 'openai', 'anthropic', 'gemini', or 'ollama'."
+        from agent_actions.core.exceptions import ConfigValidationError
+        raise ConfigValidationError(
+            "target_system",
+            f"Unknown target system: {target}",
+            context={'target_system': target, 'valid_systems': ['openai', 'anthropic', 'gemini', 'ollama'], 'operation': 'compile_unified_schema'}
         )
 
     return compiled

@@ -57,10 +57,20 @@ class GuardConfig:
             ValueError: If required keys are missing
         """
         if not isinstance(config_dict, dict):
-            raise ValueError("Guard config must be a dictionary")
+            from agent_actions.core.exceptions import ConfigValidationError
+            raise ConfigValidationError(
+                "guard_config_type",
+                "Guard config must be a dictionary",
+                context={'config_type': str(type(config_dict)), 'operation': 'parse_guard_config'}
+            )
 
         if 'condition' not in config_dict:
-            raise ValueError("Guard dict must have 'condition' key")
+            from agent_actions.core.exceptions import ConfigValidationError
+            raise ConfigValidationError(
+                "guard_config_condition",
+                "Guard dict must have 'condition' key",
+                context={'config_keys': list(config_dict.keys()), 'operation': 'parse_guard_config'}
+            )
 
         condition = config_dict['condition']
         on_false = config_dict.get('on_false', 'filter')  # Default to filter
@@ -112,7 +122,12 @@ def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
     elif isinstance(guard_data, dict):
         return GuardConfig.from_dict(guard_data)
     else:
-        raise ValueError(f"Guard must be string or dict, got {type(guard_data)}")
+        from agent_actions.core.exceptions import ConfigValidationError
+        raise ConfigValidationError(
+            "guard_data_type",
+            f"Guard must be string or dict, got {type(guard_data)}",
+            context={'guard_type': str(type(guard_data)), 'operation': 'parse_guard_config'}
+        )
 
 
 __all__ = ["GuardBehavior", "GuardConfig", "parse_guard_config"]

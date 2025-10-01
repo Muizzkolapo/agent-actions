@@ -6,6 +6,7 @@ Following TDD approach - these tests define the expected API and behavior.
 import pytest
 from agent_actions.core.utils.guard_parser import GuardParser, GuardType, GuardExpression
 from agent_actions.core.utils.consolidated_guard import GuardConfig, GuardBehavior
+from agent_actions.core.exceptions import ValidationError, ConfigValidationError
 
 
 class TestGuardConfig:
@@ -63,7 +64,7 @@ class TestGuardConfig:
 
     def test_guard_config_validation_invalid_condition(self):
         """Test that invalid conditions raise validation errors."""
-        with pytest.raises(ValueError, match="Invalid UDF expression format"):
+        with pytest.raises(ValidationError, match="Invalid UDF expression format"):
             GuardConfig(
                 condition="udf:invalid_format",  # No module.function pattern
                 on_false=GuardBehavior.SKIP
@@ -71,7 +72,7 @@ class TestGuardConfig:
 
     def test_guard_config_validation_dangerous_patterns(self):
         """Test that dangerous patterns are rejected."""
-        with pytest.raises(ValueError, match="potentially dangerous pattern"):
+        with pytest.raises(ValidationError, match="potentially dangerous pattern"):
             GuardConfig(
                 condition="udf:module.__import__",
                 on_false=GuardBehavior.SKIP
@@ -114,10 +115,10 @@ class TestConsolidatedGuardParser:
 
     def test_parse_invalid_guard_format(self):
         """Test parsing invalid guard formats raises errors."""
-        with pytest.raises(ValueError, match="Guard must be string or dict"):
+        with pytest.raises(ConfigValidationError, match="Guard must be string or dict"):
             GuardParser.parse_consolidated(123)
 
-        with pytest.raises(ValueError, match="Guard dict must have 'condition' key"):
+        with pytest.raises(ConfigValidationError, match="Guard dict must have 'condition' key"):
             GuardParser.parse_consolidated({"on_false": "skip"})
 
 
@@ -250,7 +251,7 @@ class TestSchemaValidation:
         """Test ActionConfig rejects invalid guard configurations."""
         from agent_actions.core.migration.new_format_schema import ActionConfig
 
-        with pytest.raises(ValueError, match="Invalid guard"):
+        with pytest.raises(ValidationError, match="Invalid UDF expression format"):
             ActionConfig(
                 name='test_action',
                 intent='Test action',

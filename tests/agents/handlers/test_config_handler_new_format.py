@@ -531,8 +531,10 @@ class TestNewFormatConfigHandlerIntegration:
                 config_manager.get_user_agents()
 
         error_message = str(exc_info.value)
-        assert "kind='tool' but run_mode='batch'" in error_message
         assert "Tool actions do not support batch processing" in error_message
+        # Context info is now in the error message
+        assert "kind=tool" in error_message or "kind='tool'" in error_message
+        assert "run_mode=batch" in error_message or "run_mode='batch'" in error_message
 
     def test_schema_handling(self, temp_dir):
         """Test handling of output schemas in actions."""
@@ -576,7 +578,7 @@ class TestNewFormatConfigHandlerIntegration:
 
         config_manager = ConfigManager(str(workflow_file), str(workflow_file))
 
-        with pytest.raises(ConfigurationError, match="Error parsing YAML"):
+        with pytest.raises(ConfigurationError, match="Error rendering or loading user config"):
             config_manager.load_configs()
 
     def test_error_handling_missing_file(self):

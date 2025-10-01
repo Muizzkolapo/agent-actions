@@ -111,7 +111,12 @@ class ActionExpander:
                 if guard_config.is_udf_condition():
                     # UDF conditions use conditional_clause (legacy support for skip behavior only)
                     if guard_config.on_false == GuardBehavior.FILTER:
-                        raise ValueError("UDF conditions cannot use 'filter' behavior. UDF conditions only support 'skip' behavior.")
+                        from agent_actions.core.exceptions import ConfigurationError
+                        action_name = action.get('name', 'unknown')
+                        raise ConfigurationError(
+                            "UDF conditions cannot use 'filter' behavior. UDF conditions only support 'skip' behavior",
+                            context={'action_name': action_name, 'guard_behavior': 'filter', 'operation': 'expand_actions_to_agents'}
+                        )
                     agent['conditional_clause'] = guard_config.get_condition_expression()
                 else:
                     # SQL conditions use where_clause with behavior specification
@@ -138,9 +143,8 @@ class ActionExpander:
                     from agent_actions.core.exceptions import ConfigurationError
                     action_name = action.get('name', 'unknown')
                     raise ConfigurationError(
-                        f"Action '{action_name}' has kind='tool' but run_mode='batch'. "
-                        "Tool actions do not support batch processing. "
-                        "Please set run_mode='online' or remove the run_mode setting to use the default."
+                        "Tool actions do not support batch processing. Please set run_mode='online' or remove the run_mode setting to use the default",
+                        context={'action_name': action_name, 'kind': 'tool', 'run_mode': 'batch', 'operation': 'expand_actions_to_agents'}
                     )
                 # If inherited from defaults, silently override
                 agent['run_mode'] = 'online'

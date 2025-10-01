@@ -23,6 +23,7 @@ from agent_actions.core.parser.where_parser import (
     evaluate_safe_expression
 )
 from agent_actions.core.parser.config_schema import WhereClauseConfig, FilterScope
+from agent_actions.core.exceptions import ValidationError
 
 
 class TestWhereClauseParser:
@@ -416,10 +417,10 @@ class TestWhereClauseConfig:
 
     def test_where_clause_config_validation_empty_clause(self):
         """Test WHERE clause config validation rejects empty clause."""
-        with pytest.raises(ValueError, match="WHERE clause cannot be empty"):
+        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
             WhereClauseConfig(clause="")
 
-        with pytest.raises(ValueError, match="WHERE clause cannot be empty"):
+        with pytest.raises(ValidationError, match="WHERE clause cannot be empty"):
             WhereClauseConfig(clause="   ")
 
     def test_where_clause_config_validation_dangerous_patterns(self):
@@ -432,7 +433,7 @@ class TestWhereClauseConfig:
         ]
 
         for clause in dangerous_clauses:
-            with pytest.raises(ValueError):
+            with pytest.raises(ValidationError):
                 WhereClauseConfig(clause=clause)
 
     def test_filter_scope_enum(self):

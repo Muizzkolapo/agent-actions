@@ -81,7 +81,11 @@ class DependencyContainer:
             else:
                 return self._create_instance(descriptor.implementation)
         
-        raise ValueError(f"Service {interface.__name__} not registered")
+        from agent_actions.core.exceptions import DependencyError
+        raise DependencyError(
+            f"Service {interface.__name__} not registered",
+            context={'interface': interface.__name__, 'operation': 'get_service'}
+        )
     
     def has(self, interface: Type) -> bool:
         """Check if a service is registered."""
@@ -109,8 +113,10 @@ class DependencyContainer:
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                raise ValueError(
-                    f"Cannot resolve dependency '{param_name}' for {cls.__name__}"
+                from agent_actions.core.exceptions import DependencyError
+                raise DependencyError(
+                    f"Cannot resolve dependency '{param_name}' for {cls.__name__}",
+                    context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_instance'}
                 )
         
         return cls(**init_kwargs)
@@ -156,25 +162,41 @@ class ProcessorRegistry:
     def get_processor(self, name: str) -> Type:
         """Get a processor class by name."""
         if name not in self._processors:
-            raise ValueError(f"Processor '{name}' not registered")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Processor '{name}' not registered",
+                context={'processor_name': name, 'operation': 'get_processor'}
+            )
         return self._processors[name]
     
     def get_loader(self, name: str) -> Type:
         """Get a loader class by name."""
         if name not in self._loaders:
-            raise ValueError(f"Loader '{name}' not registered")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Loader '{name}' not registered",
+                context={'loader_name': name, 'operation': 'get_loader'}
+            )
         return self._loaders[name]
     
     def get_generator(self, name: str) -> Type:
         """Get a generator class by name."""
         if name not in self._generators:
-            raise ValueError(f"Generator '{name}' not registered")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Generator '{name}' not registered",
+                context={'generator_name': name, 'operation': 'get_generator'}
+            )
         return self._generators[name]
     
     def get_service(self, name: str) -> Type:
         """Get a service class by name."""
         if name not in self._services:
-            raise ValueError(f"Service '{name}' not registered")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Service '{name}' not registered",
+                context={'service_name': name, 'operation': 'get_service'}
+            )
         return self._services[name]
     
     def list_processors(self) -> Dict[str, Type]:
@@ -245,7 +267,11 @@ class ProcessorFactory:
                 # Use default value
                 init_kwargs[param_name] = param.default
             else:
-                raise ValueError(f"Cannot resolve dependency '{param_name}' for {cls.__name__}")
+                from agent_actions.core.exceptions import DependencyError
+                raise DependencyError(
+                    f"Cannot resolve dependency '{param_name}' for {cls.__name__}",
+                    context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_with_dependencies'}
+                )
         
         return cls(**init_kwargs)
     

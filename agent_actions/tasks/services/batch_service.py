@@ -211,7 +211,11 @@ class BatchService:
         
         # Handle special case: 'tool' vendor doesn't support batch processing
         if provider_type == 'tool':
-            raise ValueError("'tool' vendor does not support batch processing. Use 'openai', 'gemini', or 'anthropic' for batch mode.")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "'tool' vendor does not support batch processing",
+                context={'provider_type': provider_type, 'supported_vendors': ['openai', 'gemini', 'anthropic']}
+            )
         
         # Check cache first
         if provider_type in self._provider_cache:
@@ -231,7 +235,11 @@ class BatchService:
             # Validate that the provider supports the requested model
             is_valid, error_msg = provider.validate_config(agent_config)
             if not is_valid:
-                raise ValueError(error_msg)
+                from agent_actions.core.exceptions import ConfigurationError
+                raise ConfigurationError(
+                    "Provider configuration validation failed",
+                    context={'provider_type': provider_type, 'error_message': error_msg}
+                )
             
             # Cache the provider
             self._provider_cache[provider_type] = provider
@@ -361,7 +369,11 @@ class BatchService:
         
         schema = self._prepare_schema(agent_config, provider)
         if not schema:
-            raise ValueError("Schema is required for batch processing")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Schema is required for batch processing",
+                context={'agent_config': agent_config.get('agent_type', 'unknown')}
+            )
             
         raw_prompt = agent_config.get(PROMPT_KEY, '')
         if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
@@ -975,7 +987,11 @@ class BatchService:
             # Check status first
             status = provider.check_status(batch_id)
             if status != 'completed':
-                raise ValueError(f"Batch job {batch_id} is not completed. Status: {status}")
+                from agent_actions.core.exceptions import ProcessingError
+                raise ProcessingError(
+                    "Batch job is not completed",
+                    context={'batch_id': batch_id, 'status': status}
+                )
             
             # Use provider to get results - already transformed to BatchResult format
             batch_results = provider.retrieve_results(batch_id, output_directory)
@@ -1288,9 +1304,13 @@ class BatchService:
         try:
             batch_dir = Path(output_directory) / "batch"
             registry_file = batch_dir / ".batch_registry.json"
-            
+
             if not registry_file.exists():
-                raise ValueError(f"No batch registry found at {registry_file}")
+                from agent_actions.core.exceptions import ProcessingError
+                raise ProcessingError(
+                    "No batch registry found",
+                    context={'registry_file': str(registry_file), 'output_directory': output_directory}
+                )
             
             # Load registry
             with open(registry_file, 'r') as f:
@@ -1377,7 +1397,11 @@ class BatchService:
                     continue
             
             if not processed_files:
-                raise ValueError("No batch results were successfully processed")
+                from agent_actions.core.exceptions import ProcessingError
+                raise ProcessingError(
+                    "No batch results were successfully processed",
+                    context={'output_directory': output_directory, 'registry_entries': len(registry)}
+                )
             
             print(f"Successfully processed {len(processed_files)} files")
             return processed_files

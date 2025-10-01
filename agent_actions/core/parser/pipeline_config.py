@@ -101,11 +101,17 @@ class WorkflowConfig(BaseModel):
     @classmethod
     def validate_execution_order(cls, v, info):
         """Validate that all agents in execution order are defined."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if 'agents' in info.data:
             agents = info.data['agents']
             undefined_agents = [agent for agent in v if agent not in agents]
             if undefined_agents:
-                raise ValueError(f"Agents in execution_order not defined: {undefined_agents}")
+                raise ConfigValidationError(
+                    "execution_order",
+                    f"Agents in execution_order not defined: {undefined_agents}",
+                    context={'undefined_agents': undefined_agents, 'execution_order': v, 'defined_agents': list(agents.keys()), 'operation': 'validate_workflow'}
+                )
         return v
 
 
@@ -138,9 +144,15 @@ class PipelineConfig(BaseModel):
     
     def add_stage(self, stage: StageConfig) -> "PipelineConfig":
         """Add a stage to the pipeline."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if stage.name in [s.name for s in self.stages]:
-            raise ValueError(f"Stage '{stage.name}' already exists")
-        
+            raise ConfigValidationError(
+                "stage_name",
+                f"Stage '{stage.name}' already exists",
+                context={'stage_name': stage.name, 'existing_stages': [s.name for s in self.stages], 'operation': 'add_stage'}
+            )
+
         self.stages.append(stage)
         self.stage_registry[stage.name] = stage
         return self
@@ -157,13 +169,19 @@ class PipelineConfig(BaseModel):
     
     def validate_dependencies(self) -> bool:
         """Validate stage dependencies are satisfied."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         stage_names = {stage.name for stage in self.stages}
-        
+
         for stage in self.stages:
             for dependency in stage.depends_on:
                 if dependency not in stage_names:
-                    raise ValueError(f"Stage '{stage.name}' depends on undefined stage '{dependency}'")
-        
+                    raise ConfigValidationError(
+                        "stage_dependency",
+                        f"Stage '{stage.name}' depends on undefined stage '{dependency}'",
+                        context={'stage_name': stage.name, 'undefined_dependency': dependency, 'defined_stages': list(stage_names), 'operation': 'validate_dependencies'}
+                    )
+
         return True
     
     def get_execution_order(self) -> List[str]:
@@ -174,11 +192,17 @@ class PipelineConfig(BaseModel):
         result = []
         
         def visit(stage_name: str):
+            from agent_actions.core.exceptions import WorkflowError
+
             if stage_name in temp_visited:
-                raise ValueError(f"Circular dependency detected involving stage '{stage_name}'")
+                raise WorkflowError(
+                    "dependency_resolution",
+                    f"Circular dependency detected involving stage '{stage_name}'",
+                    context={'stage_name': stage_name, 'temp_visited': list(temp_visited), 'operation': 'get_execution_order'}
+                )
             if stage_name in visited:
                 return
-            
+
             temp_visited.add(stage_name)
             stage = self.get_stage(stage_name)
             if stage:

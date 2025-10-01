@@ -80,9 +80,20 @@ class ActionConfig(BaseModel):
                     from agent_actions.core.utils.consolidated_guard import parse_guard_config
                     parse_guard_config(v)
                 else:
-                    raise ValueError(f"Guard must be string or dict, got {type(v)}")
+                    from agent_actions.core.exceptions import ConfigValidationError as CVE
+                    raise CVE(
+                        "guard_type",
+                        f"Guard must be string or dict, got {type(v)}",
+                        context={'guard_type': str(type(v)), 'operation': 'validate_guard'}
+                    )
             except ValueError as e:
-                raise ValueError(f"Invalid guard: {e}")
+                from agent_actions.core.exceptions import ConfigValidationError as CVE
+                raise CVE(
+                    "guard_expression",
+                    f"Invalid guard: {e}",
+                    context={'guard': v, 'operation': 'validate_guard'},
+                    cause=e
+                )
         return v
 
 
@@ -131,7 +142,12 @@ class WorkflowConfigV2(BaseModel):
                     action_name = plan_item.strip()
 
                 if action_name not in action_names:
-                    raise ValueError(f"Action '{action_name}' in plan not defined in actions")
+                    from agent_actions.core.exceptions import ConfigValidationError
+                    raise ConfigValidationError(
+                        "workflow_plan",
+                        f"Action '{action_name}' in plan not defined in actions",
+                        context={'action_name': action_name, 'plan_item': plan_item, 'defined_actions': list(action_names), 'operation': 'validate_plan'}
+                    )
         return v
 
     def get_action(self, name: str) -> Optional[ActionConfig]:

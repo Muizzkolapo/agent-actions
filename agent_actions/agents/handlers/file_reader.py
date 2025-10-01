@@ -47,7 +47,10 @@ class FileReader(ProcessorErrorHandlerMixin):
                     file_type=self.file_type
                 )
         else:
-            raise AgentActionsException(f"Unsupported file type: {self.file_type} for file {self.file_path}")
+            raise AgentActionsException(
+                f"Unsupported file type: {self.file_type}",
+                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'}
+            )
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
@@ -56,9 +59,13 @@ class FileReader(ProcessorErrorHandlerMixin):
             # Check if this is a batch placeholder file
             if isinstance(data, dict) and 'batch_job_id' in data and data.get('status') == 'submitted':
                 raise AgentActionsException(
-                    f"Cannot process batch placeholder file: {self.file_path}. "
-                    f"Batch job {data['batch_job_id']} is still pending. "
-                    "Please wait for batch processing to complete."
+                    f"Cannot process batch placeholder file. Batch job {data['batch_job_id']} is still pending.",
+                    context={
+                        'file_path': self.file_path,
+                        'batch_job_id': data['batch_job_id'],
+                        'status': data.get('status'),
+                        'operation': 'read_json'
+                    }
                 )
             
             return data

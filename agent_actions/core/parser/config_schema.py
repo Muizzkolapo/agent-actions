@@ -48,9 +48,14 @@ class WhereClauseConfig(BaseModel):
     @classmethod
     def validate_clause(cls, v):
         """Validate the WHERE clause syntax."""
+        from agent_actions.core.exceptions import ValidationError
+
         # Check if value is provided and non-empty after validation error handling
         if v is not None and (not v or not v.strip()):
-            raise ValueError("WHERE clause cannot be empty")
+            raise ValidationError(
+                "WHERE clause cannot be empty",
+                context={'clause': v, 'operation': 'validate_where_clause'}
+            )
 
         # Basic safety checks
         dangerous_patterns = [
@@ -62,7 +67,10 @@ class WhereClauseConfig(BaseModel):
         clause_lower = v.lower()
         for pattern in dangerous_patterns:
             if pattern in clause_lower:
-                raise ValueError(f"WHERE clause contains potentially dangerous operation: {pattern}")
+                raise ValidationError(
+                    f"WHERE clause contains potentially dangerous operation: {pattern}",
+                    context={'clause': v, 'dangerous_pattern': pattern, 'operation': 'validate_where_clause'}
+                )
 
         return v
     
@@ -112,18 +120,23 @@ class SkipConditionConfig(BaseModel):
     @classmethod
     def validate_expression(cls, v, info):
         """Validate custom expressions for safety."""
+        from agent_actions.core.exceptions import ValidationError
+
         if v and info.data.get('condition_type') == 'custom':
             # Basic safety validation
             dangerous_patterns = [
                 '__import__', 'exec', 'eval', 'compile', 'open', 'file',
                 'input', 'raw_input', 'reload', 'vars', 'globals', 'locals'
             ]
-            
+
             expr_lower = v.lower()
             for pattern in dangerous_patterns:
                 if pattern in expr_lower:
-                    raise ValueError(f"Expression contains potentially dangerous operation: {pattern}")
-        
+                    raise ValidationError(
+                        f"Expression contains potentially dangerous operation: {pattern}",
+                        context={'expression': v, 'dangerous_pattern': pattern, 'operation': 'validate_skip_condition'}
+                    )
+
         return v
     
     model_config = ConfigDict(extra="forbid")

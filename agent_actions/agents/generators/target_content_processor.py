@@ -152,7 +152,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     processed_data.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
+                    from agent_actions.core.exceptions import ProcessingError
+                    raise ProcessingError(
+                        "Failed to process item",
+                        context={
+                            'source_guid': source_guid,
+                            'agent_name': self.agent_name
+                        },
+                        cause=e
+                    )
 
             return processed_data
         except Exception as e:
@@ -202,7 +210,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     all_processed_items.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    raise ValueError(f"Failed to process item with source_guid {source_guid}: {str(e)}")
+                    from agent_actions.core.exceptions import ProcessingError
+                    raise ProcessingError(
+                        "Failed to process item",
+                        context={
+                            'source_guid': source_guid,
+                            'agent_name': self.agent_name
+                        },
+                        cause=e
+                    )
 
             # Separate main and side outputs
             return self.data_processor.separate_side_output(all_processed_items)
@@ -344,7 +360,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 )]
             return processed
         except Exception as e:
-            raise ValueError(f"Failed to process item: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(
+                "Failed to process item",
+                context={
+                    'agent_name': self.agent_name,
+                    'item_source_guid': item.get('source_guid', 'unknown')
+                },
+                cause=e
+            )
 
     def _extract_source_file_info(self, data: List[Dict]) -> Dict:
         """
@@ -503,5 +527,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed = [processed_item]
             return processed
         except Exception as e:
-            raise ValueError(f"Failed to process item: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(
+                "Failed to process item",
+                context={
+                    'agent_name': self.agent_name,
+                    'item_source_guid': item.get('source_guid', 'unknown')
+                },
+                cause=e
+            )
 

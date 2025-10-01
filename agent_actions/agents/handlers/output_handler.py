@@ -26,9 +26,25 @@ class OutputHandler:
             file_writer = FileWriter(str(output_file_path))
             file_writer.write_target(data)
         except IOError as e:
-            raise AgentActionsException(f"IOError saving main output to {output_file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                "IOError saving main output",
+                context={
+                    'output_file_path': str(output_file_path),
+                    'file_path': file_path,
+                    'operation': 'save_main_output'
+                },
+                cause=e
+            )
         except Exception as e:
-            raise AgentActionsException(f"Error saving main output to {output_file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                "Error saving main output",
+                context={
+                    'output_file_path': str(output_file_path),
+                    'file_path': file_path,
+                    'operation': 'save_main_output'
+                },
+                cause=e
+            )
     
     def save_side_output(self, data, file_path, base_directory, output_directory):
         """
@@ -54,9 +70,25 @@ class OutputHandler:
             with open(side_output_file_path, 'w', encoding='utf-8') as file:
                 json.dump(existing_content, file, indent=4)
         except IOError as e:
-            raise AgentActionsException(f"IOError saving side output to {side_output_file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                "IOError saving side output",
+                context={
+                    'side_output_file_path': str(side_output_file_path),
+                    'file_path': file_path,
+                    'operation': 'save_side_output'
+                },
+                cause=e
+            )
         except Exception as e:
-            raise AgentActionsException(f"Error saving side output to {side_output_file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                "Error saving side output",
+                context={
+                    'side_output_file_path': str(side_output_file_path),
+                    'file_path': file_path,
+                    'operation': 'save_side_output'
+                },
+                cause=e
+            )
     
     def _ensure_directory_exists(self, file_path):
         """Ensure the directory for the file path exists."""

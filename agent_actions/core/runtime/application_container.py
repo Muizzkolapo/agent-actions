@@ -124,6 +124,8 @@ class ApplicationContainer:
         Returns:
             ApplicationContainer configured for the environment.
         """
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if environment == 'development':
             config = ConfigurationProfile.development()
         elif environment == 'production':
@@ -131,8 +133,12 @@ class ApplicationContainer:
         elif environment == 'testing':
             config = ConfigurationProfile.testing()
         else:
-            raise ValueError(f"Unknown environment: {environment}")
-        
+            raise ConfigValidationError(
+                "environment",
+                f"Unknown environment: {environment}",
+                context={'environment': environment, 'valid_environments': ['development', 'production', 'testing'], 'operation': 'create_for_environment'}
+            )
+
         return cls(config)
     
     @classmethod

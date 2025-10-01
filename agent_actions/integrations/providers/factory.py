@@ -57,12 +57,27 @@ class BatchProviderFactory:
             try:
                 return GeminiBatchProvider(api_key=api_key)
             except ImportError as e:
-                raise ValueError(f"Gemini provider not available: {e}")
+                from agent_actions.core.exceptions import DependencyError
+                raise DependencyError(
+                    "GeminiBatchProvider",
+                    "google-genai",
+                    context={
+                        'provider_type': provider_type,
+                        'install_command': 'pip install google-genai'
+                    },
+                    cause=e
+                )
             
         elif provider_type == "anthropic":
             if not ANTHROPIC_AVAILABLE:
-                raise ValueError(
-                    "Anthropic provider not available. Install with: pip install anthropic"
+                from agent_actions.core.exceptions import DependencyError
+                raise DependencyError(
+                    "AnthropicBatchProvider",
+                    "anthropic",
+                    context={
+                        'provider_type': provider_type,
+                        'install_command': 'pip install anthropic'
+                    }
                 )
             
             # Get API key from config or environment
@@ -79,16 +94,29 @@ class BatchProviderFactory:
                     enable_prompt_caching=enable_prompt_caching
                 )
             except ImportError as e:
-                raise ValueError(f"Anthropic provider not available: {e}")
+                from agent_actions.core.exceptions import DependencyError
+                raise DependencyError(
+                    "AnthropicBatchProvider",
+                    "anthropic",
+                    context={
+                        'provider_type': provider_type,
+                        'install_command': 'pip install anthropic'
+                    },
+                    cause=e
+                )
             
         else:
             supported_providers = ["openai", "gemini"]
             if ANTHROPIC_AVAILABLE:
                 supported_providers.append("anthropic")
-            
-            raise ValueError(
-                f"Unknown provider type: {provider_type}. "
-                f"Supported providers: {', '.join(supported_providers)}"
+
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Unknown provider type",
+                context={
+                    'provider_type': provider_type,
+                    'supported_providers': supported_providers
+                }
             )
     
     @staticmethod

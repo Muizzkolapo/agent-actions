@@ -2,6 +2,7 @@
 
 import pytest
 from agent_actions.core.utils.guard_parser import GuardParser, GuardType, GuardExpression, parse_guard
+from agent_actions.core.exceptions import ValidationError
 
 
 class TestGuardParser:
@@ -44,19 +45,19 @@ class TestGuardParser:
         assert result.original == guard
 
     def test_parse_empty_guard_raises_error(self):
-        """Test that empty guard raises ValueError."""
-        with pytest.raises(ValueError, match="Guard expression must be a non-empty string"):
+        """Test that empty guard raises ValidationError."""
+        with pytest.raises(ValidationError, match="Guard expression must be a non-empty string"):
             GuardParser.parse("")
 
-        with pytest.raises(ValueError, match="Guard expression must be a non-empty string"):
+        with pytest.raises(ValidationError, match="Guard expression must be a non-empty string"):
             GuardParser.parse(None)
 
     def test_parse_empty_udf_expression_raises_error(self):
-        """Test that UDF with empty expression raises ValueError."""
-        with pytest.raises(ValueError, match="UDF guard expression cannot be empty"):
+        """Test that UDF with empty expression raises ValidationError."""
+        with pytest.raises(ValidationError, match="UDF guard expression cannot be empty"):
             GuardParser.parse("udf:")
 
-        with pytest.raises(ValueError, match="UDF guard expression cannot be empty"):
+        with pytest.raises(ValidationError, match="UDF guard expression cannot be empty"):
             GuardParser.parse("udf:   ")
 
     def test_validate_udf_expression_valid_patterns(self):
@@ -86,11 +87,11 @@ class TestGuardParser:
         ]
 
         for expr in invalid_expressions:
-            with pytest.raises(ValueError, match="Invalid UDF expression format"):
+            with pytest.raises(ValidationError, match="Invalid UDF expression format"):
                 GuardParser._validate_udf_expression(expr)
 
     def test_validate_udf_expression_dangerous_patterns(self):
-        """Test that dangerous patterns in UDF expressions raise ValueError."""
+        """Test that dangerous patterns in UDF expressions raise ValidationError."""
         dangerous_expressions = [
             'module.__import__',
             'package.exec',
@@ -100,11 +101,11 @@ class TestGuardParser:
         ]
 
         for expr in dangerous_expressions:
-            with pytest.raises(ValueError, match="potentially dangerous pattern"):
+            with pytest.raises(ValidationError, match="potentially dangerous pattern"):
                 GuardParser._validate_udf_expression(expr)
 
     def test_validate_sql_expression_dangerous_patterns(self):
-        """Test that dangerous patterns in SQL expressions raise ValueError."""
+        """Test that dangerous patterns in SQL expressions raise ValidationError."""
         dangerous_expressions = [
             'field == "value" AND __import__("os")',
             'status != "failed" OR exec("code")',
@@ -112,7 +113,7 @@ class TestGuardParser:
         ]
 
         for expr in dangerous_expressions:
-            with pytest.raises(ValueError, match="potentially dangerous pattern"):
+            with pytest.raises(ValidationError, match="potentially dangerous pattern"):
                 GuardParser._validate_sql_expression(expr)
 
     def test_is_udf_guard(self):

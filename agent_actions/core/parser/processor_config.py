@@ -193,8 +193,14 @@ class BatchProcessorConfig(BaseModel):
     @classmethod
     def validate_max_batch_size(cls, v, info):
         """Ensure max_batch_size is not smaller than default_batch_size."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if 'default_batch_size' in info.data and v < info.data['default_batch_size']:
-            raise ValueError('max_batch_size must be >= default_batch_size')
+            raise ConfigValidationError(
+                "max_batch_size",
+                "max_batch_size must be >= default_batch_size",
+                context={'max_batch_size': v, 'default_batch_size': info.data['default_batch_size'], 'operation': 'validate_batch_config'}
+            )
         return v
 
 

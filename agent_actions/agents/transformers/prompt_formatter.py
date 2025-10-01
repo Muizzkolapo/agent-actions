@@ -29,7 +29,13 @@ class PromptFormatter:
                 raw_prompt = "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
-            raise ValueError(f"Failed to get raw prompt: {str(e)}")
+            from agent_actions.core.exceptions import PromptValidationError
+            raise PromptValidationError(
+                "raw_prompt",
+                f"Failed to get raw prompt: {str(e)}",
+                context={'prompt_config': str(prompt_config), 'operation': 'get_raw_prompt'},
+                cause=e
+            )
     
     @staticmethod
     def format_prompt(raw_prompt, source_content, context_data):
@@ -56,5 +62,11 @@ class PromptFormatter:
             formatted_prompt, _ = PromptUtils.replace_placeholders(source_loaded_prompt, context_data)
             return formatted_prompt
         except Exception as e:
-            raise ValueError(f"Failed to format prompt: {str(e)}")
+            from agent_actions.core.exceptions import PromptValidationError
+            raise PromptValidationError(
+                "formatted_prompt",
+                f"Failed to format prompt: {str(e)}",
+                context={'raw_prompt': str(raw_prompt)[:100], 'operation': 'format_prompt'},
+                cause=e
+            )
     
