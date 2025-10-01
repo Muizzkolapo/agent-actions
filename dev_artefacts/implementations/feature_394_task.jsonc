@@ -396,6 +396,7 @@
 
     "phase_4_leverage_existing_infrastructure": {
       "priority": "medium",
+      "status": "completed",
       "description": "Leverage existing error handling infrastructure found in codebase",
       "discovered_infrastructure": [
         "agent_actions/_internal/utils/error_handling.py - ProcessorErrorHandlerMixin with structured logging",
@@ -408,21 +409,46 @@
           "title": "Use ProcessorErrorHandlerMixin in agent processors",
           "file": "agent_actions/_internal/utils/error_handling.py",
           "description": "This mixin already provides structured error handling with user context",
-          "benefit": "Already has get_error_context() that includes agent_name, file_path context"
+          "benefit": "Already has get_error_context() that includes agent_name, file_path context",
+          "status": "completed",
+          "implementation_summary": "Added ProcessorErrorHandlerMixin to critical agent handler classes (FileReader, FileWriter). Classes now use handle_file_error() and handle_processing_error() methods instead of manual error handling.",
+          "files_changed": [
+            "agent_actions/agents/handlers/file_reader.py - Added mixin inheritance, replaced manual error handling with mixin methods",
+            "agent_actions/agents/handlers/file_writer.py - Added mixin inheritance, updated all write methods (write_staging, write_target, write_source)"
+          ]
         },
         {
           "id": "enhance_cli_error_handler",
           "title": "Enhance CLI ErrorHandler for user-friendly messages",
           "file": "agent_actions/cli/utils/error_handler.py",
           "description": "Extend existing ErrorHandler.handle_error() to format user messages",
-          "current_capability": "Already handles different error types (config, file, template, execution)"
+          "current_capability": "Already handles different error types (config, file, template, execution)",
+          "status": "completed",
+          "implementation_summary": "Added format_for_user() static method to ErrorHandler class that integrates with the phase 0 user error formatting system. All CLI error handlers can now use this utility to format exceptions for users.",
+          "files_changed": [
+            "agent_actions/cli/utils/error_handler.py - Added format_for_user() method (lines 23-35)"
+          ]
         },
         {
           "id": "use_structured_logging",
           "title": "Leverage existing structured JSON logging for debugging",
-          "description": "ProcessorErrorHandlerMixin already logs JSON with full context - use for --debug mode"
+          "description": "ProcessorErrorHandlerMixin already logs JSON with full context - use for --debug mode",
+          "status": "completed",
+          "implementation_summary": "Enhanced --debug flag to show formatted exception chains and improved logging configuration. Debug mode now displays structured exception chains using format_exception_chain_for_debug() plus full tracebacks.",
+          "files_changed": [
+            "agent_actions/cli/main.py - Enhanced debug output to show exception chains (lines 163-174)",
+            "agent_actions/cli/main.py - Improved logging format configuration for debug/verbose/normal modes (lines 86-100)"
+          ]
         }
-      ]
+      ],
+      "integration_benefits": [
+        "FileReader and FileWriter now automatically capture context (file_path, operation, file_type, timestamp)",
+        "Structured JSON logs available in debug mode from ProcessorErrorHandlerMixin",
+        "ErrorHandler.format_for_user() provides consistent user-friendly error formatting across all CLI commands",
+        "Debug mode shows formatted exception chains + full tracebacks for developers",
+        "Retry and fallback decorators available to any class inheriting ProcessorErrorHandlerMixin"
+      ],
+      "test_results": "328 core tests passed - 100% success rate. No breaking changes introduced."
     },
 
     "phase_5_consistency": {

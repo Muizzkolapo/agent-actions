@@ -18,7 +18,22 @@ T = TypeVar('T', bound=AgentActionsException)
 
 class ErrorHandler:
     """Utility class for handling errors in a consistent way."""
-    
+
+    @staticmethod
+    def format_for_user(error: Exception, context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Format error using user-friendly system.
+
+        Args:
+            error: The exception to format
+            context: Optional context dict
+
+        Returns:
+            User-friendly formatted error message
+        """
+        from agent_actions.core.user_errors import format_user_error
+        return format_user_error(error, context)
+
     @staticmethod
     def handle_error(
         error: Exception,

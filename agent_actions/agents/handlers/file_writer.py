@@ -4,9 +4,11 @@ import csv
 from pathlib import Path
 from agent_actions.core.exceptions import AgentActionsException
 from agent_actions.core.safe_format import safe_format_error
+from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
 
-class FileWriter:
+class FileWriter(ProcessorErrorHandlerMixin):
     def __init__(self, file_path):
+        super().__init__()
         self.file_path = file_path
         self.file_type = Path(file_path).suffix.lower()
 
@@ -26,17 +28,14 @@ class FileWriter:
                 else:
                     raise AgentActionsException(f"Unsupported file type for staging: {self.file_type} for file {self.file_path}")
         except IOError as e:
-            raise AgentActionsException(
-                f"IOError writing staging file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_staging'},
-                cause=e
-            ) from e
+            self.handle_file_error(e, "write_staging", self.file_path, file_type=self.file_type)
         except Exception as e:
-            raise AgentActionsException(
-                f"Error writing staging file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_staging'},
-                cause=e
-            ) from e
+            self.handle_processing_error(
+                e,
+                f"Write staging file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type
+            )
 
     def write_target(self, data):
         try:
@@ -44,31 +43,25 @@ class FileWriter:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            raise AgentActionsException(
-                f"IOError writing target file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_target'},
-                cause=e
-            ) from e
+            self.handle_file_error(e, "write_target", self.file_path, file_type=self.file_type)
         except Exception as e:
-            raise AgentActionsException(
-                f"Error writing target file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_target'},
-                cause=e
-            ) from e
+            self.handle_processing_error(
+                e,
+                f"Write target file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type
+            )
 
     def write_source(self, data):
         try:
             with open(self.file_path, 'w', encoding='utf-8') as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            raise AgentActionsException(
-                f"IOError writing source file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_source'},
-                cause=e
-            ) from e
+            self.handle_file_error(e, "write_source", self.file_path, file_type=self.file_type)
         except Exception as e:
-            raise AgentActionsException(
-                f"Error writing source file {self.file_path}: {safe_format_error(e)}",
-                context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'write_source'},
-                cause=e
-            ) from e
+            self.handle_processing_error(
+                e,
+                f"Write source file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type
+            )
