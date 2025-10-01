@@ -43,8 +43,8 @@ class ActionConfig(BaseModel):
 
     # Implementation details
     impl: Optional[str] = Field(default=None, description="Implementation path for tool actions")
-    vendor: Optional[str] = Field(default=None, description="Model vendor (openai, anthropic, etc.)")
-    model: Optional[str] = Field(default=None, description="Model name")
+    model_vendor: Optional[str] = Field(default=None, description="Model vendor (openai, anthropic, etc.)")
+    model_name: Optional[str] = Field(default=None, description="Model name")
 
     # Schema and data handling
     output_schema: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Output schema", alias="schema")
@@ -100,8 +100,8 @@ class ActionConfig(BaseModel):
 class DefaultsConfig(BaseModel):
     """Default configuration applied to all actions."""
 
-    vendor: Optional[str] = Field(default=None, description="Default model vendor")
-    model: Optional[str] = Field(default=None, description="Default model name")
+    model_vendor: Optional[str] = Field(default=None, description="Default model vendor")
+    model_name: Optional[str] = Field(default=None, description="Default model name")
     json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
     granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
     run_mode: Optional[str] = Field(default=None, description="Default run mode")

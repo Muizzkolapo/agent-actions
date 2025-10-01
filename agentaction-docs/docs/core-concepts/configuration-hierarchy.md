@@ -66,8 +66,8 @@ name: data_extraction
 description: Extract structured data from documents
 
 defaults:
-  vendor: openai              # Override project vendor
-  model: gpt-4o-mini          # Override project model
+  model_vendor: openai              # Override project vendor
+  model_name: gpt-4o-mini          # Override project model
   granularity: file           # Workflow-specific setting
 
 actions:
@@ -86,24 +86,21 @@ actions:
 ```yaml
 actions:
   - name: extract_with_different_model
-    vendor: anthropic          # This action uses different model
-    model: claude-3-5-sonnet-20241022
+    model_vendor: anthropic          # This action uses different model
+    model_name: claude-3-5-sonnet-20241022
     few_shot: 5                # Action-specific setting
     prompt: "Extract key information..."
 ```
 
-## Field Name Differences
+## Field Name Consistency
 
-:::caution Field Naming Convention
+All configuration levels now use the same explicit field names:
 
-You'll notice that project-level configuration uses different field names than workflow/action level:
+- `model_vendor` - The LLM provider (openai, anthropic, etc.)
+- `model_name` - The specific model to use (gpt-4, claude-3-sonnet, etc.)
 
-| Level | Vendor Field | Model Field |
-|-------|-------------|-------------|
-| **Project** | `model_vendor` | `model_name` |
-| **Workflow/Action** | `vendor` | `model` |
+This consistency ensures clarity across project, workflow, and action levels.
 
-:::
 
 ### Why Different Names?
 
@@ -125,8 +122,8 @@ default_agent_config:
 
 # workflow.yml (workflow/action level)
 defaults:
-  vendor: anthropic          # ✓ Use vendor at workflow level
-  model: claude-3-5-sonnet   # ✓ Use model at workflow level
+  model_vendor: anthropic          # ✓ Use vendor at workflow level
+  model_name: claude-3-5-sonnet   # ✓ Use model at workflow level
 ```
 
 **The system handles the translation automatically** - you don't need to worry about converting between them.
@@ -159,8 +156,8 @@ actions:
     prompt: "Extract the following fields..."
     schema: person_schema
     # ✓ Inherits ALL settings from project level:
-    #   - vendor: anthropic (from model_vendor)
-    #   - model: claude-3-5-sonnet-20241022 (from model_name)
+    #   - model_vendor: anthropic (from model_vendor)
+    #   - model_name: claude-3-5-sonnet-20241022 (from model_name)
     #   - api_key: ${ANTHROPIC_API_KEY}
     #   - json_mode: true
     #   - chunk_config with size 500, overlap 50
@@ -190,16 +187,16 @@ name: budget_analysis
 description: Analyze budget using cheaper model
 
 defaults:
-  vendor: openai           # ← Override: use OpenAI instead
-  model: gpt-4o-mini       # ← Override: use cheaper model
+  model_vendor: openai           # ← Override: use OpenAI instead
+  model_name: gpt-4o-mini       # ← Override: use cheaper model
   api_key: ${OPENAI_API_KEY}  # ← Override: different API key
 
 actions:
   - name: analyze_budget
     prompt: "Analyze the budget data..."
     # ✓ Uses workflow defaults:
-    #   - vendor: openai (overridden at workflow level)
-    #   - model: gpt-4o-mini (overridden at workflow level)
+    #   - model_vendor: openai (overridden at workflow level)
+    #   - model_name: gpt-4o-mini (overridden at workflow level)
     #   - api_key: ${OPENAI_API_KEY} (overridden at workflow level)
     #   - chunk_config: size 500 (inherited from project)
 
@@ -230,8 +227,8 @@ name: content_pipeline
 description: Multi-step content processing
 
 defaults:
-  vendor: anthropic
-  model: claude-3-5-haiku-20241022
+  model_vendor: anthropic
+  model_name: claude-3-5-haiku-20241022
   granularity: record
 
 actions:
@@ -240,13 +237,13 @@ actions:
     # ✓ Uses workflow/project defaults (claude-3-5-haiku)
 
   - name: deep_analysis
-    vendor: anthropic         # ← Override at action level
-    model: claude-3-5-sonnet-20241022  # ← Use more powerful model
+    model_vendor: anthropic         # ← Override at action level
+    model_name: claude-3-5-sonnet-20241022  # ← Use more powerful model
     few_shot: 5               # ← Action-specific setting
     prompt: "Perform deep analysis..."
     # ✓ Uses action-level overrides:
-    #   - vendor: anthropic (from action)
-    #   - model: claude-3-5-sonnet (from action - more powerful!)
+    #   - model_vendor: anthropic (from action)
+    #   - model_name: claude-3-5-sonnet (from action - more powerful!)
     #   - few_shot: 5 (from action)
     #   - api_key: ${ANTHROPIC_API_KEY} (inherited from project)
 
@@ -281,7 +278,7 @@ name: document_processing
 description: Process legal documents
 
 defaults:
-  model: claude-3-5-haiku-20241022  # ← Override model
+  model_name: claude-3-5-haiku-20241022  # ← Override model
   granularity: file                  # ← Workflow-specific
   few_shot: 2                        # ← Workflow-specific
 
@@ -290,8 +287,8 @@ actions:
     few_shot: 0               # ← Override: no few-shot for this action
     prompt: "Extract document metadata..."
     # ✓ Final configuration is merged from all levels:
-    #   - vendor: anthropic (from project model_vendor)
-    #   - model: claude-3-5-haiku (from workflow)
+    #   - model_vendor: anthropic (from project model_vendor)
+    #   - model_name: claude-3-5-haiku (from workflow)
     #   - api_key: ${ANTHROPIC_API_KEY} (from project)
     #   - chunk_config: 500/50 (from project)
     #   - json_mode: true (from project)
@@ -347,7 +344,7 @@ default_agent_config:
 
 # workflows/my_workflow.yml
 defaults:
-  model: claude-3-5-sonnet-20241022  # Model from workflow
+  model_name: claude-3-5-sonnet-20241022  # Model from workflow
 
 actions:
   - name: extract
@@ -361,15 +358,15 @@ actions:
 # workflows/my_workflow.yml
 actions:
   - name: extract
-    vendor: anthropic
-    model: claude-3-5-sonnet-20241022
+    model_vendor: anthropic
+    model_name: claude-3-5-sonnet-20241022
     api_key: ${ANTHROPIC_API_KEY}
     prompt: "..."
 ```
 
 #### ❌ Invalid Configurations
 
-**Missing vendor:**
+**Missing model_vendor: **
 ```yaml
 # agent_actions.yml
 default_agent_config:
@@ -382,7 +379,7 @@ actions:
     # ❌ Error: No vendor specified at any level
 ```
 
-**Missing model:**
+**Missing model_name: **
 ```yaml
 # agent_actions.yml
 default_agent_config:
@@ -434,8 +431,8 @@ When a workflow needs different settings, override at workflow level:
 ```yaml
 # workflows/cheap_processing.yml
 defaults:
-  vendor: anthropic
-  model: claude-3-5-haiku-20241022  # Cheaper model for this workflow
+  model_vendor: anthropic
+  model_name: claude-3-5-haiku-20241022  # Cheaper model for this workflow
 ```
 
 ### 3. Override at Action Level Sparingly
@@ -445,7 +442,7 @@ Only override at the action level when truly necessary:
 ```yaml
 actions:
   - name: complex_analysis
-    model: claude-3-5-sonnet-20241022  # Only this action needs powerful model
+    model_name: claude-3-5-sonnet-20241022  # Only this action needs powerful model
 ```
 
 ### 4. Use Environment Variables for API Keys
@@ -464,8 +461,8 @@ Add comments to explain why you're overriding defaults:
 ```yaml
 defaults:
   # Use GPT-4 for this workflow because it requires strong reasoning
-  vendor: openai
-  model: gpt-4
+  model_vendor: openai
+  model_name: gpt-4
 ```
 
 ## How Merging Works

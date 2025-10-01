@@ -33,9 +33,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test workflow in new format",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
+                "model_vendor": "openai",
                 'api_key': 'TEST_API_KEY',
-                "model": "gpt-4"
+                "model_name": "gpt-4"
             },
             "actions": [
                 {
@@ -90,8 +90,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test workflow with project config integration",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4o-mini-workflow",
-                "vendor": "openai",
+                "model_name": "gpt-4o-mini-workflow",
+                "model_vendor": "openai",
                 "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file"
@@ -109,8 +109,8 @@ class TestNewFormatConfigHandlerIntegration:
                     "name": "action_with_overrides",
                     "intent": "Action overriding all levels",
                     "kind": "llm",
-                    "model": "claude-3-sonnet",
-                    "vendor": "anthropic",
+                    "model_name": "claude-3-sonnet",
+                    "model_vendor": "anthropic",
                     "api_key": "TEST_API_KEY",
                     "json_mode": False,
                     "few_shot": 5,
@@ -188,8 +188,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test dependency parsing",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4",
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
                 "api_key": "TEST_API_KEY"
             },
             "actions": [
@@ -251,8 +251,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test action filtering",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4",
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
                 "api_key": "TEST_API_KEY"
             },
             "actions": [
@@ -296,8 +296,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test chunking config support",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4",
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
                 "api_key": "TEST_API_KEY",
                 "chunk_config": {
                     "chunk_size": 1000,
@@ -343,8 +343,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test comprehensive defaults",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4-default",
-                "vendor": "openai",
+                "model_name": "gpt-4-default",
+                "model_vendor": "openai",
                 "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file",
@@ -482,9 +482,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test tool action with batch mode defaults",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
+                "model_vendor": "openai",
                 'api_key': 'TEST_API_KEY',
-                "model": "gpt-4",
+                "model_name": "gpt-4",
                 "run_mode": "batch"  # Default to batch mode
             },
             "actions": [
@@ -563,8 +563,8 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test schema handling",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4",
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
                 "api_key": "TEST_API_KEY"
             },
             "actions": [
@@ -671,8 +671,8 @@ class TestNewFormatFeatureIntegration:
             "description": "End-to-end test workflow",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4",
-                "vendor": "openai",
+                "model_name": "gpt-4",
+                "model_vendor": "openai",
                 "api_key": "TEST_API_KEY",
                 "json_mode": False,
                 "granularity": "record"

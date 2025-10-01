@@ -136,8 +136,8 @@ class TestFormatConverterIntegration:
                 'condition': 'udf:validators.should_process',
                 'on_false': 'skip'
             },
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
             'api_key': 'TEST_API_KEY'
         }
 
@@ -164,8 +164,8 @@ class TestFormatConverterIntegration:
                 'condition': 'questionable != "Low Value"',
                 'on_false': 'filter'
             },
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
             'api_key': 'TEST_API_KEY'
         }
 
@@ -195,8 +195,8 @@ class TestFormatConverterIntegration:
                 'condition': 'questionable != "Low Value"',
                 'on_false': 'skip'
             },
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
             'api_key': 'TEST_API_KEY'
         }
 

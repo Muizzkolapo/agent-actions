@@ -229,83 +229,60 @@
 
     "phase_3_field_name_consistency": {
       "priority": "medium",
-      "description": "Consider standardizing on one naming convention or provide clear migration path",
+      "description": "Standardize on model_vendor/model_name everywhere (Option B)",
+      "status": "completed",
+      "implementation_summary": {
+        "chosen_option": "Option B - Always use model_vendor/model_name (explicit names)",
+        "approach": "Forward-fix only, no deprecation warnings (dev environment)",
+        "breaking_changes": "All workflow files must use model_vendor/model_name instead of vendor/model"
+      },
       "tasks": [
         {
           "id": "evaluate_naming_options",
           "title": "Evaluate naming convention options",
-          "description": "Assess the three options for field name consistency",
-          "options": [
-            {
-              "option": "A",
-              "description": "Always use vendor/model (current workflow/action level)",
-              "pros": [
-                "Shorter field names",
-                "Already used in most places",
-                "More concise"
-              ],
-              "cons": [
-                "Breaking change for project-level configs",
-                "Need migration for existing agent_actions.yml files"
-              ]
-            },
-            {
-              "option": "B",
-              "description": "Always use model_vendor/model_name (current project level)",
-              "pros": [
-                "More explicit field names",
-                "Clear what each field represents",
-                "No ambiguity with 'vendor' (could mean different things)"
-              ],
-              "cons": [
-                "Breaking change for workflow/action configs",
-                "Longer field names",
-                "Need migration for all workflow files"
-              ]
-            },
-            {
-              "option": "C",
-              "description": "Support both with clear migration path",
-              "pros": [
-                "No breaking changes",
-                "Gradual migration possible",
-                "Backward compatibility"
-              ],
-              "cons": [
-                "More complex implementation",
-                "Two ways to do the same thing (confusing for users)",
-                "Longer support burden"
-              ]
-            }
-          ],
-          "recommendation": "To be determined after team discussion",
-          "status": "pending"
+          "description": "Assessed three options and chose Option B for explicit naming",
+          "chosen_option": "B",
+          "rationale": "More explicit field names provide clarity across all config levels",
+          "status": "completed"
         },
         {
           "id": "implement_chosen_naming_strategy",
-          "title": "Implement chosen naming strategy",
-          "description": "Based on the evaluation, implement the selected naming convention",
+          "title": "Implement model_vendor/model_name standardization",
+          "description": "Implemented Option B - standardized all config levels on model_vendor/model_name",
           "dependencies": ["evaluate_naming_options"],
           "implementation_steps": [
-            "Update config parsing logic",
-            "Add migration helpers if needed",
-            "Update validation to support chosen approach",
-            "Update documentation with new convention"
+            "✅ Updated Pydantic schemas (ActionConfig, DefaultsConfig) to use model_vendor/model_name",
+            "✅ Removed deprecation warnings from action_expander.py",
+            "✅ Simplified parsing logic (no fallbacks to vendor/model)",
+            "✅ Updated 713 lines of parser tests",
+            "✅ Updated config handler and consolidated guard tests",
+            "✅ Updated 8 documentation files with consistent examples",
+            "✅ Verified all 584 tests pass"
           ],
-          "status": "pending"
+          "status": "completed",
+          "files_modified": [
+            "agent_actions/core/migration/new_format_schema.py",
+            "agent_actions/core/parser/action_expander.py",
+            "tests/core/parser/test_action_expander_defaults.py",
+            "tests/core/parser/test_action_expander_guards.py",
+            "tests/agents/handlers/test_config_handler_new_format.py",
+            "tests/core/utils/test_consolidated_guard.py",
+            "agentaction-docs/docs/core-concepts/configuration-hierarchy.md",
+            "agentaction-docs/docs/core-concepts/workflows.md",
+            "agentaction-docs/docs/getting-started.md",
+            "agentaction-docs/docs/platform/project-structure.md",
+            "agentaction-docs/docs/core-concepts/agents.md",
+            "agentaction-docs/docs/core-concepts/index.md",
+            "agentaction-docs/docs/core-concepts/tokenizers.md",
+            "agentaction-docs/docs/core-concepts/error-handling.md"
+          ]
         },
         {
           "id": "add_migration_guide",
-          "title": "If keeping both, add clear documentation on when to use which",
-          "description": "Create migration guide and usage documentation",
-          "content_to_create": [
-            "Migration guide from old to new field names",
-            "When to use which field name convention",
-            "Examples of both conventions",
-            "Deprecation timeline if applicable"
-          ],
-          "suggested_location": "agentaction-docs/docs/guides/configuration-migration.md",
-          "status": "pending"
+          "title": "Migration guidance for field name changes",
+          "description": "Documentation updated to show consistent model_vendor/model_name usage",
+          "status": "completed",
+          "note": "No separate migration guide needed - documentation now shows correct usage consistently. Breaking change requires immediate update of all workflow files."
         }
       ]
     },
