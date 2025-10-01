@@ -10,6 +10,7 @@ from agent_actions.core.exceptions import AgentActionsException, ConfigurationEr
 from agent_actions.core.constants import MODEL_VENDOR_KEY
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.graph.dependency_injection import ProcessorFactory
+from agent_actions.core.safe_format import safe_format_error
 
 # Constants
 TOOL_VENDOR = 'tool'
@@ -136,9 +137,17 @@ class TargetGenerator:
             return str(Path(output_directory) / relative_path)
         except (AgentActionsException, ConfigurationError, ValueError) as e: # Catch known specific errors
             # Log e if necessary, or let it propagate if it's already informative
-            raise AgentActionsException(f"Error generating target for {file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                f"Error generating target for {file_path}: {safe_format_error(e)}",
+                context={'file_path': file_path, 'base_directory': base_directory, 'output_directory': output_directory},
+                cause=e
+            ) from e
         except Exception as e:
-            raise AgentActionsException(f"Unexpected error generating target for {file_path}: {str(e)}") from e
+            raise AgentActionsException(
+                f"Unexpected error generating target for {file_path}: {safe_format_error(e)}",
+                context={'file_path': file_path, 'base_directory': base_directory, 'output_directory': output_directory},
+                cause=e
+            ) from e
     
     def _read_input_data(self, file_path):
         """Read data from input file."""

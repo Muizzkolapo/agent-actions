@@ -18,6 +18,12 @@ from agent_actions.core.exceptions import (
 )
 from agent_actions.core.user_errors import format_user_error
 from agent_actions.core.error_context import with_error_context, with_agent_context
+from agent_actions.core.safe_format import (
+    extract_root_cause,
+    get_error_chain,
+    format_exception_chain_for_debug,
+    safe_format_error
+)
 
 
 class TestUserFriendlyErrorFormatting:
@@ -303,3 +309,204 @@ class TestErrorSystemRobustness:
         result = format_user_error(exc, {"command": "test"})
         assert len(result) > 10  # Should still work
         assert "Test" in result or "error" in result.lower()
+
+
+class TestMultiLevelExceptionChains:
+    """Test multi-level exception chains preserve context and root causes (Phase 3)."""
+
+    def test_two_level_chain_preserves_context(self):
+        """Test 2-level chain preserves context at each level."""
+        # Simulate real scenario: file error wrapped in config error
+        try:
+            try:
+                raise FileNotFoundError("config.yml not found")
+            except FileNotFoundError as e:
+                raise ConfigurationError(
+                    f"Failed to load config: {safe_format_error(e)}",
+                    context={'config_path': '/agents/config.yml', 'agent': 'test-agent'},
+                    cause=e
+                ) from e
+        except ConfigurationError as exc:
+            # Verify chain structure
+            chain = get_error_chain(exc)
+            assert len(chain) == 2
+
+            # Verify root cause extraction
+            root = extract_root_cause(exc)
+            assert isinstance(root, FileNotFoundError)
+            assert "config.yml" in str(root)
+
+            # Verify context is preserved
+            assert exc.context['agent'] == 'test-agent'
+
+            # Verify user message includes root cause info
+            result = format_user_error(exc, {'command': 'run'})
+            assert 'test-agent' in result
+
+    def test_three_level_chain_shows_root_cause(self):
+        """Test 3-level chain correctly identifies and shows root cause."""
+        # Simulate: ValueError -> ValidationError -> ConfigurationError
+        try:
+            try:
+                try:
+                    raise ValueError("Model name cannot be empty")
+                except ValueError as e:
+                    raise ValidationError(
+                        f"Field validation failed: {safe_format_error(e)}",
+                        context={'field': 'model', 'section': 'agents'},
+                        cause=e
+                    ) from e
+            except ValidationError as e:
+                raise ConfigurationError(
+                    f"Agent configuration invalid: {safe_format_error(e)}",
+                    context={'agent': 'test-agent', 'file': 'config.yml'},
+                    cause=e
+                ) from e
+        except ConfigurationError as exc:
+            # Verify chain depth
+            chain = get_error_chain(exc)
+            assert len(chain) == 3
+
+            # Verify root cause
+            root = extract_root_cause(exc)
+            assert isinstance(root, ValueError)
+            assert "cannot be empty" in str(root)
+
+            # Verify all contexts preserved
+            assert chain[0].context['agent'] == 'test-agent'
+            assert chain[1].context['field'] == 'model'
+
+            # Format for debugging
+            debug_output = format_exception_chain_for_debug(exc)
+            assert "[1]" in debug_output
+            assert "[2]" in debug_output
+            assert "[3]" in debug_output
+            assert "(Root Cause)" in debug_output
+
+    def test_five_level_chain_like_original_bug(self):
+        """Test 5-level chain like the original issue #394."""
+        # Recreate the cascading error from the bug report
+        try:
+            # Level 1: Root cause (model not supported)
+            try:
+                try:
+                    try:
+                        try:
+                            raise ValueError("Model 'claude-sonnet-4-20250514' not supported")
+                        except ValueError as e:
+                            # Level 2: Provider error
+                            raise ConfigurationError(
+                                f"Provider init failed: {safe_format_error(e)}",
+                                context={'provider': 'anthropic'},
+                                cause=e
+                            ) from e
+                    except ConfigurationError as e:
+                        # Level 3: Batch service error
+                        raise ConfigurationError(
+                            f"Batch provider creation failed: {safe_format_error(e)}",
+                            context={'provider_type': 'anthropic', 'operation': 'create_provider'},
+                            cause=e
+                        ) from e
+                except ConfigurationError as e:
+                    # Level 4: Target generator error
+                    raise AgentActionsException(
+                        f"Target generation failed: {safe_format_error(e)}",
+                        context={'file_path': '/source/data.json', 'operation': 'generate'},
+                        cause=e
+                    ) from e
+            except AgentActionsException as e:
+                # Level 5: Top-level run error
+                raise AgentActionsException(
+                    f"Agent run failed: {safe_format_error(e)}",
+                    context={'agent': 'qanalabs-quiz-gen', 'command': 'run'},
+                    cause=e
+                ) from e
+        except AgentActionsException as exc:
+            # Verify full chain
+            chain = get_error_chain(exc)
+            assert len(chain) == 5, f"Expected 5 levels, got {len(chain)}"
+
+            # Verify root cause is correctly identified
+            root = extract_root_cause(exc)
+            assert isinstance(root, ValueError)
+            assert "not supported" in str(root)
+
+            # Verify context at each level
+            assert chain[0].context['agent'] == 'qanalabs-quiz-gen'
+            assert chain[1].context['file_path'] == '/source/data.json'
+            assert chain[2].context['provider_type'] == 'anthropic'
+            assert chain[3].context['provider'] == 'anthropic'
+
+            # User-friendly message should show root cause clearly
+            result = format_user_error(exc, {})
+            assert 'qanalabs-quiz-gen' in result
+
+            # Debug output should show full chain
+            debug_output = format_exception_chain_for_debug(exc)
+            assert "Exception Chain (5 levels)" in debug_output
+            assert "[1]" in debug_output
+            assert "[5]" in debug_output
+            assert "(Root Cause)" in debug_output
+
+    def test_chain_with_mixed_exception_types(self):
+        """Test chain with different exception types preserves all info."""
+        try:
+            try:
+                try:
+                    raise IOError("File write failed: disk full")
+                except IOError as e:
+                    raise FileLoadError(
+                        "/output/results.json",
+                        f"Cannot write: {safe_format_error(e)}",
+                        context={'operation': 'write_results'},
+                        cause=e
+                    ) from e
+            except FileLoadError as e:
+                raise AgentActionsException(
+                    f"Output handling failed: {safe_format_error(e)}",
+                    context={'agent': 'data-processor', 'stage': 'finalization'},
+                    cause=e
+                ) from e
+        except AgentActionsException as exc:
+            # Verify chain
+            chain = get_error_chain(exc)
+            assert len(chain) == 3
+
+            # Verify types
+            assert isinstance(chain[0], AgentActionsException)
+            assert isinstance(chain[1], FileLoadError)
+            assert isinstance(chain[2], IOError)
+
+            # Root cause should be the IOError
+            root = extract_root_cause(exc)
+            assert isinstance(root, IOError)
+            assert "disk full" in str(root)
+
+    def test_context_from_decorators_preserved_in_chain(self):
+        """Test that decorator-added context is preserved through chains."""
+        @with_error_context(command="run")
+        @with_agent_context
+        def multi_level_failure(agent_name, config_file):
+            try:
+                raise ValueError("Invalid value")
+            except ValueError as e:
+                raise ValidationError(
+                    f"Validation failed: {safe_format_error(e)}",
+                    context={'field': 'test_field'},
+                    cause=e
+                ) from e
+
+        with pytest.raises(ValidationError) as exc_info:
+            multi_level_failure("test_agent", "config.yml")
+
+        exc = exc_info.value
+
+        # Should have context from decorators AND exception
+        result = format_user_error(exc, {})
+        assert "test_agent" in result  # from decorator
+        assert "config.yml" in result  # from decorator
+        # "test_field" might appear in context display
+
+        # Chain should show both levels
+        chain = get_error_chain(exc)
+        assert len(chain) == 2

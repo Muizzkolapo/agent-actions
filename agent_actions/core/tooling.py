@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 
 from agent_actions.core.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.core.safe_format import safe_format_error
 
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:
@@ -99,4 +100,8 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
     except ConfigurationError: # Re-raise if load_user_defined_function failed
         raise
     except Exception as e:
-        raise AgentActionsException(f"Error executing user defined function '{func_name}': {str(e)}") from e
+        raise AgentActionsException(
+            f"Error executing user defined function '{func_name}': {safe_format_error(e)}",
+            context={'function': func_name, 'module': module_name, 'operation': 'execute_udf'},
+            cause=e
+        ) from e

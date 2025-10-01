@@ -318,33 +318,80 @@
 
     "phase_3_context_preservation": {
       "priority": "medium",
+      "status": "completed",
       "description": "Improve error messages by preserving root cause context through exception chains",
       "tasks": [
         {
           "id": "root_cause_extractor",
           "title": "Add extract_root_cause() utility function",
-          "file": "agent_actions/core/exceptions.py",
+          "file": "agent_actions/core/safe_format.py",
           "description": "Walk exception chain to find the most specific/actionable error message",
-          "function_signature": "def extract_root_cause(exc: Exception) -> str"
+          "function_signature": "def extract_root_cause(exc: Exception) -> Exception",
+          "status": "completed",
+          "implementation_summary": "Already existed in safe_format.py:64-121. Enhanced with format_exception_chain_for_debug() for debugging (lines 227-285)"
         },
         {
           "id": "update_top_level_handlers",
           "title": "Update top-level exception handlers to show root cause",
-          "files": [
-            {
-              "file": "agent_actions/tasks/run.py",
-              "line": 95,
-              "improvement": "Use extract_root_cause() instead of just str(e)"
-            }
+          "status": "completed",
+          "implementation_summary": "CLI handlers already use format_user_error() which internally calls extract_root_cause(). Added debug logging with format_exception_chain_for_debug()",
+          "files_changed": [
+            "agent_actions/core/user_errors.py - Added debug logging of full exception chain (line 498)"
           ]
         },
         {
           "id": "structured_context",
           "title": "Improve context preservation in exception wrapping",
           "description": "When wrapping exceptions, preserve original error in context dict instead of string interpolation",
-          "example": "context={'file': file_path, 'original_error': safe_format_error(e)}"
+          "example": "context={'file': file_path, 'original_error': safe_format_error(e)}",
+          "status": "completed",
+          "implementation_summary": "Replaced str(e) with safe_format_error(e) and added structured context dicts in 8 high-priority files. Enhanced AgentActionsException to automatically set __cause__ for proper chain linking.",
+          "files_changed": [
+            "agent_actions/core/exceptions.py - Auto-set __cause__ from cause parameter (lines 70-73)",
+            "agent_actions/agents/handlers/file_writer.py - 6 replacements with context preservation",
+            "agent_actions/agents/handlers/file_reader.py - 2 replacements with context",
+            "agent_actions/agents/handlers/config_handler.py - 6 replacements with operation context",
+            "agent_actions/agents/generators/target_generator.py - 2 replacements with structured context",
+            "agent_actions/core/tooling.py - 1 replacement for UDF execution errors",
+            "agent_actions/core/graph/render_workflow.py - 2 replacements for template errors"
+          ]
+        },
+        {
+          "id": "debug_chain_formatter",
+          "title": "Add debug utility for formatting full exception chains",
+          "file": "agent_actions/core/safe_format.py",
+          "status": "completed",
+          "implementation_summary": "Created format_exception_chain_for_debug() function that provides detailed, structured representation of complete exception chains for debugging purposes",
+          "function_signature": "def format_exception_chain_for_debug(exc: Exception, max_depth: int = 10) -> str",
+          "location": "agent_actions/core/safe_format.py:227-285"
         }
-      ]
+      ],
+      "test_coverage": {
+        "new_test_file": "tests/core/test_context_preservation.py",
+        "test_count": 19,
+        "all_passing": true,
+        "test_categories": [
+          "Context preservation through 1-5 level chains",
+          "Root cause extraction from complex chains",
+          "Circular reference handling",
+          "Debug chain formatting",
+          "Structured context usage",
+          "Real-world scenarios"
+        ]
+      },
+      "integration_tests": {
+        "file": "tests/core/test_error_system_integration.py",
+        "new_test_class": "TestMultiLevelExceptionChains",
+        "test_count": 5,
+        "all_passing": true,
+        "scenarios_tested": [
+          "2-level chain with context preservation",
+          "3-level chain with root cause identification",
+          "5-level chain simulating original issue #394",
+          "Mixed exception types in chains",
+          "Decorator context preservation"
+        ]
+      }
     },
 
     "phase_4_leverage_existing_infrastructure": {

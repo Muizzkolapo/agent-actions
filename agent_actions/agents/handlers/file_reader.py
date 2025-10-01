@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from pathlib import Path
 
 from agent_actions.core.exceptions import FileLoadError as AgentFileNotFoundError, AgentActionsException
+from agent_actions.core.safe_format import safe_format_error
 class FileReader:
     def __init__(self, file_path):
         self.file_path = file_path
@@ -33,10 +34,18 @@ class FileReader:
             except FileNotFoundError:
                 raise AgentFileNotFoundError(f"File not found: {self.file_path}")
             except IOError as e:
-                raise AgentActionsException(f"IOError reading file {self.file_path}: {str(e)}") from e
+                raise AgentActionsException(
+                    f"IOError reading file {self.file_path}: {safe_format_error(e)}",
+                    context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'},
+                    cause=e
+                ) from e
             except Exception as e:
                 # Catch other specific parsing errors if possible, e.g., PyPDF2.errors.PdfReadError
-                raise AgentActionsException(f"Error reading file {self.file_path} (type: {self.file_type}): {str(e)}") from e
+                raise AgentActionsException(
+                    f"Error reading file {self.file_path} (type: {self.file_type}): {safe_format_error(e)}",
+                    context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'},
+                    cause=e
+                ) from e
         else:
             raise AgentActionsException(f"Unsupported file type: {self.file_type} for file {self.file_path}")
 
