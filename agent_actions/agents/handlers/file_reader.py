@@ -10,8 +10,11 @@ from pathlib import Path
 
 from agent_actions.core.exceptions import FileLoadError as AgentFileNotFoundError, AgentActionsException
 from agent_actions.core.safe_format import safe_format_error
-class FileReader:
+from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
+
+class FileReader(ProcessorErrorHandlerMixin):
     def __init__(self, file_path):
+        super().__init__()
         self.file_path = file_path
         self.file_type = Path(file_path).suffix.lower()
 
@@ -31,21 +34,18 @@ class FileReader:
         if self.file_type in file_type_handlers:
             try:
                 return file_type_handlers[self.file_type]()
-            except FileNotFoundError:
-                raise AgentFileNotFoundError(f"File not found: {self.file_path}")
+            except FileNotFoundError as e:
+                self.handle_file_error(e, "read", self.file_path, file_type=self.file_type)
             except IOError as e:
-                raise AgentActionsException(
-                    f"IOError reading file {self.file_path}: {safe_format_error(e)}",
-                    context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'},
-                    cause=e
-                ) from e
+                self.handle_file_error(e, "read", self.file_path, file_type=self.file_type)
             except Exception as e:
                 # Catch other specific parsing errors if possible, e.g., PyPDF2.errors.PdfReadError
-                raise AgentActionsException(
-                    f"Error reading file {self.file_path} (type: {self.file_type}): {safe_format_error(e)}",
-                    context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'},
-                    cause=e
-                ) from e
+                self.handle_processing_error(
+                    e,
+                    f"Read file {self.file_path} (type: {self.file_type})",
+                    file_path=self.file_path,
+                    file_type=self.file_type
+                )
         else:
             raise AgentActionsException(f"Unsupported file type: {self.file_type} for file {self.file_path}")
 

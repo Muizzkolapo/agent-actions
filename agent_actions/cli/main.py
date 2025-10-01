@@ -75,7 +75,7 @@ class CLI:
     def _configure_logging(self, argv: List[str]) -> None:
         """
         Configure logging based on command-line arguments.
-        
+
         Args:
             argv: Command-line arguments
         """
@@ -85,12 +85,19 @@ class CLI:
 
         if debug_mode:
             level = logging.DEBUG
+            # In debug mode, configure structured JSON logging
+            log_format = '%(levelname)s - %(name)s - %(message)s'
         elif verbose_mode:
             level = logging.INFO
+            log_format = '%(levelname)s - %(message)s'
         else:
             level = logging.CRITICAL  # Only show critical system errors to users
+            log_format = '%(message)s'
 
-        logging.basicConfig(level=level)
+        logging.basicConfig(
+            level=level,
+            format=log_format
+        )
         self.logger.setLevel(level)
         
 
@@ -163,6 +170,14 @@ class CLI:
             if '--debug' in (argv or []):
                 print("\n--- Debug Information ---", file=sys.stderr)
                 import traceback
+                from agent_actions.core.safe_format import format_exception_chain_for_debug
+
+                # Show formatted exception chain
+                print("\nException Chain:", file=sys.stderr)
+                print(format_exception_chain_for_debug(e), file=sys.stderr)
+
+                # Show full traceback
+                print("\nFull Traceback:", file=sys.stderr)
                 traceback.print_exc()
 
             return 1
