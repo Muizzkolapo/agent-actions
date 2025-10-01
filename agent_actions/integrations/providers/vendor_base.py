@@ -48,17 +48,32 @@ class BaseVendorHandler:
             # Legacy format: ANTHROPIC_API_KEY (direct env var name)
             env_var_name = key_name
 
-        api_key = os.getenv(env_var_name)
-
-        if not api_key:
+        # Check if variable EXISTS in environment (not just if it's empty)
+        if env_var_name not in os.environ:
             raise ConfigurationError(
                 f"Environment variable '{env_var_name}' is not set",
                 context={
                     'agent': agent_config.get('agent_type', 'unknown'),
                     'env_var': env_var_name,
+                    'config_value': key_name,  # Shows ${VAR} or VAR
+                    'operation': 'get_api_key',
+                    'hint': f'Set the environment variable:\n  export {env_var_name}=your-api-key'
+                }
+            )
+
+        # Now we know it exists, get the value
+        api_key = os.getenv(env_var_name)
+
+        # Check if value is empty string (less common but possible)
+        if not api_key:
+            raise ConfigurationError(
+                f"Environment variable '{env_var_name}' is set but empty",
+                context={
+                    'agent': agent_config.get('agent_type', 'unknown'),
+                    'env_var': env_var_name,
                     'config_value': key_name,
                     'operation': 'get_api_key',
-                    'hint': f'Set the environment variable: export {env_var_name}=your-api-key'
+                    'hint': f'Provide a value: export {env_var_name}=your-api-key'
                 }
             )
 

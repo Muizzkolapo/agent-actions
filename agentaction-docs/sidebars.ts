@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'core-concepts/index',
         'core-concepts/agents',
         'core-concepts/workflows',
+        'core-concepts/tool-actions',
         'core-concepts/schemas',
         'core-concepts/configuration-hierarchy',
         'core-concepts/tokenizers',

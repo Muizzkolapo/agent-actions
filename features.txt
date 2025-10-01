@@ -1,1 +1,5 @@
 - dynamic prompt and schema variant selections
+- input signatures
+- prompt optizers - premium
+- workspace - premium
+- prompt waste and context distractors with unneded info - premium

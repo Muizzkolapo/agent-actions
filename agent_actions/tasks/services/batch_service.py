@@ -195,13 +195,29 @@ class BatchService:
     def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
         """
         Get the appropriate provider based on agent configuration.
-        
+
         Args:
-            agent_config: Agent configuration dictionary
-            
+            agent_config: Agent configuration dictionary (must be resolved via hierarchy)
+
         Returns:
             BatchProvider instance for the specified provider type
         """
+        # Validate that config is complete (was resolved by caller via ActionExpander)
+        # Batch service expects fully resolved config, not raw action/workflow config
+        required_fields = ['model_vendor', 'model_name', 'api_key']
+        missing = [f for f in required_fields if not agent_config.get(f)]
+
+        if missing:
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                f"Batch service received incomplete config (missing: {', '.join(missing)})",
+                context={
+                    'missing_fields': missing,
+                    'agent_type': agent_config.get('agent_type', 'unknown'),
+                    'hint': 'Caller must resolve config hierarchy (project → workflow → action) before calling batch service'
+                }
+            )
+
         # Get provider type from config - prioritize model_vendor, fallback to batch_provider for backward compatibility
         provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
         

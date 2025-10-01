@@ -48,6 +48,8 @@ class TestBatchServiceIntegration:
                     "behavior": "filter"
                 },
                 "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "OPENAI_API_KEY",
                 "schema": {"result": "string"}
             }
 
@@ -90,6 +92,8 @@ class TestBatchServiceIntegration:
                     "behavior": "skip"
                 },
                 "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "OPENAI_API_KEY",
                 "schema": {"result": "string"}
             }
 
@@ -132,7 +136,10 @@ class TestBatchServiceIntegration:
             # Test filter behavior
             filter_config = {
                 "where_clause": {"clause": "1 == 2", "scope": "item", "behavior": "filter"},
-                "model_vendor": "openai", "schema": {"result": "string"}
+                "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "OPENAI_API_KEY",
+                "schema": {"result": "string"}
             }
 
             filter_result = batch_service.submit_batch_job_from_data(
@@ -142,7 +149,10 @@ class TestBatchServiceIntegration:
             # Test skip behavior
             skip_config = {
                 "where_clause": {"clause": "1 == 2", "scope": "item", "behavior": "skip"},
-                "model_vendor": "openai", "schema": {"result": "string"}
+                "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "OPENAI_API_KEY",
+                "schema": {"result": "string"}
             }
 
             skip_result = batch_service.submit_batch_job_from_data(

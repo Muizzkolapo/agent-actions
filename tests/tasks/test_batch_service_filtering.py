@@ -97,6 +97,8 @@ class TestBatchServiceFiltering:
                 "behavior": "filter"
             },
             "model_vendor": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key": "OPENAI_API_KEY",
             "schema": {"result": "string"}
         }
 
@@ -144,6 +146,8 @@ class TestBatchServiceFiltering:
                 "behavior": "filter"
             },
             "model_vendor": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key": "OPENAI_API_KEY",
             "schema": {"result": "string"}
         }
 
@@ -193,6 +197,8 @@ class TestBatchServiceFiltering:
                 "behavior": "skip"
             },
             "model_vendor": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key": "OPENAI_API_KEY",
             "schema": {"result": "string"}
         }
 
@@ -355,6 +361,8 @@ class TestBatchServiceFiltering:
         agent_config = {
             "conditional_clause": "test_module.test_function",
             "model_vendor": "openai",
+            "model_name": "gpt-4o-mini",
+            "api_key": "OPENAI_API_KEY",
             "schema": {"result": "string"}
         }
 
