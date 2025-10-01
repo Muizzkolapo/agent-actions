@@ -42,7 +42,10 @@ class TargetGenerator:
         
         # Validate required dependency
         if processor_factory is None:
-            raise DependencyError("TargetGenerator", "processor_factory")
+            raise DependencyError(
+                "TargetGenerator requires processor_factory dependency",
+                context={'component': 'TargetGenerator', 'dependency': 'processor_factory', 'agent_name': agent_name}
+            )
         
         # Use processor factory with proper DI
         # Use bootstrap.create_target_content_processor() for proper DI setup
@@ -76,7 +79,10 @@ class TargetGenerator:
             DependencyError: If processor_factory is not provided
         """
         if processor_factory is None:
-            raise DependencyError("TargetGenerator.generate", "processor_factory")
+            raise DependencyError(
+                "TargetGenerator.generate requires processor_factory dependency",
+                context={'method': 'TargetGenerator.generate', 'dependency': 'processor_factory', 'agent_name': agent_name}
+            )
             
         if agent_config.get('run_mode') == 'batch':
             batch_service = BatchService()
@@ -138,14 +144,14 @@ class TargetGenerator:
         except (AgentActionsException, ConfigurationError, ValueError) as e: # Catch known specific errors
             # Log e if necessary, or let it propagate if it's already informative
             raise AgentActionsException(
-                f"Error generating target for {file_path}: {safe_format_error(e)}",
-                context={'file_path': file_path, 'base_directory': base_directory, 'output_directory': output_directory},
+                f"Error generating target: {safe_format_error(e)}",
+                context={'file_path': str(file_path), 'base_directory': str(base_directory), 'output_directory': str(output_directory), 'agent_name': self.agent_name},
                 cause=e
             ) from e
         except Exception as e:
             raise AgentActionsException(
-                f"Unexpected error generating target for {file_path}: {safe_format_error(e)}",
-                context={'file_path': file_path, 'base_directory': base_directory, 'output_directory': output_directory},
+                f"Unexpected error generating target: {safe_format_error(e)}",
+                context={'file_path': str(file_path), 'base_directory': str(base_directory), 'output_directory': str(output_directory), 'agent_name': self.agent_name},
                 cause=e
             ) from e
     

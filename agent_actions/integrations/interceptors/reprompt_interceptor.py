@@ -59,7 +59,14 @@ class RepromptInterceptor(ResponseInterceptor):
                 prompt_debug=self.prompt_debug
             )
         else:
-            raise ValueError(f"Unknown reprompt strategy: {strategy_type}")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Unknown reprompt strategy",
+                context={
+                    'strategy_type': strategy_type,
+                    'supported_strategies': ['llm', 'simple', 'template']
+                }
+            )
             
         if self.prompt_debug:
             print(f"   Created strategy: {type(self.strategy).__name__}")
@@ -107,7 +114,14 @@ class RepromptInterceptor(ResponseInterceptor):
         )
 
         if not self.strategy:
-            raise ValueError("Reprompt strategy not configured")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Reprompt strategy not configured",
+                context={
+                    'attempt': attempt,
+                    'max_attempts': self.max_attempts
+                }
+            )
 
         improved_prompt = self.strategy.generate_improved_prompt(reprompt_context)
 

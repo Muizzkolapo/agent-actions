@@ -43,7 +43,14 @@ class ValidationInterceptor(ResponseInterceptor):
             print(f"   Parsed on_failure: {self.on_failure}")
 
         if not self.validator_function:
-            raise ValueError("validator_function is required")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "validator_function is required",
+                context={
+                    'interceptor_type': 'validation',
+                    'config_keys': list(config.keys())
+                }
+            )
 
     def intercept(self, response: Any, context: Dict) -> InterceptorResult:
         if self.prompt_debug:
@@ -108,7 +115,15 @@ class ValidationInterceptor(ResponseInterceptor):
         if self.on_failure == "fail":
             if self.prompt_debug:
                 print(f"   ❌ VALIDATION FAILED - raising error")
-            raise ValueError(f"Validation failed: {error_message}")
+            from agent_actions.core.exceptions import ValidationError
+            raise ValidationError(
+                "Validation failed",
+                context={
+                    'validator_function': self.validator_function,
+                    'error_message': error_message,
+                    'validator_args': self.validator_args
+                }
+            )
 
         if self.prompt_debug:
             print(f"   ⚠️ VALIDATION FAILED - continuing with warning")

@@ -27,7 +27,11 @@ def _split_udf_name(udf_name: str) -> Tuple[str, str]:
         module_name, func_name = udf_name.rsplit('.', 1)
         return module_name, func_name
     except ValueError as e:
-        raise ValueError("Invalid UDF format. Expected 'module.function'") from e
+        raise ConfigurationError(
+            "Invalid UDF format. Expected 'module.function'",
+            context={'udf_name': udf_name},
+            cause=e
+        ) from e
 
 
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
@@ -60,7 +64,9 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
         if module is None:
             search_paths = ", ".join(sys.path)
             raise ConfigurationError(
-                f"Module '{module_name}' for UDF not found. Searched paths: {search_paths}"
+                f"Module '{module_name}' for UDF not found",
+                context={'module_name': module_name, 'search_paths': search_paths},
+                cause=e
             ) from e
     
     try:
@@ -68,7 +74,9 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     except AttributeError as e:
         search_paths = ", ".join(sys.path)
         raise ConfigurationError(
-            f"Function '{function_name}' not found in module '{module_name}'. Searched paths: {search_paths}"
+            f"Function '{function_name}' not found in module '{module_name}'",
+            context={'function_name': function_name, 'module_name': module_name, 'search_paths': search_paths},
+            cause=e
         ) from e
     
     return function

@@ -43,12 +43,25 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
                 parsed_data = json.loads(content)
                 return parsed_data
             else:
+                from agent_actions.core.exceptions import ValidationError
                 self.handle_validation_error(
-                    ValueError("Either file_path or content must be provided"),
+                    ValidationError(
+                        "Either file_path or content must be provided",
+                        context={
+                            'agent_name': self.agent_name,
+                            'loader_type': 'json'
+                        }
+                    ),
                     "JSON input",
                     file_path=file_path
                 )
-                raise ValueError("Either file_path or content must be provided")
+                raise ValidationError(
+                    "Either file_path or content must be provided",
+                    context={
+                        'agent_name': self.agent_name,
+                        'loader_type': 'json'
+                    }
+                )
         except json.JSONDecodeError as e:
             self.handle_processing_error(
                 e,

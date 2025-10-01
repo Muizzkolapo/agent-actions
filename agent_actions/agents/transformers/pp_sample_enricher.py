@@ -65,4 +65,9 @@ class SampleEnricher:
 
             return prompt_config
         except Exception as e:
-            raise ValueError(f"Failed to append few shot samples: {str(e)}")
+            from agent_actions.core.exceptions import ProcessingError
+            raise ProcessingError(
+                f"Failed to append few shot samples: {str(e)}",
+                context={'agent_name': agent_config.get('agent_type', 'unknown'), 'operation': 'append_few_shot_samples'},
+                cause=e
+            )

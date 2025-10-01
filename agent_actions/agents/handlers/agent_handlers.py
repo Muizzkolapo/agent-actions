@@ -118,7 +118,7 @@ class AgentManager:
         try:
             agent_config_dir, _, _ = self.get_agent_paths(agent_name) # Assuming self or make it static and call AgentManager
             return Path(agent_config_dir).exists()
-        except AgentNotFoundError: # get_agent_paths raises AgentNotFoundError
+        except AgentNotFoundError:
             return False
 
 
@@ -141,7 +141,13 @@ class AgentManager:
         # Find project root
         project_root = AgentManager.find_project_root(Path.cwd())
         if not project_root:
-            raise AgentNotFoundError("Could not find agent_actions.yml in current or parent directories")
+            raise AgentNotFoundError(
+                "Could not find agent_actions.yml in current or parent directories",
+                context={
+                    'current_directory': str(Path.cwd()),
+                    'marker_file': 'agent_actions.yml'
+                }
+            )
 
         # Search for agent configuration file
         agent_yml = f"{agent_name}.yml"
@@ -155,7 +161,14 @@ class AgentManager:
                 logs_dir = base_dir / "logs"
                 return str(agent_config_dir), str(io_dir), str(logs_dir)
 
-        raise AgentNotFoundError(f"Could not find configuration for agent: {agent_name}")
+        raise AgentNotFoundError(
+            "Could not find configuration for agent",
+            context={
+                'agent_name': agent_name,
+                'project_root': str(project_root),
+                'expected_file': f"{agent_name}.yml"
+            }
+        )
 
 
     @classmethod

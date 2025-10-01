@@ -228,7 +228,13 @@ class PathConfigManager:
             with open(config_path, 'r') as f:
                 return yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
-            raise ValueError(f"Invalid YAML in config file {config_path}: {e}")
+            from agent_actions.core.exceptions import ConfigValidationError
+            raise ConfigValidationError(
+                "path_config_yaml",
+                f"Invalid YAML in config file {config_path}",
+                context={'config_path': str(config_path), 'operation': 'load_config'},
+                cause=e
+            )
     
     def clear_cache(self):
         """Clear the configuration cache."""

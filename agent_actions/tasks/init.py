@@ -62,9 +62,17 @@ class InitCommand:
             self.project_dir.mkdir(exist_ok=self.args.force)
             
         except FileSystemError as e:
-            raise FileSystemError(f"Permission denied when creating project directory: {str(e)}")
+            raise FileSystemError(
+                "Permission denied when creating project directory",
+                context={'project_dir': str(self.project_dir), 'project_name': self.args.project_name, 'operation': '_create_project_directory'},
+                cause=e
+            ) from e
         except Exception as e:
-            raise ValidationError(f"Failed to create project directory: {str(e)}")
+            raise ValidationError(
+                "Failed to create project directory",
+                context={'project_dir': str(self.project_dir), 'project_name': self.args.project_name, 'operation': '_create_project_directory'},
+                cause=e
+            ) from e
     
     def _initialize_project(self) -> None:
         """
@@ -82,7 +90,11 @@ class InitCommand:
             initializer.init_project()
             
         except Exception as e:
-            raise ConfigurationError(f"Failed to initialize project: {str(e)}")
+            raise ConfigurationError(
+                "Failed to initialize project",
+                context={'project_name': self.args.project_name, 'project_dir': str(self.project_dir), 'template': self.args.template, 'operation': '_initialize_project'},
+                cause=e
+            ) from e
     
     def execute(self) -> None:
         """

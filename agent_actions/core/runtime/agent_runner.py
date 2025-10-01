@@ -53,10 +53,15 @@ class AgentRunner:
         Raises:
             ValueError: If the agent folder is not found.
         """
+        from agent_actions.core.exceptions import FileSystemError
+
         current_dir: Path = Path.cwd()
         agent_folder: Optional[str] = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
         if agent_folder is None:
-            raise ValueError(f"Agent folder not found for agent: {agent_name}")
+            raise FileSystemError(
+                f"Agent folder not found for agent: {agent_name}",
+                context={'agent_name': agent_name, 'current_dir': str(current_dir), 'operation': 'get_agent_folder'}
+            )
         return agent_folder
 
     def setup_directories(

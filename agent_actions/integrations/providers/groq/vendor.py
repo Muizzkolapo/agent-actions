@@ -41,7 +41,15 @@ class GroqLlama3Handler(BaseVendorHandler):
             return response_list
         except Exception as e:
             # Catch specific Groq API errors if available, e.g., groq.APIError
-            raise VendorAPIError(f"Failed to create chat completion with Groq Llama 3: {str(e)}") from e
+            raise VendorAPIError(
+                "Failed to create chat completion with Groq Llama 3",
+                context={
+                    'model_name': model_name,
+                    'vendor': 'groq',
+                    'api_operation': 'chat.completions.create'
+                },
+                cause=e
+            )
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -75,7 +83,23 @@ class GroqLlama3Handler(BaseVendorHandler):
             response_content = response.choices[0].message.content
             return [response_content]
         except (AttributeError, IndexError, TypeError) as e:
-            raise VendorAPIError(f"Error parsing non-JSON response from Groq Llama 3: {str(e)}. Response: {response}") from e
+            raise VendorAPIError(
+                "Error parsing non-JSON response from Groq Llama 3",
+                context={
+                    'model_name': model_name,
+                    'vendor': 'groq',
+                    'response': str(response)[:200]
+                },
+                cause=e
+            )
         except Exception as e: # Catch other Groq API errors
-            raise VendorAPIError(f"Failed to get non-JSON chat completion from Groq Llama 3: {str(e)}") from e
+            raise VendorAPIError(
+                "Failed to get non-JSON chat completion from Groq Llama 3",
+                context={
+                    'model_name': model_name,
+                    'vendor': 'groq',
+                    'api_operation': 'chat.completions.create'
+                },
+                cause=e
+            )
 

@@ -21,7 +21,14 @@ class InterceptorFactory:
     def create_interceptor(cls, config: Dict) -> ResponseInterceptor:
         interceptor_type = config.get("type")
         if interceptor_type not in cls._interceptor_types:
-            raise ValueError(f"Unknown interceptor type: {interceptor_type}")
+            from agent_actions.core.exceptions import ConfigurationError
+            raise ConfigurationError(
+                "Unknown interceptor type",
+                context={
+                    'interceptor_type': interceptor_type,
+                    'supported_types': list(cls._interceptor_types.keys())
+                }
+            )
 
         interceptor_class = cls._interceptor_types[interceptor_type]
         interceptor = interceptor_class()

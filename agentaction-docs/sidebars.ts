@@ -18,6 +18,7 @@ const sidebars: SidebarsConfig = {
     'index',
     'installation',
     'getting-started',
+    'cli-reference',
     {
       type: 'category',
       label: 'Platform',

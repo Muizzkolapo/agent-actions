@@ -236,8 +236,16 @@ class OpenAIBatchProvider(BatchProvider):
             batch_job = self.client.batches.retrieve(batch_id)
             return batch_job.status
         except Exception as e:
-            from agent_actions.core.exceptions import OpenAIError
-            raise OpenAIError("batch_status", cause=e)
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Failed to check OpenAI batch status",
+                context={
+                    'batch_id': batch_id,
+                    'vendor': 'openai',
+                    'api_operation': 'batches.retrieve'
+                },
+                cause=e
+            )
     
     def retrieve_results(self, 
                         batch_id: str, 
@@ -249,7 +257,15 @@ class OpenAIBatchProvider(BatchProvider):
             batch_job = self.client.batches.retrieve(batch_id)
             
             if batch_job.status != 'completed':
-                raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.status}")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    "Batch job is not completed",
+                    context={
+                        'batch_id': batch_id,
+                        'status': batch_job.status,
+                        'vendor': 'openai'
+                    }
+                )
             
             result_file_id = batch_job.output_file_id
             
@@ -262,7 +278,15 @@ class OpenAIBatchProvider(BatchProvider):
                 try:
                     result_content = self.client.files.content(result_file_id).content
                     if not result_content or len(result_content) == 0:
-                        raise ValueError("Retrieved empty content from batch results")
+                        from agent_actions.core.exceptions import VendorAPIError
+                        raise VendorAPIError(
+                            "Retrieved empty content from batch results",
+                            context={
+                                'batch_id': batch_id,
+                                'vendor': 'openai',
+                                'result_file_id': result_file_id
+                            }
+                        )
                     break
                 except Exception as e:
                     last_error = e
@@ -270,8 +294,17 @@ class OpenAIBatchProvider(BatchProvider):
                         print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
                         time.sleep(retry_delay)
                     else:
-                        from agent_actions.core.exceptions import OpenAIError
-                        raise OpenAIError("batch_results", context={"max_retries": max_retries, "last_error": str(last_error)}, cause=last_error)
+                        from agent_actions.core.exceptions import VendorAPIError
+                        raise VendorAPIError(
+                            "Failed to retrieve batch results after retries",
+                            context={
+                                'batch_id': batch_id,
+                                'vendor': 'openai',
+                                'max_retries': max_retries,
+                                'last_error': str(last_error)
+                            },
+                            cause=last_error
+                        )
             
             # Save raw results if directory provided
             if output_directory:
@@ -306,8 +339,16 @@ class OpenAIBatchProvider(BatchProvider):
             return batch_results
             
         except Exception as e:
-            from agent_actions.core.exceptions import OpenAIError
-            raise OpenAIError("batch_results", cause=e)
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Failed to retrieve OpenAI batch results",
+                context={
+                    'batch_id': batch_id,
+                    'vendor': 'openai',
+                    'api_operation': 'retrieve_results'
+                },
+                cause=e
+            )
     
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """Compile schema to OpenAI's format."""

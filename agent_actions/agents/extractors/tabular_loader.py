@@ -39,19 +39,50 @@ class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
             elif content:
                 content_str = content
             else:
-                raise ValueError("Either file_path or content must be provided for tabular processing.")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    "Either file_path or content must be provided for tabular processing",
+                    context={
+                        'agent_name': self.agent_name,
+                        'loader_type': 'tabular'
+                    }
+                )
 
             rows = list(csv.DictReader(content_str.splitlines()))
             return rows
         except csv.Error as e:
             self.handle_processing_error(e, f"parsing CSV from {file_path or 'content string'}")
-            raise AgentActionsException(f"Invalid CSV data in {file_path or 'content string'}: {e}") from e
+            raise AgentActionsException(
+                "Invalid CSV data",
+                context={
+                    'agent_name': self.agent_name,
+                    'file_path': file_path,
+                    'loader_type': 'tabular'
+                },
+                cause=e
+            )
         except IOError as e: # From self.load_file
             self.handle_processing_error(e, f"reading tabular file {file_path}")
-            raise AgentActionsException(f"Could not read tabular file {file_path}: {e}") from e
+            raise AgentActionsException(
+                "Could not read tabular file",
+                context={
+                    'agent_name': self.agent_name,
+                    'file_path': file_path,
+                    'loader_type': 'tabular'
+                },
+                cause=e
+            )
         except Exception as e:
             self.handle_processing_error(e, "processing tabular file")
-            raise AgentActionsException(f"Failed to process tabular data from {file_path or 'content string'}: {e}") from e
+            raise AgentActionsException(
+                "Failed to process tabular data",
+                context={
+                    'agent_name': self.agent_name,
+                    'file_path': file_path,
+                    'loader_type': 'tabular'
+                },
+                cause=e
+            )
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

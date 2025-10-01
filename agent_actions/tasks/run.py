@@ -38,7 +38,10 @@ class RunCommand:
         """Find the configuration file."""
         full_path = config_dir / filename
         if not full_path.exists():
-            raise FileLoadError(f"Configuration file not found at {full_path}")
+            raise FileLoadError(
+                "Configuration file not found",
+                context={'file_path': str(full_path), 'config_dir': str(config_dir), 'filename': filename, 'agent_name': self.agent_name}
+            )
         return full_path
 
     def execute(self) -> None:

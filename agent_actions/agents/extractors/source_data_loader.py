@@ -68,12 +68,26 @@ class SourceDataLoader(ISourceDataLoader):
             # Validate path structure has node directory and filename
             node_part = parts[agent_io_index + 2] if len(parts) > agent_io_index + 2 else None
             if node_part is None or Path(node_part).suffix:
-                raise PathManagerError(
-                    f"Path too short - missing node directory after 'agent_io/target/' in {file_path}"
+                from agent_actions.core.exceptions import FileSystemError
+                raise FileSystemError(
+                    "Path too short - missing node directory after 'agent_io/target/'",
+                    context={
+                        'file_path': file_path,
+                        'agent_name': self.agent_name,
+                        'operation': 'load_source_data'
+                    }
                 )
             file_parts = parts[agent_io_index + 3:]
             if not file_parts:
-                raise PathManagerError(f"No filename found after node directory in {file_path}")
+                from agent_actions.core.exceptions import FileSystemError
+                raise FileSystemError(
+                    "No filename found after node directory",
+                    context={
+                        'file_path': file_path,
+                        'agent_name': self.agent_name,
+                        'operation': 'load_source_data'
+                    }
+                )
 
             # Extract parts: everything before agent_io + agent_io + source + everything after node directory
             pipeline_parts = parts[:agent_io_index]
@@ -91,17 +105,42 @@ class SourceDataLoader(ISourceDataLoader):
             except Exception:
                 within_project = True
             if not within_project:
-                raise ValueError(
-                    f"Source file is outside project bounds: {source_file_to_load}"
+                from agent_actions.core.exceptions import FileSystemError
+                raise FileSystemError(
+                    "Source file is outside project bounds",
+                    context={
+                        'source_file': str(source_file_to_load),
+                        'agent_name': self.agent_name,
+                        'operation': 'load_source_data'
+                    }
                 )
             
             with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)
                 
         except PathManagerError as e:
-            raise IOError(f"Path structure error when deriving source from {file_path}: {e}")
+            from agent_actions.core.exceptions import FileSystemError
+            raise FileSystemError(
+                "Path structure error when deriving source",
+                context={
+                    'file_path': file_path,
+                    'agent_name': self.agent_name,
+                    'operation': 'load_source_data'
+                },
+                cause=e
+            )
         except Exception as e:
-            raise IOError(f"Failed to load source data from {str(source_file_to_load)} (derived from input {file_path}): {str(e)}")
+            from agent_actions.core.exceptions import FileLoadError
+            raise FileLoadError(
+                "Failed to load source data",
+                context={
+                    'source_file': str(source_file_to_load) if source_file_to_load else 'unknown',
+                    'input_file_path': file_path,
+                    'agent_name': self.agent_name,
+                    'operation': 'load_source_data'
+                },
+                cause=e
+            )
 
     def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
         """
@@ -140,7 +179,17 @@ class SourceDataLoader(ISourceDataLoader):
                 json.dump(content, f, indent=2)
                 
         except Exception as e:
-            raise IOError(f"Failed to save source data with guid {source_guid}: {str(e)}")
+            from agent_actions.core.exceptions import FileLoadError
+            raise FileLoadError(
+                "Failed to save source data",
+                context={
+                    'source_guid': source_guid,
+                    'file_path': file_path,
+                    'agent_name': self.agent_name,
+                    'operation': 'save_source_data'
+                },
+                cause=e
+            )
 
     def load_source_content(self, file_path: str, context_data: Dict[str, Any]) -> Optional[Any]:
         """

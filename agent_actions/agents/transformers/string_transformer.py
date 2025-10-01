@@ -66,12 +66,24 @@ class StringProcessor:
 
             return result
         except ImportError as e:
-            raise ConfigurationError(f"Could not import module for UDF '{function_name}': {e}. Ensure '{tools_path}' is correct and module exists.") from e
+            raise ConfigurationError(
+                f"Could not import module for UDF '{function_name}'",
+                context={'function_name': function_name, 'tools_path': tools_path, 'operation': 'call_user_function'},
+                cause=e
+            ) from e
         except AttributeError as e:
-            raise ConfigurationError(f"Could not find function '{function_name}' in its module: {e}") from e
+            raise ConfigurationError(
+                f"Could not find function '{function_name}' in its module",
+                context={'function_name': function_name, 'operation': 'call_user_function'},
+                cause=e
+            ) from e
         except Exception as e: # Catch other errors during UDF execution
             # Consider a more specific UDFExecutionError
-            raise AgentActionsException(f"Error executing user function '{function_name}': {str(e)}") from e
+            raise AgentActionsException(
+                f"Error executing user function '{function_name}'",
+                context={'function_name': function_name, 'operation': 'call_user_function'},
+                cause=e
+            ) from e
 
 
 class Tokenizer:
@@ -87,10 +99,19 @@ class Tokenizer:
             num_tokens = len(encoding.encode(string))
             return num_tokens
         except ValueError as e: # tiktoken.get_encoding can raise ValueError for unknown encoding
-            raise ConfigurationError(f"Invalid tiktoken encoding name '{encoding_name}': {e}") from e
+            raise ConfigurationError(
+                f"Invalid tiktoken encoding name '{encoding_name}'",
+                context={'encoding_name': encoding_name, 'operation': 'num_tokens_from_string'},
+                cause=e
+            ) from e
         except Exception as e: # Other unexpected tokenization errors
             # Log the error, but re-raise as it's a critical failure for this method's purpose
-            raise AgentActionsException(f"Tokenization error for string '{string[:100]}...': {str(e)}") from e
+            string_preview = string[:100] if len(string) > 100 else string
+            raise AgentActionsException(
+                "Tokenization error",
+                context={'string_preview': string_preview, 'encoding_name': encoding_name, 'operation': 'num_tokens_from_string'},
+                cause=e
+            ) from e
 
     @staticmethod
     def split_text_content(
@@ -121,11 +142,20 @@ class Tokenizer:
             List[str]: A list of text chunks.
         """
         if chunk_size <= 0:
-            raise ValueError("chunk_size must be a positive integer.")
+            raise ConfigurationError(
+                "chunk_size must be a positive integer",
+                context={'chunk_size': chunk_size, 'operation': 'split_text_content'}
+            )
         if overlap < 0:
-            raise ValueError("overlap cannot be negative.")
+            raise ConfigurationError(
+                "overlap cannot be negative",
+                context={'overlap': overlap, 'operation': 'split_text_content'}
+            )
         if overlap >= chunk_size and split_method in ("tiktoken", "chars"):
-            raise ValueError("overlap must be smaller than chunk_size for token/character splits.")
+            raise ConfigurationError(
+                "overlap must be smaller than chunk_size for token/character splits",
+                context={'overlap': overlap, 'chunk_size': chunk_size, 'split_method': split_method, 'operation': 'split_text_content'}
+            )
 
         try:
             if split_method == "tiktoken":
@@ -136,10 +166,15 @@ class Tokenizer:
                 return Tokenizer._split_with_spacy(text, chunk_size, overlap, tokenizer_model)
             else:
                 return Tokenizer._split_with_custom_method(text, chunk_size, overlap, tokenizer_model, split_method)
-        except ValueError:
+        except (ConfigurationError, ValueError):
             raise
         except Exception as e:  # General catch-all for unexpected issues
-            raise AgentActionsException(f"Text splitting error for text '{text[:100]}...': {str(e)}") from e
+            text_preview = text[:100] if len(text) > 100 else text
+            raise AgentActionsException(
+                "Text splitting error",
+                context={'text_preview': text_preview, 'chunk_size': chunk_size, 'overlap': overlap, 'split_method': split_method, 'operation': 'split_text_content'},
+                cause=e
+            ) from e
 
     @staticmethod
     def _split_with_tiktoken(text: str, chunk_size: int, overlap: int, tokenizer_model: str) -> List[str]:
@@ -147,7 +182,11 @@ class Tokenizer:
         try:
             tokens = encoding.encode(text)
         except Exception as e:
-            raise AgentActionsException(f"Error encoding text with tiktoken model '{tokenizer_model}': {e}") from e
+            raise AgentActionsException(
+                f"Error encoding text with tiktoken model '{tokenizer_model}'",
+                context={'tokenizer_model': tokenizer_model, 'operation': '_split_with_tiktoken'},
+                cause=e
+            ) from e
 
         chunks = []
         start_idx = 0
@@ -180,19 +219,21 @@ class Tokenizer:
         """
         try:
             import spacy
-        except ImportError:
+        except ImportError as e:
             raise ConfigurationError(
-                "spaCy is not installed. Install with: pip install agent-actions[nlp] "
-                "or pip install spacy>=3.0.0"
-            ) from None
+                "spaCy is not installed. Install with: pip install agent-actions[nlp] or pip install spacy>=3.0.0",
+                context={'operation': '_split_with_spacy', 'split_method': 'spacy'},
+                cause=e
+            ) from e
 
         try:
             nlp = spacy.load("en_core_web_sm")
-        except OSError:
+        except OSError as e:
             raise ConfigurationError(
-                "spaCy model 'en_core_web_sm' is not installed. "
-                "Download with: python -m spacy download en_core_web_sm"
-            ) from None
+                "spaCy model 'en_core_web_sm' is not installed. Download with: python -m spacy download en_core_web_sm",
+                context={'operation': '_split_with_spacy', 'model': 'en_core_web_sm'},
+                cause=e
+            ) from e
 
         encoding = tiktoken.get_encoding(tokenizer_model)
         doc = nlp(text)
@@ -235,10 +276,20 @@ class Tokenizer:
             function = getattr(module, split_method)
             return function(text, chunk_size, overlap, tokenizer_model)
         except ImportError as e:
-            raise ConfigurationError(f"Could not import custom split_method module '{split_method}': {e}") from e
+            raise ConfigurationError(
+                f"Could not import custom split_method module '{split_method}'",
+                context={'split_method': split_method, 'tools_path': tools_path, 'operation': '_split_with_custom_method'},
+                cause=e
+            ) from e
         except AttributeError as e:
             raise ConfigurationError(
-                f"Could not find custom split_method function '{split_method}' in its module: {e}"
+                f"Could not find custom split_method function '{split_method}' in its module",
+                context={'split_method': split_method, 'operation': '_split_with_custom_method'},
+                cause=e
             ) from e
         except Exception as e:
-            raise AgentActionsException(f"Error executing custom split_method '{split_method}': {str(e)}") from e
+            raise AgentActionsException(
+                f"Error executing custom split_method '{split_method}'",
+                context={'split_method': split_method, 'operation': '_split_with_custom_method'},
+                cause=e
+            ) from e

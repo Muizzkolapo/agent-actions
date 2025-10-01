@@ -108,7 +108,15 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 data_chunk = [{"content": rows, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}]
             src_text = []
         else:
-            raise AgentActionsException(f"Unsupported file type: {file_type}")
+            raise AgentActionsException(
+                "Unsupported file type in staging loader",
+                context={
+                    'file_type': file_type,
+                    'file_path': file_path,
+                    'agent_name': agent_name,
+                    'supported_types': ['.txt', '.md', '.pdf', '.docx', '.html', '.json', '.csv', '.xlsx', '.xml']
+                }
+            )
         # Patch: Ensure every record has a unique target_id before batch submission
         for row in data_chunk:
             if 'target_id' not in row or not row['target_id']:
@@ -169,7 +177,15 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     elif file_type == '.xml':
         data_chunk, src_text = content_processor._process_xml_content(content, agent_config, agent_name)
     else:
-        raise AgentActionsException(f"Unsupported file type: {file_type}")
+        raise AgentActionsException(
+            "Unsupported file type in staging loader",
+            context={
+                'file_type': file_type,
+                'file_path': file_path,
+                'agent_name': agent_name,
+                'supported_types': ['.txt', '.md', '.pdf', '.docx', '.html', '.json', '.csv', '.xlsx', '.xml']
+            }
+        )
     # ... (rest of the original non-batch output logic follows)
 
     relative_path = Path(file_path).relative_to(base_directory)

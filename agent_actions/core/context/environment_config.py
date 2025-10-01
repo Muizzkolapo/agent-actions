@@ -127,18 +127,30 @@ class EnvironmentConfig(BaseSettings):
     @classmethod
     def validate_api_keys(cls, v):
         """Validate API key format if provided."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if v is not None:
             if len(v.strip()) < 10:
-                raise ValueError("API key must be at least 10 characters long")
+                raise ConfigValidationError(
+                    "api_key_length",
+                    "API key must be at least 10 characters long",
+                    context={'key_length': len(v.strip()), 'operation': 'validate_api_key'}
+                )
         return v
     
     @field_validator('database_url')
     @classmethod
     def validate_database_url(cls, v):
         """Validate database URL format if provided."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
         if v is not None:
             if not v.startswith(('postgresql://', 'mysql://', 'sqlite:///')):
-                raise ValueError("Database URL must start with postgresql://, mysql://, or sqlite:///")
+                raise ConfigValidationError(
+                    "database_url_format",
+                    "Database URL must start with postgresql://, mysql://, or sqlite:///",
+                    context={'database_url': v, 'valid_prefixes': ['postgresql://', 'mysql://', 'sqlite:///'], 'operation': 'validate_database_url'}
+                )
         return v
     
     def get_effective_claude_key(self) -> Optional[str]:

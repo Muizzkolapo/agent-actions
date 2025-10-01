@@ -120,7 +120,13 @@ class SourcePathManager:
                             return clean_item
             return None
         except Exception as e:
-            raise IOError(f"Failed to load or create source content: {str(e)}")
+            from agent_actions.core.exceptions import FileLoadError
+            raise FileLoadError(
+                str(source_path),
+                "Failed to load or create source content",
+                context={'source_guid': source_guid, 'operation': 'load_source_content'},
+                cause=e
+            )
             
     @staticmethod
     def save_source_content(source_path: Path, source_guid: str, content: Any) -> None:

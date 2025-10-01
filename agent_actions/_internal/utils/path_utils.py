@@ -178,17 +178,30 @@ def clean_directory(directory: Union[str, Path], recursive: bool = False) -> boo
 def get_relative_path(path: Union[str, Path], base: Union[str, Path]) -> Path:
     """
     Get path relative to base directory.
-    
+
     Args:
         path: Absolute path
         base: Base directory
-        
+
     Returns:
         Path relative to base
+
+    Raises:
+        FileSystemError: If path is not within base directory
     """
+    from agent_actions.core.exceptions import FileSystemError
+
     abs_path = resolve_absolute_path(path)
     abs_base = resolve_absolute_path(base)
-    return abs_path.relative_to(abs_base)
+
+    try:
+        return abs_path.relative_to(abs_base)
+    except ValueError as e:
+        raise FileSystemError(
+            f"Path {abs_path} is not within base directory {abs_base}",
+            context={'path': str(abs_path), 'base': str(abs_base), 'operation': 'get_relative_path'},
+            cause=e
+        )
 
 
 def find_files_by_extension(directory: Union[str, Path], extension: str) -> list[Path]:
@@ -229,9 +242,13 @@ def safe_path_join(*parts: Union[str, Path]) -> Path:
     resolved_path = resolve_absolute_path(joined_path)
     
     # Check if path is within project bounds
+    from agent_actions.core.exceptions import FileSystemError
     pm = get_path_manager()
     if not pm.is_within_project(resolved_path):
-        raise ValueError(f"Path {resolved_path} is outside project bounds")
+        raise FileSystemError(
+            f"Path {resolved_path} is outside project bounds",
+            context={'resolved_path': str(resolved_path), 'project_root': str(pm.get_project_root()), 'operation': 'safe_join_paths'}
+        )
     
     return resolved_path
 

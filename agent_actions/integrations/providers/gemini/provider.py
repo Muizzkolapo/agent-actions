@@ -37,9 +37,14 @@ class GeminiBatchProvider(BatchProvider):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize Gemini client."""
         if not GEMINI_AVAILABLE:
-            raise ImportError(
-                "google-genai package is not installed. "
-                "Install it with: pip install google-genai"
+            from agent_actions.core.exceptions import DependencyError
+            raise DependencyError(
+                "GeminiBatchProvider",
+                "google-genai",
+                context={
+                    'install_command': 'pip install google-genai',
+                    'vendor': 'gemini'
+                }
             )
         
         self.client = genai.Client(
@@ -277,8 +282,16 @@ class GeminiBatchProvider(BatchProvider):
             return batch_job.name
             
         except Exception as e:
-            from agent_actions.core.exceptions import GeminiError
-            raise GeminiError("batch_submission", cause=e)
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Failed to submit Gemini batch job",
+                context={
+                    'batch_name': batch_name,
+                    'vendor': 'gemini',
+                    'api_operation': 'batches.create'
+                },
+                cause=e
+            )
     
     def check_status(self, batch_id: str) -> str:
         """Check Gemini batch job status."""
@@ -298,8 +311,16 @@ class GeminiBatchProvider(BatchProvider):
             return status_mapping.get(gemini_status, gemini_status.lower())
             
         except Exception as e:
-            from agent_actions.core.exceptions import GeminiError
-            raise GeminiError("batch_status", cause=e)
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Failed to check Gemini batch status",
+                context={
+                    'batch_id': batch_id,
+                    'vendor': 'gemini',
+                    'api_operation': 'batches.get'
+                },
+                cause=e
+            )
     
     def retrieve_results(self, 
                         batch_id: str, 
@@ -311,12 +332,27 @@ class GeminiBatchProvider(BatchProvider):
             batch_job = self.client.batches.get(name=batch_id)
             
             if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
-                raise ValueError(f"Batch job {batch_id} is not completed. Status: {batch_job.state.name}")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    "Batch job is not completed",
+                    context={
+                        'batch_id': batch_id,
+                        'status': batch_job.state.name,
+                        'vendor': 'gemini'
+                    }
+                )
             
             # Get the output file
             result_file_name = batch_job.dest.file_name
             if not result_file_name:
-                raise ValueError(f"Batch job {batch_id} has no output file")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    "Batch job has no output file",
+                    context={
+                        'batch_id': batch_id,
+                        'vendor': 'gemini'
+                    }
+                )
             
             print(f"Results are in file: {result_file_name}")
             
@@ -333,7 +369,15 @@ class GeminiBatchProvider(BatchProvider):
                     result_content = file_content_bytes.decode('utf-8')
                     
                     if not result_content or len(result_content) == 0:
-                        raise ValueError("Retrieved empty content from batch results")
+                        from agent_actions.core.exceptions import VendorAPIError
+                        raise VendorAPIError(
+                            "Retrieved empty content from batch results",
+                            context={
+                                'batch_id': batch_id,
+                                'vendor': 'gemini',
+                                'result_file_name': result_file_name
+                            }
+                        )
                     break
                 except Exception as e:
                     last_error = e
@@ -341,8 +385,17 @@ class GeminiBatchProvider(BatchProvider):
                         print(f"Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}")
                         time.sleep(retry_delay)
                     else:
-                        from agent_actions.core.exceptions import GeminiError
-                        raise GeminiError("batch_results", context={"max_retries": max_retries, "last_error": str(last_error)}, cause=last_error)
+                        from agent_actions.core.exceptions import VendorAPIError
+                        raise VendorAPIError(
+                            "Failed to retrieve batch results after retries",
+                            context={
+                                'batch_id': batch_id,
+                                'vendor': 'gemini',
+                                'max_retries': max_retries,
+                                'last_error': str(last_error)
+                            },
+                            cause=last_error
+                        )
             
             # Save raw results if directory provided
             if output_directory:
@@ -378,8 +431,16 @@ class GeminiBatchProvider(BatchProvider):
             return batch_results
             
         except Exception as e:
-            from agent_actions.core.exceptions import GeminiError
-            raise GeminiError("batch_results", cause=e)
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Failed to retrieve Gemini batch results",
+                context={
+                    'batch_id': batch_id,
+                    'vendor': 'gemini',
+                    'api_operation': 'retrieve_results'
+                },
+                cause=e
+            )
     
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """

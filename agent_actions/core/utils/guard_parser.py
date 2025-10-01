@@ -44,7 +44,11 @@ class GuardParser:
             parse('udf:module.function') -> GuardExpression(UDF, 'module.function')
         """
         if not guard or not isinstance(guard, str):
-            raise ValueError("Guard expression must be a non-empty string")
+            from agent_actions.core.exceptions import ValidationError
+            raise ValidationError(
+                "Guard expression must be a non-empty string",
+                context={'guard': guard, 'guard_type': str(type(guard)), 'operation': 'parse_guard'}
+            )
 
         original_guard = guard
         guard = guard.strip()
@@ -53,7 +57,11 @@ class GuardParser:
             # UDF expression
             udf_expression = guard[len(cls.UDF_PREFIX):].strip()
             if not udf_expression:
-                raise ValueError("UDF guard expression cannot be empty after 'udf:' prefix")
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    "UDF guard expression cannot be empty after 'udf:' prefix",
+                    context={'guard': original_guard, 'operation': 'parse_udf_guard'}
+                )
 
             # Validate UDF expression format (module.function pattern)
             cls._validate_udf_expression(udf_expression)
@@ -88,9 +96,10 @@ class GuardParser:
         pattern = r'^[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)+$'
 
         if not re.match(pattern, expression):
-            raise ValueError(
-                f"Invalid UDF expression format: '{expression}'. "
-                "Expected format: 'module.function' or 'module.submodule.function'"
+            from agent_actions.core.exceptions import ValidationError
+            raise ValidationError(
+                f"Invalid UDF expression format: '{expression}'. Expected format: 'module.function' or 'module.submodule.function'",
+                context={'expression': expression, 'expected_pattern': pattern, 'operation': 'validate_udf_expression'}
             )
 
         # Security checks - prevent dangerous patterns
@@ -103,8 +112,10 @@ class GuardParser:
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
-                raise ValueError(
-                    f"UDF expression contains potentially dangerous pattern: {pattern}"
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    f"UDF expression contains potentially dangerous pattern: {pattern}",
+                    context={'expression': expression, 'dangerous_pattern': pattern, 'operation': 'validate_udf_expression'}
                 )
 
     @classmethod
@@ -128,8 +139,10 @@ class GuardParser:
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
-                raise ValueError(
-                    f"SQL expression contains potentially dangerous pattern: {pattern}"
+                from agent_actions.core.exceptions import ValidationError
+                raise ValidationError(
+                    f"SQL expression contains potentially dangerous pattern: {pattern}",
+                    context={'expression': expression, 'dangerous_pattern': pattern, 'operation': 'validate_sql_expression'}
                 )
 
     @classmethod
