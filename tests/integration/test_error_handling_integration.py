@@ -349,3 +349,235 @@ class TestErrorMessageQuality:
         # Should not be just the error repeated
         assert "Test error" in user_message
         assert len(user_message) > len("Test error") + 20
+
+
+class TestAPIAndNetworkErrors:
+    """Test API and network error scenarios - Phase 6 Task 4 completion."""
+
+    def test_network_error_in_api_call(self):
+        """Test scenario: Network error during API call to AI provider."""
+        from agent_actions.core.exceptions import NetworkError
+
+        def simulate_network_failure():
+            """Simulate a network connection failure during API call."""
+            try:
+                # Simulate failed connection to AI provider
+                raise ConnectionError("Failed to connect to api.anthropic.com:443")
+            except ConnectionError as e:
+                raise NetworkError(
+                    operation="create_message",
+                    reason="Failed to connect to AI provider API",
+                    context={
+                        'provider': 'anthropic',
+                        'endpoint': 'https://api.anthropic.com/v1/messages'
+                    },
+                    cause=e
+                )
+
+        with pytest.raises(NetworkError) as exc_info:
+            simulate_network_failure()
+
+        # Test that the error is properly formatted for users
+        user_message = format_user_error(exc_info.value, {
+            "command": "run",
+            "agent": "chat_agent",
+            "model": "claude-3-5-sonnet-20241022"
+        })
+
+        # Should be user-friendly
+        assert "Network Error" in user_message or "network" in user_message.lower()
+        assert "anthropic" in user_message.lower() or "provider" in user_message.lower()
+        assert "connect" in user_message.lower() or "connection" in user_message.lower()
+
+        # Should not contain Python internals
+        assert "ConnectionError" not in user_message
+        assert "Traceback" not in user_message
+
+        # Should provide helpful guidance
+        assert any(word in user_message.lower() for word in ["check", "verify", "ensure", "internet"])
+
+    def test_api_timeout_error(self):
+        """Test scenario: API call times out."""
+        from agent_actions.core.exceptions import NetworkError
+        import socket
+
+        def simulate_api_timeout():
+            """Simulate API timeout."""
+            try:
+                raise socket.timeout("API request timed out after 60 seconds")
+            except socket.timeout as e:
+                raise NetworkError(
+                    operation="chat_completion",
+                    reason="API request timed out",
+                    context={
+                        'provider': 'openai',
+                        'timeout_seconds': 60
+                    },
+                    cause=e
+                )
+
+        with pytest.raises(NetworkError) as exc_info:
+            simulate_api_timeout()
+
+        user_message = format_user_error(exc_info.value, {
+            "command": "run",
+            "agent": "summarizer"
+        })
+
+        assert "timeout" in user_message.lower() or "timed out" in user_message.lower()
+        assert "60" in user_message or "seconds" in user_message.lower()
+        assert "openai" in user_message.lower() or "provider" in user_message.lower()
+
+    def test_rate_limit_error_in_api_call(self):
+        """Test scenario: Rate limit exceeded during API call."""
+        from agent_actions.core.exceptions import RateLimitError
+
+        def simulate_rate_limit():
+            """Simulate rate limit error from AI provider."""
+            raise RateLimitError(
+                service="anthropic",
+                retry_after=60,
+                context={
+                    'requests_made': 50,
+                    'rate_limit': 50,
+                    'reset_time': '2025-01-27T15:30:00Z'
+                }
+            )
+
+        with pytest.raises(RateLimitError) as exc_info:
+            simulate_rate_limit()
+
+        user_message = format_user_error(exc_info.value, {
+            "command": "run",
+            "agent": "bulk_processor"
+        })
+
+        assert "rate limit" in user_message.lower() or "too many requests" in user_message.lower()
+        assert "60" in user_message or "retry" in user_message.lower()
+        assert "anthropic" in user_message.lower()
+
+
+class TestBatchServiceErrors:
+    """Test batch service specific error scenarios - Phase 6 Task 4 completion."""
+
+    def test_invalid_model_in_batch_service(self):
+        """Test scenario: Invalid model name specified in batch configuration."""
+        from agent_actions.core.exceptions import ConfigValidationError
+
+        def simulate_batch_invalid_model():
+            """Simulate batch service rejecting invalid model."""
+            invalid_model = "claude-4-ultra-mega"  # Non-existent model
+            provider = "anthropic"
+
+            valid_models = [
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229"
+            ]
+
+            raise ConfigValidationError(
+                config_key="model",
+                reason=f"Model '{invalid_model}' not available for provider '{provider}'",
+                context={
+                    'provided_model': invalid_model,
+                    'provider': provider,
+                    'valid_models': valid_models,
+                    'operation': 'batch_job_submission',
+                    'agent': 'batch_processor'
+                }
+            )
+
+        with pytest.raises(ConfigValidationError) as exc_info:
+            simulate_batch_invalid_model()
+
+        # Test that error is properly formatted
+        user_message = format_user_error(exc_info.value, {
+            "command": "batch",
+            "config_file": "batch_config.json"
+        })
+
+        # Should be user-friendly
+        assert "Configuration Error" in user_message or "configuration" in user_message.lower()
+        assert "model" in user_message.lower()
+        assert "claude-4-ultra-mega" in user_message
+        assert "anthropic" in user_message.lower()
+
+        # Should list valid models
+        assert "claude-3-5-sonnet" in user_message or "valid_models" in user_message
+
+        # Should not contain Python internals
+        assert "ConfigValidationError" not in user_message
+        assert "Traceback" not in user_message
+
+    def test_batch_provider_mismatch(self):
+        """Test scenario: Model doesn't match provider in batch service."""
+        from agent_actions.core.exceptions import ConfigurationError
+
+        def simulate_provider_mismatch():
+            """Simulate batch config with mismatched provider/model."""
+            raise ConfigurationError(
+                "Model provider mismatch: model 'gpt-4' requires provider 'openai', but 'anthropic' was specified",
+                context={
+                    'model': 'gpt-4',
+                    'expected_provider': 'openai',
+                    'actual_provider': 'anthropic',
+                    'operation': 'validate_batch_config',
+                    'config_file': 'agents/batch_processor.yml'
+                }
+            )
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            simulate_provider_mismatch()
+
+        user_message = format_user_error(exc_info.value, {
+            "command": "batch",
+            "agent": "batch_processor"
+        })
+
+        assert "mismatch" in user_message.lower() or "provider" in user_message.lower()
+        assert "gpt-4" in user_message
+        assert "openai" in user_message.lower()
+        assert "anthropic" in user_message.lower()
+
+        # Should provide actionable guidance
+        assert any(word in user_message.lower() for word in ["change", "update", "correct", "fix"])
+
+    def test_batch_file_not_found_in_target_generator(self):
+        """Test scenario: File not found during batch target generation."""
+        from agent_actions.core.exceptions import FileLoadError
+
+        def simulate_target_gen_file_error():
+            """Simulate file not found during target generation in batch mode."""
+            missing_file = "/data/inputs/batch_001.json"
+
+            try:
+                raise FileNotFoundError(f"[Errno 2] No such file or directory: '{missing_file}'")
+            except FileNotFoundError as e:
+                raise FileLoadError(
+                    file_path=missing_file,
+                    reason="file not found during batch target generation",
+                    context={
+                        'batch_job_id': 'batch_abc123',
+                        'agent': 'data_processor',
+                        'file_type': 'json',
+                        'operation': 'generate_target'
+                    },
+                    cause=e
+                )
+
+        with pytest.raises(FileLoadError) as exc_info:
+            simulate_target_gen_file_error()
+
+        user_message = format_user_error(exc_info.value, {
+            "command": "batch",
+            "agent": "data_processor"
+        })
+
+        assert "File Error" in user_message or "file" in user_message.lower()
+        assert "not found" in user_message.lower() or "missing" in user_message.lower()
+        assert "batch_001.json" in user_message
+        assert "batch_abc123" in user_message  # Verify batch context included
+
+        # Should not contain Python class names
+        assert "FileNotFoundError" not in user_message
+        # Note: [Errno 2] may appear as it's part of the error message, which is acceptable
