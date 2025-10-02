@@ -1,0 +1,115 @@
+{
+  "$defs": {
+    "Granularity": {
+      "description": "Granularity levels for action execution.",
+      "enum": [
+        "record",
+        "file"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    }
+  },
+  "description": "JSON Schema for Agent Actions workflow defaults configuration",
+  "properties": {
+    "model_vendor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default model vendor",
+      "title": "Model Vendor"
+    },
+    "model_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default model name",
+      "title": "Model Name"
+    },
+    "json_mode": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default JSON mode setting",
+      "title": "Json Mode"
+    },
+    "granularity": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Granularity"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default granularity"
+    },
+    "run_mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default run mode",
+      "title": "Run Mode"
+    },
+    "drops": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default fields to exclude from LLM prompt and output",
+      "title": "Drops"
+    },
+    "observe": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default fields to exclude from LLM prompt but include in output",
+      "title": "Observe"
+    }
+  },
+  "title": "DefaultsConfig",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

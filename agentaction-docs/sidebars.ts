@@ -65,6 +65,23 @@ const sidebars: SidebarsConfig = {
         },
       ],
     },
+    {
+      type: 'category',
+      label: 'Guides',
+      collapsed: false,
+      items: [
+        'guides/ide-setup',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Reference',
+      collapsed: false,
+      items: [
+        'reference/configuration-schema',
+        'reference/configuration-fields',
+      ],
+    },
     // Future categories can be added here
     /*
     {
