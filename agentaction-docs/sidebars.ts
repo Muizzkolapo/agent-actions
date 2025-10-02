@@ -61,8 +61,10 @@ const sidebars: SidebarsConfig = {
             'examples/configurations/environment-variables',
             'examples/configurations/tool-actions',
             'examples/configurations/batch-mode',
+            'examples/configurations/reprompting-validators',
           ],
         },
+        'examples/custom-validators',
       ],
     },
     {
@@ -71,6 +73,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'guides/ide-setup',
+        'guides/reprompting',
       ],
     },
     {
