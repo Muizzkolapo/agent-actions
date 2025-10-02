@@ -1,0 +1,56 @@
+{
+  "additionalProperties": true,
+  "description": "JSON Schema for Agent Actions default agent configuration",
+  "properties": {
+    "api_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Api Key"
+    },
+    "model_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Name"
+    },
+    "chunk_config": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chunk Config"
+    },
+    "is_operational": {
+      "default": true,
+      "title": "Is Operational",
+      "type": "boolean"
+    },
+    "run_mode": {
+      "default": "online",
+      "title": "Run Mode",
+      "type": "string"
+    }
+  },
+  "title": "DefaultAgentConfig",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

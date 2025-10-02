@@ -14,8 +14,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with SQL guard',
             'guard': 'questionable != "Low Value"',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY'
         }
 
         # Setup test parameters
@@ -37,8 +38,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with UDF guard',
             'guard': 'udf:topic_to_quiz_pipeline.get_answer_length_flag_value',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -57,8 +59,9 @@ class TestFormatConverterGuards:
         action = {
             'name': 'test_action',
             'intent': 'Test action without guard',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -78,8 +81,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with complex SQL guard',
             'guard': 'questionable == "High Value" AND confidence > 0.8',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -98,8 +102,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with whitespace UDF guard',
             'guard': '  udf:  module.function  ',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -119,8 +124,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with invalid guard',
             'guard': 'udf:invalid_format',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -137,8 +143,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with dangerous UDF guard',
             'guard': 'udf:module.__import__',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters
@@ -155,8 +162,9 @@ class TestFormatConverterGuards:
             'name': 'test_action',
             'intent': 'Test action with dangerous SQL guard',
             'guard': 'field == "value" AND exec("code")',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini'
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
         }
 
         # Setup test parameters

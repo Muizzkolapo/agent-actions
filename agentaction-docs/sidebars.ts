@@ -36,7 +36,9 @@ const sidebars: SidebarsConfig = {
         'core-concepts/index',
         'core-concepts/agents',
         'core-concepts/workflows',
+        'core-concepts/tool-actions',
         'core-concepts/schemas',
+        'core-concepts/configuration-hierarchy',
         'core-concepts/tokenizers',
         'core-concepts/error-handling',
       ],
@@ -50,8 +52,34 @@ const sidebars: SidebarsConfig = {
         {
           type: 'category',
           label: 'Configuration Examples',
-          items: ['examples/configurations/index'],
+          items: [
+            'examples/configurations/index',
+            'examples/configurations/project-only',
+            'examples/configurations/workflow-overrides',
+            'examples/configurations/action-overrides',
+            'examples/configurations/mixed-hierarchy',
+            'examples/configurations/environment-variables',
+            'examples/configurations/tool-actions',
+            'examples/configurations/batch-mode',
+          ],
         },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Guides',
+      collapsed: false,
+      items: [
+        'guides/ide-setup',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Reference',
+      collapsed: false,
+      items: [
+        'reference/configuration-schema',
+        'reference/configuration-fields',
       ],
     },
     // Future categories can be added here

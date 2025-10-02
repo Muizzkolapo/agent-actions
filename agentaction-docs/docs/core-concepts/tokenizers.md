@@ -639,8 +639,8 @@ Auto-detection is purely content-based. It considers all string fields and uses 
 
 ```yaml
 defaults:
-  vendor: openai
-  model: gpt-4o-mini
+  model_vendor: openai
+  model_name: gpt-4o-mini
   json_mode: true
 
 actions:

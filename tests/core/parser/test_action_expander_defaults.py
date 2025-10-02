@@ -12,8 +12,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test action with no drops/observe',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt'
         }
@@ -37,8 +38,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test action with own drops/observe',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt',
             'drops': ['action_field'],
@@ -64,8 +66,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test action with empty drops/observe',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt',
             'drops': [],
@@ -91,8 +94,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test action with no defaults',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt'
         }
@@ -113,8 +117,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test partial defaults',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt'
         }
@@ -193,8 +198,9 @@ class TestActionExpanderDefaults:
         }
 
         defaults = {
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'json_mode': True,
             'drops': ['default_drop'],
             'observe': ['default_observe']
@@ -217,8 +223,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test template replacement',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt'
         }
@@ -249,8 +256,9 @@ class TestActionExpanderDefaults:
         action = {
             'name': 'test_action',
             'intent': 'Test deduplication',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt',
             'drops': ['shared_field', 'action_field'],
@@ -282,8 +290,9 @@ class TestActionExpanderFullWorkflow:
             'description': 'Test workflow',
             'version': '2.0.0',
             'defaults': {
-                'vendor': 'openai',
-                'model': 'gpt-4o-mini',
+                'model_vendor': 'openai',
+                'model_name': 'gpt-4o-mini',
+                'api_key': 'OPENAI_API_KEY',
                 'drops': ['internal_id', 'temp_data'],
                 'observe': ['user_id', 'session_id']
             },
@@ -332,8 +341,9 @@ class TestActionExpanderInterceptors:
         action = {
             'name': 'test_action',
             'intent': 'Test action with interceptors',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt',
             'interceptors': [
@@ -370,8 +380,9 @@ class TestActionExpanderInterceptors:
         action = {
             'name': 'test_action',
             'intent': 'Test action without interceptors',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt'
         }
@@ -390,8 +401,9 @@ class TestActionExpanderInterceptors:
         action = {
             'name': 'test_action',
             'intent': 'Test action with empty interceptors',
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'schema': {'output': 'string'},
             'prompt': 'Test prompt',
             'interceptors': []
@@ -424,8 +436,9 @@ class TestActionExpanderInterceptors:
         }
 
         defaults = {
-            'vendor': 'openai',
-            'model': 'gpt-4o-mini',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
             'drops': ['default_drop'],
             'observe': ['default_observe']
         }
@@ -451,8 +464,9 @@ class TestActionExpanderInterceptors:
             'description': 'Test workflow with interceptors',
             'version': '2.0.0',
             'defaults': {
-                'vendor': 'openai',
-                'model': 'gpt-4o-mini'
+                'model_vendor': 'openai',
+                'model_name': 'gpt-4o-mini',
+                'api_key': 'OPENAI_API_KEY'
             },
             'actions': [
                 {

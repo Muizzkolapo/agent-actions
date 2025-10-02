@@ -1,0 +1,436 @@
+{
+  "$defs": {
+    "ActionConfig": {
+      "description": "Configuration for a workflow action.",
+      "properties": {
+        "name": {
+          "description": "Unique action name",
+          "title": "Name",
+          "type": "string"
+        },
+        "intent": {
+          "description": "Clear description of action purpose",
+          "title": "Intent",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/ActionKind",
+          "default": "llm",
+          "description": "Type of action"
+        },
+        "impl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Implementation path for tool actions",
+          "title": "Impl"
+        },
+        "model_vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model vendor (openai, anthropic, etc.)",
+          "title": "Model Vendor"
+        },
+        "model_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Model name",
+          "title": "Model Name"
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Output schema",
+          "title": "Schema"
+        },
+        "drops": {
+          "description": "Fields to exclude from LLM prompt and final output",
+          "items": {
+            "type": "string"
+          },
+          "title": "Drops",
+          "type": "array"
+        },
+        "observe": {
+          "description": "Fields to exclude from LLM prompt but include in output (passthrough)",
+          "items": {
+            "type": "string"
+          },
+          "title": "Observe",
+          "type": "array"
+        },
+        "granularity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Granularity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Execution granularity"
+        },
+        "guard": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Condition for action execution",
+          "title": "Guard"
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Execution policy",
+          "title": "Policy"
+        },
+        "few_shot": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Number of few-shot examples",
+          "title": "Few Shot"
+        },
+        "loop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoopConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Loop configuration"
+        },
+        "loop_consumption": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoopConsumptionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Loop output consumption configuration"
+        },
+        "idempotency_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Idempotency key template",
+          "title": "Idempotency Key"
+        },
+        "prompt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Prompt template or reference",
+          "title": "Prompt"
+        }
+      },
+      "required": [
+        "name",
+        "intent"
+      ],
+      "title": "ActionConfig",
+      "type": "object"
+    },
+    "ActionKind": {
+      "description": "Types of actions in the workflow.",
+      "enum": [
+        "llm",
+        "tool"
+      ],
+      "title": "ActionKind",
+      "type": "string"
+    },
+    "DefaultsConfig": {
+      "description": "Default configuration applied to all actions.",
+      "properties": {
+        "model_vendor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default model vendor",
+          "title": "Model Vendor"
+        },
+        "model_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default model name",
+          "title": "Model Name"
+        },
+        "json_mode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default JSON mode setting",
+          "title": "Json Mode"
+        },
+        "granularity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Granularity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default granularity"
+        },
+        "run_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default run mode",
+          "title": "Run Mode"
+        },
+        "drops": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default fields to exclude from LLM prompt and output",
+          "title": "Drops"
+        },
+        "observe": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Default fields to exclude from LLM prompt but include in output",
+          "title": "Observe"
+        }
+      },
+      "title": "DefaultsConfig",
+      "type": "object"
+    },
+    "Granularity": {
+      "description": "Granularity levels for action execution.",
+      "enum": [
+        "record",
+        "file"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
+    "LoopConfig": {
+      "description": "Configuration for loop-based actions.",
+      "properties": {
+        "param": {
+          "description": "Parameter name for loop variable",
+          "title": "Param",
+          "type": "string"
+        },
+        "range": {
+          "description": "Range of values for loop parameter",
+          "items": {
+            "type": "integer"
+          },
+          "title": "Range",
+          "type": "array"
+        }
+      },
+      "required": [
+        "param",
+        "range"
+      ],
+      "title": "LoopConfig",
+      "type": "object"
+    },
+    "LoopConsumptionConfig": {
+      "description": "Configuration for consuming loop outputs.",
+      "properties": {
+        "source": {
+          "description": "Base name of the loop action to consume",
+          "title": "Source",
+          "type": "string"
+        },
+        "pattern": {
+          "$ref": "#/$defs/MergePattern",
+          "default": "merge",
+          "description": "Pattern for merging loop outputs"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "LoopConsumptionConfig",
+      "type": "object"
+    },
+    "MergePattern": {
+      "description": "Patterns for merging loop outputs.",
+      "enum": [
+        "merge"
+      ],
+      "title": "MergePattern",
+      "type": "string"
+    }
+  },
+  "description": "JSON Schema for Agent Actions workflow configuration files (.yml)",
+  "properties": {
+    "name": {
+      "description": "Workflow name",
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "description": "Workflow description",
+      "title": "Description",
+      "type": "string"
+    },
+    "version": {
+      "description": "Workflow version",
+      "title": "Version",
+      "type": "string"
+    },
+    "defaults": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DefaultsConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Default settings"
+    },
+    "actions": {
+      "description": "Workflow actions",
+      "items": {
+        "$ref": "#/$defs/ActionConfig"
+      },
+      "title": "Actions",
+      "type": "array"
+    },
+    "plan": {
+      "description": "Execution plan with dependencies",
+      "items": {
+        "type": "string"
+      },
+      "title": "Plan",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "version",
+    "actions",
+    "plan"
+  ],
+  "title": "WorkflowConfigV2",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

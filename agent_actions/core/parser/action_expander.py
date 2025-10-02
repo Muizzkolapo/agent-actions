@@ -42,6 +42,85 @@ class ActionExpander:
         return "old"
 
     @staticmethod
+    def _validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
+        """
+        Validate vendor is a known/supported vendor.
+
+        Args:
+            vendor: Vendor name to validate
+            action_name: Name of action for error context
+
+        Raises:
+            ConfigValidationError: If vendor is unknown
+        """
+        if not vendor:  # Allow None/empty (will fail in required fields check)
+            return
+
+        from agent_actions.core.parser.vendor_config import VendorType
+        from agent_actions.core.exceptions import ConfigValidationError
+
+        valid_vendors = [v.value for v in VendorType]
+
+        if vendor not in valid_vendors:
+            raise ConfigValidationError(
+                'model_vendor',
+                f"Unknown vendor '{vendor}'",
+                context={
+                    'action': action_name,
+                    'vendor': vendor,
+                    'supported_vendors': valid_vendors,
+                    'hint': f"Valid vendors: {', '.join(valid_vendors)}"
+                }
+            )
+
+    @staticmethod
+    def _validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
+        """
+        Validate that required configuration fields are present after hierarchy resolution.
+
+        This validation ensures that essential fields (vendor, model, api_key) are defined
+        at least once across the 3-level hierarchy (project → workflow → action).
+
+        Args:
+            agent: Agent configuration dict after hierarchy resolution
+            action_name: Name of the action being validated (for error messages)
+
+        Raises:
+            ConfigValidationError: If any required field is missing
+        """
+        from agent_actions.core.exceptions import ConfigValidationError
+
+        required_fields = {
+            'model_vendor': agent.get('model_vendor'),
+            'model_name': agent.get('model_name'),
+            'api_key': agent.get('api_key')
+        }
+
+        missing_fields = [field for field, value in required_fields.items() if not value]
+
+        if missing_fields:
+            # Create user-friendly field names for error message
+            field_display_names = {
+                'model_vendor': 'vendor/model_vendor',
+                'model_name': 'model/model_name',
+                'api_key': 'api_key'
+            }
+
+            missing_display = [field_display_names.get(f, f) for f in missing_fields]
+
+            raise ConfigValidationError(
+                config_key=', '.join(missing_fields),
+                reason=f"Required configuration fields are missing after hierarchy resolution",
+                context={
+                    'action_name': action_name,
+                    'missing_fields': missing_fields,
+                    'missing_display': missing_display,
+                    'operation': 'expand_actions_to_agents',
+                    'hint': 'Add missing fields to agent_actions.yml (project-level), workflow defaults, or action config'
+                }
+            )
+
+    @staticmethod
     def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer, is_operational: bool = True) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
@@ -56,11 +135,19 @@ class ActionExpander:
         Returns:
             Completed agent configuration
         """
-        # Model configuration - with fallback defaults
-        # Support both 'vendor' (workflow/action level) and 'model_vendor' (project level)
-        agent['model_vendor'] = action.get('vendor', defaults.get('vendor', defaults.get('model_vendor')))
-        agent['model_name'] = action.get('model', defaults.get('model', defaults.get('model_name')))
+        # Model configuration - standardized on model_vendor/model_name
+        agent['model_vendor'] = action.get('model_vendor', defaults.get('model_vendor'))
+        agent['model_name'] = action.get('model_name', defaults.get('model_name'))
         agent['api_key'] = action.get('api_key', defaults.get('api_key'))
+
+        # Validate vendor is a known vendor (catches typos early)
+        ActionExpander._validate_vendor_exists(agent['model_vendor'], action.get('name', 'unknown'))
+
+        # Validate required fields are present after hierarchy resolution
+        # Skip validation for tool actions since they have different requirements
+        action_kind = action.get('kind', 'llm')
+        if action_kind != 'tool':
+            ActionExpander._validate_required_fields(agent, action.get('name', 'unknown'))
 
         # Execution settings
         agent['is_operational'] = is_operational
@@ -133,6 +220,19 @@ class ActionExpander:
         # Handle tool vs LLM actions
         action_kind = action.get('kind', 'llm')
         if action_kind == 'tool':
+            # Validate 'impl' field is required for tool actions
+            if not action.get('impl'):
+                from agent_actions.core.exceptions import ConfigValidationError
+                raise ConfigValidationError(
+                    'impl',
+                    "Tool actions must specify 'impl' field",
+                    context={
+                        'action': action.get('name', 'unknown'),
+                        'kind': 'tool',
+                        'hint': "Add 'impl: module.function_name' to your tool action"
+                    }
+                )
+
             agent['model_vendor'] = 'tool'
             agent['model_name'] = action.get('impl', action.get('name'))
 

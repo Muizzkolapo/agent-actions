@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 from typing import Dict, Any
 
 from agent_actions.agents.handlers.config_handler import ConfigManager
-from agent_actions.core.exceptions import ConfigurationError
+from agent_actions.core.exceptions import ConfigurationError, ConfigValidationError
 
 
 class TestNewFormatConfigHandlerIntegration:
@@ -33,8 +33,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test workflow in new format",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4"
+                "model_vendor": "openai",
+                'api_key': 'TEST_API_KEY',
+                "model_name": "gpt-4"
             },
             "actions": [
                 {
@@ -67,6 +68,7 @@ class TestNewFormatConfigHandlerIntegration:
             "default_agent_config": {
                 "model_name": "gpt-4-project-default",
                 "model_vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "chunk_config": {
                     "chunk_size": 800,
                     "chunk_overlap": 150
@@ -88,7 +90,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test workflow with project config integration",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4o-mini-workflow",
+                "model_name": "gpt-4o-mini-workflow",
+                "model_vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file"
             },
@@ -105,8 +109,9 @@ class TestNewFormatConfigHandlerIntegration:
                     "name": "action_with_overrides",
                     "intent": "Action overriding all levels",
                     "kind": "llm",
-                    "model": "claude-3-sonnet",
-                    "vendor": "anthropic",
+                    "model_name": "claude-3-sonnet",
+                    "model_vendor": "anthropic",
+                    "api_key": "TEST_API_KEY",
                     "json_mode": False,
                     "few_shot": 5,
                     "reads": ["extracted_data"],
@@ -182,6 +187,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "dependency_test",
             "description": "Test dependency parsing",
             "version": "2.0.0",
+            "defaults": {
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "step1",
@@ -240,6 +250,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "filter_test",
             "description": "Test action filtering",
             "version": "2.0.0",
+            "defaults": {
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "included_action",
@@ -281,6 +296,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test chunking config support",
             "version": "2.0.0",
             "defaults": {
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
+                "api_key": "TEST_API_KEY",
                 "chunk_config": {
                     "chunk_size": 1000,
                     "chunk_overlap": 200
@@ -325,8 +343,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test comprehensive defaults",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4-default",
-                "vendor": "openai",
+                "model_name": "gpt-4-default",
+                "model_vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": True,
                 "granularity": "file",
                 "run_mode": "offline",
@@ -463,8 +482,9 @@ class TestNewFormatConfigHandlerIntegration:
             "description": "Test tool action with batch mode defaults",
             "version": "2.0.0",
             "defaults": {
-                "vendor": "openai",
-                "model": "gpt-4",
+                "model_vendor": "openai",
+                'api_key': 'TEST_API_KEY',
+                "model_name": "gpt-4",
                 "run_mode": "batch"  # Default to batch mode
             },
             "actions": [
@@ -542,6 +562,11 @@ class TestNewFormatConfigHandlerIntegration:
             "name": "schema_test",
             "description": "Test schema handling",
             "version": "2.0.0",
+            "defaults": {
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
+                "api_key": "TEST_API_KEY"
+            },
             "actions": [
                 {
                     "name": "schema_action",
@@ -646,8 +671,9 @@ class TestNewFormatFeatureIntegration:
             "description": "End-to-end test workflow",
             "version": "2.0.0",
             "defaults": {
-                "model": "gpt-4",
-                "vendor": "openai",
+                "model_name": "gpt-4",
+                "model_vendor": "openai",
+                "api_key": "TEST_API_KEY",
                 "json_mode": False,
                 "granularity": "record"
             },
@@ -719,3 +745,147 @@ class TestNewFormatFeatureIntegration:
         transform_pos = config_manager.execution_order.index('transform')
 
         assert extract_pos < validate_pos < transform_pos
+
+    def test_standard_field_names_all_present(self, tmp_path):
+        """Test model_vendor/model_name are recognized as valid field names."""
+        workflow = {
+            "name": "test",
+            "version": "1.0",
+            "description": "Test standard field names",
+            "defaults": {
+                "model_vendor": "openai",
+                "model_name": "gpt-4",
+                "api_key": "DEFAULT_KEY"
+            },
+            "actions": [{
+                "name": "test_action",
+                "intent": "Test",
+                "kind": "llm",
+                "reads": [],
+                "writes": [],
+                "prompt": "test"
+            }],
+            "plan": ["test_action"]
+        }
+
+        workflow_file = tmp_path / "test.yml"
+        with open(workflow_file, 'w') as f:
+            yaml.dump(workflow, f)
+
+        config_manager = ConfigManager(str(workflow_file), str(workflow_file))
+        config_manager.load_configs()
+        user_agents = config_manager.get_user_agents()
+
+        # Should use model_vendor/model_name from defaults
+        test_agent = next(a for a in user_agents if a['agent_type'] == 'test_action')
+        assert test_agent['model_vendor'] == 'openai'
+        assert test_agent['model_name'] == 'gpt-4'
+        assert test_agent['api_key'] == 'DEFAULT_KEY'
+
+    def test_standard_field_names_at_workflow_level(self, tmp_path):
+        """Test model_vendor/model_name work at workflow defaults level."""
+        workflow = {
+            "name": "test",
+            "version": "1.0",
+            "description": "Test workflow defaults",
+            "defaults": {
+                "model_vendor": "anthropic",
+                "model_name": "claude-3-5-sonnet",
+                "api_key": "WORKFLOW_KEY"
+            },
+            "actions": [{
+                "name": "test_action",
+                "intent": "Test",
+                "kind": "llm",
+                "reads": [],
+                "writes": [],
+                "prompt": "test"
+            }],
+            "plan": ["test_action"]
+        }
+
+        workflow_file = tmp_path / "test.yml"
+        with open(workflow_file, 'w') as f:
+            yaml.dump(workflow, f)
+
+        config_manager = ConfigManager(str(workflow_file), str(workflow_file))
+        config_manager.load_configs()
+        user_agents = config_manager.get_user_agents()
+
+        # Should inherit from workflow defaults
+        test_agent = next(a for a in user_agents if a['agent_type'] == 'test_action')
+        assert test_agent['model_vendor'] == 'anthropic'
+        assert test_agent['model_name'] == 'claude-3-5-sonnet'
+        assert test_agent['api_key'] == 'WORKFLOW_KEY'
+
+    def test_standard_field_names_at_action_level(self, tmp_path):
+        """Test model_vendor/model_name work at action level."""
+        workflow = {
+            "name": "test",
+            "version": "1.0",
+            "description": "Test action-level config",
+            "actions": [{
+                "name": "test_action",
+                "intent": "Test",
+                "kind": "llm",
+                "model_vendor": "openai",
+                "model_name": "gpt-4o-mini",
+                "api_key": "ACTION_KEY",
+                "reads": [],
+                "writes": [],
+                "prompt": "test"
+            }],
+            "plan": ["test_action"]
+        }
+
+        workflow_file = tmp_path / "test.yml"
+        with open(workflow_file, 'w') as f:
+            yaml.dump(workflow, f)
+
+        config_manager = ConfigManager(str(workflow_file), str(workflow_file))
+        config_manager.load_configs()
+        user_agents = config_manager.get_user_agents()
+
+        # Should use action-level values
+        test_agent = next(a for a in user_agents if a['agent_type'] == 'test_action')
+        assert test_agent['model_vendor'] == 'openai'
+        assert test_agent['model_name'] == 'gpt-4o-mini'
+        assert test_agent['api_key'] == 'ACTION_KEY'
+
+    def test_standard_field_names_hierarchy_precedence(self, tmp_path):
+        """Test precedence: action > workflow for model_vendor/model_name."""
+        workflow = {
+            "name": "test",
+            "version": "1.0",
+            "description": "Test hierarchy precedence",
+            "defaults": {
+                "model_vendor": "anthropic",
+                "model_name": "claude-3-5-sonnet",
+                "api_key": "WORKFLOW_KEY"
+            },
+            "actions": [{
+                "name": "test_action",
+                "intent": "Test",
+                "kind": "llm",
+                "model_vendor": "openai",  # Overrides workflow
+                "model_name": "gpt-4o-mini",  # Overrides workflow
+                "reads": [],
+                "writes": [],
+                "prompt": "test"
+            }],
+            "plan": ["test_action"]
+        }
+
+        workflow_file = tmp_path / "test.yml"
+        with open(workflow_file, 'w') as f:
+            yaml.dump(workflow, f)
+
+        config_manager = ConfigManager(str(workflow_file), str(workflow_file))
+        config_manager.load_configs()
+        user_agents = config_manager.get_user_agents()
+
+        # Action should win (highest precedence)
+        test_agent = next(a for a in user_agents if a['agent_type'] == 'test_action')
+        assert test_agent['model_vendor'] == 'openai'
+        assert test_agent['model_name'] == 'gpt-4o-mini'
+        assert test_agent['api_key'] == 'WORKFLOW_KEY'  # Inherited from workflow

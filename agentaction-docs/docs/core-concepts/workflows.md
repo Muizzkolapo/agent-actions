@@ -358,8 +358,8 @@ Both `drops` and `observe` can be defined in workflow `defaults` to apply across
 
 ```yaml
 defaults:
-  vendor: openai
-  model: gpt-4o-mini
+  model_vendor: openai
+  model_name: gpt-4o-mini
   drops: [internal_id, temp_metadata]     # Applied to all actions
   observe: [user_id, request_id, timestamp]  # Applied to all actions
 
