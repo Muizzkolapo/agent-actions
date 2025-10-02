@@ -1,6 +1,9 @@
 # agent_actions/models/schema_change.py  (or wherever this helper lives)
 
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict, Any, Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------------------------------- #
@@ -111,3 +114,60 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
         )
 
     return compiled
+
+
+# --------------------------------------------------------------------------- #
+# Unified Schema Preparation                                                  #
+# --------------------------------------------------------------------------- #
+def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optional[Dict[str, Any]]:
+    """
+    Unified schema preparation for both online and batch modes.
+
+    This function provides a single code path for schema compilation across
+    the entire system, ensuring consistent behavior and validation regardless
+    of whether the agent is running in online or batch mode.
+
+    Args:
+        agent_config: Agent configuration dictionary containing schema settings
+        vendor: Vendor name (e.g., 'openai', 'anthropic', 'gemini', 'ollama')
+
+    Returns:
+        Compiled schema in vendor-specific format, or None if:
+        - No schema is configured
+        - Vendor is 'tool' (special case)
+        - Vendor doesn't support schema validation
+
+    Side Effects:
+        Logs a WARNING if schema is requested but vendor doesn't support it
+    """
+    from agent_actions.core.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
+    from agent_actions.agents.handlers.schema_handler import SchemaLoader
+    from agent_actions.core.exceptions import ConfigValidationError
+
+    # Special case: tool vendor never uses schemas
+    if vendor == 'tool':
+        return None
+
+    # Check for inline schema first
+    inline_schema = agent_config.get(SCHEMA_KEY)
+    if inline_schema:
+        base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+        schema_name = agent_config.get('name', 'inline_schema')
+    else:
+        # Check for schema_name
+        schema_name = agent_config.get(SCHEMA_NAME_KEY)
+        if not schema_name:
+            return None
+        base_schema = SchemaLoader.load_schema(schema_name)
+
+    # Try to compile for this vendor
+    try:
+        return compile_unified_schema(base_schema, vendor)
+    except ConfigValidationError:
+        # Vendor doesn't support schemas - warn user
+        logger.warning(
+            f"Vendor '{vendor}' does not support schema validation. "
+            f"Schema '{schema_name}' will be ignored. "
+            f"For schema support, use one of: openai, anthropic, gemini, ollama"
+        )
+        return None

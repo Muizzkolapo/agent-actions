@@ -644,46 +644,7 @@ class AnthropicBatchProvider(BatchProvider):
         
         print(f"🛠️ Created tool definition: {tool_definition['name']}")
         return [tool_definition]
-    
-    def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Compile schema to Anthropic's format using tool definitions for structured output.
-        
-        Anthropic uses tool use to enforce structured JSON output rather than 
-        OpenAI-style JSON mode. This method returns the schema as-is for use
-        with our tool-based structured output approach.
-        """
-        try:
-            # Try to use the unified schema compiler if available
-            return compile_unified_schema(schema_dict, 'anthropic')
-        except Exception:
-            # Return the schema as-is for tool use - our _create_json_tool_from_schema
-            # method will handle the conversion to tool format
-            if isinstance(schema_dict, dict):
-                return schema_dict
-            
-            # Fallback: create a simple schema structure
-            return {
-                "type": "object",
-                "properties": {
-                    "response": {
-                        "type": "string",
-                        "description": "The response content"
-                    }
-                },
-                "required": ["response"],
-                "description": "Structured response"
-            }
-    
-    def supports_schema_validation(self) -> bool:
-        """
-        Whether Anthropic supports JSON schema validation.
-        
-        Anthropic supports structured output but not strict JSON schema validation
-        like OpenAI. It can be guided to produce structured output through prompting.
-        """
-        return True  # Supports structured output through prompting
-    
+
     def validate_config(self, agent_config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
         Validate that the agent configuration is compatible with Anthropic.

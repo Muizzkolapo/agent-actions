@@ -441,20 +441,7 @@ class GeminiBatchProvider(BatchProvider):
                 },
                 cause=e
             )
-    
-    def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Compile schema to Gemini's format.
-        
-        Gemini uses response_schema with responseJsonSchema format.
-        """
-        # Gemini expects the schema directly in OpenAPI/JSON Schema format
-        return schema_dict
-    
-    def supports_schema_validation(self) -> bool:
-        """Gemini supports native schema validation via response_schema."""
-        return True
-    
+
     def validate_config(self, agent_config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
         """
         Validate that the agent configuration is compatible with Gemini.
