@@ -353,4 +353,5 @@ Design schemas that match your agent's purpose:
 
 - **[Workflow Design](./workflows.md)** - Learn to orchestrate agents in DAGs
 - **[Schema Validation](./schemas.md)** - Master JSON schema design
+- **[Reprompting & Validators](../guides/reprompting.md)** - Validate outputs and retry with improved prompts
 - **Examples** (coming soon) - See real-world agent patterns

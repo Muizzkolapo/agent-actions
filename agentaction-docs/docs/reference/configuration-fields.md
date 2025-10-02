@@ -445,6 +445,178 @@ This page documents every configuration field available in Agent Actions, organi
   ```
 - **Notes**: Used when processing large texts that exceed token limits
 
+### `interceptors`
+- **Type**: `List[InterceptorConfig]`
+- **Required**: No
+- **Default**: `[]`
+- **Level**: Action level
+- **Description**: Response interceptors for validation and automatic reprompting when validation fails
+- **Schema Reference**: `InterceptorConfig` in `core/parser/config_schema.py`
+- **Example**:
+  ```yaml
+  interceptors:
+    # Validation interceptor
+    - type: validation
+      validator_function: "agent_actions.agents.validators.functions.validate_word_count"
+      validator_args:
+        expected: 5
+      on_failure: retry
+
+    # Reprompt interceptor
+    - type: reprompt
+      strategy: "llm"
+      max_attempts: 3
+      llm_config:
+        model_vendor: "openai"
+        model_name: "gpt-4"
+  ```
+- **See Also**: [Reprompting & Custom Validators Guide](../guides/reprompting.md)
+
+#### `interceptors[].type`
+- **Type**: `string` (enum)
+- **Required**: Yes
+- **Valid Values**: `validation`, `reprompt`, `logging`
+- **Description**: Type of interceptor
+- **Example**:
+  ```yaml
+  interceptors:
+    - type: validation  # Validates response
+    - type: reprompt    # Generates improved prompts
+  ```
+
+#### `interceptors[].validator_function`
+- **Type**: `string`
+- **Required**: Yes (when `type: validation`)
+- **Description**: Validator function reference in format `module_name.function_name`
+- **Examples**:
+  ```yaml
+  # Built-in validator
+  validator_function: "agent_actions.agents.validators.functions.validate_word_count"
+
+  # Custom validator (in tools directory)
+  validator_function: "my_validators.validate_json_structure"
+  ```
+- **Notes**:
+  - Loads from `tools.path` directory for custom validators
+  - Validator must return `Tuple[bool, str | None]`
+  - See [Custom Validators](../guides/reprompting.md#custom-validators) for details
+
+#### `interceptors[].validator_args`
+- **Type**: `dict`
+- **Required**: No
+- **Default**: `{}`
+- **Description**: Arguments passed to the validator function
+- **Example**:
+  ```yaml
+  interceptors:
+    - type: validation
+      validator_function: "agent_actions.agents.validators.functions.validate_char_count"
+      validator_args:
+        min_chars: 100
+        max_chars: 500
+  ```
+- **Notes**: Merged with workflow context data, accessible via `**kwargs` in validator
+
+#### `interceptors[].on_failure`
+- **Type**: `string` (enum)
+- **Required**: No
+- **Default**: `retry`
+- **Valid Values**: `retry`, `fail`, `continue`
+- **Description**: Action to take when validation fails
+- **Examples**:
+  ```yaml
+  # Trigger reprompt on failure (default)
+  on_failure: retry
+
+  # Stop immediately and raise error
+  on_failure: fail
+
+  # Log error but continue processing
+  on_failure: continue
+  ```
+- **Notes**:
+  - `retry`: Triggers reprompt interceptor to improve and retry
+  - `fail`: Stops execution immediately
+  - `continue`: Non-blocking validation (for monitoring)
+
+#### `interceptors[].strategy`
+- **Type**: `string` (enum)
+- **Required**: Yes (when `type: reprompt`)
+- **Valid Values**: `llm`, `simple`, `template`
+- **Description**: Strategy for generating improved prompts
+- **Examples**:
+  ```yaml
+  # LLM-based improvement
+  strategy: "llm"
+
+  # Append error to prompt
+  strategy: "simple"
+
+  # Use predefined templates
+  strategy: "template"
+  ```
+- **Notes**:
+  - `llm`: Uses LLM to analyze failure and craft better prompt (most sophisticated)
+  - `simple`: Appends error message to original prompt (fast, no extra LLM call)
+  - `template`: Uses pattern-matched templates (precise control)
+
+#### `interceptors[].max_attempts`
+- **Type**: `integer`
+- **Required**: Yes (when `type: reprompt`)
+- **Default**: `3`
+- **Description**: Maximum number of retry attempts
+- **Example**:
+  ```yaml
+  interceptors:
+    - type: reprompt
+      strategy: "simple"
+      max_attempts: 2  # Try up to 2 times
+  ```
+- **Notes**: Prevents infinite retry loops
+
+#### `interceptors[].llm_config`
+- **Type**: `object`
+- **Required**: Yes (when `strategy: llm`)
+- **Description**: LLM configuration for reprompt generation
+- **Example**:
+  ```yaml
+  interceptors:
+    - type: reprompt
+      strategy: "llm"
+      llm_config:
+        model_vendor: "openai"    # Required
+        model_name: "gpt-4"       # Optional
+        temperature: 0.7          # Optional
+  ```
+- **Sub-fields**:
+  - `model_vendor` (required): Vendor for reprompt generation
+  - `model_name` (optional): Specific model to use
+  - `temperature` (optional): Sampling temperature
+
+#### `interceptors[].templates`
+- **Type**: `dict`
+- **Required**: Yes (when `strategy: template`)
+- **Description**: Template patterns for reprompt generation
+- **Example**:
+  ```yaml
+  interceptors:
+    - type: reprompt
+      strategy: "template"
+      templates:
+        "too short": |
+          {original_prompt}
+
+          IMPORTANT: Must be at least {min_chars} characters.
+        "missing keywords": |
+          {original_prompt}
+
+          CRITICAL: Include these keywords: {required_keywords}
+  ```
+- **Notes**:
+  - Keys are pattern matchers for error messages
+  - Values are template strings with {variable} placeholders
+  - Variables come from validation_criteria/context
+
 ## Filtering and Conditional Fields
 
 ### `where_clause`

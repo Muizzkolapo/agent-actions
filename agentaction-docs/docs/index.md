@@ -30,6 +30,7 @@ Agent relationships are explicit and visual. Data flow and execution order are a
 - **Deterministic Execution**: Predictable, repeatable workflows
 - **DAG Dependencies**: Clear agent relationships and data flow
 - **Transformation Focus**: Agents as data transformation nodes
+- **Automatic Reprompting**: Validate outputs and retry with improved prompts
 - **Lightweight**: Minimal dependencies, fast execution
 - **Multi-Model Support**: Works with OpenAI, Anthropic, and other providers
 
