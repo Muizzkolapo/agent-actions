@@ -182,28 +182,24 @@ class BatchProvider(ABC):
             Both get transformed to: BatchResult(custom_id="123", content={...}, success=True)
         """
         pass
-    
-    @abstractmethod
+
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Compile a schema dictionary to provider-specific format.
-        
+        DEPRECATED: This method is no longer used for schema compilation.
+
+        Schema compilation is now handled by the unified prepare_schema_unified()
+        function in agent_actions.core.parser.schema_change module.
+
+        This method remains for backward compatibility but should not be used.
+
         Args:
             schema_dict: Generic schema dictionary
-            
+
         Returns:
-            Provider-specific schema format
+            Provider-specific schema format (returns as-is by default)
         """
-        pass
-    
-    def supports_schema_validation(self) -> bool:
-        """
-        Whether this provider supports structured output with schema validation.
-        
-        Returns:
-            True if provider supports schema validation, False otherwise
-        """
-        return True
+        # Default implementation - returns schema as-is
+        return schema_dict
     
     def get_supported_models(self) -> List[str]:
         """

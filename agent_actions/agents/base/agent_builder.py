@@ -47,11 +47,6 @@ SINGLE_RESPONSE_VENDORS: set[str] = {
     # openai & ollama both return whatever your schema dictates (obj or list)
 }
 
-# Vendors for which we pre-compile a “unified” schema
-SCHEMA_COMPILATION_VENDORS: set[str] = {
-    'openai', 'anthropic', 'gemini', 'ollama'   # ← NEW
-}
-
 # ---------------------------------------------------------------------------
 # 2. public entry-point
 # ---------------------------------------------------------------------------
@@ -166,22 +161,14 @@ def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str, contex
 
 
 def _prepare_schema(agent_config: Dict[str, Any], model_vendor: str) -> Optional[Dict[str, Any]]:
-    # Check for inline schema first
-    inline_schema = agent_config.get(SCHEMA_KEY) if model_vendor != 'tool' else None
-    if inline_schema:
-        # Construct unified schema from the inline dictionary
-        base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
-        return (compile_unified_schema(base_schema, model_vendor)
-                if model_vendor in SCHEMA_COMPILATION_VENDORS else base_schema)
-    
-    # Fall back to schema_name if no inline schema
-    schema_name = agent_config.get(SCHEMA_NAME_KEY) if model_vendor != 'tool' else None
-    if not schema_name:
-        return None
+    """
+    Prepare schema for the given vendor.
 
-    base_schema = SchemaLoader.load_schema(schema_name)
-    return (compile_unified_schema(base_schema, model_vendor)
-            if model_vendor in SCHEMA_COMPILATION_VENDORS else base_schema)
+    Uses the unified prepare_schema_unified() function to ensure consistent
+    schema handling across online and batch modes.
+    """
+    from agent_actions.core.parser.schema_change import prepare_schema_unified
+    return prepare_schema_unified(agent_config, model_vendor)
 
 
 def _invoke_vendor_handler(

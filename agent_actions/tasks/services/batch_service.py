@@ -361,23 +361,28 @@ class BatchService:
         return None
 
     def _prepare_schema(self, agent_config, provider=None):
-        """Load and prepare schema from config"""
-        # Check for inline schema first
-        inline_schema = agent_config.get(SCHEMA_KEY)
-        if inline_schema:
-            # Construct unified schema from the inline dictionary
-            base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
-        else:
-            # Fall back to schema_name if no inline schema
-            schema_name = agent_config.get(SCHEMA_NAME_KEY)
-            if not schema_name:
-                return None
-            base_schema = SchemaLoader.load_schema(schema_name)
-        
-        # Use provider to compile schema to its specific format
+        """
+        Load and prepare schema from config.
+
+        Uses the unified prepare_schema_unified() function to ensure consistent
+        schema handling across online and batch modes.
+        """
+        from agent_actions.core.parser.schema_change import prepare_schema_unified
+        from agent_actions.core.constants import MODEL_VENDOR_KEY
+
         if provider is None:
             provider = self.provider
-        return provider.compile_schema(base_schema)
+
+        # Get vendor name from agent config
+        # This is more reliable than extracting from provider class name
+        vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
+
+        # Fallback: extract from provider type if not in config
+        if not vendor:
+            # E.g., "OpenAIBatchProvider" -> "openai"
+            vendor = type(provider).__name__.replace('BatchProvider', '').lower()
+
+        return prepare_schema_unified(agent_config, vendor)
 
     def prepare_batch_tasks_from_data(self, agent_config, data):
         # Get the appropriate provider for this agent configuration

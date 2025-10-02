@@ -252,10 +252,12 @@ class TestAgentBuilder:
             "schema_name": "test_schema"
         }
 
-        with patch('agent_actions.agents.base.agent_builder.SchemaLoader.construct_schema_from_dict') as mock_construct:
+        # Schema preparation now happens in prepare_schema_unified()
+        # Need to patch where SchemaLoader is imported FROM, not where it's used
+        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
             mock_construct.return_value = {"base": "schema"}
 
-            with patch('agent_actions.agents.base.agent_builder.compile_unified_schema') as mock_compile:
+            with patch('agent_actions.core.parser.schema_change.compile_unified_schema') as mock_compile:
                 mock_compile.return_value = {"compiled": "schema"}
 
                 result = _prepare_schema(config, "openai")

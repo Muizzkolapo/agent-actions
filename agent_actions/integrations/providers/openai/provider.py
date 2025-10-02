@@ -349,12 +349,3 @@ class OpenAIBatchProvider(BatchProvider):
                 },
                 cause=e
             )
-    
-    def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """Compile schema to OpenAI's format."""
-        # Use the existing compile_unified_schema function
-        return compile_unified_schema(schema_dict, 'openai')
-
-    def supports_schema_validation(self) -> bool:
-        """OpenAI supports JSON schema validation."""
-        return True
