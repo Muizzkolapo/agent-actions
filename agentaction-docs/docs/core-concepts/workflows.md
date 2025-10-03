@@ -487,12 +487,21 @@ The `schema` field now fully replaces `writes` by defining what the LLM generate
 
 ## Execution Control
 
-### Parallel Optimization
+### Parallel Execution
 
-Agent Actions automatically parallelizes independent agents:
+Agent Actions automatically detects and parallelizes independent agents based on their dependency levels. Agents at the same dependency level execute concurrently, significantly improving workflow performance.
 
+#### How Parallel Execution Works
+
+**Level-Based Execution:**
+1. Workflow computes execution levels using BFS (Breadth-First Search)
+2. Each level represents agents that can run in parallel
+3. Levels execute sequentially, but agents within each level run concurrently
+4. Execution proceeds to the next level only after all agents in the current level complete
+
+**Example:**
 ```yaml
-# These will run in parallel (no interdependencies)
+# These will run in parallel (same dependency level)
 agents:
   - name: "sentiment_analyzer"
     depends_on: ["input_processor"]
@@ -502,6 +511,94 @@ agents:
     depends_on: ["input_processor"]
   - name: "style_analyzer"
     depends_on: ["input_processor"]
+
+# Execution:
+# Level 0: input_processor
+# Level 1: [sentiment_analyzer, entity_extractor, topic_classifier, style_analyzer] (parallel)
+```
+
+#### Auto-Detection
+
+Parallel execution is automatically enabled when:
+- Multiple agents share identical dependencies
+- No batch agents are present in the workflow
+- Loop agents have no sequential dependencies
+
+```bash
+# Auto-detection enabled by default
+agent-actions run my-workflow.yaml
+```
+
+#### Manual Control
+
+Override auto-detection with CLI flags:
+
+```bash
+# Force parallel execution
+agent-actions run my-workflow.yaml --parallel
+
+# Force sequential execution (backward compatible)
+agent-actions run my-workflow.yaml --no-parallel
+
+# Limit concurrent agents (default: 5, range: 1-50)
+agent-actions run my-workflow.yaml --parallel --concurrency-limit 10
+```
+
+#### Concurrency Limiting
+
+Control the maximum number of agents running simultaneously:
+
+- **Default**: 5 concurrent agents per level
+- **Range**: 1-50 concurrent agents
+- **Use Cases**:
+  - Reduce API rate limiting issues (lower limit)
+  - Maximize throughput with high quotas (higher limit)
+  - Control memory usage for resource-intensive agents
+
+```bash
+# Conservative approach (sequential-like)
+agent-actions run my-workflow.yaml --concurrency-limit 1
+
+# Aggressive parallelization
+agent-actions run my-workflow.yaml --concurrency-limit 20
+```
+
+#### Performance Benefits
+
+Parallel execution dramatically reduces workflow duration:
+
+**Sequential Execution:**
+```
+Total Time = Sum of all agent execution times
+Example: 10 agents × 30s each = 300s (5 minutes)
+```
+
+**Parallel Execution:**
+```
+Total Time = Sum of level execution times
+Example:
+  Level 0: 1 agent × 30s = 30s
+  Level 1: 8 agents × 30s = 30s (parallel)
+  Level 2: 1 agent × 30s = 30s
+Total: 90s (1.5 minutes) - 70% faster!
+```
+
+#### Breaking Changes
+
+**`previous_agent_type` Behavior:**
+
+In parallel execution, the `previous_agent_type` variable is **undefined** for agents running at the same dependency level. This prevents race conditions where multiple agents might set this value simultaneously.
+
+**Recommendation:** Use explicit dependencies instead:
+```yaml
+# ❌ Avoid relying on previous_agent_type in parallel workflows
+- name: "my_agent"
+  prompt: "Process data from {previous_agent_type}"
+
+# ✅ Use explicit dependencies
+- name: "my_agent"
+  prompt: "Process data from {dependency_agent.output}"
+  depends_on: ["dependency_agent"]
 ```
 
 ### Dependency Resolution
@@ -520,7 +617,10 @@ agents:
   - name: "analyzer_b"
     depends_on: ["preprocessor"]
 
-# Agent Actions resolves to: preprocessor, then analyzer_a + analyzer_b in parallel, then combiner
+# Agent Actions resolves to:
+# Level 0: preprocessor
+# Level 1: analyzer_a + analyzer_b (parallel)
+# Level 2: combiner
 ```
 
 ### Error Propagation

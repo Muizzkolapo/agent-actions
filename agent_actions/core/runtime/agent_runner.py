@@ -73,19 +73,44 @@ class AgentRunner:
     ) -> Tuple[str, str]:
         """
         Sets up input and output directories for the agent.
-        
+
         Args:
             agent_folder (str): Path to the agent folder.
             agent_config (dict): Configuration for the agent.
             previous_agent_type (Optional[str]): Type of the previous agent in workflow.
             idx (int): Numeric index to prefix folder names.
-        
+
         Returns:
             Tuple[str, str]: (input_directory, output_directory)
         """
         indexed_agent_type: str = f"node_{idx}_{agent_config['agent_type']}"
 
-        if previous_agent_type:
+        # Determine input directory
+        # For agents with dependencies, use the ACTUAL dependency's output directory
+        # Don't assume prev_idx = idx - 1 (only true for sequential workflows)
+        dependencies = agent_config.get('dependencies', [])
+
+        if dependencies and hasattr(self, 'agent_indices') and self.agent_indices:
+            # Use the LAST dependency (immediate parent in workflow)
+            last_dependency = dependencies[-1]
+            try:
+                # Find the actual index of this dependency using O(1) lookup
+                dep_idx = self.agent_indices.get(last_dependency)
+                if dep_idx is not None:
+                    indexed_previous_agent_type: str = f"node_{dep_idx}_{last_dependency}"
+                    input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
+                else:
+                    raise ValueError(f"Dependency {last_dependency} not found in agent_indices")
+            except (ValueError, AttributeError, KeyError):
+                # Fallback: if we can't find dependency, use previous_agent_type logic
+                if previous_agent_type:
+                    prev_idx: int = idx - 1
+                    indexed_previous_agent_type: str = f"node_{prev_idx}_{previous_agent_type}"
+                    input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
+                else:
+                    input_directory = Path(agent_folder) / 'staging'
+        elif previous_agent_type:
+            # Fallback to old logic for backward compatibility
             prev_idx: int = idx - 1
             indexed_previous_agent_type: str = f"node_{prev_idx}_{previous_agent_type}"
             input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
