@@ -17,10 +17,17 @@ class Granularity(str, Enum):
     FILE = "file"
 
 
+class LoopMode(str, Enum):
+    """Loop execution modes."""
+    PARALLEL = "parallel"  # Default - iterations run independently
+    SEQUENTIAL = "sequential"  # Iterations run in order, N+1 waits for N
+
+
 class LoopConfig(BaseModel):
     """Configuration for loop-based actions."""
     param: str = Field(..., description="Parameter name for loop variable")
     range: List[int] = Field(..., description="Range of values for loop parameter")
+    mode: LoopMode = Field(default=LoopMode.PARALLEL, description="Execution mode")
 
 
 class MergePattern(str, Enum):

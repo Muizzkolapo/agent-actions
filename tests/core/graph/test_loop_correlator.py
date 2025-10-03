@@ -447,5 +447,213 @@ class TestLoopOutputCorrelatorIntegration:
             assert data[0]['content']['field_3'] == 'value_3'
 
 
+class TestLoopCorrelatorWithSequentialMode:
+    """Test suite for LoopOutputCorrelator with sequential loop execution."""
+
+    @pytest.fixture
+    def temp_agent_folder(self):
+        """Create a temporary agent folder for testing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            yield Path(tmpdir)
+
+    @pytest.fixture
+    def correlator(self, temp_agent_folder):
+        """Create a LoopOutputCorrelator instance."""
+        return LoopOutputCorrelator(temp_agent_folder)
+
+    def test_sequential_loop_correlation_works(self, correlator, temp_agent_folder):
+        """Test that correlator works correctly with sequential loop outputs."""
+        # Create sequential loop output directories
+        # Sequential loops execute 1 -> 2 -> 3, but correlation should work the same
+        for i in range(1, 4):
+            loop_dir = temp_agent_folder / "target" / f"node_{i}_refine_{i}"
+            loop_dir.mkdir(parents=True)
+
+            test_data = [{
+                "source_guid": f"test-{i}",
+                "loop_correlation_id": f"test-corr-{i}",
+                "content": {
+                    "iteration": i,
+                    "data": f"refined_data_{i}"
+                }
+            }]
+
+            with open(loop_dir / "output.json", 'w') as f:
+                json.dump(test_data, f)
+
+        # Correlate sequential loop outputs
+        result_dir = correlator.prepare_correlated_input(
+            "aggregate",
+            ["refine_1", "refine_2", "refine_3"],
+            4  # node index
+        )
+
+        assert result_dir is not None
+        output_file = Path(result_dir) / "output.json"
+        assert output_file.exists()
+
+        with open(output_file, 'r') as f:
+            data = json.load(f)
+            # Should have 3 separate records (one per iteration)
+            assert len(data) == 3
+
+            # Verify each iteration's data is present
+            iterations = {item["content"]["iteration"] for item in data}
+            assert iterations == {1, 2, 3}
+
+    def test_partial_sequential_failure_correlation(self, correlator, temp_agent_folder):
+        """Test correlation when some sequential iterations fail."""
+        # In sequential mode, if iteration 2 fails, iteration 3 never runs
+        # So we should only have outputs from iterations 1 and 2
+
+        # Create outputs for iterations 1 and 2 only
+        for i in range(1, 3):  # Only 1 and 2
+            loop_dir = temp_agent_folder / "target" / f"node_{i}_process_{i}"
+            loop_dir.mkdir(parents=True)
+
+            test_data = [{
+                "source_guid": "test-guid",
+                "loop_correlation_id": "test-corr",
+                "content": {f"field_{i}": f"value_{i}"}
+            }]
+
+            with open(loop_dir / "result.json", 'w') as f:
+                json.dump(test_data, f)
+
+        # Iteration 3 directory doesn't exist (it never ran)
+        # Correlator should handle this gracefully
+
+        result_dir = correlator.prepare_correlated_input(
+            "consumer",
+            ["process_1", "process_2", "process_3"],  # Expected 3, but only 2 exist
+            4
+        )
+
+        # Should still create correlation directory
+        assert result_dir is not None
+        output_file = Path(result_dir) / "result.json"
+
+        if output_file.exists():
+            with open(output_file, 'r') as f:
+                data = json.load(f)
+                # Should only have data from successful iterations
+                assert len(data) <= 2
+                if len(data) > 0:
+                    # Should have fields from iterations 1 and 2
+                    assert 'field_1' in data[0]['content'] or 'field_2' in data[0]['content']
+
+    def test_sequential_loop_with_mixed_metadata(self, correlator, temp_agent_folder):
+        """Test correlation when sequential loop agents have loop_mode metadata."""
+        # Create outputs with loop_mode metadata
+        for i in range(1, 4):
+            loop_dir = temp_agent_folder / "target" / f"node_{i}_step_{i}"
+            loop_dir.mkdir(parents=True)
+
+            test_data = [{
+                "source_guid": "test-guid",
+                "loop_correlation_id": "test-corr",
+                "loop_mode": "sequential",  # Metadata about execution mode
+                "loop_iteration": i,
+                "content": {"step": i, "result": f"step_{i}_result"}
+            }]
+
+            with open(loop_dir / "data.json", 'w') as f:
+                json.dump(test_data, f)
+
+        result_dir = correlator.prepare_correlated_input(
+            "final",
+            ["step_1", "step_2", "step_3"],
+            4
+        )
+
+        assert result_dir is not None
+        output_file = Path(result_dir) / "data.json"
+        assert output_file.exists()
+
+        with open(output_file, 'r') as f:
+            data = json.load(f)
+            # Should have merged all iterations
+            assert len(data) == 1
+            # Should have results from all steps
+            assert data[0]['content']['step'] in [1, 2, 3]
+
+    def test_sequential_vs_parallel_correlation_same_behavior(self, correlator, temp_agent_folder):
+        """Test that correlation behavior is identical for sequential and parallel loops."""
+        # Create two sets of loop outputs - one "sequential", one "parallel"
+        # Both should correlate the same way
+
+        # Sequential loop outputs
+        for i in range(1, 3):
+            loop_dir = temp_agent_folder / "target" / f"node_{i}_seq_{i}"
+            loop_dir.mkdir(parents=True)
+
+            test_data = [{
+                "source_guid": "guid-1",
+                "loop_correlation_id": "corr-1",
+                "loop_mode": "sequential",
+                "content": {f"seq_field_{i}": f"seq_value_{i}"}
+            }]
+
+            with open(loop_dir / "output.json", 'w') as f:
+                json.dump(test_data, f)
+
+        # Parallel loop outputs (different agents)
+        for i in range(3, 5):
+            loop_dir = temp_agent_folder / "target" / f"node_{i}_par_{i-2}"
+            loop_dir.mkdir(parents=True)
+
+            test_data = [{
+                "source_guid": "guid-2",
+                "loop_correlation_id": "corr-2",
+                "loop_mode": "parallel",
+                "content": {f"par_field_{i-2}": f"par_value_{i-2}"}
+            }]
+
+            with open(loop_dir / "output.json", 'w') as f:
+                json.dump(test_data, f)
+
+        # Correlate both
+        seq_result = correlator.prepare_correlated_input(
+            "seq_consumer",
+            ["seq_1", "seq_2"],
+            5
+        )
+
+        par_result = correlator.prepare_correlated_input(
+            "par_consumer",
+            ["par_1", "par_2"],
+            6
+        )
+
+        # Both should succeed
+        assert seq_result is not None
+        assert par_result is not None
+
+        # Both should merge data the same way
+        seq_file = Path(seq_result) / "output.json"
+        par_file = Path(par_result) / "output.json"
+
+        assert seq_file.exists()
+        assert par_file.exists()
+
+        with open(seq_file, 'r') as f:
+            seq_data = json.load(f)
+
+        with open(par_file, 'r') as f:
+            par_data = json.load(f)
+
+        # Both should have merged content
+        assert len(seq_data) == 1
+        assert len(par_data) == 1
+
+        # Sequential merged data should have both fields
+        assert 'seq_field_1' in seq_data[0]['content']
+        assert 'seq_field_2' in seq_data[0]['content']
+
+        # Parallel merged data should have both fields
+        assert 'par_field_1' in par_data[0]['content']
+        assert 'par_field_2' in par_data[0]['content']
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

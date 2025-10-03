@@ -214,8 +214,12 @@ class ActionExpander:
                     }
                 # Future: Add support for WRITE_TO, REPROCESS behaviors
 
-        # Prompt
-        agent['prompt'] = action.get('prompt')
+        # Prompt - apply template replacement
+        prompt = action.get('prompt')
+        if prompt:
+            agent['prompt'] = template_replacer(prompt)
+        else:
+            agent['prompt'] = None
 
         # Handle tool vs LLM actions
         action_kind = action.get('kind', 'llm')
@@ -385,13 +389,25 @@ class ActionExpander:
                     range_values = loop_range
 
                 # Create an agent for each loop iteration
-                for i in range_values:
+                range_values_list = list(range_values)
+                for idx, i in enumerate(range_values_list):
                     agent: AgentEntryDict = {}
 
                     # Replace template variables in relevant fields
                     def replace_template_var(value):
                         if isinstance(value, str):
-                            return value.replace(f'${{{param_name}}}', str(i))
+                            # Replace ${param} with current iteration
+                            result = value.replace(f'${{{param_name}}}', str(i))
+
+                            # Replace ${param-1} with previous iteration value
+                            if idx > 0:  # Not first iteration
+                                prev_value = range_values_list[idx - 1]
+                                result = result.replace(f'${{{param_name}-1}}', str(prev_value))
+                            else:
+                                # First iteration: replace with empty string
+                                result = result.replace(f'${{{param_name}-1}}', '')
+
+                            return result
                         elif isinstance(value, dict):
                             # Replace in both keys and values
                             return {
@@ -410,6 +426,7 @@ class ActionExpander:
                     agent['is_loop_agent'] = True
                     agent['loop_base_name'] = action.get('name', 'unknown')
                     agent['loop_iteration'] = i
+                    agent['loop_mode'] = loop_config.get('mode', 'parallel')
 
                     # Continue with rest of agent setup
                     agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_in_plan))
@@ -425,6 +442,14 @@ class ActionExpander:
 
         # Extract dependencies from plan
         plan = action_config.get('plan', [])
+
+        # Create mapping of action names to their loop configs
+        action_loop_configs = {}
+        for action in actions:
+            action_name = action.get('name')
+            loop_config = action.get('loop')
+            if loop_config:
+                action_loop_configs[action_name] = loop_config
 
         # Create mapping of action names to agent indices (accounting for loops)
         agent_name_to_indices = {}
@@ -456,17 +481,32 @@ class ActionExpander:
 
                 # Find the corresponding agent(s) and set dependencies
                 if action_name in agent_name_to_indices:
-                    for agent_idx in agent_name_to_indices[action_name]:
-                        # For looped actions, dependencies should reference the expanded names
-                        expanded_deps = []
-                        for dep in deps:
-                            if dep in agent_name_to_indices:
-                                # If dependency is also looped, use all expanded names
-                                for dep_idx in agent_name_to_indices[dep]:
-                                    expanded_deps.append(agents[dep_idx]['agent_type'])
+                    # For looped actions, dependencies should reference the expanded names
+                    expanded_deps = []
+                    for dep in deps:
+                        if dep in agent_name_to_indices:
+                            # If dependency is also looped, use all expanded names
+                            for dep_idx in agent_name_to_indices[dep]:
+                                expanded_deps.append(agents[dep_idx]['agent_type'])
+                        else:
+                            expanded_deps.append(dep)
+
+                    # Check if this action has sequential loop mode
+                    loop_config = action_loop_configs.get(action_name)
+                    if loop_config and loop_config.get('mode') == 'sequential':
+                        # Sequential mode: chain iterations
+                        for i, agent_idx in enumerate(agent_name_to_indices[action_name]):
+                            if i == 0:
+                                # First iteration keeps original dependencies
+                                agents[agent_idx]['dependencies'] = expanded_deps
                             else:
-                                expanded_deps.append(dep)
-                        agents[agent_idx]['dependencies'] = expanded_deps
+                                # Later iterations depend only on previous iteration
+                                prev_idx = agent_name_to_indices[action_name][i-1]
+                                agents[agent_idx]['dependencies'] = [agents[prev_idx]['agent_type']]
+                    else:
+                        # Parallel mode (current behavior)
+                        for agent_idx in agent_name_to_indices[action_name]:
+                            agents[agent_idx]['dependencies'] = expanded_deps
 
         return {workflow_name: agents}
 

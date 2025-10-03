@@ -33,6 +33,188 @@ Source Data → Loop Agent 1 (distractor_1) ↘
             → Loop Agent 3 (distractor_3) ↗
 ```
 
+### Loop Modes: Parallel and Sequential
+
+The Loop Output Correlator is **mode-agnostic** and works identically for both parallel and sequential loop execution modes.
+
+#### Parallel Loops (Default)
+
+In parallel mode, all loop iterations execute concurrently:
+
+```yaml
+actions:
+  - name: generate_variants
+    loop:
+      param: variant_id
+      range: [1, 3]
+      mode: parallel  # All run concurrently
+
+    prompt: "Generate variant ${variant_id}"
+```
+
+**Execution Timeline:**
+```
+t=0s:  variant_1, variant_2, variant_3 start simultaneously
+t=30s: All variants complete (assuming 30s per iteration)
+t=30s: Correlator merges outputs
+t=30s: Downstream agent receives correlated data
+```
+
+**Dependency Structure:**
+- `variant_1` depends on parent agent
+- `variant_2` depends on parent agent
+- `variant_3` depends on parent agent
+- All execute in parallel when parent completes
+
+#### Sequential Loops
+
+In sequential mode, iterations execute in order with each iteration depending on the previous:
+
+```yaml
+actions:
+  - name: refine_data
+    loop:
+      param: stage
+      range: [1, 3]
+      mode: sequential  # Iterations run in order
+
+    prompt: "Refine stage ${stage}: improve output from stage ${stage-1}"
+    observe:
+      - refined_output_${stage}
+```
+
+**Execution Timeline:**
+```
+t=0s:   stage_1 starts
+t=30s:  stage_1 completes, stage_2 starts
+t=60s:  stage_2 completes, stage_3 starts
+t=90s:  stage_3 completes
+t=90s:  Correlator merges outputs
+t=90s:  Downstream agent receives correlated data
+```
+
+**Dependency Structure:**
+- `refine_data_1` depends on parent agent
+- `refine_data_2` depends on `refine_data_1`
+- `refine_data_3` depends on `refine_data_2`
+- Iterations execute sequentially
+
+#### Why the Correlator is Mode-Agnostic
+
+The Loop Output Correlator operates **after** all loop iterations complete, regardless of execution mode:
+
+1. **Barrier Point**: The correlator acts as a barrier - it only runs when all loop iterations are complete
+2. **Output Collection**: It scans output directories from all iterations, whether they ran in parallel or sequentially
+3. **Correlation Logic**: Correlation by `source_guid` or `loop_correlation_id` is independent of execution order
+4. **Data Merging**: The merging process is the same - group records by identifier, merge fields from all iterations
+
+**Example with Sequential Loop:**
+
+```yaml
+actions:
+  - name: extract_data
+    prompt: "Extract data from input"
+
+  - name: enhance
+    loop:
+      param: pass
+      range: [1, 3]
+      mode: sequential
+    prompt: "Enhancement pass ${pass}"
+    observe:
+      - enhanced_data_${pass}
+
+  - name: aggregate
+    loop_consumption:
+      source: enhance
+      pattern: merge
+    prompt: "Aggregate all enhancements"
+
+plan:
+  - extract_data
+  - enhance <- extract_data
+  - aggregate <- enhance
+```
+
+**Execution Flow:**
+1. `extract_data` runs
+2. `enhance_1` runs (depends on `extract_data`)
+3. `enhance_2` runs (depends on `enhance_1`)
+4. `enhance_3` runs (depends on `enhance_2`)
+5. **Correlator detects**: `aggregate` depends on loop base name `enhance`
+6. **Correlator collects**: Outputs from `enhance_1`, `enhance_2`, `enhance_3`
+7. **Correlator merges**: Records with same `source_guid` are combined
+8. **Correlator writes**: Correlated data to `aggregate` input directory
+9. `aggregate` runs with merged data
+
+**Output Structure:**
+
+Each iteration produces records:
+```json
+// enhance_1 output
+{"source_guid": "record_A", "enhanced_data_1": "...", ...}
+
+// enhance_2 output
+{"source_guid": "record_A", "enhanced_data_2": "...", ...}
+
+// enhance_3 output
+{"source_guid": "record_A", "enhanced_data_3": "...", ...}
+```
+
+Correlator merges into:
+```json
+{
+  "source_guid": "record_A",
+  "enhanced_data_1": "...",
+  "enhanced_data_2": "...",
+  "enhanced_data_3": "...",
+  ...
+}
+```
+
+#### Performance Characteristics
+
+**Parallel Loop Correlation:**
+- **Iteration Time**: All iterations run concurrently (~30s for 3 iterations)
+- **Correlation Time**: Same (scans 3 output directories)
+- **Total Time**: ~30s + correlation overhead
+
+**Sequential Loop Correlation:**
+- **Iteration Time**: Iterations run in order (~90s for 3 iterations × 30s each)
+- **Correlation Time**: Same (scans 3 output directories)
+- **Total Time**: ~90s + correlation overhead
+
+**Key Insight**: The correlation process is identical; only the iteration execution differs.
+
+#### Batch Mode Compatibility
+
+The correlator also works identically in batch mode for both loop types:
+
+**Parallel Batch Loop:**
+```yaml
+actions:
+  - name: process_items
+    loop: {param: i, range: [1, 3], mode: parallel}
+    run_mode: batch
+```
+- All 3 batch jobs submitted together
+- All complete asynchronously
+- Correlator merges results when all complete
+
+**Sequential Batch Loop:**
+```yaml
+actions:
+  - name: refine_items
+    loop: {param: stage, range: [1, 3], mode: sequential}
+    run_mode: batch
+```
+- Batch job 1 submitted → completes
+- Batch job 2 submitted → completes
+- Batch job 3 submitted → completes
+- Correlator merges results when all complete
+
+In both cases, the correlation logic is identical - the correlator simply waits for all iterations to complete before merging outputs.
+
 ## Implementation
 
 ### Key Components
