@@ -87,8 +87,32 @@ class RunCommand:
             )
             
             click.echo("Starting workflow execution...")
-            workflow.run()
-            
+
+            # Determine execution mode
+            use_parallel = False
+            if hasattr(self.args, 'parallel') and self.args.parallel:
+                # Force parallel execution
+                use_parallel = True
+                click.echo('🔀 Using parallel execution (forced via --parallel flag)...')
+            elif hasattr(self.args, 'no_parallel') and self.args.no_parallel:
+                # Force sequential execution
+                use_parallel = False
+                click.echo('Using sequential execution (forced via --no-parallel flag)...')
+            else:
+                # Auto-detect
+                if workflow._should_use_parallel_execution():
+                    use_parallel = True
+                    click.echo('🔀 Using parallel execution (auto-detected)...')
+                else:
+                    click.echo('Using sequential execution...')
+
+            # Execute workflow
+            if use_parallel:
+                import asyncio
+                asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
+            else:
+                workflow.run()
+
             click.echo(f"Successfully completed agent run for: {self.args.agent}")
             
         except (ValidationError, FileLoadError, ConfigurationError, AgentExecutionError) as e:
@@ -123,7 +147,10 @@ class RunCommand:
               help="Path to the user's code folder containing UDFs")
 @click.option('--use-tools', is_flag=True, help="Enable tool usage for agents")
 @click.option('--force', is_flag=True, help="Force execution even if validation warnings occur")
-def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = False) -> None:
+@click.option('--parallel', is_flag=True, help="Force parallel execution (overrides auto-detection)")
+@click.option('--no-parallel', is_flag=True, help="Force sequential execution (overrides auto-detection)")
+@click.option('--concurrency-limit', type=int, default=5, help="Maximum number of agents to run concurrently (default: 5, range: 1-50)")
+def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = False, parallel: bool = False, no_parallel: bool = False, concurrency_limit: int = 5) -> None:
     """
     Run agents with a specified agent configuration.
 
@@ -136,7 +163,7 @@ def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = Fal
         agent-actions run -a my_agent -u ./user_code --use-tools
     """
     try:
-        args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force)
+        args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit)
         command = RunCommand(args)
         command.execute()
     except ValidationError as e:

@@ -4,7 +4,7 @@ import os
 import asyncio  # Added for async processing
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 from agent_actions.agents.handlers.config_handler import ConfigManager
 from agent_actions.core.runtime.agent_runner import AgentRunner
 from agent_actions.agents.generators.output_processor import OutputProcessor
@@ -22,79 +22,176 @@ from rich.console import Console
 
 
 class AgentWorkflow:
-    async def async_run(self, concurrency_limit=None):
+    async def async_run(self, concurrency_limit=5):
         """
-        Run agents in parallel using asyncio. Optionally limit concurrency.
+        Execute workflow level-by-level with parallelism within each level.
+
+        Args:
+            concurrency_limit: Maximum concurrent agents within a level (default 5)
         """
-        semaphore = asyncio.Semaphore(concurrency_limit) if concurrency_limit else None
+        # Compute execution levels
+        levels = self._compute_execution_levels()
+        self._log_execution_levels(levels)
+
         total_agents = len(self.execution_order)
-        self.console.print(f"[async] Found {total_agents} agents to run.")
-        results = []
-        exceptions = []
 
-        async def run_single_agent(idx, agent_name):
-            agent_config = self.agent_configs[agent_name]
-            status_details = self.agent_status.get(agent_name, {})
-            current_status = status_details.get('status', 'pending')
+        for level_idx, level_agents in enumerate(levels):
             start_time = datetime.now()
-            self.console.print(f"[async] {start_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} START agent: [bold]{agent_name}[/bold]...")
-            if current_status == 'completed':
-                self.previous_agent_type = agent_name
-                end_time = datetime.now()
-                duration = (end_time - start_time).total_seconds()
-                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
-                return 'completed'
-            previous_outputs = self._get_previous_outputs(idx)
-            if self._should_skip_agent(agent_config, previous_outputs):
-                self.console.print(f"[async] Skipping agent {agent_name} due to WHERE clause condition")
-                self._create_passthrough_output(idx, agent_name)
-                self._update_status(agent_name, 'completed')
-                self.previous_agent_type = agent_name
-                end_time = datetime.now()
-                duration = (end_time - start_time).total_seconds()
-                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s")
-                return 'completed'
-            try:
-                if semaphore:
+
+            # Check for already completed agents in this level
+            pending_agents = [
+                agent for agent in level_agents
+                if self.agent_status.get(agent, {}).get('status') != 'completed'
+            ]
+
+            if not pending_agents:
+                self.console.print(f"[yellow]Level {level_idx}: All agents complete (skipped)[/yellow]")
+                continue
+
+            self.console.print(f"[cyan]Level {level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]")
+
+            # Execute agents in level
+            if len(pending_agents) == 1:
+                # Single agent - run directly
+                agent_name = pending_agents[0]
+                original_idx = self.agent_indices[agent_name]
+                await self._run_single_agent_async(agent_name, original_idx)
+            else:
+                # Multiple agents - run in parallel with concurrency limit
+                self.console.print(f"[blue]  → {len(pending_agents)} agents in parallel[/blue]")
+
+                semaphore = asyncio.Semaphore(concurrency_limit)
+
+                async def run_with_limit(agent):
                     async with semaphore:
-                        output_folder = await asyncio.to_thread(
-                            self.agent_runner.run_agent,
-                            agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
-                        )
-                else:
-                    output_folder = await asyncio.to_thread(
-                        self.agent_runner.run_agent,
-                        agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1
-                    )
-                self._update_status(agent_name, 'completed')
-                self.previous_agent_type = agent_name
-                self.ephemeral_directories.append({'output_folder': output_folder, 'ephemeral': agent_config.get('ephemeral', False)})
-                end_time = datetime.now()
-                duration = (end_time - start_time).total_seconds()
-                self.console.print(f"[async] {end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} [green]OK[/green] [bold]{agent_name}[/bold] in {duration:.2f}s")
-                return 'completed'
-            except Exception as e:
-                self.console.print(f"[async] [red]Agent '{agent_name}' failed with error: {e}[/red]")
-                self._update_status(agent_name, 'failed')
-                exceptions.append((agent_name, e))
-                return 'failed'
+                        original_idx = self.agent_indices[agent]
+                        return await self._run_single_agent_async(agent, original_idx)
 
-        tasks = [run_single_agent(idx, agent_name) for idx, agent_name in enumerate(self.execution_order)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+                tasks = [run_with_limit(agent) for agent in pending_agents]
+                # Use return_exceptions=True to capture all errors, not just first
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        self.console.print("\n[bold][async] Workflow Summary:[/bold]")
-        for idx, agent_name in enumerate(self.execution_order):
+                # Check for any exceptions and aggregate them
+                errors = []
+                for agent, result in zip(pending_agents, results):
+                    if isinstance(result, Exception):
+                        errors.append((agent, result))
+
+                if errors:
+                    # Multiple agents failed - show all errors
+                    from agent_actions.core.exceptions import WorkflowError
+                    error_details = '\n'.join([
+                        f"  - {agent}: {str(exc)}" for agent, exc in errors
+                    ])
+                    error_msg = f"Multiple agents failed in parallel level {level_idx}:\n{error_details}"
+                    raise WorkflowError('parallel_execution_failures', error_msg)
+
+            # Check for batch submissions in this level
+            batch_pending = [
+                agent for agent in level_agents
+                if self.agent_status.get(agent, {}).get('status') == 'batch_submitted'
+            ]
+
+            if batch_pending:
+                # Before early exit, check if any agents in this level failed
+                failed_agents = [
+                    agent for agent in level_agents
+                    if self.agent_status.get(agent, {}).get('status') == 'failed'
+                ]
+
+                if failed_agents:
+                    # Some batch agents succeeded but others failed - raise error
+                    from agent_actions.core.exceptions import WorkflowError
+                    error_msg = f"Partial failure in parallel level {level_idx}: {', '.join(failed_agents)} failed while batch jobs were submitted"
+                    raise WorkflowError('batch_submission_partial_failure', error_msg)
+
+                # All agents succeeded and batch jobs submitted - safe to exit
+                duration = (datetime.now() - start_time).total_seconds()
+                self.console.print(f"[yellow]Level {level_idx}: {len(batch_pending)} batch job(s) submitted ({duration:.2f}s)[/yellow]")
+                self.console.print(f"[yellow]Run workflow again to check batch status[/yellow]")
+                return  # Exit early - resume on next run
+
+            # Level complete
+            duration = (datetime.now() - start_time).total_seconds()
+            self.console.print(f"[green]Level {level_idx} complete ({duration:.2f}s)[/green]")
+
+        # All levels complete
+        self.console.print("\n[bold]Workflow Summary:[/bold]")
+        for agent_name in self.execution_order:
             status = self.agent_status[agent_name]['status']
             color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
             self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
-        self.output_processor.process_final_output(self.ephemeral_directories)
-        self.console.print("\n🎉 [bold green][async] Workflow Complete[/bold green]")
-        self.console.print("Done.")
-        if exceptions:
-            from agent_actions.core.exceptions import WorkflowError
-            raise WorkflowError("parallel_execution", f"Some agents failed: {exceptions}")
 
-    # (rest of class unchanged)
+        self.output_processor.process_final_output(self.ephemeral_directories)
+        self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
+        self.console.print("Done.")
+
+    async def _run_single_agent_async(self, agent_name: str, agent_idx: int):
+        """
+        Run a single agent asynchronously.
+
+        Args:
+            agent_name: Name of the agent to run
+            agent_idx: Original index in execution_order (for directory naming)
+        """
+        agent_config = self.agent_configs[agent_name]
+        status_details = self.agent_status.get(agent_name, {})
+        current_status = status_details.get('status', 'pending')
+        start_time = datetime.now()
+
+        # Check if agent is already completed
+        if current_status == 'completed':
+            # Note: previous_agent_type is not updated in parallel execution
+            # to avoid race conditions. It remains the last sequential agent.
+            return
+
+        # Check WHERE clause
+        previous_outputs = self._get_previous_outputs(agent_idx)
+        if self._should_skip_agent(agent_config, previous_outputs):
+            self.console.print(f"  [yellow]Skipping {agent_name} (WHERE clause)[/yellow]")
+            self._create_passthrough_output(agent_idx, agent_name)
+            self._update_status(agent_name, 'completed')
+            # Note: previous_agent_type not updated to avoid race condition
+            return
+
+        # Run the agent
+        try:
+            output_folder = await asyncio.to_thread(
+                self.agent_runner.run_agent,
+                agent_config,
+                self.agent_name,
+                self.previous_agent_type,
+                agent_idx,
+                agent_idx == len(self.execution_order) - 1
+            )
+
+            # Check if batch mode
+            if agent_config.get('run_mode') == 'batch':
+                # Check for batch registry
+                agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
+                node_output_dir = agent_io_path / "target" / f"node_{agent_idx}_{agent_name}"
+                registry_file = node_output_dir / "batch" / ".batch_registry.json"
+
+                if registry_file.exists():
+                    self._update_status(agent_name, 'batch_submitted')
+                    self.console.print(f"  [yellow]→ {agent_name}: batch submitted[/yellow]")
+                    return
+
+            # Online mode or batch passthrough
+            self._update_status(agent_name, 'completed')
+            # Note: previous_agent_type not updated to avoid race condition in parallel execution
+            self.ephemeral_directories.append({
+                'output_folder': output_folder,
+                'ephemeral': agent_config.get('ephemeral', False)
+            })
+
+            duration = (datetime.now() - start_time).total_seconds()
+            self.console.print(f"  [green]✓ {agent_name} ({duration:.2f}s)[/green]")
+
+        except Exception as e:
+            self.console.print(f"  [red]✗ {agent_name} failed: {e}[/red]")
+            self._update_status(agent_name, 'failed')
+            raise
 
     def __init__(self, constructor_path, user_code_path, default_path, use_tools,
                  parent_output=None, parent_source=None, parent_pipeline=None):
@@ -106,6 +203,9 @@ class AgentWorkflow:
         self.parent_source = parent_source
         self.parent_pipeline = parent_pipeline
 
+        # Note: previous_agent_type tracks the last completed agent in sequential execution.
+        # In parallel execution (async_run), it is NOT updated to avoid race conditions.
+        # For parallel agents, this value represents the last sequential agent (or None).
         self.previous_agent_type = None
         self.ephemeral_directories = []
         self.failed = False
@@ -130,6 +230,10 @@ class AgentWorkflow:
             constructor_path=self.constructor_path,
             default_path=getattr(self.config_manager, 'default_path', None)
         )
+        # Pass execution_order and agent_indices to agent_runner for proper dependency resolution
+        self.agent_runner.execution_order = self.execution_order
+        self.agent_runner.agent_indices = self.agent_indices
+
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()
         self.where_parser = WhereClauseParser()
@@ -171,6 +275,8 @@ class AgentWorkflow:
         self.config_manager.determine_execution_order(user_agents)
         self.agent_name = self.config_manager.agent_name
         self.execution_order = self.config_manager.execution_order
+        # Pre-compute agent indices for O(1) lookup instead of O(n) execution_order.index()
+        self.agent_indices = {agent: i for i, agent in enumerate(self.execution_order)}
         self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
         self.child_pipeline = self.config_manager.child_pipeline
 
@@ -195,8 +301,90 @@ class AgentWorkflow:
             
         except Exception as e:
             self.console.print(f"[yellow]Warning: Could not initialize manifest: {e}[/yellow]")
-    
-    
+
+    def _compute_execution_levels(self) -> List[List[str]]:
+        """
+        Compute execution levels from dependency graph.
+        Agents in same level can run in parallel.
+
+        Returns:
+            List of execution levels, where each level is a list of agent names
+        """
+        from agent_actions.core.exceptions import WorkflowError
+
+        # Build dependency map
+        deps_map = {
+            agent: self.agent_configs[agent].get('dependencies', [])
+            for agent in self.execution_order
+        }
+
+        levels = []
+        assigned = set()
+
+        # Iteratively assign agents to levels
+        while len(assigned) < len(self.execution_order):
+            # Find agents whose dependencies are all satisfied
+            current_level = [
+                agent for agent in self.execution_order
+                if agent not in assigned
+                and all(dep in assigned for dep in deps_map[agent])
+            ]
+
+            if not current_level:
+                # No progress made - circular dependency detected
+                # Build detailed error showing which agents are waiting for which dependencies
+                remaining_agents = set(self.execution_order) - assigned
+                unsatisfied_deps = {
+                    agent: [dep for dep in deps_map[agent] if dep not in assigned]
+                    for agent in remaining_agents
+                }
+
+                # Create detailed error message
+                error_details = '\n'.join([
+                    f"  - {agent} waiting for: {', '.join(deps)}"
+                    for agent, deps in unsatisfied_deps.items()
+                ])
+
+                raise WorkflowError(
+                    'circular_dependency',
+                    f'Circular dependency detected - cannot compute execution levels.\n\nAgents blocked:\n{error_details}',
+                    context={
+                        'assigned': list(assigned),
+                        'remaining': list(remaining_agents),
+                        'unsatisfied_dependencies': unsatisfied_deps
+                    }
+                )
+
+            levels.append(current_level)
+            assigned.update(current_level)
+
+        return levels
+
+    def _should_use_parallel_execution(self) -> bool:
+        """
+        Determine if workflow should use parallel execution.
+
+        Returns True if any execution level has more than 1 agent.
+        """
+        levels = self._compute_execution_levels()
+        return any(len(level) > 1 for level in levels)
+
+    def _log_execution_levels(self, levels: List[List[str]]) -> None:
+        """Log execution levels for user transparency."""
+        self.console.print(f"[blue]📊 Execution: {len(levels)} level(s)[/blue]")
+
+        for i, level in enumerate(levels):
+            if len(level) > 1:
+                # Sort agents by original execution order for consistent logging
+                sorted_agents = sorted(level, key=lambda a: self.agent_indices[a])
+                self.console.print(
+                    f"[blue]  Level {i}: {len(level)} agents in parallel - {', '.join(sorted_agents)}[/blue]"
+                )
+            else:
+                self.console.print(
+                    f"[dim]  Level {i}: {level[0]} (sequential)[/dim]"
+                )
+
     def _load_status(self):
         if self.status_file.exists():
             with open(self.status_file, 'r') as f:

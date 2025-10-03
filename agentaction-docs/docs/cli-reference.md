@@ -100,6 +100,27 @@ agent-actions run <workflow-file> [options]
 **Options:**
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
+- `--parallel` - Force parallel execution (overrides auto-detection)
+- `--no-parallel` - Force sequential execution (overrides auto-detection)
+- `--concurrency-limit` - Maximum concurrent agents in parallel execution (default: 5, range: 1-50)
+
+**Parallel Execution:**
+
+Agent Actions automatically detects when agents can run in parallel based on their dependencies. Agents at the same dependency level execute concurrently, improving workflow performance.
+
+```bash
+# Auto-detect parallel execution (default)
+agent-actions run my-workflow.yaml
+
+# Force parallel execution
+agent-actions run my-workflow.yaml --parallel
+
+# Force sequential execution
+agent-actions run my-workflow.yaml --no-parallel
+
+# Limit concurrent agents to 10
+agent-actions run my-workflow.yaml --parallel --concurrency-limit 10
+```
 
 **Examples:**
 
@@ -112,6 +133,9 @@ agent-actions run my-workflow.yaml --verbose
 
 # Run with debug mode for troubleshooting
 agent-actions run my-workflow.yaml --debug
+
+# Run with parallel execution and custom concurrency limit
+agent-actions run my-workflow.yaml --parallel --concurrency-limit 10
 ```
 
 ### `batch`
