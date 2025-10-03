@@ -18,6 +18,15 @@
       "title": "Granularity",
       "type": "string"
     },
+    "LoopMode": {
+      "description": "Loop execution modes",
+      "enum": [
+        "parallel",
+        "sequential"
+      ],
+      "title": "LoopMode",
+      "type": "string"
+    },
     "LoopConfig": {
       "description": "Configuration for loop-based actions.",
       "properties": {
@@ -33,6 +42,11 @@
           },
           "title": "Range",
           "type": "array"
+        },
+        "mode": {
+          "$ref": "#/$defs/LoopMode",
+          "default": "parallel",
+          "description": "Execution mode for loop iterations"
         }
       },
       "required": [

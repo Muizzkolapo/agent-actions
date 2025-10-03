@@ -541,6 +541,236 @@ agents:
 
 ## Advanced Patterns
 
+### Sequential Loop Execution
+
+Sequential loops enable iterative refinement workflows where each iteration builds on the output of the previous iteration. This pattern is essential for multi-pass processing, progressive enhancement, and iterative improvement.
+
+#### Parallel vs Sequential Modes
+
+Loops in Agent Actions support two execution modes:
+
+**Parallel Mode (Default)**
+- All loop iterations run independently
+- Iterations execute concurrently
+- Best for independent processing tasks
+- Faster execution with parallelization
+
+**Sequential Mode**
+- Iterations run in order: iteration 2 waits for iteration 1
+- Each iteration can access previous iteration's output
+- Best for refinement and enhancement workflows
+- Slower but enables iteration-dependent logic
+
+#### Configuration
+
+```yaml
+actions:
+  # Parallel processing (default)
+  - name: process_batch
+    loop:
+      param: i
+      range: [1, 5]
+      mode: parallel  # Optional - this is the default
+    prompt: "Process batch ${i}"
+
+  # Sequential refinement
+  - name: refine_data
+    loop:
+      param: stage
+      range: [1, 3]
+      mode: sequential  # Iterations run in order
+    prompt: "Refine stage ${stage}: improve output from stage ${stage-1}"
+    observe:
+      - refined_output_${stage}
+```
+
+#### Template Variables
+
+Sequential loops support special template variables for referencing iterations:
+
+- **`${param}`**: Current iteration value
+- **`${param-1}`**: Previous iteration value (empty string on first iteration)
+
+These variables work in all configuration fields: `prompt`, `observe`, `drops`, `schema`, etc.
+
+```yaml
+actions:
+  - name: enhance_content
+    loop:
+      param: pass
+      range: [1, 4]
+      mode: sequential
+
+    # Template variables in prompt
+    prompt: |
+      Pass ${pass}: Enhance the content.
+      {% if pass > 1 %}
+      Build on previous pass output: {enhanced_content_${pass-1}}
+      {% endif %}
+
+    # Template variables in observe
+    observe:
+      - enhanced_content_${pass}
+      - previous_pass_${pass-1}
+
+    # Template variables in schema
+    schema:
+      pass_number: integer
+      current_version: enhanced_content_${pass}
+      previous_version: enhanced_content_${pass-1}
+```
+
+#### Dependency Chains
+
+Sequential loops automatically create dependency chains:
+
+```yaml
+# Configuration with sequential loop
+actions:
+  - name: extract_data
+    prompt: "Extract data from input"
+
+  - name: refine
+    loop:
+      param: stage
+      range: [1, 3]
+      mode: sequential
+    prompt: "Refine stage ${stage}"
+
+plan:
+  - extract_data
+  - refine <- extract_data
+```
+
+**Creates execution structure:**
+```
+extract_data → refine_1 → refine_2 → refine_3
+```
+
+Each iteration depends only on the previous:
+- `refine_1` depends on `extract_data`
+- `refine_2` depends on `refine_1`
+- `refine_3` depends on `refine_2`
+
+#### Use Cases
+
+**Iterative Data Refinement**
+```yaml
+actions:
+  - name: initial_extraction
+    prompt: "Extract structured data from text"
+
+  - name: quality_pass
+    loop:
+      param: pass
+      range: [1, 4]
+      mode: sequential
+    prompt: |
+      Pass ${pass}: Review and improve data from pass ${pass-1}
+      Focus areas:
+      - Pass 1: Validate completeness
+      - Pass 2: Correct errors
+      - Pass 3: Enrich data
+      - Pass 4: Final quality check
+    observe:
+      - quality_output_${pass}
+```
+
+**Progressive Content Enhancement**
+```yaml
+actions:
+  - name: content_builder
+    loop:
+      param: stage
+      range: [1, 5]
+      mode: sequential
+    prompt: |
+      Stage ${stage}: Build on content from stage ${stage-1}
+      - Stage 1: Generate outline
+      - Stage 2: Add detailed explanations
+      - Stage 3: Add examples
+      - Stage 4: Polish language
+      - Stage 5: Final review
+    observe:
+      - content_${stage}
+```
+
+**Multi-Level Classification**
+```yaml
+actions:
+  - name: classify
+    loop:
+      param: level
+      range: [1, 3]
+      mode: sequential
+    prompt: |
+      Level ${level}: Classify based on level ${level-1} category
+      - Level 1: High-level category
+      - Level 2: Subcategory
+      - Level 3: Specific topic
+    observe:
+      - category_${level}
+```
+
+#### Performance Considerations
+
+**Sequential Mode:**
+- **Execution Time**: Sum of all iteration times (linear)
+- **Parallelization**: None - iterations run one at a time
+- **When to Use**: When iteration N+1 **must** depend on iteration N output
+
+**Parallel Mode:**
+- **Execution Time**: Max of iteration times (constant with concurrency)
+- **Parallelization**: Full - all iterations run concurrently
+- **When to Use**: When iterations are independent of each other
+
+**Hybrid Approach:**
+Mix both modes in the same workflow:
+```yaml
+actions:
+  # Parallel extraction (fast)
+  - name: extract_features
+    loop:
+      param: feature
+      range: [1, 10]
+      mode: parallel
+
+  # Sequential refinement (quality)
+  - name: refine_features
+    loop:
+      param: stage
+      range: [1, 3]
+      mode: sequential
+
+  # Parallel export (fast)
+  - name: export_results
+    loop:
+      param: format
+      range: [1, 5]
+      mode: parallel
+```
+
+#### Error Handling
+
+If an iteration fails in sequential mode, subsequent iterations are automatically skipped:
+
+```yaml
+# If refine_2 fails:
+# - refine_1: completed ✓
+# - refine_2: failed ✗
+# - refine_3: skipped (dependency failed)
+# - refine_4: skipped (dependency failed)
+```
+
+The dependency chain ensures that failed iterations block dependent iterations, preventing incorrect results from propagating.
+
+#### Backward Compatibility
+
+Sequential loops are fully backward compatible:
+- Existing loops without `mode` default to `parallel`
+- No changes required to existing workflows
+- Explicit `mode: parallel` has same behavior as omitting the field
+
 ### Conditional Processing
 
 Implement branching logic through agent design:

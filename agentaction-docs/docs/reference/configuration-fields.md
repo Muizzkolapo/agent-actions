@@ -392,17 +392,105 @@ This page documents every configuration field available in Agent Actions, organi
 - **Type**: `object` (`LoopConfig`)
 - **Required**: No
 - **Default**: None
-- **Description**: Loop configuration for parametric execution
-- **Example**:
-  ```yaml
-  loop:
-    param: iteration
-    range: [1, 10]
-  ```
-- **Notes**:
-  - Creates multiple action instances with different parameters
-  - `param`: Variable name for loop counter
-  - `range`: `[start, end]` (inclusive)
+- **Description**: Loop configuration for parametric execution with support for parallel and sequential execution modes
+
+#### Loop Configuration Fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `param` | `string` | Yes | - | Variable name for loop parameter |
+| `range` | `array` | Yes | - | Range of values: `[start, end]` (inclusive) or explicit list `[10, 20, 30]` |
+| `mode` | `string` | No | `"parallel"` | Execution mode: `"parallel"` or `"sequential"` |
+
+#### Execution Modes
+
+**`parallel` (default)**
+- All loop iterations run independently
+- Iterations execute concurrently
+- Each iteration depends on the same parent agents
+- Best for independent processing tasks
+
+**`sequential`**
+- Iterations run in order: iteration N+1 waits for iteration N
+- Creates dependency chain: iteration 2 ← iteration 1
+- Each iteration can access previous iteration's output
+- Best for iterative refinement workflows
+
+#### Template Variables
+
+Loop parameters support template variable syntax in all configuration fields:
+
+- **`${param}`**: Replaced with current iteration value
+- **`${param-1}`**: Replaced with previous iteration value (empty string on first iteration)
+
+Template variables work in: `prompt`, `observe`, `drops`, `reads`, `writes`, `schema`, and all other config fields.
+
+#### Examples
+
+**Basic Parallel Loop (Default)**
+```yaml
+loop:
+  param: i
+  range: [1, 5]
+  # mode: parallel is implicit
+```
+
+Creates 5 independent iterations: `action_1`, `action_2`, `action_3`, `action_4`, `action_5`
+
+**Sequential Refinement Loop**
+```yaml
+loop:
+  param: stage
+  range: [1, 3]
+  mode: sequential
+
+prompt: "Refine stage ${stage}: improve output from stage ${stage-1}"
+observe:
+  - refined_output_${stage}
+```
+
+Creates 3 sequential iterations:
+- `action_1`: depends on parent, `${stage-1}` → empty string
+- `action_2`: depends on `action_1`, `${stage-1}` → `"1"`
+- `action_3`: depends on `action_2`, `${stage-1}` → `"2"`
+
+**Explicit Range Values**
+```yaml
+loop:
+  param: level
+  range: [10, 20, 30]  # Explicit list instead of [start, end]
+  mode: sequential
+
+prompt: "Process level ${level} (previous: ${level-1})"
+```
+
+Creates iterations with values 10, 20, 30:
+- `${level}` in iteration 1 → `"10"`, `${level-1}` → empty string
+- `${level}` in iteration 2 → `"20"`, `${level-1}` → `"10"`
+- `${level}` in iteration 3 → `"30"`, `${level-1}` → `"20"`
+
+**Template Variables in Schema**
+```yaml
+loop:
+  param: pass
+  range: [1, 4]
+  mode: sequential
+
+schema:
+  pass_number: integer
+  current_data: refined_${pass}
+  previous_data: refined_${pass-1}
+
+observe:
+  - refined_${pass}
+```
+
+#### Notes
+- **Backward Compatibility**: Loops without `mode` default to `parallel` (existing behavior)
+- **Template Expansion**: `${param}` and `${param-1}` are replaced during loop expansion
+- **Dependency Chaining**: Sequential mode automatically creates `iteration_N+1 <- iteration_N` dependencies
+- **Error Propagation**: In sequential mode, if iteration N fails, iterations N+1 onwards are skipped
+- **Performance**: Sequential loops have linear execution time (sum of all iterations), parallel loops can run concurrently
 
 ### `loop_consumption`
 - **Type**: `object` (`LoopConsumptionConfig`)
