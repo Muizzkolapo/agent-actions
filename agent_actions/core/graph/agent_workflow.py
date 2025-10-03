@@ -145,6 +145,38 @@ class AgentWorkflow:
             # to avoid race conditions. It remains the last sequential agent.
             return
 
+        # Check if agent has batch already submitted (from previous run)
+        if current_status == 'batch_submitted':
+            self._update_status(agent_name, 'checking_batch')
+
+            # Check batch status instead of re-running agent
+            output_folder, batch_status = await asyncio.to_thread(
+                self._handle_batch_agent,
+                agent_name,
+                agent_idx
+            )
+
+            if batch_status == 'completed':
+                self._update_status(agent_name, 'completed')
+                self.ephemeral_directories.append({
+                    'output_folder': output_folder,
+                    'ephemeral': agent_config.get('ephemeral', False)
+                })
+                duration = (datetime.now() - start_time).total_seconds()
+                self.console.print(f"  [green]✓ {agent_name} (batch completed, {duration:.2f}s)[/green]")
+                return
+            elif batch_status == 'in_progress':
+                self._update_status(agent_name, 'batch_submitted')
+                duration = (datetime.now() - start_time).total_seconds()
+                self.console.print(f"  [yellow]→ {agent_name}: batch still in progress ({duration:.2f}s)[/yellow]")
+                return
+            else:
+                # Batch failed
+                self._update_status(agent_name, 'failed')
+                duration = (datetime.now() - start_time).total_seconds()
+                self.console.print(f"  [red]✗ {agent_name}: batch failed ({duration:.2f}s)[/red]")
+                raise Exception(f"Batch job for {agent_name} failed")
+
         # Check WHERE clause
         previous_outputs = self._get_previous_outputs(agent_idx)
         if self._should_skip_agent(agent_config, previous_outputs):
