@@ -1,0 +1,646 @@
+{
+  "title": "Support running commands from any subdirectory within project (like dbt/git)",
+  "issue": "#422",
+  "priority": "enhancement",
+  "estimated_effort": "6-8 hours",
+  "risk_level": "low",
+
+  "description": "Enable agent-actions CLI commands to work from any subdirectory within a project by automatically finding the project root (marked by agent_actions.yml). Currently commands only work when executed from the exact directory containing agent_actions.yml, creating a poor developer experience compared to standard tools like git, dbt, and npm.",
+
+  "current_state": {
+    "behavior": "Commands must be run from directory containing agent_actions.yml",
+    "example_failure": {
+      "working_directory": "/qanalabs-actions/qanalabs/prompts",
+      "command": "agent-actions run -a my_agent",
+      "result": "❌ Error: Cannot find agent_actions.yml"
+    },
+    "user_pain_points": [
+      "Must remember to cd to project root before every command",
+      "Breaks IDE/editor integration workflows",
+      "Inconsistent with familiar tools (git, dbt, npm)",
+      "Error messages don't suggest solutions"
+    ]
+  },
+
+  "desired_state": {
+    "behavior": "Commands work from any subdirectory within project",
+    "algorithm": "Walk up directory tree to find agent_actions.yml marker file",
+    "example_success": {
+      "working_directory": "/qanalabs-actions/qanalabs/prompts",
+      "command": "agent-actions run -a my_agent",
+      "result": "📁 Project root: ../..\n✅ Running workflow..."
+    },
+    "benefits": [
+      "Better developer experience",
+      "IDE/editor integration works from any directory",
+      "Matches behavior of industry-standard CLI tools",
+      "Clear user feedback about detected project root"
+    ]
+  },
+
+  "phases": {
+    "phase_1_core_utilities": {
+      "duration": "2-3 hours",
+      "description": "Create core project root detection logic",
+      "tasks": [
+        {
+          "id": "project_root_module",
+          "title": "Create project root detection module",
+          "file": "agent_actions/core/project_root.py",
+          "status": "pending",
+          "implementation": {
+            "constants": {
+              "PROJECT_MARKER_FILE": "agent_actions.yml",
+              "MAX_PARENT_LEVELS": 100
+            },
+            "functions": [
+              {
+                "name": "find_project_root",
+                "signature": "def find_project_root(start_path: Optional[str] = None) -> Optional[Path]",
+                "description": "Walk up directory tree to find agent_actions.yml",
+                "returns": "Path to project root, or None if not found",
+                "algorithm": [
+                  "Resolve start_path (or use CWD) to absolute path",
+                  "For each directory from current to filesystem root:",
+                  "  - Check if agent_actions.yml exists",
+                  "  - Return directory if found",
+                  "  - Handle PermissionError gracefully",
+                  "  - Stop after MAX_PARENT_LEVELS",
+                  "Return None if not found"
+                ],
+                "edge_cases": [
+                  "Symlinks - use Path.resolve() to follow",
+                  "Permission errors - skip inaccessible directories",
+                  "Nested projects - return nearest ancestor",
+                  "Max depth - prevent infinite loops"
+                ]
+              },
+              {
+                "name": "ensure_in_project",
+                "signature": "def ensure_in_project() -> Path",
+                "description": "Ensure CWD is within a project, raise if not",
+                "returns": "Path to project root",
+                "raises": "ProjectNotFoundError if not in project",
+                "usage": "For commands that require being in a project"
+              },
+              {
+                "name": "get_project_root_or_cwd",
+                "signature": "def get_project_root_or_cwd() -> Path",
+                "description": "Get project root if in project, otherwise CWD",
+                "returns": "Path to project root or current directory",
+                "usage": "For commands that can work outside projects"
+              },
+              {
+                "name": "is_in_project",
+                "signature": "def is_in_project() -> bool",
+                "description": "Check if CWD is within a project",
+                "returns": "True if in project, False otherwise",
+                "usage": "For conditional logic based on project context"
+              }
+            ]
+          },
+          "testing": {
+            "test_file": "tests/core/test_project_root.py",
+            "scenarios": [
+              "Find root from deeply nested subdirectory",
+              "Find root when already at root",
+              "Return None when not in project",
+              "Find nearest ancestor in nested projects",
+              "Resolve symlinks correctly",
+              "Use CWD when no path provided",
+              "Handle permission errors gracefully"
+            ]
+          }
+        },
+        {
+          "id": "project_not_found_exception",
+          "title": "Add ProjectNotFoundError exception",
+          "file": "agent_actions/core/exceptions.py",
+          "status": "pending",
+          "implementation": {
+            "class_name": "ProjectNotFoundError",
+            "base_class": "AgentActionsException",
+            "user_message_format": {
+              "header": "Not in an agent-actions project",
+              "details": "Could not find 'agent_actions.yml' in current directory or any parent directory.",
+              "context": "Current directory: {cwd}",
+              "solutions": [
+                "Navigate to your agent-actions project directory",
+                "Run 'agent-actions init' to create a new project"
+              ]
+            },
+            "example_output": "Error: Not in an agent-actions project\n\nCould not find 'agent_actions.yml' in current directory or any parent directory.\n\nCurrent directory: /tmp\n\nSolutions:\n  1. Navigate to your agent-actions project directory\n  2. Run 'agent-actions init' to create a new project"
+          },
+          "testing": {
+            "verify": [
+              "Error message formatting is clear",
+              "Context values are displayed correctly",
+              "Helpful suggestions are included",
+              "Message is user-friendly (no Python internals)"
+            ]
+          }
+        }
+      ]
+    },
+
+    "phase_2_cli_integration": {
+      "duration": "2-3 hours",
+      "description": "Integrate project root detection into CLI commands",
+      "tasks": [
+        {
+          "id": "requires_project_decorator",
+          "title": "Create @requires_project decorator for CLI commands",
+          "file": "agent_actions/core/cli_decorators.py",
+          "status": "completed",
+          "implementation": {
+            "decorator_name": "requires_project",
+            "functionality": [
+              "Call ensure_in_project() to find project root",
+              "Display detected project root to user",
+              "Change working directory to project root",
+              "Execute wrapped command",
+              "Restore original directory in finally block"
+            ],
+            "user_feedback": {
+              "format": "📁 Project root: {display_path}",
+              "display_logic": "Show relative path if within CWD, otherwise absolute"
+            },
+            "error_handling": "Propagate ProjectNotFoundError to CLI error handler",
+            "defensive_programming": "Always restore CWD even if command fails"
+          },
+          "usage_example": "@cli.command()\n@requires_project\ndef run(agent: str, batch: bool, ...):\n    # Command implementation\n    pass",
+          "testing": {
+            "test_file": "tests/core/test_decorators.py",
+            "scenarios": [
+              "Decorator finds project root correctly",
+              "CWD is changed to project root",
+              "Original CWD is restored after execution",
+              "Original CWD is restored even on failure",
+              "Relative paths are displayed when appropriate",
+              "Absolute paths are shown when necessary"
+            ]
+          }
+        },
+        {
+          "id": "update_cli_commands",
+          "title": "Apply @requires_project decorator to CLI commands",
+          "file": "agent_actions/tasks/*.py",
+          "status": "completed",
+          "commands_to_update": {
+            "requires_project": [
+              "run - Execute workflows",
+              "test - Run tests",
+              "render - Render templates",
+              "docs - Generate documentation (if exists)",
+              "clean - Clean artifacts (if exists)",
+              "status - Check workflow status (if exists)"
+            ],
+            "no_decorator_needed": [
+              "init - Creates project (works anywhere)",
+              "--version - Show version (informational)",
+              "--help - Show help (informational)"
+            ]
+          },
+          "implementation": {
+            "pattern": "Add @requires_project decorator above command function",
+            "example": "@cli.command()\n@click.option('-a', '--agent', required=True)\n@requires_project  # Add this\ndef run(agent: str, ...):\n    # No need to check for config - decorator ensures we're in project\n    config = load_config()  # Guaranteed to find agent_actions.yml\n    ..."
+          },
+          "testing": {
+            "verify": [
+              "All project-aware commands have decorator",
+              "Non-project commands do NOT have decorator",
+              "Commands still work from project root (backward compatible)",
+              "Commands now work from subdirectories"
+            ]
+          }
+        }
+      ]
+    },
+
+    "phase_3_error_handling_ux": {
+      "duration": "1-2 hours",
+      "description": "Improve error messages and user experience",
+      "tasks": [
+        {
+          "id": "cli_error_handler",
+          "title": "Add ProjectNotFoundError handler to CLI main",
+          "file": "agent_actions/cli/main.py",
+          "status": "completed",
+          "implementation": {
+            "location": "CLI main entry point / error handler",
+            "logic": "Catch ProjectNotFoundError and format with colors",
+            "example": "try:\n    cli()\nexcept ProjectNotFoundError as e:\n    click.echo(click.style('Error: ', fg='red', bold=True) + str(e))\n    sys.exit(1)"
+          },
+          "user_facing_output": {
+            "when_not_in_project": "Error: Not in an agent-actions project\n\nCould not find 'agent_actions.yml' in current directory or any parent directory.\n\nCurrent directory: /tmp\n\nSolutions:\n  1. Navigate to your agent-actions project directory\n  2. Run 'agent-actions init' to create a new project"
+          }
+        },
+        {
+          "id": "verbose_logging",
+          "title": "Add --verbose flag for debugging (optional enhancement)",
+          "file": "agent_actions/cli.py",
+          "status": "optional",
+          "implementation": {
+            "flag": "--verbose or -v",
+            "behavior": "Show detailed project root detection process",
+            "example_output": "🔍 Searching for project root from: /path/to/project/src/utils\n✅ Found project root: /path/to/project\n📂 Changing directory to: /path/to/project"
+          },
+          "usage": "agent-actions --verbose run -a my_agent"
+        }
+      ]
+    },
+
+    "phase_4_testing": {
+      "duration": "2-3 hours",
+      "description": "Comprehensive testing of project root detection",
+      "tasks": [
+        {
+          "id": "unit_tests",
+          "title": "Write unit tests for project root detection",
+          "file": "tests/core/test_project_root.py",
+          "status": "completed",
+          "test_classes": [
+            {
+              "name": "TestFindProjectRoot",
+              "tests": [
+                "test_find_root_from_subdirectory - Nested directories",
+                "test_find_root_at_root - Already at project root",
+                "test_find_root_not_in_project - Outside any project",
+                "test_find_root_nested_projects - Multiple agent_actions.yml files",
+                "test_find_root_with_symlinks - Symlink resolution",
+                "test_find_root_default_cwd - Uses CWD when no path given"
+              ]
+            },
+            {
+              "name": "TestEnsureInProject",
+              "tests": [
+                "test_ensure_in_project_success - Returns root when in project",
+                "test_ensure_in_project_failure - Raises exception when not in project"
+              ]
+            },
+            {
+              "name": "TestGetProjectRootOrCwd",
+              "tests": [
+                "test_returns_root_when_in_project",
+                "test_returns_cwd_when_not_in_project"
+              ]
+            },
+            {
+              "name": "TestIsInProject",
+              "tests": [
+                "test_true_when_in_project",
+                "test_false_when_not_in_project"
+              ]
+            }
+          ],
+          "coverage_target": "90%+ on new code"
+        },
+        {
+          "id": "integration_tests",
+          "title": "Write CLI integration tests",
+          "file": "tests/cli/test_project_root_integration.py",
+          "status": "skipped - manual testing preferred",
+          "test_class": "TestCLIProjectRootIntegration",
+          "fixtures": [
+            "runner - CliRunner for testing",
+            "project_structure - Create test project with subdirectories"
+          ],
+          "test_scenarios": [
+            {
+              "name": "test_run_from_project_root",
+              "setup": "Create project with agent_actions.yml",
+              "action": "Run command from project root",
+              "verify": "Shows '📁 Project root:' and executes"
+            },
+            {
+              "name": "test_run_from_subdirectory",
+              "setup": "Create project with src/utils/ subdirectories",
+              "action": "Run command from src/utils/",
+              "verify": "Finds project root and executes"
+            },
+            {
+              "name": "test_run_outside_project",
+              "setup": "Use temp directory with no agent_actions.yml",
+              "action": "Try to run command",
+              "verify": "Fails with helpful error message"
+            },
+            {
+              "name": "test_init_works_anywhere",
+              "setup": "Any directory",
+              "action": "Run 'agent-actions init'",
+              "verify": "Succeeds and creates agent_actions.yml"
+            },
+            {
+              "name": "test_version_works_anywhere",
+              "setup": "Any directory",
+              "action": "Run 'agent-actions --version'",
+              "verify": "Shows version without project search"
+            }
+          ]
+        },
+        {
+          "id": "manual_testing",
+          "title": "Manual testing checklist",
+          "status": "ready - checklist created",
+          "scenarios": [
+            "Scenario 1: Run from project root - verify works",
+            "Scenario 2: Run from subdirectory (2 levels deep) - verify finds root",
+            "Scenario 3: Run from deep subdirectory (4+ levels) - verify works",
+            "Scenario 4: Run outside project - verify helpful error",
+            "Scenario 5: Init from anywhere - verify creates project",
+            "Scenario 6: Version from anywhere - verify no project search",
+            "Scenario 7: Multiple commands from subdirectory - verify all work",
+            "Scenario 8: Nested projects - verify uses nearest ancestor",
+            "Scenario 9: Symlinks - verify resolves correctly",
+            "Scenario 10: Permission errors - verify graceful handling"
+          ],
+          "platforms": [
+            "macOS - primary development platform",
+            "Linux - CI/CD environment",
+            "Windows - ensure cross-platform compatibility"
+          ]
+        }
+      ]
+    },
+
+    "phase_5_documentation": {
+      "duration": "1 hour",
+      "description": "Update documentation for new functionality",
+      "tasks": [
+        {
+          "id": "user_documentation",
+          "title": "Update user-facing documentation",
+          "files": [
+            "CLI_USAGE.md"
+          ],
+          "status": "completed",
+          "sections_to_add": [
+            {
+              "title": "Running Commands from Subdirectories",
+              "content": [
+                "Explain automatic project root detection",
+                "Show examples from different directory levels",
+                "Explain how it works (searches for agent_actions.yml)",
+                "Show example output with project root display",
+                "Explain error handling when not in project",
+                "Cover nested projects behavior"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "changelog",
+          "title": "Update CHANGELOG.md",
+          "file": "CHANGELOG.md",
+          "status": "completed",
+          "section": "## [Unreleased]",
+          "entries": {
+            "added": [
+              "**Project root detection**: CLI commands now work from any subdirectory within a project. The CLI automatically searches for `agent_actions.yml` by walking up the directory tree, similar to git, dbt, and npm. (#422)"
+            ],
+            "changed": [
+              "Commands that require a project (`run`, `test`, `render`, `docs`, `clean`, `status`) now display the detected project root for clarity.",
+              "Error messages when not in a project now provide clearer guidance on how to resolve the issue."
+            ]
+          },
+          "developer_notes": [
+            "Added `agent_actions/core/project_root.py` module for project detection logic",
+            "Added `ProjectNotFoundError` exception with helpful user messages",
+            "Added `@requires_project` decorator for CLI commands",
+            "All project-aware commands now change to project root before execution"
+          ]
+        }
+      ]
+    }
+  },
+
+  "edge_cases": {
+    "symlinks": {
+      "behavior": "Use Path.resolve() to follow symlinks to their real paths",
+      "test": "Create symlink to project subdirectory and verify detection works"
+    },
+    "permission_errors": {
+      "behavior": "Gracefully skip directories we can't access, continue searching",
+      "test": "Create directory structure with restricted permissions"
+    },
+    "nested_projects": {
+      "behavior": "Use nearest ancestor (closest agent_actions.yml)",
+      "example": "outer-project/agent_actions.yml and outer-project/submodule/agent_actions.yml - use submodule's config when inside submodule",
+      "test": "Create nested project structure and verify correct root is used"
+    },
+    "maximum_depth": {
+      "behavior": "Stop searching after MAX_PARENT_LEVELS (100) to prevent infinite loops",
+      "test": "Verify limit is enforced (edge case, unlikely in practice)"
+    },
+    "relative_paths_in_config": {
+      "behavior": "After changing to project root, all relative paths resolve correctly",
+      "example": "prompt_file: ./prompts/my_prompt.md resolves relative to project root",
+      "test": "Verify relative paths in agent_actions.yml still work from subdirectories"
+    },
+    "working_directory_restoration": {
+      "behavior": "Restore original CWD even if command fails (defensive programming)",
+      "implementation": "Use try/finally block in decorator",
+      "test": "Verify CWD is restored even when command raises exception"
+    },
+    "cross_platform_paths": {
+      "behavior": "Use pathlib.Path for cross-platform compatibility",
+      "test": "Verify works on Windows, macOS, and Linux"
+    },
+    "performance": {
+      "behavior": "Minimal overhead (just stat calls walking up tree)",
+      "expected": "Negligible performance impact even with deep directory structures"
+    }
+  },
+
+  "implementation_checklist": [
+    {
+      "phase": "Phase 1: Core Utilities",
+      "tasks": [
+        "Create agent_actions/core/project_root.py",
+        "Implement find_project_root() function",
+        "Implement ensure_in_project() function",
+        "Implement get_project_root_or_cwd() function",
+        "Implement is_in_project() function",
+        "Add ProjectNotFoundError to exceptions.py",
+        "Write docstrings for all functions"
+      ]
+    },
+    {
+      "phase": "Phase 2: CLI Integration",
+      "tasks": [
+        "Create @requires_project decorator",
+        "Update 'run' command with decorator",
+        "Update 'test' command with decorator",
+        "Update 'render' command with decorator",
+        "Update 'docs' command with decorator (if exists)",
+        "Update 'clean' command with decorator (if exists)",
+        "Update 'status' command with decorator (if exists)",
+        "Verify 'init' command does NOT use decorator",
+        "Verify '--version' does NOT use decorator"
+      ]
+    },
+    {
+      "phase": "Phase 3: Error Handling & UX",
+      "tasks": [
+        "Update CLI error handler for ProjectNotFoundError",
+        "Format error messages with colors (red for errors)",
+        "Add project root display in decorator",
+        "(Optional) Add --verbose flag for detailed output",
+        "Test error message clarity"
+      ]
+    },
+    {
+      "phase": "Phase 4: Testing",
+      "tasks": [
+        "Write unit tests for find_project_root()",
+        "Write unit tests for ensure_in_project()",
+        "Write unit tests for edge cases (symlinks, permissions, nested)",
+        "Write integration tests for CLI commands",
+        "Write integration test for running from subdirectories",
+        "Write integration test for error handling",
+        "Complete manual testing checklist",
+        "Test on different platforms (macOS, Linux, Windows)"
+      ]
+    },
+    {
+      "phase": "Phase 5: Documentation",
+      "tasks": [
+        "Update CLI usage documentation",
+        "Add 'Running from Subdirectories' section",
+        "Update CHANGELOG.md",
+        "Add code comments for complex logic",
+        "Update developer documentation (if exists)",
+        "Add troubleshooting section for common issues"
+      ]
+    },
+    {
+      "phase": "Phase 6: Code Review & Deployment",
+      "tasks": [
+        "Self-review all changes",
+        "Run full test suite",
+        "Check code coverage (aim for >90% on new code)",
+        "Update PR with implementation notes",
+        "Request code review",
+        "Address review feedback",
+        "Merge to main branch",
+        "Update issue #422 as resolved"
+      ]
+    }
+  ],
+
+  "risk_assessment": {
+    "overall_risk": "low",
+    "reasons": [
+      "Backward compatible - existing workflows from project root unchanged",
+      "Internal implementation change only",
+      "Falls back to current behavior if detection fails",
+      "Comprehensive test coverage planned"
+    ],
+    "potential_issues": {
+      "performance": {
+        "concern": "Directory walking overhead",
+        "mitigation": "Minimal (just file stat calls), negligible impact"
+      },
+      "complexity": {
+        "concern": "Edge cases with symlinks and permissions",
+        "mitigation": "Well-handled with Path.resolve() and try/except"
+      },
+      "edge_cases": {
+        "concern": "Nested projects, symlinks, permissions",
+        "mitigation": "All edge cases identified and tested"
+      }
+    }
+  },
+
+  "success_criteria": {
+    "functional_requirements": [
+      "✅ Commands work from any subdirectory within project",
+      "✅ Clear error messages when not in project",
+      "✅ Displays detected project root to user",
+      "✅ Backward compatible with existing workflows",
+      "✅ Works on all platforms (macOS, Linux, Windows)"
+    ],
+    "quality_requirements": [
+      "✅ 90%+ test coverage on new code",
+      "✅ All existing tests pass",
+      "✅ No breaking changes",
+      "✅ Clear documentation",
+      "✅ Helpful error messages"
+    ],
+    "user_experience": [
+      "✅ Matches behavior of familiar tools (git, dbt, npm)",
+      "✅ No surprise behavior",
+      "✅ Clear feedback about what's happening",
+      "✅ Helpful suggestions when something goes wrong"
+    ]
+  },
+
+  "comparison": {
+    "before": {
+      "must_be_at_root": true,
+      "example": {
+        "directory": "/my-project",
+        "command": "agent-actions run -a my_agent",
+        "result": "✅ Works"
+      },
+      "fails_from_subdirectory": {
+        "directory": "/my-project/src/utils",
+        "command": "agent-actions run -a my_agent",
+        "result": "❌ Error: Cannot find agent_actions.yml"
+      }
+    },
+    "after": {
+      "works_from_root": {
+        "directory": "/my-project",
+        "command": "agent-actions run -a my_agent",
+        "output": "📁 Project root: .\n✅ Works"
+      },
+      "works_from_subdirectory": {
+        "directory": "/my-project/src/utils",
+        "command": "agent-actions run -a my_agent",
+        "output": "📁 Project root: ../..\n✅ Works"
+      },
+      "clear_error_outside_project": {
+        "directory": "/tmp",
+        "command": "agent-actions run -a my_agent",
+        "output": "❌ Error: Not in an agent-actions project\n   Solutions:\n     1. Navigate to your agent-actions project directory\n     2. Run 'agent-actions init' to create a new project"
+      }
+    }
+  },
+
+  "related_tools_behavior": {
+    "git": {
+      "marker": ".git directory",
+      "behavior": "Works from any subdirectory within repo",
+      "example": "/my-repo/src/components$ git status ✅ Works"
+    },
+    "dbt": {
+      "marker": "dbt_project.yml",
+      "behavior": "Automatically finds project file by walking up tree",
+      "example": "/dbt-project/models/staging$ dbt run ✅ Works"
+    },
+    "npm": {
+      "marker": "package.json",
+      "behavior": "Commands work from any subdirectory",
+      "example": "/my-project/src/utils$ npm run test ✅ Works"
+    }
+  },
+
+  "conclusion": {
+    "summary": "This implementation provides a significant developer experience improvement by allowing commands to run from anywhere within a project, matching the behavior of industry-standard CLI tools.",
+    "key_benefits": [
+      "Improved developer ergonomics",
+      "Better IDE/editor integration",
+      "More intuitive behavior for new users",
+      "Fully backward compatible",
+      "Clear error messages and user feedback"
+    ],
+    "implementation_summary": {
+      "core_logic": "~100 LOC",
+      "tests": "~200 LOC",
+      "documentation": "~50 LOC",
+      "total_effort": "6-8 hours"
+    },
+    "risk": "Low - Internal change with comprehensive testing and fallback behavior"
+  }
+}

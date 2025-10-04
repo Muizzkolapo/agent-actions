@@ -21,6 +21,9 @@ from agent_actions.tasks.run import run
 from agent_actions.tasks.batch import batch
 from agent_actions.tasks.status import status
 
+# Import exceptions
+from agent_actions.core.exceptions import ProjectNotFoundError
+
 # Version information
 __version__ = '1.0.0'
 
@@ -150,7 +153,33 @@ class CLI:
             self.logger.error(f"Usage error: {str(e)}")
             print(f"Error: {str(e)}", file=sys.stderr)
             return 2
-            
+
+        except ProjectNotFoundError as e:
+            # Project root not found - show clear, actionable error message
+            self.logger.info("Not in project directory")
+
+            # Extract context from exception
+            context = e.context if hasattr(e, 'context') else {}
+            marker_file = context.get('marker_file', 'agent_actions.yml')
+            search_path = context.get('search_path', 'unknown')
+            solution_1 = context.get('solution_1', 'Navigate to your agent-actions project directory')
+            solution_2 = context.get('solution_2', "Run 'agent-actions init' to create a new project")
+
+            # Format user-friendly error message
+            error_msg = (
+                f"Not in an agent-actions project\n\n"
+                f"Could not find '{marker_file}' in current directory or any parent directory.\n\n"
+                f"Current directory: {search_path}\n\n"
+                f"Solutions:\n"
+                f"  1. {solution_1}\n"
+                f"  2. {solution_2}"
+            )
+
+            # Use Click styling for better visibility
+            print(click.style("Error: ", fg='red', bold=True) + error_msg, file=sys.stderr)
+
+            return 1
+
         except Exception as e:
             # Unexpected error - use user-friendly formatting
             from agent_actions.core.user_errors import format_user_error

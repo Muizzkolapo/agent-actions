@@ -13,6 +13,7 @@ from rich.table import Table
 
 from agent_actions.tasks.services.project_paths_factory import ProjectPathsFactory
 from agent_actions.agents.validators.status_validator import StatusCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 from pydantic import ValidationError
 
 
@@ -69,6 +70,7 @@ class StatusCommand:
 @click.command()
 @click.option('-a', '--agent', required=True,
               help="Agent configuration file name without path or extension")
+@requires_project
 def status(agent: str) -> None:
     """
     Display the status of an agent workflow.

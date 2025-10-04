@@ -1,6 +1,7 @@
 import click
 from agent_actions.agents.handlers.cleaner import Cleaner
 from agent_actions.agents.validators.clean_validator import CleanCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 from pydantic import ValidationError
 
 @click.command(
@@ -25,6 +26,7 @@ from pydantic import ValidationError
     default=False,
     help="Remove all directories including staging.",
 )
+@requires_project
 def clean_cli(agent: str, force: bool, all: bool) -> None:  
     """
     CLI entrypoint for 'clean'.

@@ -84,6 +84,66 @@ agent-actions --help
 agent-actions run --help
 ```
 
+## Working Directory
+
+Agent Actions CLI commands automatically detect your project root by searching for `agent_actions.yml`, similar to how git, dbt, and npm work. This means you can run commands from **any subdirectory** within your project.
+
+### How It Works
+
+The CLI walks up the directory tree from your current location looking for `agent_actions.yml`:
+
+```bash
+my-project/
+├── agent_actions.yml       # Project root marker
+├── src/
+│   ├── agents/
+│   └── utils/
+└── tests/
+
+# All of these work the same:
+
+# From project root
+cd my-project
+agent-actions run my-workflow.yaml
+# 📁 Project root: .
+
+# From subdirectory
+cd my-project/src/utils
+agent-actions run my-workflow.yaml
+# 📁 Project root: ../..
+
+# From any depth
+cd my-project/src/agents/helpers
+agent-actions run my-workflow.yaml
+# 📁 Project root: ../../../
+```
+
+### Not in a Project?
+
+If you're outside a project directory, you'll get a helpful error:
+
+```bash
+$ cd /tmp
+$ agent-actions run my-workflow.yaml
+
+Error: Not in an agent-actions project
+
+Could not find 'agent_actions.yml' in current directory or any parent directory.
+
+Current directory: /tmp
+
+Solutions:
+  1. Navigate to your agent-actions project directory
+  2. Run 'agent-actions init' to create a new project
+```
+
+### Commands That Work Anywhere
+
+These commands don't require being in a project:
+- `init` - Create a new project
+- `--version` - Show version
+- `--help` - Display help
+
 ## Commands
 
 ### `run`
@@ -103,6 +163,10 @@ agent-actions run <workflow-file> [options]
 - `--parallel` - Force parallel execution (overrides auto-detection)
 - `--no-parallel` - Force sequential execution (overrides auto-detection)
 - `--concurrency-limit` - Maximum concurrent agents in parallel execution (default: 5, range: 1-50)
+
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project. The CLI will automatically find your project root.
+:::
 
 **Parallel Execution:**
 
@@ -150,6 +214,10 @@ agent-actions batch <workflow-file> [options]
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
 
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
+
 ### `test`
 
 Run workflow tests and validations.
@@ -162,6 +230,10 @@ agent-actions test [options]
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
 
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
+
 ### `clean`
 
 Clean up generated files and caches.
@@ -169,6 +241,10 @@ Clean up generated files and caches.
 ```bash
 agent-actions clean [options]
 ```
+
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
 
 ### `docs`
 
@@ -182,6 +258,10 @@ agent-actions docs [options]
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
 
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
+
 ### `render`
 
 Render workflow templates.
@@ -193,6 +273,10 @@ agent-actions render <workflow-file> [options]
 **Options:**
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
+
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
 
 ### `init`
 
@@ -217,6 +301,10 @@ agent-actions status [options]
 **Options:**
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
+
+:::tip Run from Anywhere
+You can run this command from any subdirectory within your project.
+:::
 
 ## Error Messages
 
