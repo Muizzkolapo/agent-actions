@@ -252,15 +252,39 @@ class AgentWorkflow:
         self.config_manager = ConfigManager(self.constructor_path, self.default_path)
         self._load_configs()
 
+        # Discover and register UDFs
         if self.user_code_path:
+            from agent_actions.core.udf_loader import discover_udfs
+            console = Console()
+
             abs_user_code_path = str(Path(self.user_code_path).resolve())
             if abs_user_code_path not in sys.path:
                 sys.path.insert(0, abs_user_code_path)
+
+            # Discover UDFs
+            console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
+            registry = discover_udfs(Path(abs_user_code_path))
+            console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]")
+
         elif self.config_manager.tool_path:
+            from agent_actions.core.udf_loader import discover_udfs
+            console = Console()
+
+            # Discover UDFs from all tool paths
+            total_udfs = 0
             for path in self.config_manager.tool_path:
                 abs_tool_path = str(Path(path).resolve())
                 if abs_tool_path not in sys.path:
                     sys.path.insert(0, abs_tool_path)
+
+                # Discover UDFs in this path
+                if Path(abs_tool_path).exists() and Path(abs_tool_path).is_dir():
+                    console.print(f"[cyan]🔍 Discovering UDFs in {abs_tool_path}...[/cyan]")
+                    registry = discover_udfs(Path(abs_tool_path))
+                    total_udfs += len(registry)
+
+            if total_udfs > 0:
+                console.print(f"[green]✅ Discovered {total_udfs} UDF(s)[/green]")
 
         # Use bootstrap to create properly configured AgentRunner with DI
         from ..bootstrap_factory import create_agent_runner

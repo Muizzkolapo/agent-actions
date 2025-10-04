@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **UDF Auto-Discovery**: User-Defined Functions now use `@udf_tool` decorator for automatic registration. Reference functions by simple names (no module paths required), similar to dbt macros. ([#423](https://github.com/Muizzkolapo/agent-actions/issues/423))
+  - `@udf_tool` decorator for auto-registering functions
+  - Reference UDFs by simple function names in configs (`impl: function_name`)
+  - Automatic function discovery from user_code directory
+  - Duplicate function name detection at load time (prevents silent conflicts)
+  - Case-insensitive exact name matching (like dbt)
+- New command: `agent-actions list-udfs` to display all discovered UDFs
+  - Table format output showing function names, locations, and descriptions
+  - `--json` flag for programmatic use
+  - `--verbose` flag for full signatures and docstrings
+- New command: `agent-actions validate-udfs` to validate config references without running workflow
+  - Checks all `impl` references exist in registry
+  - Detects duplicate function names across files
+  - Validates imports without execution
+  - Ideal for CI/CD pipelines
 - **Project root detection**: CLI commands now work from any subdirectory within a project. The CLI automatically searches for `agent_actions.yml` by walking up the directory tree, similar to git, dbt, and npm. ([#422](https://github.com/Muizzkolapo/agent-actions/issues/422))
   - Commands detect project root automatically by finding `agent_actions.yml`
   - Works from any subdirectory depth (src/utils/, a/b/c/d/, etc.)
@@ -28,6 +43,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Developer Notes
 
+- Added `agent_actions/core/udf_registry.py` (167 lines) - Core UDF registration system
+  - `@udf_tool` decorator for function registration with metadata extraction
+  - `get_udf(func_name)` for case-insensitive function retrieval (exact matching only)
+  - `list_udfs()` for registry inspection with full metadata
+  - `clear_registry()` for test isolation
+  - Global `UDF_REGISTRY` dict storing function metadata (module, file, docstring, signature)
+  - Stores registry keys as lowercase for case-insensitive matching
+- Added `agent_actions/core/udf_loader.py` (159 lines) - Auto-discovery logic
+  - `discover_udfs(user_code_path)` scans directory and imports all Python files recursively
+  - `validate_udf_references(config)` validates all `impl` fields in config exist in registry
+  - Supports nested directories and multiple files
+  - Skips files starting with `_` (e.g., `__init__.py`, `__pycache__`)
+  - Handles import errors gracefully with `UDFLoadError`
+- Added UDF-specific exceptions to `agent_actions/core/exceptions.py`:
+  - `DuplicateFunctionError` - Shows both file locations when duplicate names found
+  - `FunctionNotFoundError` - Lists available functions alphabetically (no fuzzy matching)
+  - `UDFLoadError` - Wraps Python import errors with module/file context
+- Updated `agent_actions/core/tooling.py`:
+  - `execute_user_defined_function()` now uses `get_udf()` from registry
+  - No backward compatibility with old `module.path` syntax (forward fixes only)
+- Updated `agent_actions/core/graph/agent_workflow.py`:
+  - Calls `discover_udfs()` during `__init__()` if `user_code_path` provided
+  - Shows "🔍 Discovering UDFs..." and "✅ Discovered N UDF(s)" messages
+  - Adds user_code_path to sys.path for imports
+- Added CLI commands:
+  - `agent_actions/tasks/list_udfs.py` (161 lines, 93% test coverage)
+  - `agent_actions/tasks/validate_udfs.py` (193 lines, 95% test coverage)
+  - Registered in `agent_actions/cli/main.py`
+- Exported `udf_tool` from `agent_actions/__init__.py` for easy import
 - Added `agent_actions/core/project_root.py` module with project detection utilities
   - `find_project_root(start_path)` - Walks up directory tree to find `agent_actions.yml`
   - `ensure_in_project()` - Raises `ProjectNotFoundError` if not in project
@@ -59,6 +103,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Testing
 
+- Added comprehensive UDF tests - 53 total tests with 94%+ coverage:
+  - `tests/core/test_udf_registry.py` - 16 unit tests, 100% coverage
+  - `tests/core/test_udf_loader.py` - 17 unit tests, 100% coverage
+  - `tests/integration/test_udf_discovery.py` - 7 integration tests
+  - `tests/tasks/test_list_udfs.py` - 8 CLI tests, 93% coverage
+  - `tests/tasks/test_validate_udfs.py` - 5 CLI tests, 95% coverage
+- Test scenarios covered:
+  - Function registration and retrieval (exact case-insensitive matching)
+  - Duplicate function name detection across files
+  - Auto-discovery from nested directories
+  - Import error handling
+  - Config reference validation
+  - CLI command output formatting (table and JSON)
+  - Registry isolation between tests
 - Added comprehensive unit tests (`tests/core/test_project_root.py`) - 21 tests, 89% coverage
   - Project root detection from various directory depths
   - Nested projects handling
@@ -75,5 +133,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- Added comprehensive UDF documentation:
+  - `agentaction-docs/docs/guides/udf-decorator.md` - Complete UDF decorator guide (~300 lines)
+  - `agentaction-docs/docs/examples/udfs/` - UDF example directory with 5 files:
+    - `index.md` - Overview of UDF examples
+    - `basic-udf.md` - First UDF tutorial with testing
+    - `multiple-files.md` - Organizing UDFs across files and directories
+    - `validation-udfs.md` - Common validation patterns (8 patterns)
+    - `transformation-udfs.md` - Data transformation examples (6 patterns)
+  - Updated `agentaction-docs/docs/cli-reference.md` - Added `list-udfs` and `validate-udfs` command documentation
+  - Updated `agentaction-docs/docs/getting-started.md` - Added "Using Custom Functions (UDFs)" section with quick examples
 - Added `CHANGELOG.md` to track project changes
 - Added `CLI_USAGE.md` with comprehensive guide on running commands from subdirectories

@@ -20,6 +20,8 @@ from agent_actions.tasks.compile import render
 from agent_actions.tasks.run import run
 from agent_actions.tasks.batch import batch
 from agent_actions.tasks.status import status
+from agent_actions.tasks.list_udfs import list_udfs_cmd
+from agent_actions.tasks.validate_udfs import validate_udfs_cmd
 
 # Import exceptions
 from agent_actions.core.exceptions import ProjectNotFoundError
@@ -48,6 +50,8 @@ class CLI:
         self.click_group.add_command(run)
         self.click_group.add_command(batch)
         self.click_group.add_command(status)
+        self.click_group.add_command(list_udfs_cmd)
+        self.click_group.add_command(validate_udfs_cmd)
     
     def _register_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown."""

@@ -202,6 +202,22 @@ agent-actions run my-workflow.yaml --debug
 agent-actions run my-workflow.yaml --parallel --concurrency-limit 10
 ```
 
+**UDF Discovery:**
+
+When your workflow uses User-Defined Functions (UDFs) with the `@udf_tool` decorator, Agent Actions automatically discovers and registers them at workflow start:
+
+```bash
+$ agent-actions run my-workflow.yaml -u user_code/
+
+🔍 Discovering UDFs...
+✅ Discovered 5 UDF(s)
+
+Running workflow: my-workflow
+...
+```
+
+See the [UDF Decorator Guide](/guides/udf-decorator) for more information on creating and using UDFs.
+
 ### `batch`
 
 Process multiple files in batch mode.
@@ -304,6 +320,167 @@ agent-actions status [options]
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.
+:::
+
+### `list-udfs`
+
+List all discovered User-Defined Functions (UDFs).
+
+```bash
+agent-actions list-udfs -u <user-code-path> [options]
+```
+
+**Arguments:**
+- `-u`, `--user-code` - Path to user code directory containing UDFs (required)
+
+**Options:**
+- `--json` - Output as JSON for programmatic use
+- `--verbose` - Show full signatures and docstrings
+- `--debug` - Enable debug mode
+- `-v` - Enable verbose output
+
+**Description:**
+
+Scans the user code directory for Python files decorated with `@udf_tool` and displays their metadata including location, file path, and documentation.
+
+**Examples:**
+
+```bash
+# List UDFs in table format
+agent-actions list-udfs -u user_code/
+
+# Output as JSON
+agent-actions list-udfs -u user_code/ --json
+
+# Show full details (signatures, docstrings)
+agent-actions list-udfs -u user_code/ --verbose
+```
+
+**Table Output Example:**
+
+```
+Available User-Defined Functions
+
+Function              Location          File
+validate_email        validators        user_code/validators.py
+                                        Validate email address format
+transform_data        transformers      user_code/transformers.py
+                                        Transform JSON to dict
+
+Total: 2 function(s)
+```
+
+**JSON Output Example:**
+
+```json
+[
+  {
+    "name": "validate_email",
+    "module": "validators",
+    "file": "/path/to/user_code/validators.py",
+    "signature": "(data, **kwargs)",
+    "docstring": "Validate email address format."
+  }
+]
+```
+
+:::tip
+Use this command to verify which UDFs were discovered and registered from your code directory.
+:::
+
+### `validate-udfs`
+
+Validate all UDF references in config without running the workflow.
+
+```bash
+agent-actions validate-udfs -a <agent> -u <user-code-path> [options]
+```
+
+**Arguments:**
+- `-a`, `--agent` - Agent configuration file name (required)
+- `-u`, `--user-code` - Path to user code directory containing UDFs (required)
+
+**Options:**
+- `--debug` - Enable debug mode
+- `-v`, `--verbose` - Enable verbose output
+
+**Description:**
+
+Discovers UDFs from the user code directory and verifies that all `impl` references in the agent configuration exist and are properly decorated with `@udf_tool`. This helps catch configuration errors before running workflows.
+
+**What it validates:**
+- All `impl` references exist in the UDF registry
+- No duplicate function names across files
+- All Python files can be imported without errors
+- Functions are properly decorated with `@udf_tool`
+
+**Examples:**
+
+```bash
+# Validate agent config references
+agent-actions validate-udfs -a my_agent -u user_code/
+```
+
+**Success Output:**
+
+```
+🔍 Discovering UDFs...
+✅ Discovered 5 UDF(s)
+
+Loading configuration...
+Validating UDF references in config...
+
+✅ All UDF references valid
+✅ No duplicate function names
+
+Summary:
+  - 3 UDF(s) referenced in config
+  - 5 UDF(s) discovered and registered
+  - All functions found
+
+Referenced UDFs:
+  • validate_email (/path/to/user_code/validators.py)
+  • transform_data (/path/to/user_code/transformers.py)
+  • enrich_product (/path/to/user_code/enrichers.py)
+```
+
+**Error Output (Missing Function):**
+
+```
+❌ Function 'validate_emai' not found
+
+This function is not registered. Did you forget the @udf_tool decorator?
+
+Available functions (5):
+  • validate_email (/path/to/user_code/validators.py)
+  • validate_phone (/path/to/user_code/validators.py)
+  ...
+
+Fix:
+  1. Check the function name spelling
+  2. Ensure the function has @udf_tool decorator
+  3. Verify the file is in the user code directory
+```
+
+**Error Output (Duplicate Names):**
+
+```
+❌ Error: Duplicate function name 'process_data'
+
+First definition:
+  Location: validators.process_data
+  File: /path/to/user_code/validators.py
+
+Duplicate definition:
+  Location: transformers.process_data
+  File: /path/to/user_code/transformers.py
+
+Fix:
+  Function names must be unique. Rename one of these functions.
+```
+
+:::tip When to Use
+Run this command before deploying workflows to catch UDF reference errors early. Ideal for CI/CD pipelines.
 :::
 
 ## Error Messages

@@ -87,7 +87,8 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
     Dynamically execute a user-defined function (UDF).
 
     Args:
-        udf_name: The full path to the UDF (e.g., 'module_name.function_name').
+        udf_name: Simple function name (e.g., 'my_function').
+                 Must be decorated with @udf_tool and registered via auto-discovery.
         input_data: The input data to pass to the UDF.
         **kwargs: Additional keyword arguments to pass to the UDF.
 
@@ -95,21 +96,20 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
         The result of the UDF execution.
 
     Raises:
-        ImportError: If the module cannot be found.
-        AttributeError: If the function cannot be found in the module.
+        FunctionNotFoundError: If the function is not in the UDF registry.
         Exception: If there's an error executing the function.
     """
-    module_name, func_name = _split_udf_name(udf_name)
-    udf = load_user_defined_function(module_name, func_name)
-    
+    from agent_actions.core.udf_registry import get_udf
+
+    # Get function from registry
+    udf = get_udf(udf_name)
+
     try:
         result = udf(input_data, **kwargs)
         return result
-    except ConfigurationError: # Re-raise if load_user_defined_function failed
-        raise
     except Exception as e:
         raise AgentActionsException(
-            f"Error executing user defined function '{func_name}': {safe_format_error(e)}",
-            context={'function': func_name, 'module': module_name, 'operation': 'execute_udf'},
+            f"Error executing user defined function '{udf_name}': {safe_format_error(e)}",
+            context={'function': udf_name, 'operation': 'execute_udf'},
             cause=e
         ) from e
