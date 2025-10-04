@@ -1,0 +1,187 @@
+{
+  "title": "Fix Loop Correlation for Batch Agents in Parallel Execution",
+  "issue_number": "TBD",
+  "priority": "critical",
+  "type": "bugfix",
+  "discovered_date": "2025-10-04",
+  "description": "Loop consumption feature was not working for batch agents running in parallel execution mode. Agents with loop_consumption configuration (e.g., reconstruct_options consuming from generate_distractors loop) were only receiving data from one loop iteration instead of all iterations merged by loop_correlation_id.",
+
+  "symptom": {
+    "user_report": "reconstruct_options agent with loop_consumption config only receives data from generate_distractors_3 (last iteration) instead of merged data from all 3 iterations (generate_distractors_1, _2, _3)",
+    "error_message": "Data validation failed for field 'loop_correlation_id': expected required, got missing",
+    "affected_scenarios": [
+      "Batch agents with loop_consumption configuration",
+      "Parallel execution mode (async_run)",
+      "Any workflow using loop consumption with batch processing"
+    ],
+    "workflow_example": {
+      "loop_agent": "generate_distractors with loop: {param: variant, range: [1,3]}",
+      "consumer_agent": "reconstruct_options with loop_consumption: {source: 'generate_distractors', pattern: 'merge'}"
+    }
+  },
+
+  "root_causes": [
+    {
+      "bug_1": {
+        "title": "Loop Correlation Not Set Up in Async Execution Path",
+        "severity": "critical",
+        "file": "agent_actions/core/graph/agent_workflow.py",
+        "location": "_run_single_agent_async method (line ~189)",
+        "problem": "The _setup_correlation_if_needed() method was only called in the sequential run() method, not in the parallel async_run() → _run_single_agent_async() execution path",
+        "impact": "When workflows run in parallel mode (auto-detected or --parallel flag), loop correlation setup is completely skipped, causing agents to use standard input from last dependency instead of correlated loop outputs",
+        "code_flow": {
+          "sequential": "run() → _setup_correlation_if_needed() → run_agent() ✅",
+          "parallel_before_fix": "async_run() → _run_single_agent_async() → run_agent() ❌ (missing setup)",
+          "parallel_after_fix": "async_run() → _run_single_agent_async() → _setup_correlation_if_needed() → run_agent() ✅"
+        }
+      }
+    },
+    {
+      "bug_2": {
+        "title": "loop_correlation_id Not Added to Batch Processing Results",
+        "severity": "critical",
+        "file": "agent_actions/tasks/services/batch_service.py",
+        "location": "_convert_batch_results_to_workflow_format method (line ~1145)",
+        "problem": "Batch results were missing loop_correlation_id field due to two issues: (1) agent_config not passed through call chain, (2) ProcessorUtils.add_loop_correlation_id() returns new dict but original list wasn't updated",
+        "impact": "Batch agent outputs lack loop_correlation_id, causing correlation to fail with validation error",
+        "technical_details": {
+          "issue_1": "agent_config parameter not passed from _handle_batch_agent → _process_all_batch_results → process_all_batch_results_to_workflow_output → _convert_batch_results_to_workflow_format",
+          "issue_2": "ProcessorUtils.add_loop_correlation_id() creates copy (line 391: obj = obj.copy()) and returns new dict, but code did: itm = add_loop_correlation_id(itm) without updating the list",
+          "why_it_failed": "Loop over structured_items modified local variable 'itm' but didn't update the actual list item, so loop_correlation_id was lost"
+        }
+      }
+    }
+  ],
+
+  "files_modified": [
+    {
+      "file": "agent_actions/core/graph/agent_workflow.py",
+      "changes": [
+        {
+          "location": "line ~190 in _run_single_agent_async()",
+          "change": "Added call to self._setup_correlation_if_needed(agent_idx) before running agent",
+          "rationale": "Ensures loop correlation is configured for agents in parallel execution, matching sequential behavior"
+        },
+        {
+          "location": "line ~232 in _run_single_agent_async() finally block",
+          "change": "Added cleanup to restore original setup_directories method if overridden",
+          "rationale": "Prevents correlation setup from affecting subsequent agents"
+        },
+        {
+          "location": "line ~564 in _handle_batch_agent()",
+          "change": "Added agent_config = self.agent_configs.get(agent_name, {}) and passed to _process_all_batch_results()",
+          "rationale": "Provides agent configuration needed for loop correlation ID generation"
+        },
+        {
+          "location": "line ~598 in _process_all_batch_results()",
+          "change": "Added agent_config parameter and passed to batch_service method",
+          "rationale": "Threads agent_config through to batch result processing"
+        }
+      ]
+    },
+    {
+      "file": "agent_actions/tasks/services/batch_service.py",
+      "changes": [
+        {
+          "location": "line ~1320 - process_all_batch_results_to_workflow_output signature",
+          "change": "Added agent_config: Dict[str, Any] = None parameter",
+          "rationale": "Accepts agent configuration for loop correlation"
+        },
+        {
+          "location": "line ~1397 - _convert_batch_results_to_workflow_format call",
+          "change": "Added agent_config=agent_config to method call",
+          "rationale": "Passes agent config to conversion logic"
+        },
+        {
+          "location": "line ~1052 - _convert_batch_results_to_workflow_format signature",
+          "change": "Added agent_config=None parameter",
+          "rationale": "Accepts agent configuration for loop correlation ID"
+        },
+        {
+          "location": "line ~1115 - for loop over structured_items",
+          "change": "Changed from 'for itm in structured_items:' to 'for idx, itm in enumerate(structured_items):'",
+          "rationale": "Need index to update list items in place"
+        },
+        {
+          "location": "line ~1145 - add loop_correlation_id",
+          "change": "Changed from 'itm = ProcessorUtils.add_loop_correlation_id(...)' to 'structured_items[idx] = ProcessorUtils.add_loop_correlation_id(...)'",
+          "rationale": "ProcessorUtils.add_loop_correlation_id returns new dict (due to obj.copy()), must update list item to persist the change"
+        }
+      ]
+    }
+  ],
+
+  "testing": {
+    "test_scenario": "Workflow with 3 parallel loop iterations (generate_distractors_1, _2, _3) consumed by reconstruct_options",
+    "verification_steps": [
+      "1. Delete cached loop agent outputs to force re-processing",
+      "2. Run workflow: agent-actions run -a qanalabs-quiz-gen",
+      "3. Verify batch processing adds loop_correlation_id (debug logs show: '[DEBUG] Added loop_correlation_id: <uuid>')",
+      "4. Verify all 3 loop iterations get same loop_correlation_id for matching source_guid",
+      "5. Verify reconstruct_options shows: '🔗 Using correlated input for reconstruct_options from 3 loop sources (pattern: merge)'",
+      "6. Verify no correlation errors (was: 'Data validation failed for field loop_correlation_id')",
+      "7. Check output JSON has loop_correlation_id field for all records"
+    ],
+    "test_results": {
+      "before_fix": {
+        "batch_output_records": "708 records, 0 with loop_correlation_id",
+        "correlation_status": "Failed - loop_correlation_id missing",
+        "reconstruct_options_input": "Only data from generate_distractors_3 (last dependency)"
+      },
+      "after_fix": {
+        "batch_output_records": "708 records, 708 with loop_correlation_id",
+        "correlation_status": "Success - '🔗 Using correlated input from 3 loop sources'",
+        "reconstruct_options_input": "Merged data from all 3 iterations correlated by loop_correlation_id",
+        "sample_correlation_ids": [
+          "3c6cb5b4-14fd-45b2-9c69-d7528e2ee434",
+          "f88bd978-24aa-4bdf-94ab-602a50d4dae7"
+        ]
+      }
+    }
+  },
+
+  "debug_process": {
+    "investigation_steps": [
+      "1. Added debug logging to detect_explicit_loop_consumption() - confirmed all 3 loop agents detected",
+      "2. Added debug logging to _get_input_directory() - never called (code path not reached)",
+      "3. Discovered _setup_correlation_if_needed() only in sequential run(), not in async_run()",
+      "4. Added _setup_correlation_if_needed() to async path - correlation setup worked but still failed",
+      "5. Checked batch output files - loop_correlation_id field completely missing",
+      "6. Traced batch processing flow - found agent_config not passed to _convert_batch_results_to_workflow_format()",
+      "7. Added agent_config parameter through call chain",
+      "8. Found loop_correlation_id was added but not persisted (add_loop_correlation_id returns new dict)",
+      "9. Fixed by updating list item: structured_items[idx] = ProcessorUtils.add_loop_correlation_id(...)",
+      "10. Verified fix: all records have loop_correlation_id, correlation succeeds"
+    ],
+    "key_insights": [
+      "Parallel execution has separate code path (async_run vs run) - both need loop correlation setup",
+      "Batch processing transforms data through multiple layers - agent_config must thread through entire chain",
+      "ProcessorUtils.add_loop_correlation_id() uses defensive copying (obj.copy()) - must capture return value",
+      "Loop correlation requires: (1) correlation setup, (2) loop_correlation_id in data, (3) correlator able to read outputs"
+    ]
+  },
+
+  "related_features": {
+    "loop_correlation": "#384 - Parallel Execution with Loop Output Correlation",
+    "batch_processing": "Batch API integration for cost-effective LLM processing",
+    "parallel_execution": "#384 - Level-by-level parallel execution"
+  },
+
+  "regression_risk": {
+    "level": "low",
+    "rationale": "Changes are additive and defensive",
+    "areas_to_watch": [
+      "Sequential execution (unchanged, should work as before)",
+      "Non-loop batch agents (agent_config optional, defaults to None)",
+      "Online (non-batch) loop agents (use different code path, unchanged)"
+    ]
+  },
+
+  "lessons_learned": [
+    "Always check both sequential AND parallel execution paths for features",
+    "When adding new fields, trace through ALL processing layers (especially batch)",
+    "Functions that return new objects (due to .copy()) require capturing return value",
+    "Debug logging is essential - print statements were suppressed, needed console.print()",
+    "Loop correlation has 3 requirements: setup, data field, and correlator - all must work together"
+  ]
+}

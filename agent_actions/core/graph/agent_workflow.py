@@ -186,6 +186,9 @@ class AgentWorkflow:
             # Note: previous_agent_type not updated to avoid race condition
             return
 
+        # Set up loop correlation if needed (BEFORE running the agent)
+        self._setup_correlation_if_needed(agent_idx)
+
         # Run the agent
         try:
             output_folder = await asyncio.to_thread(
@@ -224,6 +227,10 @@ class AgentWorkflow:
             self.console.print(f"  [red]✗ {agent_name} failed: {e}[/red]")
             self._update_status(agent_name, 'failed')
             raise
+        finally:
+            # Restore original setup_directories if it was overridden for loop correlation
+            if hasattr(self, '_original_setup_directories'):
+                self.agent_runner.setup_directories = self._original_setup_directories
 
     def __init__(self, constructor_path, user_code_path, default_path, use_tools,
                  parent_output=None, parent_source=None, parent_pipeline=None):
@@ -552,21 +559,24 @@ class AgentWorkflow:
     def _handle_batch_agent(self, agent_name, idx):
         agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
         output_directory = agent_io_path / "target" / f"node_{idx}_{agent_name}"
-        
+
+        # Get agent config for loop correlation
+        agent_config = self.agent_configs.get(agent_name, {})
+
         # Check overall batch registry status - this is the single source of truth
         registry_status = self.batch_service._get_batch_registry_status(str(output_directory))
-        
+
         if registry_status == 'completed':
             self.console.print(f"[green]All batch jobs are completed. Processing results...[/green]")
             # Process all completed batch jobs in the registry
-            self._process_all_batch_results(str(output_directory))
+            self._process_all_batch_results(str(output_directory), agent_config)
             self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
             return str(output_directory), 'completed'
         elif registry_status in ['in_progress', 'partial_failed']:
             # Check if all jobs are actually done (some might have completed since last check)
             if self.batch_service._are_all_batch_jobs_completed(str(output_directory)):
                 self.console.print(f"[green]All batch jobs are now completed. Processing results...[/green]")
-                self._process_all_batch_results(str(output_directory))
+                self._process_all_batch_results(str(output_directory), agent_config)
                 self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
                 return str(output_directory), 'completed'
             else:
@@ -585,11 +595,11 @@ class AgentWorkflow:
         else:
             return None, 'failed'
 
-    def _process_all_batch_results(self, output_directory):
+    def _process_all_batch_results(self, output_directory, agent_config=None):
         """Process all completed batch jobs in the registry together as one dataset."""
         try:
             # Use the new combined processing method
-            processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory)
+            processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory, agent_config=agent_config)
             if not processed_files:
                 from agent_actions.core.exceptions import ProcessingError
                 raise ProcessingError("No batch results were successfully processed")

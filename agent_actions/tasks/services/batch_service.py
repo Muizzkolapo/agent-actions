@@ -1049,17 +1049,18 @@ class BatchService:
             from agent_actions.core.exceptions import ProcessingError
             raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
 
-    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None, agent_config=None):
         """
         Convert batch provider results to the workflow's expected format.
         Works with standardized BatchResult objects from any provider.
-        
+
         Args:
             batch_results: List of BatchResult objects from provider
             side_collection: List of side collection fields
             context_map: Map of custom_id to original row data
             output_directory: Output directory path to extract node information
-            
+            agent_config: Agent configuration (needed for loop correlation ID)
+
         Returns:
             List of processed data in workflow format
         """
@@ -1111,25 +1112,38 @@ class BatchService:
                         [{original_source_guid: generated_list}]
                     )
 
-                    for itm in structured_items:
+                    for idx, itm in enumerate(structured_items):
                         # Use metadata from BatchResult
                         itm["metadata"] = batch_result.metadata or {}
-                        
+
                         # Add node_id and lineage tracking
                         if node_idx is not None:
                             # Generate a unique node_id for each item
                             item_node_id = ProcessorUtils.generate_node_id(node_idx)
                             itm["node_id"] = item_node_id
-                            
+
                             # Use ProcessorUtils for lineage tracking
                             itm["lineage"] = ProcessorUtils.build_lineage(original_row, item_node_id)
-                        
+
                         # Ensure target_id and source_guid are set
                         if 'target_id' not in itm or not itm['target_id']:
                             itm['target_id'] = original_row.get('target_id', ProcessorUtils.generate_target_id())
                         if 'source_guid' not in itm or not itm['source_guid']:
                             itm['source_guid'] = original_source_guid
-                            
+
+                        # Add loop correlation ID if agent is part of a loop
+                        if agent_config:
+                            # Get the record index from context_map (position in original batch)
+                            record_index = None
+                            if custom_id and context_map:
+                                # Find the position of this record in the context_map
+                                context_keys = list(context_map.keys())
+                                if custom_id in context_keys:
+                                    record_index = context_keys.index(custom_id)
+
+                            # add_loop_correlation_id returns a new dict, so update the list
+                            structured_items[idx] = ProcessorUtils.add_loop_correlation_id(itm, agent_config, record_index=record_index)
+
                     processed_data.extend(structured_items)
                     processed_custom_ids.add(custom_id)
                     
@@ -1317,10 +1331,14 @@ class BatchService:
             from agent_actions.core.exceptions import ProcessingError
             raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
 
-    def process_all_batch_results_to_workflow_output(self, output_directory: str):
+    def process_all_batch_results_to_workflow_output(self, output_directory: str, agent_config: Dict[str, Any] = None):
         """
         Process all completed batch jobs in the registry, maintaining file-to-file mapping.
         Each input file produces its own corresponding output file.
+
+        Args:
+            output_directory: Path to the agent's output directory
+            agent_config: Agent configuration (needed for loop correlation ID)
         """
         try:
             batch_dir = Path(output_directory) / "batch"
@@ -1378,6 +1396,7 @@ class BatchService:
                         side_collection=side_collection,
                         context_map=context_map,
                         output_directory=output_directory,
+                        agent_config=agent_config,
                     )
 
                     main_output, side_output_data = self._separate_side_output(processed_data)
