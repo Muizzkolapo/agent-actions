@@ -87,6 +87,7 @@ $ agent-actions run my_agent -i input.json -u user_code/
 
 ❌ **Skipped**:
 - Files starting with `_` (e.g., `__init__.py`, `_helpers.py`)
+- Files starting with `test_` (e.g., `test_utils.py`, `test_api.py`) - these are assumed to be test files
 - Non-Python files
 - Functions without the decorator
 
@@ -356,6 +357,13 @@ user_code/
 ```
 
 **All files are automatically discovered** as long as they're in the user code directory.
+
+:::warning File Naming Convention
+Avoid naming your UDF files with prefixes that are filtered during discovery:
+- ❌ `test_api.py` - Files starting with `test_` are skipped (assumed to be test files)
+- ❌ `_helpers.py` - Files starting with `_` are skipped (private modules)
+- ✅ `api_tools.py` - Use descriptive names without these prefixes
+:::
 
 **Example - `user_code/validators/email_validators.py`**:
 ```python

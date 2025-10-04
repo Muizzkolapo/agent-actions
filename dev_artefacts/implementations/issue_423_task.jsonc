@@ -954,6 +954,51 @@
     "no_backward_compat_needed": "New feature with zero existing users - forward fixes only"
   },
 
+  "post_implementation_fixes": {
+    "date": "2025-10-04",
+    "issues_found_and_resolved": [
+      {
+        "issue": "Duplicate Console import causing 'cannot access local variable' error",
+        "location": "agent_actions/core/graph/agent_workflow.py:258",
+        "fix": "Removed duplicate 'from rich.console import Console' inside if block (already imported at module level)",
+        "status": "fixed"
+      },
+      {
+        "issue": "UDF discovery only working for user_code_path, not tool_path from config",
+        "location": "agent_actions/core/graph/agent_workflow.py:269-287",
+        "fix": "Added UDF discovery logic for tool_path (elif block) to match user_code_path behavior",
+        "status": "fixed",
+        "details": "Now discovers UDFs from all tool_path directories specified in config, following precedence: CLI > Agent Config > Project Config"
+      },
+      {
+        "issue": "Test using old module.path syntax instead of UDF registry",
+        "location": "tests/tasks/test_batch_service_filtering.py::test_legacy_conditional_clause_compatibility",
+        "fix": "Updated test to mock UDF registry (get_udf) instead of load_user_defined_function",
+        "status": "fixed"
+      },
+      {
+        "issue": "Documentation missing file naming convention warnings",
+        "location": "agentaction-docs/docs/guides/udf-decorator.md",
+        "fix": "Added notes about files starting with test_ being skipped, added warning box in 'Organizing UDFs' section",
+        "status": "fixed"
+      }
+    ],
+    "test_results": {
+      "passing": "802 tests",
+      "failing": "13 tests (batch/loop integration tests - require fixture updates for UDF support)",
+      "fixed": "1 test (test_legacy_conditional_clause_compatibility)",
+      "coverage": "Maintained 90%+ coverage for new modules"
+    },
+    "real_world_validation": {
+      "project": "qanalabs-quiz-gen",
+      "result": "Successfully discovered 16 UDFs from tool_path",
+      "issues_identified": [
+        "User had test_api.py (starts with test_) - file was skipped by design",
+        "User had module-level executable code causing prints during discovery - Python best practice issue, not framework bug"
+      ]
+    }
+  },
+
   "summary": {
     "what_changes": {
       "new_feature": "@udf_tool decorator + impl: function_name (simple function names only)"
