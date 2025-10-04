@@ -348,7 +348,7 @@ class TestBatchServiceFiltering:
 
     @patch('agent_actions.tasks.services.batch_service.BatchProviderFactory')
     def test_legacy_conditional_clause_compatibility(self, mock_factory, batch_service, temp_output_dir):
-        """Test that legacy conditional_clause still works and marks items as skipped."""
+        """Test that conditional_clause works with UDF registry and marks items as skipped."""
 
         # Setup mocks
         mock_provider = Mock()
@@ -357,9 +357,9 @@ class TestBatchServiceFiltering:
         mock_provider.prepare_tasks.return_value = ["task1"]  # Only one task for item1
         mock_factory.create_provider.return_value = mock_provider
 
-        # Agent config with legacy conditional clause
+        # Agent config with conditional clause using simple function name
         agent_config = {
-            "conditional_clause": "test_module.test_function",
+            "conditional_clause": "test_function",
             "model_vendor": "openai",
             "model_name": "gpt-4o-mini",
             "api_key": "OPENAI_API_KEY",
@@ -371,18 +371,14 @@ class TestBatchServiceFiltering:
             {"target_id": "item2", "process": False, "content": "should skip"}
         ]
 
-        with patch('agent_actions.core.tooling.load_user_defined_function') as mock_load_udf:
-            with patch('agent_actions.core.tooling.execute_user_defined_function') as mock_udf:
-                # Mock the function loading
-                mock_test_func = Mock()
-                mock_test_func.side_effect = lambda data: data.get('process', True)
-                mock_load_udf.return_value = mock_test_func
+        # Mock the UDF registry to return our test function
+        with patch('agent_actions.core.udf_registry.get_udf') as mock_get_udf:
+            # Create a mock function that checks the 'process' field
+            mock_test_func = Mock(side_effect=lambda data, **kwargs: data.get('process', True))
+            mock_get_udf.return_value = mock_test_func
 
-                # Mock UDF execution to return True for item1, False for item2
-                mock_udf.side_effect = lambda clause, data: data.get('process', True)
-
-                # Call prepare_batch_tasks_from_data
-                tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
+            # Call prepare_batch_tasks_from_data
+            tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
 
             # Should create tasks (filtered items don't prevent task creation in this test)
             assert tasks is not None
