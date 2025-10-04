@@ -1,6 +1,7 @@
 import click
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.agents.validators.batch_validator import BatchCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 from pydantic import ValidationError
 
 @click.group()
@@ -10,6 +11,7 @@ def batch():
 
 @batch.command()
 @click.option('--batch-id', help='The ID of the batch job to check. If not provided, the last submitted job ID will be used.')
+@requires_project
 def status(batch_id: str = None):
     """Checks the status of a running batch job."""
     try:
@@ -35,6 +37,7 @@ def status(batch_id: str = None):
 @batch.command()
 @click.option('--batch-id', help='The ID of the batch job to retrieve. If not provided, the last submitted job ID will be used.')
 @click.option('--output-dir', '-o', default='.', type=click.Path(), help='Directory to save the retrieved results.')
+@requires_project
 def retrieve(batch_id: str = None, output_dir: str = '.'):
     """Retrieves the results of a completed batch job."""
     try:

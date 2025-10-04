@@ -521,15 +521,20 @@ class TestRenderClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(render, [
-                '--agent', 'test_agent',
-                '--output', str(output_file),
-                '--template-dir', str(template_dir)
-            ])
+            # CliRunner isolates filesystem, need to create agent_actions.yml in isolated env
+            with runner.isolated_filesystem():
+                # Create agent_actions.yml for @requires_project decorator
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code == 0
-            mock_command_class.assert_called_once()
-            mock_command.execute.assert_called_once()
+                result = runner.invoke(render, [
+                    '--agent', 'test_agent',
+                    '--output', str(output_file),
+                    '--template-dir', str(template_dir)
+                ])
+
+                assert result.exit_code == 0
+                mock_command_class.assert_called_once()
+                mock_command.execute.assert_called_once()
 
     def test_render_click_command_required_agent(self):
         """Test render Click command requires agent parameter."""
@@ -554,18 +559,21 @@ class TestRenderClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(render, [
-                '-a', 'short_test',
-                '-o', str(output_file),
-                '-t', str(template_dir)
-            ])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code == 0
-            # Verify correct arguments were passed
-            args_call = mock_command_class.call_args[0][0]
-            assert args_call.agent_name == "short_test"
-            assert str(args_call.output_file) == str(output_file)
-            assert str(args_call.template_dir) == str(template_dir)
+                result = runner.invoke(render, [
+                    '-a', 'short_test',
+                    '-o', str(output_file),
+                    '-t', str(template_dir)
+                ])
+
+                assert result.exit_code == 0
+                # Verify correct arguments were passed
+                args_call = mock_command_class.call_args[0][0]
+                assert args_call.agent_name == "short_test"
+                assert str(args_call.output_file) == str(output_file)
+                assert str(args_call.template_dir) == str(template_dir)
 
     def test_render_click_command_minimal_args(self):
         """Test render Click command with minimal arguments."""
@@ -575,14 +583,17 @@ class TestRenderClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(render, ['--agent', 'minimal_test'])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code == 0
-            # Verify optional arguments are None
-            args_call = mock_command_class.call_args[0][0]
-            assert args_call.agent_name == "minimal_test"
-            assert args_call.output_file is None
-            assert args_call.template_dir is None
+                result = runner.invoke(render, ['--agent', 'minimal_test'])
+
+                assert result.exit_code == 0
+                # Verify optional arguments are None
+                args_call = mock_command_class.call_args[0][0]
+                assert args_call.agent_name == "minimal_test"
+                assert args_call.output_file is None
+                assert args_call.template_dir is None
 
     def test_render_click_command_validation_error(self):
         """Test render Click command handles validation errors."""
@@ -596,10 +607,13 @@ class TestRenderClickCommand:
                 [{'type': 'missing', 'loc': ('agent_name',), 'msg': 'Field required', 'input': {}, 'url': 'https://errors.pydantic.dev/2.11/v/missing'}]
             )
 
-            result = runner.invoke(render, ['--agent', ''])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code != 0
-            assert "Error" in result.output
+                result = runner.invoke(render, ['--agent', ''])
+
+                assert result.exit_code != 0
+                assert "Error" in result.output
 
     def test_render_click_command_execution_error(self):
         """Test render Click command handles execution errors."""

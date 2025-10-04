@@ -14,12 +14,13 @@ from agent_actions.tasks.services.config_renderer import ConfigRenderer
 from agent_actions.tasks.services.project_paths_factory import ProjectPathsFactory
 from agent_actions.core.graph.agent_workflow import AgentWorkflow
 from agent_actions.core.exceptions import (
-    ConfigurationError, 
+    ConfigurationError,
     ValidationError,
     FileLoadError,
     AgentExecutionError
 )
 from agent_actions.agents.validators.run_validator import RunCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 
 class RunCommand:
     """Implementation of the run command."""
@@ -150,6 +151,7 @@ class RunCommand:
 @click.option('--parallel', is_flag=True, help="Force parallel execution (overrides auto-detection)")
 @click.option('--no-parallel', is_flag=True, help="Force sequential execution (overrides auto-detection)")
 @click.option('--concurrency-limit', type=int, default=5, help="Maximum number of agents to run concurrently (default: 5, range: 1-50)")
+@requires_project
 def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool = False, parallel: bool = False, no_parallel: bool = False, concurrency_limit: int = 5) -> None:
     """
     Run agents with a specified agent configuration.

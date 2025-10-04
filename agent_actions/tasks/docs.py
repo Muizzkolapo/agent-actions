@@ -13,6 +13,7 @@ import webbrowser
 from agent_actions.docs.app import run_app
 from agent_actions.core.exceptions import FileSystemError
 from agent_actions.agents.validators.docs_validator import DocsCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 from pydantic import ValidationError
 
 
@@ -124,8 +125,9 @@ class DocsCommand:
 @click.option('--host', default='0.0.0.0', help='Host for the documentation server.')
 @click.option('--port', default=8000, type=int, help='Port for the documentation server.')
 @click.option('--debug', is_flag=True, default=False, help='Run the server in debug mode.')
-@click.option('--open', 'open_browser', is_flag=True, default=True, 
+@click.option('--open', 'open_browser', is_flag=True, default=True,
               help='Open the browser automatically when the server starts.')
+@requires_project
 def docs(host: str, port: int, debug: bool, open_browser: bool) -> None:
     """
     Generate or display agent documentation.

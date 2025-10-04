@@ -437,11 +437,14 @@ class TestStatusClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(status, ['--agent', 'test_agent'])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code == 0
-            mock_command_class.assert_called_once()
-            mock_command.execute.assert_called_once()
+                result = runner.invoke(status, ['--agent', 'test_agent'])
+
+                assert result.exit_code == 0
+                mock_command_class.assert_called_once()
+                mock_command.execute.assert_called_once()
 
     def test_status_click_command_short_option(self):
         """Test status Click command with short option."""
@@ -451,12 +454,15 @@ class TestStatusClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(status, ['-a', 'short_test'])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code == 0
-            # Verify correct argument was passed
-            args_call = mock_command_class.call_args[0][0]
-            assert args_call.agent == "short_test"
+                result = runner.invoke(status, ['-a', 'short_test'])
+
+                assert result.exit_code == 0
+                # Verify correct argument was passed
+                args_call = mock_command_class.call_args[0][0]
+                assert args_call.agent == "short_test"
 
     def test_status_click_command_required_agent(self):
         """Test status Click command requires agent parameter."""
@@ -481,10 +487,13 @@ class TestStatusClickCommand:
 
         with patch('agent_actions.tasks.status.StatusCommandArgs', side_effect=mock_status):
 
-            result = runner.invoke(status, ['--agent', ''])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code != 0
-            assert "Error" in result.output
+                result = runner.invoke(status, ['--agent', ''])
+
+                assert result.exit_code != 0
+                assert "Error" in result.output
 
     def test_status_click_command_execution_error(self):
         """Test status Click command handles execution errors."""
@@ -495,9 +504,12 @@ class TestStatusClickCommand:
             mock_command.execute.side_effect = Exception("Status execution failed")
             mock_command_class.return_value = mock_command
 
-            result = runner.invoke(status, ['--agent', 'error_test'])
+            with runner.isolated_filesystem():
+                Path('agent_actions.yml').write_text('# Test project')
 
-            assert result.exit_code != 0
+                result = runner.invoke(status, ['--agent', 'error_test'])
+
+                assert result.exit_code != 0
 
     def test_status_click_command_help(self):
         """Test status Click command help display."""

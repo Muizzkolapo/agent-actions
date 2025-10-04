@@ -15,6 +15,7 @@ from agent_actions.core.exceptions import (
     TemplateRenderingError
 )
 from agent_actions.agents.validators.render_validator import RenderCommandArgs
+from agent_actions.core.cli_decorators import requires_project
 from pydantic import ValidationError as PydanticValidationError
 
 logger = logging.getLogger(__name__)
@@ -104,7 +105,8 @@ class RenderCommand:
               help="Path to save the rendered template (default: output to console)")
 @click.option('-t', '--template-dir',
               help="Directory containing templates (default: ./templates)")
-def render(agent_name: str, output_file: Optional[str] = None, 
+@requires_project
+def render(agent_name: str, output_file: Optional[str] = None,
           template_dir: Optional[str] = None) -> None:
     """
     Render a Jinja template for the specified agent.

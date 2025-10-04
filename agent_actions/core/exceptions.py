@@ -863,6 +863,37 @@ class AgentNotFoundError(ConfigurationError):
         self.agent_name = agent_name
 
 
+class ProjectNotFoundError(ConfigurationError):
+    """Raised when a command requires being in a project but agent_actions.yml not found."""
+
+    def __init__(
+        self,
+        marker_file: str = "agent_actions.yml",
+        search_path: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None
+    ) -> None:
+        """Initialize ProjectNotFoundError.
+
+        Args:
+            marker_file: Name of the marker file being searched for
+            search_path: Path where search started
+            context: Additional context dict (merged with marker_file/search_path)
+            cause: The underlying exception that caused this error
+        """
+        import os
+        message = f"Not in an agent-actions project"
+        ctx = context or {}
+        ctx.update({
+            'marker_file': marker_file,
+            'search_path': search_path or os.getcwd(),
+            'solution_1': 'Navigate to your agent-actions project directory',
+            'solution_2': "Run 'agent-actions init' to create a new project"
+        })
+        super().__init__(message, context=ctx, cause=cause)
+
+
 # Backward compatibility aliases
 # These maintain compatibility with existing code
 ProcessorError = ProcessingError
