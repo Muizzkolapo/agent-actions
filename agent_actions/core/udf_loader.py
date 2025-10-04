@@ -76,10 +76,10 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
     # Find all Python files recursively
     python_files = list(user_code_path.rglob('*.py'))
 
-    # Filter out private files (starting with _)
+    # Filter out private files (starting with _) and test files (starting with test_)
     python_files = [
         f for f in python_files
-        if not f.name.startswith('_')
+        if not f.name.startswith('_') and not f.name.startswith('test_')
     ]
 
     # Import each file to trigger @udf_tool registration
