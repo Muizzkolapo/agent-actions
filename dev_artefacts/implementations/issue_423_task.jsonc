@@ -1,0 +1,977 @@
+{
+  "task_id": "issue_423_auto_discover_udfs",
+  "title": "Auto-discover UDFs with decorator - eliminate verbose module paths",
+  "github_issue": "https://github.com/Muizzkolapo/agent-actions/issues/423",
+  "description": "Implement auto-discovery of User-Defined Functions (UDFs) using decorators, similar to dbt macros. Users will decorate functions with @udf_tool and reference them by name only (not full module path). This eliminates brittle references, enables namespace validation, and improves DX.",
+
+  "objectives": {
+    "primary": [
+      "Enable users to reference UDFs by function name only (no module paths)",
+      "Auto-discover and register all @udf_tool decorated functions",
+      "Validate function name uniqueness at load time (prevent silent conflicts)",
+      "Provide helpful error messages with suggestions for missing/duplicate functions"
+    ],
+    "secondary": [
+      "Generate function registry documentation automatically",
+      "Enable refactoring safety (move functions without breaking references)",
+      "Match dbt/Jinja mental model for better developer experience"
+    ]
+  },
+
+  "technical_approach": {
+    "core_pattern": "Decorator-based registration with global function registry",
+    "discovery_strategy": "Auto-import all Python files in user_code directory to trigger decorator registration",
+    "conflict_resolution": "Fail fast with clear error on duplicate function names",
+    "breaking_change": "None - this is a new feature with no existing users"
+  },
+
+  "phases": [
+    {
+      "phase": 1,
+      "name": "Core Infrastructure - UDF Registry & Decorator",
+      "status": "completed",
+      "description": "Build the core UDF registration system with decorator and global registry",
+
+      "tasks": [
+        {
+          "id": "1.1",
+          "task": "Create UDF registry module",
+          "status": "completed",
+          "file": "agent_actions/core/udf_registry.py",
+          "details": {
+            "create": [
+              "Global UDF_REGISTRY dictionary to store registered functions",
+              "@udf_tool decorator for function registration",
+              "get_udf(func_name) to retrieve functions from registry",
+              "list_udfs() to return all registered functions with metadata",
+              "clear_registry() for testing purposes"
+            ],
+            "validation": [
+              "Check for duplicate function names on registration",
+              "Raise DuplicateFunctionError with both locations",
+              "Store function metadata: module, file, docstring, signature"
+            ],
+            "metadata_stored": {
+              "function": "The actual callable",
+              "module": "func.__module__",
+              "name": "func.__name__",
+              "file": "inspect.getfile(func)",
+              "docstring": "func.__doc__",
+              "signature": "inspect.signature(func)"
+            }
+          },
+          "implementation": {
+            "udf_tool_decorator": {
+              "purpose": "Register function in global registry",
+              "raises": "DuplicateFunctionError if name already registered",
+              "returns": "Original function (transparent decorator)",
+              "example": "@udf_tool\\ndef my_function(data):\\n    return data"
+            },
+            "get_udf_function": {
+              "purpose": "Retrieve function by name from registry",
+              "raises": "FunctionNotFoundError with suggestions",
+              "fuzzy_matching": "Suggest similar names using difflib",
+              "example": "func = get_udf('my_function')"
+            }
+          },
+          "testing": [
+            "test_udf_registration() - Verify decorator adds to registry",
+            "test_duplicate_udf_raises_error() - Test DuplicateFunctionError",
+            "test_get_udf_retrieves_function() - Test successful retrieval",
+            "test_get_udf_not_found_raises_error() - Test FunctionNotFoundError",
+            "test_get_udf_fuzzy_matching() - Test 'Did you mean?' suggestions",
+            "test_registry_stores_metadata() - Verify all metadata captured"
+          ]
+        },
+        {
+          "id": "1.2",
+          "task": "Add UDF-specific exceptions",
+          "status": "completed",
+          "file": "agent_actions/core/exceptions.py",
+          "details": {
+            "exceptions": [
+              {
+                "name": "DuplicateFunctionError",
+                "extends": "ConfigurationError",
+                "context_fields": [
+                  "function_name",
+                  "existing_location (module.function)",
+                  "existing_file (path)",
+                  "new_location (module.function)",
+                  "new_file (path)"
+                ],
+                "message": "Duplicate function name: '{function_name}'"
+              },
+              {
+                "name": "FunctionNotFoundError",
+                "extends": "ConfigurationError",
+                "context_fields": [
+                  "function_name",
+                  "available_functions (list)",
+                  "suggestion (similar name if found)"
+                ],
+                "message": "Function '{function_name}' not found"
+              },
+              {
+                "name": "UDFLoadError",
+                "extends": "ConfigurationError",
+                "context_fields": [
+                  "module (name)",
+                  "file (path)",
+                  "error (original error message)"
+                ],
+                "message": "Error loading UDF module '{module}'"
+              },
+              {
+                "name": "InvalidImplSyntaxError",
+                "extends": "ConfigurationError",
+                "context_fields": [
+                  "old_syntax (the module.path string)",
+                  "fix (use @udf_tool decorator)",
+                  "example (suggested new syntax)"
+                ],
+                "message": "Module path syntax no longer supported: '{old_syntax}'"
+              }
+            ]
+          },
+          "testing": [
+            "test_duplicate_function_error_context() - Verify context includes both locations",
+            "test_function_not_found_error_context() - Verify available functions listed",
+            "test_udf_load_error_context() - Verify module and error details"
+          ]
+        },
+        {
+          "id": "1.3",
+          "task": "Export udf_tool decorator",
+          "status": "completed",
+          "file": "agent_actions/__init__.py",
+          "details": {
+            "exports": [
+              "from agent_actions.core.udf_registry import udf_tool",
+              "Add udf_tool to __all__ list"
+            ],
+            "purpose": "Enable users to import: from agent_actions import udf_tool"
+          },
+          "testing": [
+            "test_udf_tool_importable() - Verify import works",
+            "test_udf_tool_in_public_api() - Check in __all__"
+          ]
+        }
+      ],
+
+      "acceptance_criteria": [
+        "@udf_tool decorator successfully registers functions",
+        "Duplicate function names raise DuplicateFunctionError with both locations",
+        "get_udf() retrieves functions by EXACT name match only (like dbt)",
+        "FunctionNotFoundError lists available functions (NO fuzzy matching/suggestions)",
+        "All metadata (module, file, docstring, signature) stored correctly",
+        "udf_tool importable from agent_actions package"
+      ],
+
+      "testing_strategy": {
+        "unit_tests": "tests/core/test_udf_registry.py (12+ tests)",
+        "coverage_target": "95%+",
+        "test_scenarios": [
+          "Function registration and retrieval",
+          "Duplicate detection",
+          "Error handling with context",
+          "Exact name matching (case-INSENSITIVE)",
+          "Metadata storage"
+        ]
+      },
+
+      "technical_notes": {
+        "name_matching": "EXACT name matching, case-INSENSITIVE (NO fuzzy matching)",
+        "case_handling": "Store registry keys as lowercase, match case-insensitively",
+        "metadata_extraction": "Use inspect.getfile() for file path, inspect.signature() for signature",
+        "decorator_pattern": "Use @functools.wraps(func) to preserve function metadata",
+        "exception_pattern": "Follow existing ConfigurationError pattern with context dict",
+        "registry_scope": "Global in-memory dict (cleared between tests for isolation)",
+        "error_messages": "FunctionNotFoundError lists available functions alphabetically, no suggestions"
+      }
+    },
+
+    {
+      "phase": 2,
+      "name": "Auto-Discovery - Load and Register UDFs",
+      "status": "completed",
+      "description": "Implement automatic discovery of UDFs by scanning user code directory",
+
+      "tasks": [
+        {
+          "id": "2.1",
+          "task": "Create UDF loader/discovery module",
+          "status": "completed",
+          "file": "agent_actions/core/udf_loader.py",
+          "details": {
+            "functions": [
+              {
+                "name": "discover_udfs(user_code_path: Path) -> Dict",
+                "purpose": "Scan directory and import all Python files to trigger registration",
+                "algorithm": [
+                  "Add user_code_path to sys.path if not present",
+                  "Use pathlib.rglob('*.py') to find all Python files",
+                  "Skip files starting with '_' (__init__.py, __pycache__, etc.)",
+                  "Convert file path to module name (replace / with .)",
+                  "Use importlib.import_module() to import and trigger decorators",
+                  "Catch and re-raise DuplicateFunctionError",
+                  "Wrap other errors in UDFLoadError with context",
+                  "Return UDF_REGISTRY after discovery"
+                ],
+                "output": "Click message: '✅ Discovered N UDF(s)'"
+              },
+              {
+                "name": "validate_udf_references(config: Dict, registry: Dict) -> None",
+                "purpose": "Validate all impl references in config exist in registry",
+                "raises": "FunctionNotFoundError if reference not found",
+                "timing": "Called during config load (fail fast)"
+              }
+            ],
+            "edge_cases": [
+              "Handle permission errors gracefully",
+              "Skip non-Python files",
+              "Handle circular imports",
+              "Support nested directory structures"
+            ]
+          },
+          "testing": [
+            "test_discover_udfs_single_file() - Test single file discovery",
+            "test_discover_udfs_multiple_files() - Test multi-file discovery",
+            "test_discover_udfs_nested_dirs() - Test nested directory structure",
+            "test_discover_udfs_skips_private_files() - Test skipping __*.py",
+            "test_discover_udfs_handles_import_errors() - Test error handling",
+            "test_discover_udfs_adds_to_sys_path() - Test sys.path modification",
+            "test_validate_udf_references_success() - Test valid references",
+            "test_validate_udf_references_missing() - Test missing function error"
+          ]
+        },
+        {
+          "id": "2.2",
+          "task": "Integrate discovery into config loading",
+          "status": "completed",
+          "file": "agent_actions/core/graph/agent_workflow.py",
+          "details": {
+            "integration_points": [
+              "Call discover_udfs() when loading agent config",
+              "Determine user_code_path from project structure or config",
+              "Cache registry to avoid re-scanning on subsequent loads",
+              "Validate all impl references after discovery"
+            ],
+            "config_updates": {
+              "user_code_path": "Optional config field to specify UDF location",
+              "default": "Defaults to ./user_code or ./functions directory"
+            },
+            "timing": "Discover UDFs once at workflow start, before agent execution"
+          },
+          "testing": [
+            "test_config_load_discovers_udfs() - Test discovery during config load",
+            "test_config_load_validates_references() - Test validation",
+            "test_config_load_caches_registry() - Test registry caching",
+            "test_config_custom_user_code_path() - Test custom path config"
+          ]
+        }
+      ],
+
+      "acceptance_criteria": [
+        "discover_udfs() finds all @udf_tool functions in user code",
+        "Nested directories and multiple files supported",
+        "Import errors wrapped in UDFLoadError with helpful context",
+        "Discovery integrated into config loading workflow",
+        "All impl references validated against registry",
+        "Registry cached to avoid redundant scanning"
+      ],
+
+      "testing_strategy": {
+        "unit_tests": "tests/core/test_udf_loader.py (12+ tests)",
+        "integration_tests": "tests/integration/test_udf_discovery.py (5+ tests)",
+        "coverage_target": "90%+",
+        "test_fixtures": [
+          "Temporary directories with sample UDF files",
+          "Invalid Python files",
+          "Nested directory structures"
+        ]
+      }
+    },
+
+    {
+      "phase": 3,
+      "name": "Config Integration - Support Simple Function Names",
+      "status": "completed",
+      "description": "Update config parsing and workflow execution to use function names instead of module paths",
+
+      "tasks": [
+        {
+          "id": "3.1",
+          "task": "Update impl resolution logic",
+          "file": "agent_actions/core/workflow_executor.py (or equivalent)",
+          "details": {
+            "resolution_strategy": {
+              "new_syntax_only": "Accept function names only"
+            },
+            "implementation": {
+              "function": "resolve_impl(impl_string: str, user_code_path: Path) -> Callable",
+              "logic": [
+                "# Function name only",
+                "if not UDF_REGISTRY:",
+                "    discover_udfs(user_code_path)",
+                "return get_udf(impl_string)"
+              ]
+            }
+          },
+          "testing": [
+            "test_resolve_impl_function_name() - Test function name resolution",
+            "test_resolve_impl_triggers_discovery() - Test auto-discovery",
+            "test_resolve_impl_not_found() - Test FunctionNotFoundError"
+          ]
+        },
+        {
+          "id": "3.2",
+          "task": "Update config validator",
+          "file": "agent_actions/agents/validators/agent_validator.py (or equivalent)",
+          "details": {
+            "validation_updates": [
+              "Accept impl values as function names",
+              "Validate impl references during config load",
+              "Provide clear error if function not found"
+            ],
+            "schema_changes": {
+              "impl_field": {
+                "pattern": "'^[a-zA-Z0-9_]+$' (function names only)",
+                "description": "Function name only - must be decorated with @udf_tool",
+                "error_message": "impl must be a valid function name. Use @udf_tool decorator."
+              }
+            }
+          },
+          "testing": [
+            "test_validator_accepts_function_name() - Test syntax validation",
+            "test_validator_checks_function_exists() - Test existence validation",
+            "test_validator_error_message() - Test helpful error messages"
+          ]
+        },
+        {
+          "id": "3.3",
+          "task": "Update workflow execution",
+          "file": "agent_actions/tasks/run.py",
+          "details": {
+            "execution_updates": [
+              "Call discover_udfs() at workflow start if not already done",
+              "Use resolve_impl() to get function from impl config",
+              "Pass discovered registry to agents for execution",
+              "Handle FunctionNotFoundError gracefully"
+            ],
+            "user_feedback": {
+              "discovery_message": "🔍 Discovering UDFs...",
+              "success_message": "✅ Discovered N UDF(s)",
+              "error_message": "❌ Function '{name}' not found - see available functions above"
+            }
+          },
+          "testing": [
+            "test_workflow_discovers_udfs() - Test discovery at start",
+            "test_workflow_resolves_impl() - Test function resolution",
+            "test_workflow_handles_not_found() - Test error handling",
+            "test_workflow_user_feedback() - Test messages displayed"
+          ]
+        }
+      ],
+
+      "acceptance_criteria": [
+        "Config accepts impl: function_name",
+        "Workflow execution discovers UDFs before running agents",
+        "FunctionNotFoundError provides helpful error messages",
+        "Clear user feedback during discovery and execution"
+      ],
+
+      "testing_strategy": {
+        "unit_tests": "tests/tasks/test_udf_execution.py (10+ tests)",
+        "integration_tests": "tests/integration/test_workflow_with_udfs.py (8+ tests)",
+        "coverage_target": "90%+",
+        "end_to_end_test": "Full workflow with UDFs discovered and executed"
+      }
+    },
+
+    {
+      "phase": 4,
+      "name": "Developer Experience - Error Messages & CLI Commands",
+      "status": "completed",
+      "description": "Implement helpful error messages, fuzzy matching, and UDF listing command",
+
+      "tasks": [
+        {
+          "id": "4.1",
+          "task": "Implement fuzzy matching for suggestions",
+          "file": "agent_actions/core/udf_registry.py",
+          "details": {
+            "fuzzy_matching": {
+              "library": "difflib.get_close_matches()",
+              "similarity_threshold": 0.6,
+              "max_suggestions": 3,
+              "integration": "Add to get_udf() when function not found"
+            },
+            "suggestion_format": "Did you mean: '{similar_name}'?",
+            "example": {
+              "input": "apply_edited_distractor (typo)",
+              "output": "Did you mean: 'apply_edited_distractors'?"
+            }
+          },
+          "testing": [
+            "test_fuzzy_match_single_suggestion() - Test one close match",
+            "test_fuzzy_match_multiple_suggestions() - Test multiple matches",
+            "test_fuzzy_match_no_suggestions() - Test no close matches",
+            "test_fuzzy_match_threshold() - Test similarity threshold"
+          ]
+        },
+        {
+          "id": "4.2",
+          "task": "Enhance error message formatting",
+          "file": "agent_actions/cli/main.py",
+          "details": {
+            "error_handlers": [
+              {
+                "exception": "InvalidImplSyntaxError",
+                "format": [
+                  "❌ Configuration Error: Module path syntax no longer supported",
+                  "",
+                  "   Your config uses: {old_syntax}",
+                  "",
+                  "   Old syntax (no longer works):",
+                  "     impl: module.path.function",
+                  "",
+                  "   New syntax (required):",
+                  "     1. Add @udf_tool decorator to your function:",
+                  "        from agent_actions import udf_tool",
+                  "        ",
+                  "        @udf_tool",
+                  "        def {function_name}(data):",
+                  "            ...",
+                  "",
+                  "     2. Use function name only in config:",
+                  "        impl: {example}",
+                  "",
+                  "   Why this changed:",
+                  "     UDFs now use auto-discovery for better DX (like dbt macros)"
+                ]
+              },
+              {
+                "exception": "DuplicateFunctionError",
+                "format": [
+                  "❌ Configuration Error: Duplicate function name '{function_name}'",
+                  "",
+                  "   First definition:",
+                  "     Location: {existing_location}",
+                  "     File: {existing_file}",
+                  "",
+                  "   Duplicate definition:",
+                  "     Location: {new_location}",
+                  "     File: {new_file}",
+                  "",
+                  "   Fix:",
+                  "     Function names must be unique. Rename one of these functions:"
+                ]
+              },
+              {
+                "exception": "FunctionNotFoundError",
+                "format": [
+                  "❌ Configuration Error: Function '{function_name}' not found",
+                  "",
+                  "   This function is not registered. Did you forget the @udf_tool decorator?",
+                  "",
+                  "   Available functions:",
+                  "     {list of available functions with files}",
+                  "",
+                  "   {suggestion if fuzzy match found}",
+                  "",
+                  "   Fix:",
+                  "     1. Check the function name spelling",
+                  "     2. Ensure the function has @udf_tool decorator"
+                ]
+              }
+            ],
+            "styling": {
+              "use_click_styling": true,
+              "error_prefix": "click.style('Error:', fg='red', bold=True)",
+              "suggestion_color": "yellow",
+              "code_color": "cyan"
+            }
+          },
+          "testing": [
+            "test_duplicate_error_formatting() - Test formatted output",
+            "test_not_found_error_formatting() - Test formatted output",
+            "test_error_includes_suggestions() - Test fuzzy match in error",
+            "test_error_includes_available_functions() - Test function list"
+          ]
+        },
+        {
+          "id": "4.3",
+          "task": "Add list-udfs CLI command",
+          "file": "agent_actions/tasks/list_udfs.py (new)",
+          "details": {
+            "command": "agent-actions list-udfs",
+            "purpose": "Display all discovered UDFs with metadata",
+            "output_format": {
+              "header": "Available User-Defined Functions:",
+              "per_function": [
+                "",
+                "{function_name}",
+                "  Location: {module}",
+                "  File: {file}:{line_number}",
+                "  Description: {first line of docstring}"
+              ],
+              "footer": "Total: {count} function(s)"
+            },
+            "options": [
+              "--json - Output as JSON for programmatic use",
+              "--verbose - Include full docstrings and signatures"
+            ]
+          },
+          "testing": [
+            "test_list_udfs_command() - Test command execution",
+            "test_list_udfs_output_format() - Test formatted output",
+            "test_list_udfs_json_output() - Test --json flag",
+            "test_list_udfs_verbose() - Test --verbose flag",
+            "test_list_udfs_empty_registry() - Test no functions found"
+          ]
+        },
+        {
+          "id": "4.4",
+          "task": "Add validate-udfs CLI command",
+          "file": "agent_actions/tasks/validate_udfs.py (new)",
+          "details": {
+            "command": "agent-actions validate-udfs",
+            "purpose": "Validate all UDF references in config without running workflow",
+            "checks": [
+              "All impl references exist in registry",
+              "No duplicate function names",
+              "All functions have @udf_tool decorator",
+              "All Python files can be imported without errors"
+            ],
+            "output": {
+              "success": "✅ All UDF references valid\\n✅ No duplicate function names",
+              "error": "❌ {count} issue(s) found - see details above"
+            }
+          },
+          "testing": [
+            "test_validate_udfs_success() - Test successful validation",
+            "test_validate_udfs_missing_reference() - Test missing function",
+            "test_validate_udfs_duplicate() - Test duplicate detection",
+            "test_validate_udfs_import_error() - Test import failures"
+          ]
+        }
+      ],
+
+      "acceptance_criteria": [
+        "Fuzzy matching suggests similar function names",
+        "DuplicateFunctionError shows both locations clearly",
+        "FunctionNotFoundError lists available functions and suggestions",
+        "list-udfs command displays all UDFs with metadata",
+        "validate-udfs command checks config without execution",
+        "Error messages use color and formatting for readability"
+      ],
+
+      "testing_strategy": {
+        "unit_tests": "tests/tasks/test_list_udfs.py, test_validate_udfs.py (10+ tests)",
+        "cli_tests": "tests/cli/test_udf_commands.py (8+ tests)",
+        "coverage_target": "85%+",
+        "manual_testing": "Test error messages display correctly in terminal"
+      }
+    },
+
+    {
+      "phase": 5,
+      "name": "Documentation & Migration Guide",
+      "status": "completed",
+      "description": "Create comprehensive documentation and migration guide for users",
+
+      "tasks": [
+        {
+          "id": "5.1",
+          "task": "Create UDF decorator documentation",
+          "file": "agentaction-docs/docs/guides/udf-decorator.md (new)",
+          "sections": [
+            {
+              "title": "Using the @udf_tool Decorator",
+              "content": [
+                "Basic usage with examples",
+                "How auto-discovery works",
+                "Function naming best practices",
+                "Handling duplicate names"
+              ]
+            },
+            {
+              "title": "Writing UDFs",
+              "content": [
+                "Function signature requirements",
+                "Docstring conventions",
+                "Error handling in UDFs",
+                "Testing UDFs"
+              ]
+            },
+            {
+              "title": "Advanced Usage",
+              "content": [
+                "Organizing UDFs in multiple files",
+                "Custom user_code paths",
+                "Debugging UDF issues",
+                "Performance considerations"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "5.2",
+          "task": "Update CLI reference documentation",
+          "file": "agentaction-docs/docs/cli-reference.md",
+          "updates": [
+            "Add list-udfs command documentation",
+            "Add validate-udfs command documentation",
+            "Update run command to mention UDF discovery",
+            "Add UDF-related error examples"
+          ]
+        },
+        {
+          "id": "5.3",
+          "task": "Update getting started guide",
+          "file": "agentaction-docs/docs/getting-started.md",
+          "updates": [
+            "Add section on defining UDFs with @udf_tool",
+            "Add examples using function names",
+            "Add note about auto-discovery"
+          ]
+        },
+        {
+          "id": "5.4",
+          "task": "Create examples repository",
+          "file": "agentaction-docs/docs/examples/udfs/ (new directory)",
+          "examples": [
+            {
+              "file": "basic-udf.md",
+              "content": "Simple UDF example with decorator"
+            },
+            {
+              "file": "multiple-files.md",
+              "content": "Organizing UDFs across multiple files"
+            },
+            {
+              "file": "validation-udfs.md",
+              "content": "UDFs for data validation"
+            },
+            {
+              "file": "transformation-udfs.md",
+              "content": "UDFs for data transformation"
+            }
+          ]
+        },
+        {
+          "id": "5.5",
+          "task": "Update CHANGELOG",
+          "file": "CHANGELOG.md",
+          "sections": [
+            {
+              "version": "[Unreleased]",
+              "category": "Added",
+              "entries": [
+                "**UDF Auto-Discovery**: @udf_tool decorator for auto-registering functions ([#423])",
+                "Reference UDFs by simple function names",
+                "Automatic function discovery from user_code directory",
+                "Duplicate function name detection at load time",
+                "New command: `agent-actions list-udfs` to display all UDFs",
+                "New command: `agent-actions validate-udfs` to validate config references"
+              ]
+            },
+            {
+              "version": "[Unreleased]",
+              "category": "Developer Notes",
+              "entries": [
+                "Added `agent_actions/core/udf_registry.py` with decorator and global registry",
+                "Added `agent_actions/core/udf_loader.py` with auto-discovery logic",
+                "Added exceptions: DuplicateFunctionError, FunctionNotFoundError, UDFLoadError",
+                "Updated workflow execution to use UDF registry",
+                "Enhanced error messages with file locations"
+              ]
+            }
+          ]
+        }
+      ],
+
+      "acceptance_criteria": [
+        "Complete UDF decorator guide with examples",
+        "CLI reference updated with new commands",
+        "Getting started guide uses decorator syntax",
+        "Examples cover common UDF patterns",
+        "CHANGELOG documents all changes"
+      ],
+
+      "deliverables": [
+        "agentaction-docs/docs/guides/udf-decorator.md",
+        "agentaction-docs/docs/examples/udfs/ (4+ examples)",
+        "Updated CLI reference and getting started guide",
+        "CHANGELOG.md with comprehensive changes"
+      ]
+    }
+  ],
+
+  "implementation_order": {
+    "phase_1": {
+      "priority": "CRITICAL",
+      "dependencies": [],
+      "estimated_time": "2-3 days",
+      "deliverable": "Working @udf_tool decorator with registry and exceptions"
+    },
+    "phase_2": {
+      "priority": "CRITICAL",
+      "dependencies": ["phase_1"],
+      "estimated_time": "2-3 days",
+      "deliverable": "Auto-discovery working, UDFs loaded from user_code"
+    },
+    "phase_3": {
+      "priority": "HIGH",
+      "dependencies": ["phase_1", "phase_2"],
+      "estimated_time": "2-3 days",
+      "deliverable": "Config accepts function names, workflow executes UDFs"
+    },
+    "phase_4": {
+      "priority": "MEDIUM",
+      "dependencies": ["phase_1", "phase_2", "phase_3"],
+      "estimated_time": "1-2 days",
+      "deliverable": "CLI commands, enhanced error messages with fuzzy matching"
+    },
+    "phase_5": {
+      "priority": "MEDIUM",
+      "dependencies": ["phase_1", "phase_2", "phase_3", "phase_4"],
+      "estimated_time": "2 days",
+      "deliverable": "Complete documentation and migration guide"
+    }
+  },
+
+  "testing_strategy": {
+    "unit_tests": {
+      "total_estimated": "50+ tests",
+      "files": [
+        "tests/core/test_udf_registry.py (15 tests)",
+        "tests/core/test_udf_loader.py (12 tests)",
+        "tests/tasks/test_udf_execution.py (10 tests)",
+        "tests/tasks/test_list_udfs.py (6 tests)",
+        "tests/tasks/test_validate_udfs.py (4 tests)",
+        "tests/cli/test_udf_commands.py (8 tests)"
+      ],
+      "coverage_target": "90%+"
+    },
+    "integration_tests": {
+      "total_estimated": "13+ tests",
+      "files": [
+        "tests/integration/test_udf_discovery.py (5 tests)",
+        "tests/integration/test_workflow_with_udfs.py (8 tests)"
+      ],
+      "scenarios": [
+        "End-to-end workflow with UDF discovery and execution",
+        "Multiple UDF files discovery",
+        "Old syntax rejection with clear error",
+        "Error handling and recovery"
+      ]
+    },
+    "manual_testing": {
+      "checklist": "dev_artefacts/manual_testing/issue_423_checklist.md",
+      "scenarios": [
+        "Basic UDF registration and usage",
+        "Duplicate function name detection",
+        "Missing function error with suggestions",
+        "Old syntax rejection with migration guidance",
+        "list-udfs and validate-udfs commands",
+        "Error message formatting in terminal"
+      ]
+    }
+  },
+
+  "breaking_change_details": {
+    "impact": "NO BREAKING CHANGE - Nobody using this yet, forward fixes only",
+    "rationale": "New feature with no existing users, so no backward compatibility needed",
+    "migration_support": "Not applicable - this is a new feature"
+  },
+
+  "edge_cases": {
+    "handled": [
+      {
+        "case": "Duplicate function names",
+        "solution": "Raise DuplicateFunctionError with both locations"
+      },
+      {
+        "case": "Function not found",
+        "solution": "Raise FunctionNotFoundError with fuzzy matching suggestions"
+      },
+      {
+        "case": "Import errors in user code",
+        "solution": "Wrap in UDFLoadError with module and file context"
+      },
+      {
+        "case": "Circular imports",
+        "solution": "Handle gracefully, provide clear error message"
+      },
+      {
+        "case": "Permission errors",
+        "solution": "Skip file, log warning, continue discovery"
+      },
+      {
+        "case": "Empty user_code directory",
+        "solution": "Log info message, allow workflow to continue"
+      },
+      {
+        "case": "Function renamed after registration",
+        "solution": "Re-discovery on config reload clears and rebuilds registry"
+      }
+    ],
+    "testing": "Each edge case has dedicated test coverage"
+  },
+
+  "performance_considerations": {
+    "discovery_caching": "Registry cached after first discovery to avoid re-scanning",
+    "lazy_loading": "Discovery only happens when first UDF reference encountered",
+    "import_overhead": "Import all user code files once at startup (acceptable)",
+    "registry_size": "In-memory dict, negligible overhead even with 100+ functions",
+    "benchmarks": [
+      "Discovery of 50 UDFs across 10 files: <100ms",
+      "Registry lookup: O(1), <1ms per lookup"
+    ]
+  },
+
+  "future_enhancements": {
+    "namespace_support": {
+      "description": "Allow optional namespacing for large projects",
+      "syntax": "@udf_tool(namespace='validators')",
+      "usage": "impl: validators.validate_format",
+      "priority": "LOW"
+    },
+    "type_hints_validation": {
+      "description": "Validate function signatures against expected inputs",
+      "example": "@udf_tool\\ndef process(data: dict) -> dict: ...",
+      "priority": "MEDIUM"
+    },
+    "auto_docs_generation": {
+      "description": "Generate markdown docs from UDF docstrings",
+      "command": "agent-actions docs --udfs",
+      "priority": "LOW"
+    },
+    "udf_testing_framework": {
+      "description": "Built-in testing for UDFs with fixtures",
+      "priority": "MEDIUM"
+    }
+  },
+
+  "success_metrics": {
+    "technical": [
+      "All 50+ unit tests passing",
+      "90%+ code coverage for new modules",
+      "Discovery completes in <100ms for typical projects"
+    ],
+    "user_experience": [
+      "Simple function name references (no module paths)",
+      "Error messages provide actionable suggestions",
+      "Clear documentation with examples"
+    ],
+    "adoption": [
+      "Documentation covers all use cases",
+      "list-udfs and validate-udfs commands used regularly"
+    ]
+  },
+
+  "risks_and_mitigations": {
+    "risks": [
+      {
+        "risk": "Import errors in user code break discovery",
+        "probability": "MEDIUM",
+        "impact": "HIGH",
+        "mitigation": "Wrap imports in try/except, provide clear error with file location"
+      },
+      {
+        "risk": "Performance degradation from importing all files",
+        "probability": "LOW",
+        "impact": "MEDIUM",
+        "mitigation": "Cache registry, lazy load, benchmark performance"
+      },
+      {
+        "risk": "Users confused by duplicate name errors",
+        "probability": "MEDIUM",
+        "impact": "LOW",
+        "mitigation": "Clear error messages showing both locations, suggest renames"
+      }
+    ]
+  },
+
+  "checklist": {
+    "phase_1": [
+      "[x] Create agent_actions/core/udf_registry.py with decorator and registry",
+      "[x] Implement @udf_tool decorator with duplicate detection",
+      "[x] Implement get_udf() with exact case-insensitive matching (NO fuzzy matching)",
+      "[x] Add DuplicateFunctionError, FunctionNotFoundError, UDFLoadError, InvalidImplSyntaxError",
+      "[x] Export udf_tool from agent_actions/__init__.py",
+      "[x] Write 16 unit tests for registry",
+      "[x] Achieve 100% coverage for udf_registry.py"
+    ],
+    "phase_2": [
+      "[x] Create agent_actions/core/udf_loader.py with discovery logic",
+      "[x] Implement discover_udfs() function",
+      "[x] Implement validate_udf_references() function",
+      "[x] Integrate discovery into AgentWorkflow.__init__() (agent_workflow.py)",
+      "[x] Handle edge cases (imports, permissions, nested dirs)",
+      "[x] Write 17 unit tests for loader (100% coverage)",
+      "[x] Write 7 integration tests for discovery",
+      "[x] Modify tooling.py to use UDF registry (get_udf)"
+    ],
+    "phase_3": [
+      "[x] Update impl resolution to support function names only (done in tooling.py)",
+      "[x] execute_user_defined_function() uses get_udf() directly",
+      "[x] Config schema has impl field (no additional validation needed)",
+      "[x] Discovery integrated into AgentWorkflow (done in Phase 2)",
+      "[x] User feedback messages added (Phase 2)",
+      "[x] Tests covered in Phase 2 integration tests (test_udf_discovery.py)",
+      "[x] End-to-end workflow tests included"
+    ],
+    "phase_4": [
+      "[x] Enhance error message formatting (NO fuzzy matching - just list available)",
+      "[x] Create list-udfs CLI command (agent_actions/tasks/list_udfs.py)",
+      "[x] Create validate-udfs CLI command (agent_actions/tasks/validate_udfs.py)",
+      "[x] Register commands in agent_actions/cli/main.py",
+      "[x] Write 13 unit tests for commands (8 list-udfs, 5 validate-udfs)",
+      "[x] Achieve 94% coverage for CLI commands"
+    ],
+    "phase_5": [
+      "[x] Create UDF decorator guide (agentaction-docs/docs/guides/udf-decorator.md - ~300 lines)",
+      "[x] Update CLI reference with list-udfs and validate-udfs commands",
+      "[x] Update getting started guide with UDF section",
+      "[x] Create 5 UDF example files (index, basic, multiple-files, validation, transformation)",
+      "[x] Update CHANGELOG.md with comprehensive Phase 1-5 changes",
+      "[x] All documentation complete and accurate"
+    ]
+  },
+
+  "related_issues": [
+    "#422 - Enable CLI commands from any subdirectory (completed)",
+    "#412 - Input signature validation (related)",
+    "Developer experience improvements (general)"
+  ],
+
+  "notes": {
+    "inspiration": "This feature is inspired by dbt's macro system where function names are unique and auto-discovered",
+    "key_insight": "Requiring decorators enables validation (duplicate detection) while maintaining simplicity",
+    "no_backward_compat_needed": "New feature with zero existing users - forward fixes only"
+  },
+
+  "summary": {
+    "what_changes": {
+      "new_feature": "@udf_tool decorator + impl: function_name (simple function names only)"
+    },
+    "breaking_change": "❌ NO - This is a new feature with no existing users",
+    "benefits": [
+      "Simple function name references",
+      "Refactoring safety - move functions without breaking configs",
+      "Namespace validation - duplicates caught at load time",
+      "Better DX - matches dbt/Jinja mental model",
+      "Auto-discovery - no manual registration needed"
+    ],
+    "user_action_required": [
+      "1. Add @udf_tool decorator to UDF functions",
+      "2. Use impl: function_name in configs",
+      "3. Ensure function names are unique",
+      "4. Run validate-udfs to verify"
+    ],
+    "support": "Clear error messages with examples, comprehensive documentation, validate-udfs command"
+  }
+}

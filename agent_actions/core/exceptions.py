@@ -280,6 +280,131 @@ class EnvironmentConfigError(ConfigurationError):
         super().__init__(message, context=ctx, cause=cause)
 
 
+class DuplicateFunctionError(ConfigurationError):
+    """Raised when duplicate @udf_tool function names detected."""
+
+    def __init__(
+        self,
+        function_name: str,
+        existing_location: str,
+        existing_file: str,
+        new_location: str,
+        new_file: str,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None
+    ) -> None:
+        """Initialize DuplicateFunctionError.
+
+        Args:
+            function_name: The duplicate function name
+            existing_location: Module path of existing function
+            existing_file: File path of existing function
+            new_location: Module path of new duplicate function
+            new_file: File path of new duplicate function
+            context: Additional context dict
+            cause: The underlying exception that caused this error
+        """
+        message = f"Duplicate function name: '{function_name}'"
+        ctx = context or {}
+        ctx.update({
+            'function_name': function_name,
+            'existing_location': existing_location,
+            'existing_file': existing_file,
+            'new_location': new_location,
+            'new_file': new_file
+        })
+        super().__init__(message, context=ctx, cause=cause)
+
+
+class FunctionNotFoundError(ConfigurationError):
+    """Raised when UDF not found in registry."""
+
+    def __init__(
+        self,
+        function_name: str,
+        available_functions: list,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None
+    ) -> None:
+        """Initialize FunctionNotFoundError.
+
+        Args:
+            function_name: Name of the function that was not found
+            available_functions: List of available function names
+            context: Additional context dict
+            cause: The underlying exception that caused this error
+        """
+        message = f"Function '{function_name}' not found"
+        ctx = context or {}
+        ctx.update({
+            'function_name': function_name,
+            'available_functions': available_functions
+        })
+        super().__init__(message, context=ctx, cause=cause)
+
+
+class UDFLoadError(ConfigurationError):
+    """Raised when UDF module fails to load."""
+
+    def __init__(
+        self,
+        module: str,
+        file: str,
+        error: str,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None
+    ) -> None:
+        """Initialize UDFLoadError.
+
+        Args:
+            module: Module name that failed to load
+            file: File path of the module
+            error: Error message from the failed import
+            context: Additional context dict
+            cause: The underlying exception that caused this error
+        """
+        message = f"Error loading UDF module '{module}'"
+        ctx = context or {}
+        ctx.update({
+            'module': module,
+            'file': file,
+            'error': error
+        })
+        super().__init__(message, context=ctx, cause=cause)
+
+
+class InvalidImplSyntaxError(ConfigurationError):
+    """Raised when old module.path syntax used instead of @udf_tool decorator."""
+
+    def __init__(
+        self,
+        old_syntax: str,
+        example: str,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None
+    ) -> None:
+        """Initialize InvalidImplSyntaxError.
+
+        Args:
+            old_syntax: The invalid module.path syntax that was used
+            example: Suggested new syntax (function name only)
+            context: Additional context dict
+            cause: The underlying exception that caused this error
+        """
+        message = f"Module path syntax no longer supported: '{old_syntax}'"
+        ctx = context or {}
+        ctx.update({
+            'old_syntax': old_syntax,
+            'fix': 'Use @udf_tool decorator and function name only',
+            'example': example
+        })
+        super().__init__(message, context=ctx, cause=cause)
+
+
 # Processing-related exceptions
 class ProcessingError(AgentActionsException):
     """Base exception for processing operations."""

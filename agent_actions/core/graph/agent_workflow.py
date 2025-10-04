@@ -252,10 +252,21 @@ class AgentWorkflow:
         self.config_manager = ConfigManager(self.constructor_path, self.default_path)
         self._load_configs()
 
+        # Discover and register UDFs
         if self.user_code_path:
+            from agent_actions.core.udf_loader import discover_udfs
+            from rich.console import Console
+            console = Console()
+
             abs_user_code_path = str(Path(self.user_code_path).resolve())
             if abs_user_code_path not in sys.path:
                 sys.path.insert(0, abs_user_code_path)
+
+            # Discover UDFs
+            console.print("[cyan]🔍 Discovering UDFs...[/cyan]")
+            registry = discover_udfs(Path(abs_user_code_path))
+            console.print(f"[green]✅ Discovered {len(registry)} UDF(s)[/green]")
+
         elif self.config_manager.tool_path:
             for path in self.config_manager.tool_path:
                 abs_tool_path = str(Path(path).resolve())

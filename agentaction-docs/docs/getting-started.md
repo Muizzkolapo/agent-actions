@@ -187,6 +187,94 @@ Unlike autonomous agents, Agent Actions provides predictable results:
 - **Fixed dependencies** prevent execution order variations
 - **Schema validation** eliminates output unpredictability
 
+## Using Custom Functions (UDFs)
+
+You can extend Agent Actions with custom Python functions using the `@udf_tool` decorator. This is useful for data validation, transformation, and custom business logic.
+
+### Quick Example
+
+**Create a UDF** (`user_code/validators.py`):
+```python
+from agent_actions import udf_tool
+
+@udf_tool
+def validate_product_price(data, **kwargs):
+    """Ensure product price is positive and reasonable."""
+    price = data.get('price', 0)
+
+    if price <= 0:
+        raise ValueError(f"Price must be positive, got {price}")
+
+    if price > 100000:
+        raise ValueError(f"Price {price} seems unreasonably high")
+
+    return data
+```
+
+**Reference in your config**:
+```yaml
+# agent_configs/my_agent.yml
+actions:
+  - name: price_validator
+    impl: validate_product_price  # Just the function name!
+    type: tool
+```
+
+**Run with UDF discovery**:
+```bash
+agent-actions run my_agent -i input.json -u user_code/
+
+🔍 Discovering UDFs...
+✅ Discovered 1 UDF(s)
+```
+
+### Why Use UDFs?
+
+- **Simple references**: Use `impl: function_name` instead of module paths
+- **Auto-discovery**: Functions are found automatically from your code directory
+- **Validation**: Duplicate names caught at load time
+- **Refactoring safe**: Move functions between files without breaking configs
+
+### Common UDF Patterns
+
+**Validation**:
+```python
+@udf_tool
+def validate_email(data, **kwargs):
+    """Check email format is valid."""
+    import re
+    email = data.get('email', '')
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    if not re.match(pattern, email):
+        raise ValueError(f"Invalid email: {email}")
+
+    return data
+```
+
+**Transformation**:
+```python
+@udf_tool
+def enrich_customer_data(data, **kwargs):
+    """Add computed fields to customer data."""
+    # Add customer tier based on lifetime value
+    ltv = data.get('lifetime_value', 0)
+
+    if ltv > 10000:
+        data['tier'] = 'platinum'
+    elif ltv > 5000:
+        data['tier'] = 'gold'
+    else:
+        data['tier'] = 'silver'
+
+    return data
+```
+
+**Learn more**:
+- **[UDF Decorator Guide](/guides/udf-decorator)** - Complete guide with examples
+- **[UDF Examples](/examples/udfs/)** - Real-world patterns and use cases
+- **[CLI Reference](/cli-reference#list-udfs)** - `list-udfs` and `validate-udfs` commands
+
 ## Next Steps
 
 Now that you've created your first DAG workflow, explore:
