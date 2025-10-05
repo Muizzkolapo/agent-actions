@@ -215,3 +215,125 @@ class PromptUtils:
             processed_prompt = prompt_config
 
         return processed_prompt, captured_results
+
+    @staticmethod
+    def parse_field_references(prompt: str) -> list:
+        """
+        Parse {reference.field} patterns from prompt.
+
+        Pattern matches:
+        - {source.field}
+        - {agent.field}
+        - {agent.nested.field}
+        - {agent.items.0} (array index)
+
+        Args:
+            prompt: Prompt string with field references
+
+        Returns:
+            List of dicts with 'reference', 'field_path', and 'full_match'
+        """
+        # Pattern: {word.word} or {word.word.word} etc.
+        # Must have at least one dot, starts with letter/underscore
+        pattern = r'\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\}'
+        references = []
+
+        for match in re.finditer(pattern, prompt):
+            full_ref = match.group(1)  # e.g., 'extractor.metrics.count'
+            parts = full_ref.split('.')
+
+            references.append({
+                'reference': parts[0],      # 'extractor'
+                'field_path': parts[1:],    # ['metrics', 'count']
+                'full_match': match.group(0) # '{extractor.metrics.count}'
+            })
+
+        return references
+
+    @staticmethod
+    def resolve_field_reference(reference: str, field_path: list, context: dict):
+        """
+        Resolve a field reference to its value in the context.
+
+        Args:
+            reference: Reference name (e.g., 'source', 'extractor')
+            field_path: List of field names (e.g., ['metrics', 'count'])
+            context: Dict with available references
+
+        Returns:
+            Resolved value
+
+        Raises:
+            ValueError: If reference or field not found
+        """
+        # Check reference exists
+        if reference not in context:
+            available = ', '.join(context.keys())
+            raise ValueError(
+                f"Reference '{reference}' not found. Available: [{available}]"
+            )
+
+        data = context[reference]
+
+        # Navigate field path
+        for field in field_path:
+            if isinstance(data, dict) and field in data:
+                data = data[field]
+            elif isinstance(data, list) and field.isdigit():
+                # Handle array index: {agent.items.0}
+                idx = int(field)
+                if 0 <= idx < len(data):
+                    data = data[idx]
+                else:
+                    raise ValueError(
+                        f"Index {idx} out of range for array in '{reference}'"
+                    )
+            else:
+                field_str = '.'.join(field_path)
+                raise ValueError(
+                    f"Field '{field_str}' not found in '{reference}'"
+                )
+
+        return data
+
+    @staticmethod
+    def replace_field_references(prompt: str, context: dict) -> str:
+        """
+        Replace all {reference.field} patterns with their values.
+
+        Args:
+            prompt: Prompt string with field references
+            context: Dict with available references
+
+        Returns:
+            Prompt with all references replaced
+
+        Raises:
+            ValueError: If reference or field not found
+        """
+        references = PromptUtils.parse_field_references(prompt)
+
+        for ref in references:
+            try:
+                value = PromptUtils.resolve_field_reference(
+                    ref['reference'],
+                    ref['field_path'],
+                    context
+                )
+
+                # Convert to string
+                if isinstance(value, (dict, list)):
+                    value_str = json.dumps(value, indent=2)
+                else:
+                    value_str = str(value)
+
+                # Replace in prompt
+                prompt = prompt.replace(ref['full_match'], value_str)
+
+            except ValueError as e:
+                # Re-raise with context
+                raise ValueError(
+                    f"Error resolving {ref['full_match']}: {str(e)}"
+                )
+
+        return prompt

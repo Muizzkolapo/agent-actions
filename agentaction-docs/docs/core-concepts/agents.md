@@ -83,7 +83,32 @@ agents:
 
 ### Data Access in Prompts
 
-Access outputs from dependent agents using template syntax:
+Agent Actions uses `{reference.field}` syntax to access data in prompts. You can reference:
+
+- **Source data**: `{source.field}` - Original workflow input
+- **Agent outputs**: `{agent_name.field}` - Outputs from dependency agents
+- **Loop context**: `{loop.index}`, `{loop.item.field}` - Loop iteration data
+- **Workflow metadata**: `{workflow.name}`, `{workflow.version}` - Workflow info
+
+#### Accessing Source Data
+
+Reference original workflow input using `{source.field}`:
+
+```yaml
+agents:
+  - name: "document_analyzer"
+    prompt: |
+      Analyze this document:
+
+      Title: {source.title}
+      Content: {source.page_content}
+      Author: {source.metadata.author}
+    depends_on: []
+```
+
+#### Accessing Dependency Outputs
+
+Access outputs from agents listed in `depends_on`:
 
 ```yaml
 agents:
@@ -98,6 +123,20 @@ agents:
       Create engaging marketing copy.
     depends_on: ["sentiment_analyzer", "entity_extractor", "data_extractor"]
 ```
+
+#### Nested Field Access
+
+Navigate nested structures with dot notation:
+
+```yaml
+prompt: |
+  Report accuracy: {analyzer.results.metrics.accuracy}
+  First item: {extractor.items.0}
+```
+
+:::tip
+See [Field Referencing](/core-concepts/field-referencing) for complete documentation on all reference types and patterns.
+:::
 
 ## Model Configuration
 
