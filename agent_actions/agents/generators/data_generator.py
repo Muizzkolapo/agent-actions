@@ -40,7 +40,9 @@ class DataGenerator(IGenerator):
     def create_agent_with_data(
         self,
         contents: Any,
-        source_content: Optional[Any] = None
+        source_content: Optional[Any] = None,
+        loop_context: Optional[Dict] = None,
+        workflow_metadata: Optional[Dict] = None
     ) -> Tuple[List[Dict], bool]:
         """
         Create an agent with the provided data and generate results.
@@ -48,7 +50,9 @@ class DataGenerator(IGenerator):
         Args:
             contents: Content to process
             source_content: Optional source content for prompt formatting
-            
+            loop_context: Optional loop context for {loop.*} references
+            workflow_metadata: Optional workflow metadata for {workflow.*} references
+
         Returns:
             Tuple containing the generated data and a flag indicating if the
             agent was executed
@@ -58,7 +62,9 @@ class DataGenerator(IGenerator):
         """
         try:
             # Format prompt with content
-            formatted_prompt, contents = self._format_prompt(contents, source_content)
+            formatted_prompt, contents = self._format_prompt(
+                contents, source_content, loop_context, workflow_metadata
+            )
             
             # Append few-shot samples if configured
             formatted_prompt = SampleEnricher.append_few_shot_samples(
@@ -95,15 +101,21 @@ class DataGenerator(IGenerator):
         return apply_remove_collection(contents, self.agent_config)
 
     def _format_prompt(
-        self, contents: Dict, source_content: Optional[Any] = None
+        self,
+        contents: Dict,
+        source_content: Optional[Any] = None,
+        loop_context: Optional[Dict] = None,
+        workflow_metadata: Optional[Dict] = None
     ) -> Tuple[str, Dict]:
         """
         Format the prompt with contents and source content.
-        
+
         Args:
             contents: Content for prompt formatting
             source_content: Optional source content for prompt formatting
-            
+            loop_context: Optional loop context for {loop.*} references
+            workflow_metadata: Optional workflow metadata for {workflow.*} references
+
         Returns:
             Tuple of the formatted prompt and cleaned content
         """
@@ -114,9 +126,36 @@ class DataGenerator(IGenerator):
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
 
+        # Build field context for {reference.field} pattern
+        field_context = {}
+        if source_content:
+            field_context['source'] = source_content
+
+        # Add dependency outputs from contents
+        # Contents may contain dependency data
+        if isinstance(contents, dict):
+            field_context.update(contents)
+
+        # Add special loop context for {loop.*} references
+        if loop_context:
+            field_context['loop'] = loop_context
+
+        # Add workflow metadata for {workflow.*} references
+        if workflow_metadata:
+            field_context['workflow'] = workflow_metadata
+
+        # Replace patterns in order
         source_loaded_prompt = PromptUtils.replace_source_context_placeholder(
             raw_prompt,
             source_content
         )
+
+        # NEW: Replace field references
+        if field_context:
+            source_loaded_prompt = PromptUtils.replace_field_references(
+                source_loaded_prompt,
+                field_context
+            )
+
         prompt, cleaned_contents = PromptUtils.replace_placeholders(source_loaded_prompt, contents)
         return prompt, cleaned_contents

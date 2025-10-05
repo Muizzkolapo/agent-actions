@@ -1,0 +1,569 @@
+name: customer_review_analysis_pipeline
+description: Sample workflow demonstrating {reference.field} pattern with loop context
+version: 2.0.0
+
+# ═══════════════════════════════════════════════════════════════
+# SAMPLE WORKFLOW: Customer Review Analysis with Loop
+# ═══════════════════════════════════════════════════════════════
+#
+# PURPOSE:
+# Demonstrates the unified {reference.field} pattern for field referencing
+# Shows how to use loop context, workflow metadata, and cross-agent references
+#
+# WORKFLOW FLOW:
+# 1. Preprocessor ← {source.raw_customer_data}
+# 2. Review Extractor ← {preprocessor.cleaned_data}
+# 3. Sentiment Analyzer (LOOP) ← loop over {review_extractor.reviews}
+#    - Uses {loop.index}, {loop.total}, {loop.item.field}
+# 4. Insights Aggregator ← {sentiment_analyzer}, {review_extractor.total_reviews}
+# 5. Report Generator ← {insights_aggregator.summary}, {workflow.name}, etc.
+#
+# REFERENCE PATTERNS DEMONSTRATED:
+# ┌────────────────────────────────────────────────────────────┐
+# │ Pattern                    │ Example                       │
+# ├────────────────────────────────────────────────────────────┤
+# │ {source.field}            │ {source.raw_customer_data}    │
+# │ {agent.field}             │ {preprocessor.cleaned_data}   │
+# │ {agent.nested.field}      │ {review_extractor.date_range.start} │
+# │ {loop.index}              │ Current iteration (0, 1, 2...) │
+# │ {loop.total}              │ Total items in loop           │
+# │ {loop.item.field}         │ {loop.item.customer_name}     │
+# │ {workflow.name}           │ Workflow metadata             │
+# │ {workflow.run_id}         │ Current execution ID          │
+# └────────────────────────────────────────────────────────────┘
+#
+# KEY CONCEPTS:
+# 1. depends_on: [agent] - Declares which agents you need
+# 2. {agent.field} - References fields from dependencies
+# 3. loop: over: {agent.array} - Iterates over array
+# 4. {loop.item.field} - Accesses current loop item
+# 5. return_collection: true - Returns array of all loop results
+#
+# ═══════════════════════════════════════════════════════════════
+
+actions:
+  # ===================================================================
+  # Agent 1: PREPROCESSOR (Initial Agent)
+  # ===================================================================
+  - name: preprocessor
+    intent: Clean and normalize customer data
+    kind: llm
+    prompt: |
+      [Workflow: {workflow.name} v{workflow.version}]
+      [Run ID: {workflow.run_id}]
+
+      Clean and normalize this customer data:
+      {source.raw_customer_data}
+
+      Tasks:
+      - Remove duplicates
+      - Standardize date formats
+      - Validate customer IDs
+      - Fix encoding issues
+
+      Return cleaned, structured data.
+
+    schema:
+      cleaned_data: array
+      customers_processed: number
+      duplicates_removed: number
+      validation_errors: array
+
+  # ===================================================================
+  # Agent 2: EXTRACTOR (Depends on Preprocessor)
+  # ===================================================================
+  - name: review_extractor
+    intent: Extract individual reviews from customer data
+    kind: llm
+    depends_on: [preprocessor]  # ← DECLARES: I need preprocessor's output
+    prompt: |
+      Extract all customer reviews from the cleaned data.
+
+      # HOW REFERENCING WORKS:
+      # Pattern: {agent_name.field_name}
+      #           ↑           ↑
+      #           │           └── Field from agent's output schema
+      #           └── Agent you depend on
+
+      Cleaned customer data:
+      {preprocessor.cleaned_data}  # ← REFERENCES: preprocessor's 'cleaned_data' field
+
+      Total customers processed: {preprocessor.customers_processed}  # ← REFERENCES: preprocessor's 'customers_processed' field
+
+      For each review, extract:
+      - Customer ID
+      - Customer name
+      - Product ID
+      - Rating (1-5)
+      - Review text
+      - Review date
+      - Verified purchase (yes/no)
+
+      Return as array of review objects.
+
+    # OUTPUT SCHEMA: These fields can be referenced by dependent agents
+    # Example references:
+    #   {review_extractor.reviews} ← Gets the array
+    #   {review_extractor.total_reviews} ← Gets the number
+    #   {review_extractor.date_range.start} ← Nested field access
+    schema:
+      reviews: array            # ← Will be used in loop: over: {review_extractor.reviews}
+      total_reviews: number     # ← Can be referenced as {review_extractor.total_reviews}
+      average_rating: number    # ← Can be referenced as {review_extractor.average_rating}
+      date_range:               # ← Nested object
+        start: string           # ← Access as {review_extractor.date_range.start}
+        end: string             # ← Access as {review_extractor.date_range.end}
+
+  # ===================================================================
+  # Agent 3: SENTIMENT ANALYZER (LOOP AGENT - Processes Each Review)
+  # ===================================================================
+  - name: sentiment_analyzer
+    intent: Analyze sentiment for each individual review
+    kind: llm
+    depends_on: [review_extractor]  # ← DECLARES: I need review_extractor's output
+
+    # LOOP: Process each review one by one
+    # This agent will execute MULTIPLE times - once for each item in the array
+    loop:
+      over: {review_extractor.reviews}  # ← LOOPS OVER: review_extractor's 'reviews' array
+                                        # Each iteration gets one review as {loop.item}
+
+    prompt: |
+      ═══════════════════════════════════════════════════════
+      REVIEW ANALYSIS #{loop.index}
+      ═══════════════════════════════════════════════════════
+
+      # LOOP CONTEXT REFERENCES:
+      # {loop.index} ← Current iteration number (0-based): 0, 1, 2, 3...
+      # {loop.total} ← Total items in loop: e.g., 50
+      # {loop.item} ← Current item object being processed
+      # {loop.item.field} ← Access fields from current item
+
+      Progress: Review {loop.index} of {loop.total}  # ← e.g., "Review 0 of 50"
+      Workflow: {workflow.name} (Run: {workflow.run_id})  # ← Workflow metadata
+
+      ───────────────────────────────────────────────────────
+      REVIEW DETAILS (from current loop item)
+      ───────────────────────────────────────────────────────
+      Customer: {loop.item.customer_name} (ID: {loop.item.customer_id})  # ← Fields from CURRENT review
+      Product ID: {loop.item.product_id}
+      Rating: {loop.item.rating}/5 stars
+      Date: {loop.item.review_date}
+      Verified Purchase: {loop.item.verified_purchase}
+
+      ───────────────────────────────────────────────────────
+      REVIEW TEXT (from current loop item)
+      ───────────────────────────────────────────────────────
+      {loop.item.review_text}  # ← The actual review text for THIS iteration
+
+      ───────────────────────────────────────────────────────
+      ANALYSIS TASKS
+      ───────────────────────────────────────────────────────
+
+      1. SENTIMENT ANALYSIS:
+         - Overall sentiment (positive/negative/neutral)
+         - Sentiment score (-1.0 to +1.0)
+         - Confidence level (0-100%)
+
+      2. KEY TOPICS:
+         - Extract main topics mentioned (product quality, shipping, customer service, price)
+         - Rate satisfaction for each topic (1-5)
+
+      3. ACTIONABLE INSIGHTS:
+         - Is this a complaint? (yes/no)
+         - Needs urgent attention? (yes/no)
+         - Key issues to address
+         - Positive highlights to leverage
+
+      4. CATEGORIZATION:
+         - Product category concern
+         - Issue severity (low/medium/high/critical)
+         - Customer satisfaction level
+
+      # CROSS-AGENT REFERENCES (accessing dependency data while in loop):
+      # Even though we're in a loop, we can still access fields from review_extractor
+      Note: This is review {loop.index} in the batch.
+      Context from extractor: Total reviews = {review_extractor.total_reviews}, Average rating = {review_extractor.average_rating}
+      # ↑ Accessing review_extractor's fields while processing individual loop items
+
+    schema:
+      review_id: string
+      customer_id: string
+      sentiment:
+        overall: string  # positive/negative/neutral
+        score: number    # -1.0 to +1.0
+        confidence: number  # 0-100
+      topics:
+        product_quality:
+          mentioned: boolean
+          satisfaction: number  # 1-5
+        shipping:
+          mentioned: boolean
+          satisfaction: number
+        customer_service:
+          mentioned: boolean
+          satisfaction: number
+        price:
+          mentioned: boolean
+          satisfaction: number
+      insights:
+        is_complaint: boolean
+        needs_urgent_attention: boolean
+        key_issues: array
+        positive_highlights: array
+      categorization:
+        product_category: string
+        issue_severity: string  # low/medium/high/critical
+        customer_satisfaction_level: string  # very_dissatisfied/dissatisfied/neutral/satisfied/very_satisfied
+      original_rating: number
+      loop_iteration: number  # Which review number this was
+
+    # Output directives
+    return_collection: true  # Return array of all analyzed reviews
+
+    # Keep internal processing data out of next agent's LLM context
+    observe:
+      - loop_iteration
+
+  # ===================================================================
+  # Agent 4: AGGREGATOR (Depends on Loop Results)
+  # ===================================================================
+  - name: insights_aggregator
+    intent: Aggregate all sentiment analysis results
+    kind: llm
+    depends_on: [sentiment_analyzer, review_extractor]  # ← DEPENDS ON: Both loop results AND original extractor
+    prompt: |
+      Aggregate insights from all analyzed reviews.
+
+      # REFERENCE PATTERNS USED:
+      # 1. {agent.field} - Simple field reference
+      # 2. {agent.nested.field} - Nested field reference (dot notation)
+      # 3. {agent} - Entire agent output (for loop results)
+
+      ═══════════════════════════════════════════════════════
+      AGGREGATION CONTEXT
+      ═══════════════════════════════════════════════════════
+      Workflow: {workflow.name} v{workflow.version}
+      Run: {workflow.run_id}
+      Timestamp: {workflow.timestamp}
+
+      ───────────────────────────────────────────────────────
+      INPUT DATA
+      ───────────────────────────────────────────────────────
+
+      # SIMPLE FIELD REFERENCES:
+      Original extraction stats:
+      - Total reviews extracted: {review_extractor.total_reviews}  # ← Simple: gets number
+      - Overall average rating: {review_extractor.average_rating}  # ← Simple: gets number
+
+      # NESTED FIELD REFERENCES (using dot notation):
+      - Date range: {review_extractor.date_range.start} to {review_extractor.date_range.end}
+      #              ↑ Nested object access          ↑ Another nested field
+
+      # LOOP RESULTS (array of all analyzed reviews):
+      Analyzed reviews (from loop):
+      {sentiment_analyzer}  # ← Gets ALL results from loop (array of analyzed reviews)
+                           # Because sentiment_analyzer had return_collection: true
+
+      ───────────────────────────────────────────────────────
+      AGGREGATION TASKS
+      ───────────────────────────────────────────────────────
+
+      1. SENTIMENT SUMMARY:
+         - Calculate overall sentiment distribution (% positive/negative/neutral)
+         - Average sentiment score across all reviews
+         - Sentiment trends over time
+
+      2. TOPIC ANALYSIS:
+         - Most mentioned topics
+         - Average satisfaction per topic
+         - Critical issues by frequency
+
+      3. URGENT ITEMS:
+         - Count of complaints
+         - Reviews needing urgent attention
+         - Critical severity issues
+
+      4. CUSTOMER INSIGHTS:
+         - Customer satisfaction distribution
+         - Correlation between rating and sentiment
+         - Key drivers of satisfaction/dissatisfaction
+
+      5. ACTIONABLE RECOMMENDATIONS:
+         - Top 3 areas for improvement
+         - Quick wins (easy fixes with high impact)
+         - Long-term strategic recommendations
+
+      Provide comprehensive aggregated insights.
+
+    schema:
+      summary:
+        total_reviews_analyzed: number
+        sentiment_distribution:
+          positive_percent: number
+          negative_percent: number
+          neutral_percent: number
+        average_sentiment_score: number
+        average_rating: number
+
+      topic_insights:
+        product_quality:
+          mention_count: number
+          average_satisfaction: number
+          key_issues: array
+        shipping:
+          mention_count: number
+          average_satisfaction: number
+          key_issues: array
+        customer_service:
+          mention_count: number
+          average_satisfaction: number
+          key_issues: array
+        price:
+          mention_count: number
+          average_satisfaction: number
+          key_issues: array
+
+      urgent_items:
+        total_complaints: number
+        urgent_attention_needed: number
+        critical_issues: array
+
+      customer_satisfaction:
+        very_dissatisfied: number
+        dissatisfied: number
+        neutral: number
+        satisfied: number
+        very_satisfied: number
+
+      recommendations:
+        top_improvements: array
+        quick_wins: array
+        strategic_initiatives: array
+
+      metadata:
+        workflow_name: string
+        run_id: string
+        analysis_date: string
+
+  # ===================================================================
+  # Agent 5: REPORT GENERATOR (Final Agent)
+  # ===================================================================
+  - name: report_generator
+    intent: Generate executive summary report
+    kind: llm
+    depends_on: [insights_aggregator, review_extractor, preprocessor]  # ← DEPENDS ON: Multiple agents
+    prompt: |
+      Generate a professional executive summary report.
+
+      # REFERENCE SUMMARY:
+      # This agent demonstrates referencing MULTIPLE dependencies
+      # - {preprocessor.field} - From agent 1
+      # - {review_extractor.field} - From agent 2
+      # - {insights_aggregator.field} - From agent 4
+      # - {workflow.field} - Workflow metadata
+
+      ═══════════════════════════════════════════════════════
+      REPORT METADATA
+      ═══════════════════════════════════════════════════════
+      # WORKFLOW METADATA REFERENCES:
+      Workflow: {workflow.name}        # ← Gets workflow name: "customer_review_analysis_pipeline"
+      Version: {workflow.version}      # ← Gets version: "2.0.0"
+      Run ID: {workflow.run_id}        # ← Gets unique run ID: "run_20250105_143022"
+      Execution Date: {workflow.timestamp}  # ← Gets timestamp: "2025-01-05T14:30:22Z"
+
+      ═══════════════════════════════════════════════════════
+      DATA PIPELINE SUMMARY (Referencing ALL dependencies)
+      ═══════════════════════════════════════════════════════
+
+      # REFERENCES TO AGENT 1 (preprocessor):
+      1. Data Preprocessing (Agent: preprocessor):
+         - Customers processed: {preprocessor.customers_processed}  # ← From agent 1
+         - Duplicates removed: {preprocessor.duplicates_removed}    # ← From agent 1
+         - Validation errors: {preprocessor.validation_errors}      # ← From agent 1
+
+      # REFERENCES TO AGENT 2 (review_extractor):
+      2. Review Extraction (Agent: review_extractor):
+         - Total reviews extracted: {review_extractor.total_reviews}      # ← Simple field
+         - Average rating: {review_extractor.average_rating}/5            # ← Simple field
+         - Date range: {review_extractor.date_range.start} - {review_extractor.date_range.end}  # ← Nested fields
+
+      3. Sentiment Analysis (Agent: sentiment_analyzer - LOOP):
+         - Reviews analyzed: [COMPLETED LOOP PROCESSING]
+
+      # REFERENCES TO AGENT 4 (insights_aggregator):
+      # Note: These use DEEPLY NESTED field access
+      4. Insights Aggregation (Agent: insights_aggregator):
+         - Sentiment distribution: {insights_aggregator.summary.sentiment_distribution}  # ← 3 levels deep!
+         - Average sentiment: {insights_aggregator.summary.average_sentiment_score}      # ← 3 levels deep!
+
+      ═══════════════════════════════════════════════════════
+      KEY INSIGHTS (Multiple nested field references)
+      ═══════════════════════════════════════════════════════
+
+      # Different ways to reference insights_aggregator fields:
+      Aggregated Insights:
+      {insights_aggregator.summary}  # ← Gets entire 'summary' object
+
+      Topic Analysis:
+      {insights_aggregator.topic_insights}  # ← Gets entire 'topic_insights' object
+
+      Urgent Items:
+      {insights_aggregator.urgent_items}  # ← Gets entire 'urgent_items' object
+
+      Customer Satisfaction:
+      {insights_aggregator.customer_satisfaction}  # ← Gets entire object
+
+      Recommendations:
+      {insights_aggregator.recommendations}  # ← Gets entire 'recommendations' object
+
+      ═══════════════════════════════════════════════════════
+      REPORT GENERATION INSTRUCTIONS
+      ═══════════════════════════════════════════════════════
+
+      Create a professional executive summary that includes:
+
+      1. EXECUTIVE OVERVIEW
+         - High-level summary of findings
+         - Key metrics at a glance
+
+      2. SENTIMENT ANALYSIS RESULTS
+         - Overall sentiment trends
+         - Rating vs. sentiment correlation
+
+      3. CRITICAL INSIGHTS
+         - Urgent issues requiring immediate attention
+         - Most common complaints
+         - Top positive feedback themes
+
+      4. TOPIC DEEP-DIVE
+         - Product quality assessment
+         - Shipping experience analysis
+         - Customer service evaluation
+         - Price perception analysis
+
+      5. ACTIONABLE RECOMMENDATIONS
+         - Immediate actions (next 30 days)
+         - Short-term improvements (next quarter)
+         - Long-term strategic initiatives
+
+      6. APPENDIX
+         - Methodology
+         - Data quality notes
+         - Processing statistics
+
+      Format: Professional business report in markdown.
+      Include: Charts descriptions, tables, executive-friendly language.
+      Footer: Include workflow metadata for traceability.
+
+    schema:
+      executive_summary: string
+      detailed_report: string
+      recommendations_list: array
+      charts_data: object
+      metadata:
+        workflow_name: string
+        workflow_version: string
+        run_id: string
+        execution_date: string
+        total_reviews_processed: number
+        pipeline_stages_completed: number
+
+# ═══════════════════════════════════════════════════════════════
+# WORKFLOW EXECUTION PLAN
+# ═══════════════════════════════════════════════════════════════
+
+plan:
+  - preprocessor
+  - review_extractor <- preprocessor
+  - sentiment_analyzer <- review_extractor  # LOOP AGENT
+  - insights_aggregator <- [sentiment_analyzer, review_extractor]
+  - report_generator <- [insights_aggregator, review_extractor, preprocessor]
+
+# ═══════════════════════════════════════════════════════════════
+# HOW THE NEW {reference.field} PATTERN IS USED
+# ═══════════════════════════════════════════════════════════════
+#
+# 1. {source.field} - Access original workflow input:
+#    - {source.raw_customer_data}
+#
+# 2. {agent.field} - Access dependency outputs:
+#    - {preprocessor.cleaned_data}
+#    - {preprocessor.customers_processed}
+#    - {review_extractor.reviews}
+#    - {review_extractor.total_reviews}
+#    - {insights_aggregator.summary}
+#
+# 3. {agent.nested.field} - Nested field access:
+#    - {review_extractor.date_range.start}
+#    - {review_extractor.date_range.end}
+#    - {insights_aggregator.summary.sentiment_distribution}
+#
+# 4. {loop.index} - Current loop iteration (0-based):
+#    - "Processing review {loop.index} of {loop.total}"
+#
+# 5. {loop.total} - Total items in loop:
+#    - "Review 5 of {loop.total}"
+#
+# 6. {loop.item.field} - Current item in loop:
+#    - {loop.item.customer_name}
+#    - {loop.item.rating}
+#    - {loop.item.review_text}
+#
+# 7. {workflow.name} - Workflow metadata:
+#    - {workflow.name} → "customer_review_analysis_pipeline"
+#    - {workflow.version} → "2.0.0"
+#    - {workflow.run_id} → "run_20250105_143022"
+#    - {workflow.timestamp} → "2025-01-05T14:30:22Z"
+#
+# ═══════════════════════════════════════════════════════════════
+# EXECUTION FLOW VISUALIZATION
+# ═══════════════════════════════════════════════════════════════
+#
+#  ┌─────────────────┐
+#  │ Source Input    │
+#  │ raw_customer    │
+#  │ _data           │
+#  └────────┬────────┘
+#           │
+#           ▼
+#  ┌─────────────────┐
+#  │ 1. Preprocessor │ {source.raw_customer_data}
+#  │                 │ {workflow.name}, {workflow.run_id}
+#  └────────┬────────┘
+#           │ cleaned_data, customers_processed
+#           ▼
+#  ┌─────────────────┐
+#  │ 2. Extractor    │ {preprocessor.cleaned_data}
+#  │                 │ {preprocessor.customers_processed}
+#  └────────┬────────┘
+#           │ reviews[], total_reviews
+#           ▼
+#  ┌─────────────────┐
+#  │ 3. Sentiment    │ LOOP over {review_extractor.reviews}
+#  │    Analyzer     │ {loop.index}, {loop.total}
+#  │    (LOOP)       │ {loop.item.customer_name}
+#  │                 │ {loop.item.rating}
+#  │                 │ {loop.item.review_text}
+#  │                 │ {workflow.run_id}
+#  └────────┬────────┘
+#           │ analyzed_reviews[] (from return_collection)
+#           ▼
+#  ┌─────────────────┐
+#  │ 4. Aggregator   │ {sentiment_analyzer} (all loop results)
+#  │                 │ {review_extractor.total_reviews}
+#  │                 │ {review_extractor.average_rating}
+#  └────────┬────────┘
+#           │ summary, topic_insights, recommendations
+#           ▼
+#  ┌─────────────────┐
+#  │ 5. Report Gen   │ {insights_aggregator.summary}
+#  │                 │ {preprocessor.customers_processed}
+#  │                 │ {review_extractor.total_reviews}
+#  │                 │ {workflow.name}, {workflow.version}
+#  └────────┬────────┘
+#           │
+#           ▼
+#       Final Report
+#
+# ═══════════════════════════════════════════════════════════════
