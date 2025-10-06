@@ -5,8 +5,9 @@ from pydantic import ValidationError
 from agent_actions.core.core_utils import Utils
 from agent_actions.core.graph.render_workflow import render_pipeline_with_templates
 from agent_actions.agents.validators.config_validator import ConfigValidator
+from agent_actions.agents.validators.input_signature_validator import InputSignatureValidator
 from typing import Dict, Any, Optional, List
-from agent_actions.core.exceptions import ConfigurationError, TemplateRenderingError
+from agent_actions.core.exceptions import ConfigurationError, TemplateRenderingError, ConfigValidationError
 from agent_actions.core.parser.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineConfig
@@ -241,6 +242,9 @@ class ConfigManager:
                 ]
                 dependency_graph[agent_type] = dependencies
 
+        # Validate input signatures (field references in prompts)
+        self._validate_input_signatures(dependency_graph)
+
         self.execution_order = Utils.topological_sort(dependency_graph)
     
     def load_environment_config(self) -> EnvironmentConfig:
@@ -353,6 +357,87 @@ class ConfigManager:
                 "name": self.pipeline_config.name if self.pipeline_config else None
             }
         }
+
+    def _validate_input_signatures(self, dependency_graph: Dict[str, List[str]]) -> None:
+        """
+        Validate that field references in agent prompts match available LLM context.
+
+        This validates that when agents reference fields from dependencies (like {extractor.summary}),
+        those fields will actually be available in the next agent's LLM context based on
+        output schema, observe, and drops directives.
+
+        Args:
+            dependency_graph: Dict mapping agent names to their dependency lists
+
+        Raises:
+            ConfigValidationError: If any agent has invalid field references in its prompt
+        """
+        validator = InputSignatureValidator()
+        all_errors = []
+
+        for agent_name, dependencies in dependency_graph.items():
+            # Get agent config
+            if agent_name not in self.agent_configs:
+                continue
+
+            agent_config = self.agent_configs[agent_name].model_dump()
+
+            # Build dependency configs dict
+            dependency_configs = {}
+            for dep_name in dependencies:
+                if dep_name in self.agent_configs:
+                    dependency_configs[dep_name] = self.agent_configs[dep_name].model_dump()
+
+            # Validate this agent's input signature
+            result = validator.validate_agent_inputs(agent_config, dependency_configs, agent_name)
+
+            if result.has_errors():
+                all_errors.append((agent_name, result))
+
+        # If any errors found, format and raise
+        if all_errors:
+            error_message = self._format_input_validation_errors(all_errors)
+            raise ConfigValidationError(
+                config_key="input_signatures",
+                reason="Field references in prompts do not match available LLM context",
+                context={
+                    'operation': 'validate_input_signatures',
+                    'agents_with_errors': [agent_name for agent_name, _ in all_errors],
+                    'error_details': error_message
+                }
+            )
+
+    def _format_input_validation_errors(self, errors: List[tuple]) -> str:
+        """
+        Format input signature validation errors as a human-readable string.
+
+        Args:
+            errors: List of (agent_name, ValidationResult) tuples
+
+        Returns:
+            Formatted error message string
+        """
+        lines = ["\n" + "="*80]
+        lines.append("INPUT SIGNATURE VALIDATION ERRORS")
+        lines.append("="*80 + "\n")
+
+        for agent_name, validation_result in errors:
+            lines.append(f"Agent: '{agent_name}'")
+            lines.append("-" * 80)
+
+            for error in validation_result.errors:
+                lines.append(f"\n  ❌ {error.field_reference}")
+                lines.append(f"     {error.message}")
+                if error.help_text:
+                    lines.append(f"     → {error.help_text}")
+
+            lines.append("\n")
+
+        lines.append("="*80)
+        lines.append("Fix these errors in your agent configurations before running the workflow.")
+        lines.append("="*80 + "\n")
+
+        return "\n".join(lines)
 
 
 class DuplicateAgentError(Exception):
