@@ -58,21 +58,49 @@ class ApplicationContainer:
     def get_dependency_container(self) -> DependencyContainer:
         """
         Get the underlying dependency container.
-        
+
         Returns:
             DependencyContainer instance.
         """
         return self.container
-    
-    def create_target_content_processor(self, agent_config: Dict, agent_name: str, idx: int):
+
+    def _get_dependency_configs_for_agent(
+        self,
+        agent_config: Dict,
+        agent_configs: Optional[Dict[str, Dict]] = None
+    ) -> Dict[str, Dict]:
+        """
+        Extract configs for all dependencies of an agent.
+
+        Args:
+            agent_config: Configuration for the agent
+            agent_configs: Full dict mapping agent names to their configs
+
+        Returns:
+            Dict mapping dependency names to their configs
+        """
+        if not agent_configs:
+            return {}
+
+        dependency_names = agent_config.get('dependencies', [])
+        dependency_configs = {}
+
+        for dep_name in dependency_names:
+            if dep_name in agent_configs:
+                dependency_configs[dep_name] = agent_configs[dep_name]
+
+        return dependency_configs
+
+    def create_target_content_processor(self, agent_config: Dict, agent_name: str, idx: int, agent_configs: Optional[Dict[str, Dict]] = None):
         """
         Create a TargetContentProcessor with all dependencies injected.
-        
+
         Args:
             agent_config: Configuration for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
-            
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution)
+
         Returns:
             TargetContentProcessor instance with injected dependencies.
         """
@@ -92,7 +120,9 @@ class ApplicationContainer:
         try:
             data_generator = self.container.get(IGenerator)
         except Exception:
-            data_generator = DataGenerator(agent_config, agent_name)
+            # Extract dependency configs for this agent
+            dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
+            data_generator = DataGenerator(agent_config, agent_name, dependency_configs)
 
         try:
             data_processor = self.container.get(IDataProcessor)
