@@ -507,3 +507,46 @@ class TestValidationResultDataclass:
         )
 
         assert result.has_warnings() is True
+
+    def test_side_collection_fallback(self):
+        """Should validate reference to side_collection when observe is not present."""
+        agent_config = {
+            'prompt': 'Process {extractor.document_id}',
+            'dependencies': ['extractor']
+        }
+        dep_configs = {
+            'extractor': {
+                'output_schema': {'properties': {'summary': {}}},
+                'side_collection': ['document_id', 'author']  # Using side_collection instead of observe
+            }
+        }
+
+        result = InputSignatureValidator.validate_agent_inputs(
+            agent_config, dep_configs, 'processor'
+        )
+
+        assert result.is_valid()
+        assert len(result.successes) == 1
+        assert result.successes[0].field_name == 'document_id'
+
+    def test_remove_collection_fallback(self):
+        """Should handle remove_collection when drops is not present."""
+        agent_config = {
+            'prompt': 'Use {extractor.temp_data}',
+            'dependencies': ['extractor']
+        }
+        dep_configs = {
+            'extractor': {
+                'output_schema': {'properties': {'summary': {}, 'temp_data': {}}},
+                'remove_collection': ['temp_data']  # Using remove_collection instead of drops
+            }
+        }
+
+        result = InputSignatureValidator.validate_agent_inputs(
+            agent_config, dep_configs, 'user'
+        )
+
+        assert not result.is_valid()
+        assert len(result.errors) == 1
+        assert 'temp_data' in result.errors[0].message
+        assert 'not available' in result.errors[0].message
