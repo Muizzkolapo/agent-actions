@@ -3,8 +3,8 @@ import logging
 from typing import Dict, List
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import SIDE_COLLECTION_KEY
-from agent_actions.core.utils.processor_helpers import transform_with_side_collection
+from agent_actions.core.constants import OBSERVE_KEY
+from agent_actions.core.utils.processor_helpers import transform_with_observe
 from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.core.exceptions import TransformationError
 
@@ -57,7 +57,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            return transform_with_side_collection(
+            return transform_with_observe(
                 generated_data,
                 contents,
                 source_guid,

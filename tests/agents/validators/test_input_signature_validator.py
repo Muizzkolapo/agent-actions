@@ -508,8 +508,8 @@ class TestValidationResultDataclass:
 
         assert result.has_warnings() is True
 
-    def test_side_collection_fallback(self):
-        """Should validate reference to side_collection when observe is not present."""
+    def test_observe_fallback(self):
+        """Should validate reference to observe when observe is not present."""
         agent_config = {
             'prompt': 'Process {extractor.document_id}',
             'dependencies': ['extractor']
@@ -517,7 +517,7 @@ class TestValidationResultDataclass:
         dep_configs = {
             'extractor': {
                 'output_schema': {'properties': {'summary': {}}},
-                'side_collection': ['document_id', 'author']  # Using side_collection instead of observe
+                'observe': ['document_id', 'author']  # Using observe instead of observe
             }
         }
 
@@ -529,8 +529,8 @@ class TestValidationResultDataclass:
         assert len(result.successes) == 1
         assert result.successes[0].field_name == 'document_id'
 
-    def test_remove_collection_fallback(self):
-        """Should handle remove_collection when drops is not present."""
+    def test_drops_fallback(self):
+        """Should handle drops when drops is not present."""
         agent_config = {
             'prompt': 'Use {extractor.temp_data}',
             'dependencies': ['extractor']
@@ -538,7 +538,7 @@ class TestValidationResultDataclass:
         dep_configs = {
             'extractor': {
                 'output_schema': {'properties': {'summary': {}, 'temp_data': {}}},
-                'remove_collection': ['temp_data']  # Using remove_collection instead of drops
+                'drops': ['temp_data']  # Using drops instead of drops
             }
         }
 

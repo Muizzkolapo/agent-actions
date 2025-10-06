@@ -47,19 +47,29 @@ class TestFieldReferencingIntegration:
         agent_config = {
             'prompt': 'Analyze these metrics: {extractor.metrics}',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor']
         }
         source_content = {'text': 'input'}
+        # Contents are FLAT - namespacing happens in _build_namespaced_field_context
         contents = {
+            'metrics': {'count': 5, 'accuracy': 0.95}
+        }
+        # Provide dependency configs so namespacing works
+        dependency_configs = {
             'extractor': {
-                'metrics': {'count': 5, 'accuracy': 0.95}
+                'output_schema': {
+                    'properties': {
+                        'metrics': {}
+                    }
+                }
             }
         }
 
         mock_run_agent.return_value = ([{'result': 'analyzed'}], True)
 
         # Execute
-        generator = DataGenerator(agent_config, 'analyzer')
+        generator = DataGenerator(agent_config, 'analyzer', dependency_configs)
         generator.create_agent_with_data(contents, source_content)
 
         # Verify
@@ -78,14 +88,23 @@ class TestFieldReferencingIntegration:
         agent_config = {
             'prompt': 'Report accuracy: {analyzer.results.metrics.accuracy}',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['analyzer']
         }
         source_content = {}
+        # Flat contents
         contents = {
+            'results': {
+                'metrics': {
+                    'accuracy': 0.87
+                }
+            }
+        }
+        dependency_configs = {
             'analyzer': {
-                'results': {
-                    'metrics': {
-                        'accuracy': 0.87
+                'output_schema': {
+                    'properties': {
+                        'results': {}
                     }
                 }
             }
@@ -94,7 +113,7 @@ class TestFieldReferencingIntegration:
         mock_run_agent.return_value = ([{'report': 'done'}], True)
 
         # Execute
-        generator = DataGenerator(agent_config, 'reporter')
+        generator = DataGenerator(agent_config, 'reporter', dependency_configs)
         generator.create_agent_with_data(contents, source_content)
 
         # Verify
@@ -115,18 +134,36 @@ Extractor summary: {extractor.summary}
 Classifier label: {classifier.label}
 ''',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor', 'classifier']
         }
         source_content = {'title': 'Test Document'}
+        # Flat contents
         contents = {
-            'extractor': {'summary': 'A test summary'},
-            'classifier': {'label': 'positive'}
+            'summary': 'A test summary',
+            'label': 'positive'
+        }
+        dependency_configs = {
+            'extractor': {
+                'output_schema': {
+                    'properties': {
+                        'summary': {}
+                    }
+                }
+            },
+            'classifier': {
+                'output_schema': {
+                    'properties': {
+                        'label': {}
+                    }
+                }
+            }
         }
 
         mock_run_agent.return_value = ([{'combined': 'result'}], True)
 
         # Execute
-        generator = DataGenerator(agent_config, 'combiner')
+        generator = DataGenerator(agent_config, 'combiner', dependency_configs)
         generator.create_agent_with_data(contents, source_content)
 
         # Verify all references replaced
@@ -221,11 +258,22 @@ Previous analysis: {extractor.summary}
 Current review: {loop.item.text}
 ''',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor']
         }
         source_content = {'title': 'Product Reviews'}
+        # Flat contents
         contents = {
-            'extractor': {'summary': 'Mostly positive feedback'}
+            'summary': 'Mostly positive feedback'
+        }
+        dependency_configs = {
+            'extractor': {
+                'output_schema': {
+                    'properties': {
+                        'summary': {}
+                    }
+                }
+            }
         }
         loop_context = {
             'index': 3,
@@ -236,7 +284,7 @@ Current review: {loop.item.text}
         mock_run_agent.return_value = ([{'analyzed': True}], True)
 
         # Execute
-        generator = DataGenerator(agent_config, 'analyzer')
+        generator = DataGenerator(agent_config, 'analyzer', dependency_configs)
         generator.create_agent_with_data(
             contents,
             source_content,
@@ -266,19 +314,28 @@ Current review: {loop.item.text}
         agent_config = {
             'prompt': 'First item: {extractor.items.0}, Second: {extractor.items.1}',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor']
         }
         source_content = {}
+        # Flat contents
         contents = {
+            'items': ['alpha', 'beta', 'gamma']
+        }
+        dependency_configs = {
             'extractor': {
-                'items': ['alpha', 'beta', 'gamma']
+                'output_schema': {
+                    'properties': {
+                        'items': {}
+                    }
+                }
             }
         }
 
         mock_run_agent.return_value = ([{'result': 'ok'}], True)
 
         # Execute
-        generator = DataGenerator(agent_config, 'selector')
+        generator = DataGenerator(agent_config, 'selector', dependency_configs)
         generator.create_agent_with_data(contents, source_content)
 
         # Verify
@@ -294,13 +351,24 @@ Current review: {loop.item.text}
         agent_config = {
             'prompt': 'Use data from: {unknown_agent.field}',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor']
         }
         source_content = {}
-        contents = {'extractor': {'data': 'test'}}
+        # Flat contents
+        contents = {'data': 'test'}
+        dependency_configs = {
+            'extractor': {
+                'output_schema': {
+                    'properties': {
+                        'data': {}
+                    }
+                }
+            }
+        }
 
         # Execute and expect error
-        generator = DataGenerator(agent_config, 'test_agent')
+        generator = DataGenerator(agent_config, 'test_agent', dependency_configs)
 
         with pytest.raises(Exception) as exc_info:
             generator.create_agent_with_data(contents, source_content)
@@ -316,13 +384,25 @@ Current review: {loop.item.text}
         agent_config = {
             'prompt': 'Get metrics: {extractor.missing_field}',
             'model_vendor': 'openai',
-            'model_name': 'gpt-4o-mini'
+            'model_name': 'gpt-4o-mini',
+            'dependencies': ['extractor']
         }
         source_content = {}
-        contents = {'extractor': {'data': 'test', 'summary': 'text'}}
+        # Flat contents - only have 'data' and 'summary', not 'missing_field'
+        contents = {'data': 'test', 'summary': 'text'}
+        dependency_configs = {
+            'extractor': {
+                'output_schema': {
+                    'properties': {
+                        'data': {},
+                        'summary': {}
+                    }
+                }
+            }
+        }
 
         # Execute and expect error
-        generator = DataGenerator(agent_config, 'test_agent')
+        generator = DataGenerator(agent_config, 'test_agent', dependency_configs)
 
         with pytest.raises(Exception) as exc_info:
             generator.create_agent_with_data(contents, source_content)

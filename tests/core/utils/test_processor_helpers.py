@@ -195,7 +195,7 @@ class TestRunDynamicAgent:
     """Test the run_dynamic_agent function integration."""
 
     @patch('agent_actions.core.utils.processor_helpers.agent_builder')
-    @patch('agent_actions.core.utils.processor_helpers.apply_remove_collection')
+    @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_executes_agent_when_no_guards(self, mock_apply_remove, mock_agent_builder):
         """Test normal agent execution when no guard conditions are present."""
         mock_apply_remove.return_value = {'processed': 'context'}
@@ -252,7 +252,7 @@ class TestRunDynamicAgent:
         mock_where_skip.assert_called_once_with(agent_config, context)
 
     @patch('agent_actions.core.utils.processor_helpers.agent_builder')
-    @patch('agent_actions.core.utils.processor_helpers.apply_remove_collection')
+    @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     @patch('agent_actions.core.utils.processor_helpers._should_skip_where_clause')
     @patch('agent_actions.core.utils.processor_helpers._should_skip_legacy_conditional')
     def test_executes_agent_when_all_guards_pass(
@@ -284,7 +284,7 @@ class TestRunDynamicAgent:
         mock_agent_builder.create_dynamic_agent.assert_called_once()
 
     @patch('agent_actions.core.utils.processor_helpers.agent_builder')
-    @patch('agent_actions.core.utils.processor_helpers.apply_remove_collection')
+    @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_passes_all_parameters_to_agent_builder(self, mock_apply_remove, mock_agent_builder):
         """Test that all parameters are correctly passed to agent builder."""
         mock_apply_remove.return_value = {'processed': 'context'}
@@ -314,7 +314,7 @@ class TestToolAgentGuardIntegration:
 
     @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
     @patch('agent_actions.core.utils.processor_helpers.agent_builder')
-    @patch('agent_actions.core.utils.processor_helpers.apply_remove_collection')
+    @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_tool_agent_with_skip_guard_condition_false(
         self, mock_apply_remove, mock_agent_builder, mock_get_filter
     ):

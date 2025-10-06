@@ -101,9 +101,9 @@ class TestSequentialLoopIntegration:
         assert refine_3['prompt'] == "Refine stage 3: improve based on stage 2"
 
         # Verify template variable expansion in observe fields
-        assert "refined_output_1" in refine_1['side_collection']
-        assert "refined_output_2" in refine_2['side_collection']
-        assert "refined_output_3" in refine_3['side_collection']
+        assert "refined_output_1" in refine_1['observe']
+        assert "refined_output_2" in refine_2['observe']
+        assert "refined_output_3" in refine_3['observe']
 
     def test_mixed_parallel_and_sequential_workflow(self):
         """Test workflow with both parallel and sequential loops."""
@@ -328,13 +328,13 @@ class TestSequentialLoopIntegration:
         assert 'previous_pass_1' in schema2
 
         # Verify observe field expansion
-        assert "pass_1_output" in agents[0]['side_collection']
-        assert "pass_2_output" in agents[1]['side_collection']
+        assert "pass_1_output" in agents[0]['observe']
+        assert "pass_2_output" in agents[1]['observe']
 
         # Verify drops field expansion (includes defaults + action-specific)
-        assert "temp_metadata" in agents[0]['remove_collection']  # From defaults
-        assert "debug_1" in agents[0]['remove_collection']  # From action
-        assert "debug_2" in agents[1]['remove_collection']
+        assert "temp_metadata" in agents[0]['drops']  # From defaults
+        assert "debug_1" in agents[0]['drops']  # From action
+        assert "debug_2" in agents[1]['drops']
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from agent_actions.agents.transformers.prompt_utils import PromptUtils
 from agent_actions.core.constants import PROMPT_KEY
 from agent_actions.agents.transformers.pp_sample_enricher import SampleEnricher
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.utils.processor_helpers import apply_remove_collection, run_dynamic_agent
+from agent_actions.core.utils.processor_helpers import apply_drops, run_dynamic_agent
 
 from agent_actions.core.contracts.interfaces import IGenerator, ProcessingMode
 from ...core.graph.dependency_injection import registry
@@ -86,9 +86,9 @@ class DataGenerator(IGenerator):
             from agent_actions.core.exceptions import GenerationError
             raise GenerationError(f"Failed to create agent with data: {str(e)}", cause=e)
 
-    def _apply_remove_collection(self, contents: Dict) -> Dict:
+    def _apply_drops(self, contents: Dict) -> Dict:
         """
-        Apply remove_collection transformation to contents.
+        Apply drops transformation to contents.
         
         Args:
             contents: Content to transform
@@ -96,7 +96,7 @@ class DataGenerator(IGenerator):
         Returns:
             Transformed content
         """
-        return apply_remove_collection(contents, self.agent_config)
+        return apply_drops(contents, self.agent_config)
 
     def _format_prompt(
         self, contents: Dict, source_content: Optional[Any] = None

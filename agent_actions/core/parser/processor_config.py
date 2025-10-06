@@ -102,9 +102,9 @@ class DataProcessorConfig(ProcessorConfig):
         default=True,
         description="Enable data validation"
     )
-    side_collection_handling: Literal["ignore", "separate", "merge"] = Field(
+    observe_handling: Literal["ignore", "separate", "merge"] = Field(
         default="separate",
-        description="How to handle side collections"
+        description="How to handle observe fields"
     )
     cache_config: Optional[CacheConfig] = Field(
         default=None,

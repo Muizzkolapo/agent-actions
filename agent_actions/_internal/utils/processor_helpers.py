@@ -5,13 +5,13 @@ from typing import Any, Dict, Optional
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.agents.base import agent_builder
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import SIDE_COLLECTION_KEY
+from agent_actions.core.constants import OBSERVE_KEY
 from .processor_utils import ProcessorUtils
 
 
-def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
-    """Apply ``remove_collection`` transformations consistently."""
-    return ProcessorUtils.apply_remove_collection(contents, agent_config)
+def apply_drops(contents: Any, agent_config: Dict) -> Any:
+    """Apply ``drops`` transformations consistently."""
+    return ProcessorUtils.apply_drops(contents, agent_config)
 
 
 def run_dynamic_agent(
@@ -36,8 +36,8 @@ def run_dynamic_agent(
     ):
         return context, False
 
-    # Apply remove_collection only after conditional check passes
-    processed_context = apply_remove_collection(context, agent_config)
+    # Apply drops only after conditional check passes
+    processed_context = apply_drops(context, agent_config)
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
@@ -51,15 +51,15 @@ def run_dynamic_agent(
     return response, True
 
 
-def transform_with_side_collection(
+def transform_with_observe(
     data: list,
     context_data: dict,
     source_guid: str,
     agent_config: Dict,
     idx: int = 0,
 ) -> list:
-    """Apply ``side_collection`` logic to generated data consistently."""
-    return ProcessorUtils.transform_with_side_collection(
+    """Apply ``observe`` logic to generated data consistently."""
+    return ProcessorUtils.transform_with_observe(
         data, context_data, source_guid, agent_config, idx
     )
 

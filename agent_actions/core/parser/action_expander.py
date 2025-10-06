@@ -266,8 +266,8 @@ class ActionExpander:
 
         if not (is_file_level and is_tool_action):
             # Data flow field mappings:
-            # - observe -> side_collection: Fields excluded from LLM prompt but included in output (passthrough)
-            # - drops -> remove_collection: Fields excluded from LLM prompt AND from output
+            # - observe: Fields excluded from LLM prompt but included in output (passthrough)
+            # - drops: Fields excluded from LLM prompt AND from output
             # Note: Schema defines LLM output fields (replaces deprecated 'writes')
             # Both observe and drops are ADDITIVE - action-level fields extend defaults rather than replace them
 
@@ -291,8 +291,8 @@ class ActionExpander:
             observe = template_replacer(combined_observe)
             drops = template_replacer(combined_drops)
 
-            agent['side_collection'] = observe
-            agent['remove_collection'] = drops
+            agent['observe'] = observe
+            agent['drops'] = drops
 
         # Dependencies - will be populated from plan
         agent['dependencies'] = []

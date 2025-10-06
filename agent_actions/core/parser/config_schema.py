@@ -171,7 +171,8 @@ class AgentConfig(BaseModel):
     prompt: Optional[str] = None
     schema_name: Optional[str] = None
     chunk_config: Dict[str, Any] = Field(default_factory=dict)
-    side_collection: List[str] = Field(default_factory=list)
+    observe: List[str] = Field(default_factory=list)
+    drops: List[str] = Field(default_factory=list)
     is_operational: bool = True
     use_few_shot_samples: int = Field(default=0, ge=0)
     ephemeral: Optional[bool] = None

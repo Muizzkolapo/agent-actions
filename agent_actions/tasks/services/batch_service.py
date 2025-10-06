@@ -13,8 +13,8 @@ from agent_actions.agents.handlers.schema_handler import SchemaLoader
 from agent_actions.core.parser.schema_change import compile_unified_schema
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, SIDE_COLLECTION_KEY
-from agent_actions.core.utils.processor_helpers import apply_remove_collection
+from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY
+from agent_actions.core.utils.processor_helpers import apply_drops
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.core.parser.where_parser import get_global_filter, evaluate_safe_skip_condition
 from agent_actions.core.utils.path_utils import (
@@ -186,7 +186,7 @@ class BatchService:
         self.data_loader = BatchDataLoader()
         self.provider = provider
         self.context_map = {}
-        self.side_collection = []
+        self.observe = []
         # Cache providers by type to avoid recreating them
         self._provider_cache = {}
         self.where_parser = WhereClauseParser()
@@ -407,7 +407,7 @@ class BatchService:
             sys.path.insert(0, tools_path)
 
         self.context_map = {}
-        self.side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
+        self.observe = agent_config.get(OBSERVE_KEY, [])
         
         # Check for conditional clause (legacy support)
         conditional_clause = agent_config.get("conditional_clause", "")
@@ -594,8 +594,8 @@ class BatchService:
                 # (skip behavior is handled at agent level)
                 continue
 
-            # Apply remove_collection only for rows that pass the conditional check
-            processed_row = apply_remove_collection(row_content, agent_config)
+            # Apply drops only for rows that pass the conditional check
+            processed_row = apply_drops(row_content, agent_config)
 
             formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
@@ -703,7 +703,7 @@ class BatchService:
         
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
-        """Persist original context data for side_collection processing."""
+        """Persist original context data for observe processing."""
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
         else:
@@ -711,7 +711,7 @@ class BatchService:
         ensure_directory_exists(batch_dir)
         path = batch_dir / f"{Path(batch_name).stem}_context_map.json"
         payload = {
-            "side_collection": agent_config.get(SIDE_COLLECTION_KEY, []),
+            "observe": agent_config.get(OBSERVE_KEY, []),
             "data": context_map,
         }
         with open(path, "w", encoding="utf-8") as f:
@@ -729,7 +729,7 @@ class BatchService:
             raw_map = payload.get("data", {})
             # Keep the full row data to preserve source_guid and other metadata
             # The key is target_id (custom_id), the value should be the full row
-            return raw_map, payload.get("side_collection", [])
+            return raw_map, payload.get("observe", [])
         except Exception:
             return {}, []
 
@@ -1018,12 +1018,12 @@ class BatchService:
             batch_results = provider.retrieve_results(batch_id, output_directory)
             
             batch_dir = Path(output_directory) / "batch"
-            context_map, side_collection = self._load_context_map(batch_dir)
+            context_map, observe = self._load_context_map(batch_dir)
 
             # Process results into workflow format
             processed_data = self._convert_batch_results_to_workflow_format(
                 batch_results,
-                side_collection=side_collection,
+                observe=observe,
                 context_map=context_map,
                 output_directory=output_directory,
             )
@@ -1049,14 +1049,14 @@ class BatchService:
             from agent_actions.core.exceptions import ProcessingError
             raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
 
-    def _convert_batch_results_to_workflow_format(self, batch_results, *, side_collection=None, context_map=None, output_directory=None, agent_config=None):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, observe=None, context_map=None, output_directory=None, agent_config=None):
         """
         Convert batch provider results to the workflow's expected format.
         Works with standardized BatchResult objects from any provider.
 
         Args:
             batch_results: List of BatchResult objects from provider
-            side_collection: List of side collection fields
+            observe: List of side collection fields
             context_map: Map of custom_id to original row data
             output_directory: Output directory path to extract node information
             agent_config: Agent configuration (needed for loop correlation ID)
@@ -1066,7 +1066,7 @@ class BatchService:
         """
         processed_data = []
         context_map = context_map or {}
-        side_collection = side_collection or []
+        observe = observe or []
         
         # Extract node index from output directory (e.g., "node_0_summary")
         node_idx = None
@@ -1099,10 +1099,10 @@ class BatchService:
                     original_row = context_map.get(custom_id, {})
                     original_source_guid = original_row.get("source_guid", custom_id)
 
-                    if side_collection and custom_id in context_map:
+                    if observe and custom_id in context_map:
                         original_content = original_row.get("content", original_row)
                         generated_list = [
-                            DataTransformer.update_schema_objects(original_content, item, side_collection)
+                            DataTransformer.update_schema_objects(original_content, item, observe)
                             if isinstance(item, dict) else item
                             for item in generated_list
                         ]
@@ -1281,12 +1281,12 @@ class BatchService:
             print(f"Retrieved {len(batch_results)} batch results")
             
             batch_dir = Path(output_directory) / "batch"
-            context_map, side_collection = self._load_context_map(batch_dir)
+            context_map, observe = self._load_context_map(batch_dir)
 
             # Process results into workflow format
             processed_data = self._convert_batch_results_to_workflow_format(
                 batch_results,
-                side_collection=side_collection,
+                observe=observe,
                 context_map=context_map,
                 output_directory=output_directory,
             )
@@ -1356,7 +1356,7 @@ class BatchService:
                 registry = json.load(f)
             
             # Load context map and side collection once
-            context_map, side_collection = self._load_context_map(batch_dir)
+            context_map, observe = self._load_context_map(batch_dir)
             
             processed_files = []
             
@@ -1393,7 +1393,7 @@ class BatchService:
                     # Process results for this file into workflow format
                     processed_data = self._convert_batch_results_to_workflow_format(
                         batch_results,
-                        side_collection=side_collection,
+                        observe=observe,
                         context_map=context_map,
                         output_directory=output_directory,
                         agent_config=agent_config,
