@@ -510,5 +510,154 @@ class TestActionExpanderInterceptors:
         assert 'interceptors' not in regular_action
 
 
+class TestActionExpanderPromptDebug:
+    """Test prompt_debug inheritance and action-level override."""
+
+    def test_prompt_debug_inherits_from_defaults(self):
+        """Test that prompt_debug inherits from defaults."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt'
+            # No prompt_debug specified
+        }
+
+        defaults = {
+            'prompt_debug': True
+        }
+
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should inherit prompt_debug from defaults
+        assert result['prompt_debug'] is True
+
+    def test_prompt_debug_action_override(self):
+        """Test that action-level prompt_debug overrides defaults."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt',
+            'prompt_debug': True  # Action-level override
+        }
+
+        defaults = {
+            'prompt_debug': False  # Default is False
+        }
+
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Action-level should override defaults
+        assert result['prompt_debug'] is True
+
+    def test_prompt_debug_defaults_to_false(self):
+        """Test that prompt_debug defaults to False when not specified."""
+        action = {
+            'name': 'test_action',
+            'intent': 'Test action',
+            'model_vendor': 'openai',
+            'model_name': 'gpt-4o-mini',
+            'api_key': 'OPENAI_API_KEY',
+            'schema': {'output': 'string'},
+            'prompt': 'Test prompt'
+            # No prompt_debug specified
+        }
+
+        defaults = {}  # No defaults either
+
+        agent = {'agent_type': 'test_action', 'name': 'test_action'}
+        template_replacer = lambda x: x
+
+        result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
+
+        # Should default to False
+        assert result['prompt_debug'] is False
+
+    def test_prompt_debug_in_loop_actions(self):
+        """Test that prompt_debug works correctly in loop-expanded actions."""
+        workflow_config = {
+            'name': 'test_workflow',
+            'defaults': {
+                'model_vendor': 'openai',
+                'model_name': 'gpt-4o-mini',
+                'api_key': 'OPENAI_API_KEY',
+                'prompt_debug': True  # Default prompt_debug enabled
+            },
+            'actions': [
+                {
+                    'name': 'looped_action',
+                    'intent': 'Test loop',
+                    'schema': {'output': 'string'},
+                    'prompt': 'Loop iteration ${i}',
+                    'loop': {
+                        'param': 'i',
+                        'range': [1, 3]
+                    }
+                }
+            ],
+            'plan': [
+                'looped_action'
+            ]
+        }
+
+        result = ActionExpander.expand_actions_to_agents(workflow_config)
+        agents = result['test_workflow']
+
+        # All loop iterations should have prompt_debug from defaults
+        assert len(agents) == 3
+        for agent in agents:
+            assert agent['prompt_debug'] is True
+            assert agent['is_loop_agent'] is True
+
+    def test_prompt_debug_in_loop_with_action_override(self):
+        """Test that action-level prompt_debug overrides defaults in loop."""
+        workflow_config = {
+            'name': 'test_workflow',
+            'defaults': {
+                'model_vendor': 'openai',
+                'model_name': 'gpt-4o-mini',
+                'api_key': 'OPENAI_API_KEY',
+                'prompt_debug': False  # Default is False
+            },
+            'actions': [
+                {
+                    'name': 'looped_action',
+                    'intent': 'Test loop',
+                    'schema': {'output': 'string'},
+                    'prompt': 'Loop iteration ${i}',
+                    'prompt_debug': True,  # Action-level override
+                    'loop': {
+                        'param': 'i',
+                        'range': [1, 2]
+                    }
+                }
+            ],
+            'plan': [
+                'looped_action'
+            ]
+        }
+
+        result = ActionExpander.expand_actions_to_agents(workflow_config)
+        agents = result['test_workflow']
+
+        # All loop iterations should have prompt_debug from action, not defaults
+        assert len(agents) == 2
+        for agent in agents:
+            assert agent['prompt_debug'] is True
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

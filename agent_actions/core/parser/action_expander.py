@@ -158,6 +158,7 @@ class ActionExpander:
 
         # Configuration settings
         agent['json_mode'] = action.get('json_mode', defaults.get('json_mode', False))
+        agent['prompt_debug'] = action.get('prompt_debug', defaults.get('prompt_debug', False))
 
         # Schema handling - apply template replacement
         schema_value = action.get('schema') or action.get('output_schema')
