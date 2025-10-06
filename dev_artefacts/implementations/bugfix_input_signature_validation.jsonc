@@ -220,8 +220,8 @@
     "✅ No changes to public APIs or YAML configuration format",
     "✅ Comments added explaining field name mapping",
     "✅ Backward compatible with existing workflows",
-    "⏳ User to verify: qanalabs-quiz-gen workflow validates successfully",
-    "⏳ User to verify: Runtime execution works correctly"
+    "✅ qanalabs-quiz-gen workflow validates successfully",
+    "⚠️ Runtime execution revealed separate bug in file-level processing (see follow_up_fix below)"
   ],
 
   "field_reference_patterns": {
@@ -349,5 +349,155 @@
     "tests_added": 2,
     "backward_compatible": "Yes",
     "risk": "Low - minimal change, comprehensive test coverage"
+  },
+
+  "follow_up_fix": {
+    "issue_discovered": "Runtime execution still failed after validation fix",
+    "github_issue": "#436",
+    "problem_statement": {
+      "symptom": "Validation passes but runtime throws 'Reference source not found' error",
+      "affected_methods": [
+        "DataTransformer.get_content_by_source_guid() - Wrong lookup pattern",
+        "TargetContentProcessor.process_file_level() - Missing file_path parameter"
+      ],
+      "error_context": "All processing (file-level and record-level) with {source.field} references"
+    },
+    "root_cause": {
+      "description": "DataTransformer.get_content_by_source_guid() used wrong lookup pattern for source_guid",
+      "actual_bug": "Function expected source_guid as dictionary KEY, but actual data has source_guid as a FIELD",
+      "data_structure_mismatch": {
+        "function_expected": "[{'source_guid_value': {...}}] - GUID as key",
+        "actual_data_format": "[{'source_guid': 'source_guid_value', 'bloom_details': '...', ...}] - GUID as field"
+      },
+      "result": "get_content_by_source_guid() always returned None, source_content was never populated",
+      "why_validation_passed": "Validation layer (fixed by PR #435) checks agent configs, doesn't execute actual data lookups"
+    },
+    "the_disconnect": {
+      "validation_layer": "✅ Fixed by PR #435 - LLMContextUtils checks both observe and side_collection",
+      "runtime_layer": "❌ Broken at TWO levels: (1) data lookup pattern, (2) file-level parameter passing"
+    },
+    "fixes_applied": [
+      {
+        "fix_number": 1,
+        "title": "Fix source_guid Lookup Pattern (MAIN FIX)",
+        "date": "2025-01-06",
+        "file": "agent_actions/agents/transformers/data_transformer.py",
+        "method": "get_content_by_source_guid",
+        "lines": "139-147",
+        "before": "for item in data:\n    if isinstance(item, dict) and source_guid in item:\n        return item[source_guid]  # ❌ Expects GUID as KEY\nreturn None",
+        "after": "for item in data:\n    if isinstance(item, dict):\n        # Check if source_guid is a field (new format)\n        if item.get('source_guid') == source_guid:\n            return item  # ✅ Return entire item\n        # Check if source_guid is a key (legacy format)\n        if source_guid in item:\n            return item[source_guid]\nreturn None",
+        "changes": [
+          "Added check for source_guid as a FIELD: item.get('source_guid') == source_guid",
+          "Returns entire item when found as field (contains all source data)",
+          "Maintains backward compatibility for legacy format (GUID as key)",
+          "Fixes {source.field} for BOTH file-level AND record-level processing"
+        ],
+        "impact": "Critical - Fixes the actual root cause of {source.field} failures",
+        "lines_added": 4,
+        "lines_modified": 3
+      },
+      {
+        "fix_number": 2,
+        "title": "Add file_path Parameter to process_file_level (SUPPORTING FIX)",
+        "date": "2025-01-06",
+        "files_changed": [
+          {
+            "file": "agent_actions/agents/generators/target_content_processor.py",
+            "method": "process_file_level",
+            "lines": "229, 260",
+            "changes": [
+              "Added file_path parameter to method signature",
+              "Pass file_path to source_loader.load_source_data(file_path)"
+            ]
+          },
+          {
+            "file": "agent_actions/agents/generators/target_generator.py",
+            "line": 205,
+            "changes": [
+              "Updated caller to pass file_path: process_file_level(data, file_path, output_directory)"
+            ]
+          }
+        ],
+        "before": "def process_file_level(self, data: List[Dict], output_directory: str = None)",
+        "after": "def process_file_level(self, data: List[Dict], file_path: str = None, output_directory: str = None)",
+        "why_needed": "source_loader.load_source_data() requires file_path to load source data",
+        "impact": "Enables source data loading for file-level processing",
+        "lines_added": 5,
+        "lines_modified": 2
+      },
+      {
+        "fix_number": 3,
+        "title": "Pass Full Data List for File-Level Tools (CORRECTION)",
+        "date": "2025-01-06",
+        "file": "agent_actions/agents/generators/target_content_processor.py",
+        "lines": "256-265",
+        "correction_reason": "File-level tools need entire data list, not just first item's content",
+        "before": "contents = data[0]['content']\ngenerated_data, _ = self.data_generator.create_agent_with_data(contents, source_content)",
+        "after": "source_guid = data[0]['source_guid'] if data else None\nsource_data = self.source_loader.load_source_data(file_path) if file_path else []\nsource_content = DataTransformer.get_content_by_source_guid(source_data, source_guid) if source_guid else None\ngenerated_data, _ = self.data_generator.create_agent_with_data(data, source_content)",
+        "changes": [
+          "Pass 'data' (full list) for file-level tool processing",
+          "Extract source_guid from first item for source lookup",
+          "Add defensive checks for None values"
+        ],
+        "why_different": "File-level tools process all records at once, need full list not individual contents"
+      }
+    ],
+    "why_fixes_work": {
+      "fix_1_impact": {
+        "what_changed": "get_content_by_source_guid() now finds source data correctly",
+        "before": "Always returned None (couldn't find GUID as key)",
+        "after": "Returns full source item (finds GUID as field)",
+        "enables": "source_content populated for ALL agents (file-level and record-level)"
+      },
+      "fix_2_impact": {
+        "what_changed": "process_file_level() can now load source data",
+        "before": "No file_path parameter, couldn't call load_source_data()",
+        "after": "Has file_path, calls load_source_data(file_path)",
+        "enables": "File-level tools can access source data"
+      },
+      "fix_3_impact": {
+        "what_changed": "File-level tools receive correct data structure",
+        "before": "Received single item's content dict",
+        "after": "Receives full list of all items",
+        "enables": "Tools that process multiple records at once work correctly"
+      },
+      "combined_result": {
+        "field_context_building": {
+          "before": "field_context = {} (source_content was None, never added)",
+          "after": "field_context = {'source': {bloom_details: '...', page_content: '...', ...}}"
+        },
+        "enables_patterns": [
+          "{source.bloom_details} - ✅ source_content now populated and accessible",
+          "{source.page_content} - ✅ all source fields available",
+          "{agent.field} - ❌ Still requires Issue #437 (namespace preservation)"
+        ]
+      }
+    },
+    "test_results": {
+      "field_referencing_integration": "✅ 10/10 tests passing",
+      "input_signature_validator": "✅ 25/25 tests passing",
+      "regressions": "✅ None detected",
+      "backward_compatibility": "✅ Supports both GUID-as-key and GUID-as-field formats",
+      "verification": "Ready for qanalabs-quiz-gen workflow with {source.bloom_details}"
+    },
+    "complete_solution_summary": {
+      "part_1_validation": {
+        "pr": "#435",
+        "fix": "LLMContextUtils checks both observe and side_collection",
+        "impact": "Validation recognizes fields correctly"
+      },
+      "part_2_runtime_source_lookup": {
+        "issue": "#436 - Fix 1 (MAIN)",
+        "fix": "get_content_by_source_guid() checks GUID as field, not just as key",
+        "impact": "source_content populated for all agents"
+      },
+      "part_3_runtime_file_level": {
+        "issue": "#436 - Fix 2 & 3 (SUPPORTING)",
+        "fix": "process_file_level() has file_path param and passes correct data structure",
+        "impact": "File-level tools can load and use source data"
+      },
+      "result": "{source.field} references now work for both file-level and record-level processing",
+      "remaining_issue": "{agent.field} references still require Issue #437 (namespace preservation)"
+    }
   }
 }

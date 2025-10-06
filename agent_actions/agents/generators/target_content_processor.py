@@ -226,17 +226,18 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             from agent_actions.core.exceptions import ProcessingError
             raise ProcessingError(f"Failed to process for side output: {str(e)}", cause=e)
 
-    def process_file_level(self, data: List[Dict], output_directory: str = None) -> List[Dict]:
+    def process_file_level(self, data: List[Dict], file_path: str = None, output_directory: str = None) -> List[Dict]:
         """
         Process data at the file level.
-        
+
         Args:
             data: List of data items to process
+            file_path: Path to the file containing the data (needed for source_data loading)
             output_directory: Directory where batch files should be created
-            
+
         Returns:
             Processed data
-            
+
         Raises:
             RuntimeError: If processing fails
         """
@@ -253,8 +254,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return []
 
         try:
-            contents, source_guid = data[0]['content'], data[0]['source_guid']
-            generated_data, _ = self.data_generator.create_agent_with_data(data)
+            # For file-level processing, pass the entire data list (not just first item's content)
+            # But we still need source_content for {source.field} references
+            source_guid = data[0]['source_guid'] if data else None
+
+            # Get source content for {source.field} references
+            source_data = self.source_loader.load_source_data(file_path) if file_path else []
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid) if source_guid else None
+
+            generated_data, _ = self.data_generator.create_agent_with_data(data, source_content)
             
             # For tool vendor with file granularity, return generated_data directly
             # to match the bypass behavior in agent_builder.py
@@ -269,7 +277,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     return generated_data
                 else:
                     return [generated_data]
-            
+
+            # For non-tool vendors, process normally (though file-level is typically only for tools)
+            contents = data[0]['content'] if data else {}
             return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
             from agent_actions.core.exceptions import ProcessingError
