@@ -202,7 +202,7 @@ class TargetGenerator:
         
         # Tool vendor with file granularity
         elif self.model_vendor == TOOL_VENDOR and self.granularity == 'file':
-            output = self.content_processor.process_file_level(data, output_directory)
+            output = self.content_processor.process_file_level(data, file_path, output_directory)
             self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
         
         # Record granularity (default)

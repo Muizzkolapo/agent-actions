@@ -130,13 +130,18 @@ class DataTransformer:
         Retrieve content by source_guid without side effects.
 
         Args:
-            data: List containing dictionaries with GUIDs as keys
+            data: List of dictionaries with 'source_guid' field or GUIDs as keys
             source_guid: The source_guid to search for
 
         Returns:
             The content associated with the source_guid, or None if not found
         """
         for item in data:
-            if isinstance(item, dict) and source_guid in item:
-                return item[source_guid]
+            if isinstance(item, dict):
+                # Check if source_guid is a field (new format)
+                if item.get('source_guid') == source_guid:
+                    return item
+                # Check if source_guid is a key (legacy format)
+                if source_guid in item:
+                    return item[source_guid]
         return None
