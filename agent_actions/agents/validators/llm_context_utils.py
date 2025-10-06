@@ -48,11 +48,13 @@ class LLMContextUtils:
         schema = agent_config.get('output_schema', {})
         schema_fields = set(schema.get('properties', {}).keys())
 
-        # Get pass-through fields from input (observe)
-        observe = set(agent_config.get('observe', []))
+        # Get pass-through fields from input (observe or side_collection)
+        # Note: 'observe' is the YAML field name, 'side_collection' is the internal Pydantic field name
+        observe = set(agent_config.get('observe', agent_config.get('side_collection', [])))
 
-        # Get fields to remove from output (drops)
-        drops = set(agent_config.get('drops', []))
+        # Get fields to remove from output (drops or remove_collection)
+        # Note: 'drops' is the YAML field name, 'remove_collection' is the internal Pydantic field name
+        drops = set(agent_config.get('drops', agent_config.get('remove_collection', [])))
 
         # Compute LLM context: (schema + observe) - drops
         llm_context = (schema_fields | observe) - drops
@@ -92,11 +94,13 @@ class LLMContextUtils:
         schema = agent_config.get('output_schema', {})
         schema_fields = set(schema.get('properties', {}).keys())
 
-        # Get pass-through fields from input (observe)
-        observe = set(agent_config.get('observe', []))
+        # Get pass-through fields from input (observe or side_collection)
+        # Note: 'observe' is the YAML field name, 'side_collection' is the internal Pydantic field name
+        observe = set(agent_config.get('observe', agent_config.get('side_collection', [])))
 
-        # Get fields to remove from output (drops)
-        drops = set(agent_config.get('drops', []))
+        # Get fields to remove from output (drops or remove_collection)
+        # Note: 'drops' is the YAML field name, 'remove_collection' is the internal Pydantic field name
+        drops = set(agent_config.get('drops', agent_config.get('remove_collection', [])))
 
         # Output fields: (schema + observe) - drops
         output_fields = (schema_fields | observe) - drops
