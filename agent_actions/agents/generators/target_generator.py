@@ -20,42 +20,45 @@ SOURCE_FOLDER = 'source'
 class TargetGenerator:
     """Responsible for generating target data from input files based on configuration."""
     
-    def __init__(self, agent_config, agent_name, idx, processor_factory: ProcessorFactory):
+    def __init__(self, agent_config, agent_name, idx, processor_factory: ProcessorFactory, agent_configs: Optional[dict] = None):
         """
         Initialize the target generator.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent
             agent_name: Name of the agent
             idx: Index of the config being processed
             processor_factory: Required factory for creating processors with DI (must be provided)
-            
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution)
+
         Raises:
             DependencyError: If processor_factory is not provided
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.idx = idx
+        self.agent_configs = agent_configs
         self.model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
         self.granularity = (agent_config.get('granularity') or '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
-        
+
         # Validate required dependency
         if processor_factory is None:
             raise DependencyError(
                 "TargetGenerator requires processor_factory dependency",
                 context={'component': 'TargetGenerator', 'dependency': 'processor_factory', 'agent_name': agent_name}
             )
-        
+
         # Use processor factory with proper DI
         # Use bootstrap.create_target_content_processor() for proper DI setup
         from ..._internal.bootstrap.bootstrap import create_target_content_processor
         self.content_processor = create_target_content_processor(
             agent_config=agent_config,
             agent_name=agent_name,
-            idx=idx
+            idx=idx,
+            agent_configs=agent_configs
         )
-        
+
         self.output_handler = OutputHandler()
     
     @staticmethod

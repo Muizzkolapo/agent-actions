@@ -293,9 +293,10 @@ class AgentWorkflow:
             constructor_path=self.constructor_path,
             default_path=getattr(self.config_manager, 'default_path', None)
         )
-        # Pass execution_order and agent_indices to agent_runner for proper dependency resolution
+        # Pass execution_order, agent_indices, and agent_configs to agent_runner for proper dependency resolution
         self.agent_runner.execution_order = self.execution_order
         self.agent_runner.agent_indices = self.agent_indices
+        self.agent_runner.agent_configs = self.agent_configs
 
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
         self.batch_service = BatchService()

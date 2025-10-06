@@ -36,11 +36,12 @@ class AgentStrategy(ABC):
         file_path: str,
         base_directory: str,
         output_directory: str,
-        idx: int
+        idx: int,
+        agent_configs: Optional[Dict[str, Dict]] = None
     ) -> str:
         """
         Execute the strategy for a specific agent and file.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent.
             agent_name: Name of the agent.
@@ -48,7 +49,8 @@ class AgentStrategy(ABC):
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
             idx: Index of the config being processed.
-            
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
+
         Returns:
             Path to the generated output file.
         """
@@ -61,14 +63,18 @@ class AgentStrategy(ABC):
         file_path: str,
         base_directory: str,
         output_directory: str,
-        idx: int
+        idx: int,
+        agent_configs: Optional[Dict[str, Dict]] = None
     ) -> str:
         """
         Helper method to generate target data.
-        
+
         This method wraps the generate_target function so that it can be
         reused by multiple strategies without duplication.
-        
+
+        Args:
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
+
         Returns:
             Path to the generated output file.
         """
@@ -76,10 +82,10 @@ class AgentStrategy(ABC):
         if self.processor_factory is None:
             from agent_actions.core.exceptions import DependencyError
             raise DependencyError("BaseAgentStrategy", "processor_factory")
-            
-        generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory)
+
+        generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory, agent_configs=agent_configs)
         result = generator.process(file_path, base_directory, output_directory)
-        
+
         if asyncio.iscoroutine(result):
             try:
                 loop = asyncio.get_running_loop()
@@ -97,7 +103,7 @@ class AgentStrategy(ABC):
 class InitialStrategy(AgentStrategy):
     """
     Strategy for the initial agent in a workflow.
-    
+
     This strategy typically handles the initial loading and processing of data.
     """
 
@@ -108,13 +114,14 @@ class InitialStrategy(AgentStrategy):
         file_path: str,
         base_directory: str,
         output_directory: str,
-        idx: int
+        idx: int,
+        agent_configs: Optional[Dict[str, Dict]] = None
     ) -> str:
         """
         Execute the initial agent strategy.
-        
+
         Generates staging data from the input file.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent.
             agent_name: Name of the agent.
@@ -122,6 +129,7 @@ class InitialStrategy(AgentStrategy):
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
             idx: Index of the config being processed.
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
         Returns:
             Path to the generated output file.
         """
@@ -131,7 +139,7 @@ class InitialStrategy(AgentStrategy):
 class TerminalStrategy(AgentStrategy):
     """
     Strategy for the terminal (final) agent in a workflow.
-    
+
     This strategy typically handles the final processing and output generation.
     """
 
@@ -142,13 +150,14 @@ class TerminalStrategy(AgentStrategy):
         file_path: str,
         base_directory: str,
         output_directory: str,
-        idx: int
+        idx: int,
+        agent_configs: Optional[Dict[str, Dict]] = None
     ) -> str:
         """
         Execute the terminal agent strategy.
-        
+
         Generates final target data from the input file.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent.
             agent_name: Name of the agent.
@@ -156,16 +165,17 @@ class TerminalStrategy(AgentStrategy):
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
             idx: Index of the config being processed.
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
         Returns:
             Path to the generated output file.
         """
-        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx)
+        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx, agent_configs)
 
 
 class IntermediateStrategy(AgentStrategy):
     """
     Strategy for intermediate agents in a workflow.
-    
+
     This strategy handles the processing of data between initial and terminal agents.
     """
 
@@ -176,13 +186,14 @@ class IntermediateStrategy(AgentStrategy):
         file_path: str,
         base_directory: str,
         output_directory: str,
-        idx: int
+        idx: int,
+        agent_configs: Optional[Dict[str, Dict]] = None
     ) -> str:
         """
         Execute the intermediate agent strategy.
-        
+
         Processes input data and generates intermediate target data.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent.
             agent_name: Name of the agent.
@@ -190,7 +201,8 @@ class IntermediateStrategy(AgentStrategy):
             base_directory: Base input directory.
             output_directory: Directory where output should be written.
             idx: Index of the config being processed.
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
         Returns:
             Path to the generated output file.
         """
-        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx)
+        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx, agent_configs)

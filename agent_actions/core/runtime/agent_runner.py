@@ -30,10 +30,13 @@ class AgentRunner:
         """
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
-        
+
         # Processor factory is now required for proper DI
         # Use bootstrap.create_agent_runner() to get a properly configured instance
-        
+
+        # Agent configs will be set by AgentWorkflow for dependency resolution
+        self.agent_configs: Optional[Dict[str, Dict]] = None
+
         self.strategies: Dict[str, AgentStrategy] = {
             'initial': InitialStrategy(self.processor_factory),
             'terminal': TerminalStrategy(self.processor_factory),
@@ -165,7 +168,8 @@ class AgentRunner:
                     str(item),
                     input_directory,
                     str(output_file_path.parent),
-                    idx
+                    idx,
+                    agent_configs=self.agent_configs
                 )
                 files_processed_count += 1
 
