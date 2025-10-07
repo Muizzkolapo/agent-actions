@@ -45,10 +45,10 @@ class AgentWorkflow:
             ]
 
             if not pending_agents:
-                self.console.print(f"[yellow]Level {level_idx}: All agents complete (skipped)[/yellow]")
+                self.console.print(f"[yellow]Action {level_idx}: All agents complete (skipped)[/yellow]")
                 continue
 
-            self.console.print(f"[cyan]Level {level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]")
+            self.console.print(f"[cyan]Action {level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]")
 
             # Execute agents in level
             if len(pending_agents) == 1:
@@ -83,7 +83,7 @@ class AgentWorkflow:
                     error_details = '\n'.join([
                         f"  - {agent}: {str(exc)}" for agent, exc in errors
                     ])
-                    error_msg = f"Multiple agents failed in parallel level {level_idx}:\n{error_details}"
+                    error_msg = f"Multiple agents failed in parallel action {level_idx}:\n{error_details}"
                     raise WorkflowError('parallel_execution_failures', error_msg)
 
             # Check for batch submissions in this level
@@ -102,18 +102,18 @@ class AgentWorkflow:
                 if failed_agents:
                     # Some batch agents succeeded but others failed - raise error
                     from agent_actions.core.exceptions import WorkflowError
-                    error_msg = f"Partial failure in parallel level {level_idx}: {', '.join(failed_agents)} failed while batch jobs were submitted"
+                    error_msg = f"Partial failure in parallel action {level_idx}: {', '.join(failed_agents)} failed while batch jobs were submitted"
                     raise WorkflowError('batch_submission_partial_failure', error_msg)
 
                 # All agents succeeded and batch jobs submitted - safe to exit
                 duration = (datetime.now() - start_time).total_seconds()
-                self.console.print(f"[yellow]Level {level_idx}: {len(batch_pending)} batch job(s) submitted ({duration:.2f}s)[/yellow]")
+                self.console.print(f"[yellow]Action {level_idx}: {len(batch_pending)} batch job(s) submitted ({duration:.2f}s)[/yellow]")
                 self.console.print(f"[yellow]Run workflow again to check batch status[/yellow]")
                 return  # Exit early - resume on next run
 
             # Level complete
             duration = (datetime.now() - start_time).total_seconds()
-            self.console.print(f"[green]Level {level_idx} complete ({duration:.2f}s)[/green]")
+            self.console.print(f"[green]Action {level_idx} complete ({duration:.2f}s)[/green]")
 
         # All levels complete
         self.console.print("\n[bold]Workflow Summary:[/bold]")
@@ -435,18 +435,18 @@ class AgentWorkflow:
 
     def _log_execution_levels(self, levels: List[List[str]]) -> None:
         """Log execution levels for user transparency."""
-        self.console.print(f"[blue]📊 Execution: {len(levels)} level(s)[/blue]")
+        self.console.print(f"[blue]📊 Execution: {len(levels)} action(s)[/blue]")
 
         for i, level in enumerate(levels):
             if len(level) > 1:
                 # Sort agents by original execution order for consistent logging
                 sorted_agents = sorted(level, key=lambda a: self.agent_indices[a])
                 self.console.print(
-                    f"[blue]  Level {i}: {len(level)} agents in parallel - {', '.join(sorted_agents)}[/blue]"
+                    f"[blue]  Action {i}: {len(level)} agents in parallel - {', '.join(sorted_agents)}[/blue]"
                 )
             else:
                 self.console.print(
-                    f"[dim]  Level {i}: {level[0]} (sequential)[/dim]"
+                    f"[dim]  Action {i}: {level[0]} (sequential)[/dim]"
                 )
 
     def _load_status(self):
