@@ -30,8 +30,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should inherit drops and observe from defaults
-        assert result['remove_collection'] == ['internal_id', 'temp_metadata']
-        assert result['side_collection'] == ['user_id', 'request_id', 'timestamp']
+        assert result['drops'] == ['internal_id', 'temp_metadata']
+        assert result['observe'] == ['user_id', 'request_id', 'timestamp']
 
     def test_action_level_drops_observe_extend_defaults(self):
         """Test that action-level drops/observe extend defaults additively."""
@@ -58,8 +58,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should combine defaults + action-level values
-        assert result['remove_collection'] == ['default_field', 'action_field']
-        assert result['side_collection'] == ['default_metadata', 'action_metadata']
+        assert result['drops'] == ['default_field', 'action_field']
+        assert result['observe'] == ['default_metadata', 'action_metadata']
 
     def test_empty_action_level_drops_observe_with_defaults(self):
         """Test that empty action-level drops/observe combined with defaults results in just defaults."""
@@ -86,8 +86,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should use defaults since empty + defaults = defaults
-        assert result['remove_collection'] == ['default_field']
-        assert result['side_collection'] == ['default_metadata']
+        assert result['drops'] == ['default_field']
+        assert result['observe'] == ['default_metadata']
 
     def test_no_defaults_drops_observe_uses_empty_lists(self):
         """Test that when no defaults are provided, empty lists are used."""
@@ -109,8 +109,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should use empty lists
-        assert result['remove_collection'] == []
-        assert result['side_collection'] == []
+        assert result['drops'] == []
+        assert result['observe'] == []
 
     def test_partial_defaults_inheritance(self):
         """Test inheritance when only one of drops/observe is in defaults."""
@@ -135,8 +135,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should inherit drops, use empty list for observe
-        assert result['remove_collection'] == ['default_drop']
-        assert result['side_collection'] == []
+        assert result['drops'] == ['default_drop']
+        assert result['observe'] == []
 
     def test_tool_action_processes_drops_observe(self):
         """Test that tool actions (record level) still process drops/observe."""
@@ -158,8 +158,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Regular tool actions should still process drops/observe
-        assert result['side_collection'] == ['default_metadata']
-        assert result['remove_collection'] == ['default_field']
+        assert result['observe'] == ['default_metadata']
+        assert result['drops'] == ['default_field']
 
     def test_file_level_tool_action_skips_drops_observe(self):
         """Test that file-level tool actions skip drops/observe processing."""
@@ -182,9 +182,9 @@ class TestActionExpanderDefaults:
 
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
-        # File-level tool actions should not have side_collection or remove_collection
-        assert 'side_collection' not in result
-        assert 'remove_collection' not in result
+        # File-level tool actions should not have observe or drops
+        assert 'observe' not in result
+        assert 'drops' not in result
         assert result['granularity'] == 'File'
 
     def test_other_defaults_still_work(self):
@@ -215,8 +215,8 @@ class TestActionExpanderDefaults:
         assert result['model_vendor'] == 'openai'
         assert result['model_name'] == 'gpt-4o-mini'
         assert result['json_mode'] == True
-        assert result['remove_collection'] == ['default_drop']
-        assert result['side_collection'] == ['default_observe']
+        assert result['drops'] == ['default_drop']
+        assert result['observe'] == ['default_observe']
 
     def test_template_replacement_in_drops_observe_from_defaults(self):
         """Test that template replacement works for drops/observe inherited from defaults."""
@@ -248,8 +248,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should apply template replacement to inherited values
-        assert result['remove_collection'] == ['test_field']
-        assert result['side_collection'] == ['test_metadata']
+        assert result['drops'] == ['test_field']
+        assert result['observe'] == ['test_metadata']
 
     def test_additive_behavior_with_deduplication(self):
         """Test that additive behavior removes duplicates while preserving order."""
@@ -276,8 +276,8 @@ class TestActionExpanderDefaults:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
 
         # Should combine with deduplication (defaults first, then unique action fields)
-        assert result['remove_collection'] == ['default_field', 'shared_field', 'action_field']
-        assert result['side_collection'] == ['default_metadata', 'shared_metadata', 'action_metadata']
+        assert result['drops'] == ['default_field', 'shared_field', 'action_field']
+        assert result['observe'] == ['default_metadata', 'shared_metadata', 'action_metadata']
 
 
 class TestActionExpanderFullWorkflow:
@@ -324,13 +324,13 @@ class TestActionExpanderFullWorkflow:
 
         # First action should inherit defaults
         action1 = next(a for a in agents if a['name'] == 'action1')
-        assert action1['remove_collection'] == ['internal_id', 'temp_data']
-        assert action1['side_collection'] == ['user_id', 'session_id']
+        assert action1['drops'] == ['internal_id', 'temp_data']
+        assert action1['observe'] == ['user_id', 'session_id']
 
         # Second action should combine defaults + its own values
         action2 = next(a for a in agents if a['name'] == 'action2')
-        assert action2['remove_collection'] == ['internal_id', 'temp_data', 'other_field']
-        assert action2['side_collection'] == ['user_id', 'session_id', 'correlation_id']
+        assert action2['drops'] == ['internal_id', 'temp_data', 'other_field']
+        assert action2['observe'] == ['user_id', 'session_id', 'correlation_id']
 
 
 class TestActionExpanderInterceptors:
@@ -451,8 +451,8 @@ class TestActionExpanderInterceptors:
         # Should map all fields correctly
         assert result['model_vendor'] == 'openai'
         assert result['model_name'] == 'gpt-4o-mini'
-        assert result['remove_collection'] == ['default_drop', 'temp_field']
-        assert result['side_collection'] == ['default_observe', 'tracking_id']
+        assert result['drops'] == ['default_drop', 'temp_field']
+        assert result['observe'] == ['default_observe', 'tracking_id']
         assert 'interceptors' in result
         assert len(result['interceptors']) == 1
         assert result['interceptors'][0]['type'] == 'validation'

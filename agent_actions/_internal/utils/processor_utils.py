@@ -12,7 +12,7 @@ import json
 from typing import Dict, List, Any, Optional, Union
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import SIDE_COLLECTION_KEY
+from agent_actions.core.constants import OBSERVE_KEY
 
 
 class ProcessorUtils:
@@ -186,24 +186,24 @@ class ProcessorUtils:
         }
 
     @staticmethod
-    def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
+    def apply_drops(contents: Any, agent_config: Dict) -> Any:
         """
-        Apply remove_collection transformations consistently.
+        Apply drops transformations consistently.
         
         Args:
             contents: Content to transform
-            agent_config: Agent configuration containing remove_collection
+            agent_config: Agent configuration containing drops
             
         Returns:
             Transformed content
         """
-        remove_collection = agent_config.get("remove_collection", [])
-        if remove_collection and isinstance(contents, dict):
-            return DataTransformer.remove_schema_objects(contents, remove_collection)
+        drops = agent_config.get("drops", [])
+        if drops and isinstance(contents, dict):
+            return DataTransformer.remove_schema_objects(contents, drops)
         return contents
 
     @staticmethod
-    def transform_with_side_collection(
+    def transform_with_observe(
         data: List,
         context_data: Dict,
         source_guid: str,
@@ -211,7 +211,7 @@ class ProcessorUtils:
         idx: int = 0,
     ) -> List:
         """
-        Apply side_collection logic to generated data consistently.
+        Apply observe logic to generated data consistently.
         
         Args:
             data: Generated data list
@@ -240,23 +240,23 @@ class ProcessorUtils:
             )
         )
         
-        side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
+        observe = agent_config.get(OBSERVE_KEY, [])
 
-        if already_structured and not side_collection:
+        if already_structured and not observe:
             # Data already has correct structure, just ensure required fields
             output = data
-        elif side_collection:
-            # Apply side_collection logic
+        elif observe:
+            # Apply observe logic
             if already_structured:
-                # Extract content from structured data for side_collection processing
+                # Extract content from structured data for observe processing
                 contents = [item['content'] for item in data]
                 updated = [
-                    DataTransformer.update_schema_objects(context_data, content, side_collection)
+                    DataTransformer.update_schema_objects(context_data, content, observe)
                     for content in contents
                 ]
             else:
                 updated = [
-                    DataTransformer.update_schema_objects(context_data, item, side_collection)
+                    DataTransformer.update_schema_objects(context_data, item, observe)
                     for item in data
                 ]
             output = DataTransformer.transform_structure([{source_guid: updated}])

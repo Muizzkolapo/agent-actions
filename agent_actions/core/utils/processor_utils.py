@@ -12,7 +12,7 @@ import json
 from typing import Dict, List, Any, Optional, Union
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import SIDE_COLLECTION_KEY
+from agent_actions.core.constants import OBSERVE_KEY
 
 
 class ProcessorUtils:
@@ -186,28 +186,28 @@ class ProcessorUtils:
         }
 
     @staticmethod
-    def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
+    def apply_drops(contents: Any, agent_config: Dict) -> Any:
         """
-        Apply remove_collection transformations consistently.
+        Apply drops transformations consistently.
 
-        remove_collection (from config 'drops') specifies fields that should be:
+        drops (from config 'drops') specifies fields that should be:
         - Excluded from the LLM prompt
         - Removed from the final output
 
         Args:
             contents: Content to transform
-            agent_config: Agent configuration containing remove_collection
+            agent_config: Agent configuration containing drops
 
         Returns:
             Transformed content with removed fields
         """
-        remove_collection = agent_config.get("remove_collection", [])
-        if remove_collection and isinstance(contents, dict):
-            return DataTransformer.remove_schema_objects(contents, remove_collection)
+        drops = agent_config.get("drops", [])
+        if drops and isinstance(contents, dict):
+            return DataTransformer.remove_schema_objects(contents, drops)
         return contents
 
     @staticmethod
-    def transform_with_side_collection(
+    def transform_with_observe(
         data: List,
         context_data: Dict,
         source_guid: str,
@@ -215,9 +215,9 @@ class ProcessorUtils:
         idx: int = 0,
     ) -> List:
         """
-        Apply side_collection logic to generated data consistently.
+        Apply observe logic to generated data consistently.
 
-        side_collection (from config 'observe') specifies fields that should be:
+        observe (from config 'observe') specifies fields that should be:
         - Excluded from the LLM prompt
         - Included in the final output (passthrough from context)
 
@@ -225,11 +225,11 @@ class ProcessorUtils:
             data: Generated data list
             context_data: Context data dictionary containing observe fields
             source_guid: Source GUID
-            agent_config: Agent configuration containing side_collection
+            agent_config: Agent configuration containing observe
             idx: Index for node generation
 
         Returns:
-            Transformed data list with side_collection fields merged
+            Transformed data list with observe fields merged
         """
         # Ensure data is a list for consistent processing
         if not isinstance(data, list):
@@ -248,33 +248,33 @@ class ProcessorUtils:
             )
         )
         
-        side_collection = agent_config.get(SIDE_COLLECTION_KEY, [])
+        observe = agent_config.get(OBSERVE_KEY, [])
 
-        if already_structured and not side_collection:
+        if already_structured and not observe:
             # Data already has correct structure, just ensure required fields
             output = data
-        elif side_collection:
-            # Apply side_collection logic
+        elif observe:
+            # Apply observe logic
             if already_structured:
-                # Extract content from structured data for side_collection processing
+                # Extract content from structured data for observe processing
                 contents = [item['content'] for item in data]
                 updated = []
                 for content in contents:
                     if isinstance(content, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_data, content, side_collection))
+                        updated.append(DataTransformer.update_schema_objects(context_data, content, observe))
                     else:
                         # Convert non-dict content to dict format for processing
                         content_dict = {"content": content}
-                        updated.append(DataTransformer.update_schema_objects(context_data, content_dict, side_collection))
+                        updated.append(DataTransformer.update_schema_objects(context_data, content_dict, observe))
             else:
                 updated = []
                 for item in data:
                     if isinstance(item, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_data, item, side_collection))
+                        updated.append(DataTransformer.update_schema_objects(context_data, item, observe))
                     else:
                         # Convert non-dict items to dict format for processing
                         item_dict = {"content": item}
-                        updated.append(DataTransformer.update_schema_objects(context_data, item_dict, side_collection))
+                        updated.append(DataTransformer.update_schema_objects(context_data, item_dict, observe))
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
             # Apply transform_structure to ensure consistent output format

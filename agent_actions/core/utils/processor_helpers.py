@@ -8,9 +8,9 @@ from agent_actions.core.parser.where_parser import get_global_filter
 from .processor_utils import ProcessorUtils
 
 
-def apply_remove_collection(contents: Any, agent_config: Dict) -> Any:
-    """Apply ``remove_collection`` transformations consistently."""
-    return ProcessorUtils.apply_remove_collection(contents, agent_config)
+def apply_drops(contents: Any, agent_config: Dict) -> Any:
+    """Apply ``drops`` transformations consistently."""
+    return ProcessorUtils.apply_drops(contents, agent_config)
 
 
 def run_dynamic_agent(
@@ -51,7 +51,7 @@ def run_dynamic_agent(
         return context, False
 
     # Execute agent after all guard checks pass
-    processed_context = apply_remove_collection(context, agent_config)
+    processed_context = apply_drops(context, agent_config)
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
@@ -91,15 +91,15 @@ def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
         return passthrough_on_error
 
 
-def transform_with_side_collection(
+def transform_with_observe(
     data: list,
     context_data: dict,
     source_guid: str,
     agent_config: Dict,
     idx: int = 0,
 ) -> list:
-    """Apply ``side_collection`` logic to generated data consistently."""
-    return ProcessorUtils.transform_with_side_collection(
+    """Apply ``observe`` logic to generated data consistently."""
+    return ProcessorUtils.transform_with_observe(
         data, context_data, source_guid, agent_config, idx
     )
 

@@ -1,7 +1,7 @@
 """Module for transforming agent responses."""
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import SIDE_COLLECTION_KEY
-from agent_actions.core.utils.processor_helpers import transform_with_side_collection
+from agent_actions.core.constants import OBSERVE_KEY
+from agent_actions.core.utils.processor_helpers import transform_with_observe
 
 
 class ResponseTransformer:
@@ -21,7 +21,7 @@ class ResponseTransformer:
         Returns:
             Transformed response structure
         """
-        return transform_with_side_collection(
+        return transform_with_observe(
             response,
             context_data,
             source_guid,

@@ -1,5 +1,5 @@
 """Module for preprocessing context data."""
-from agent_actions.core.utils.processor_helpers import apply_remove_collection
+from agent_actions.core.utils.processor_helpers import apply_drops
 
 
 class ContextPreprocessor:
@@ -17,7 +17,7 @@ class ContextPreprocessor:
         Returns:
             Processed context data
         """
-        return apply_remove_collection(context_data, agent_config)
+        return apply_drops(context_data, agent_config)
     
     @staticmethod
     def extract_guid_and_content(context_data):

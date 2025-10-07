@@ -214,7 +214,7 @@ class TestBatchServiceIntegration:
         # Convert to workflow format
         processed_data = batch_service._convert_batch_results_to_workflow_format(
             batch_results,
-            side_collection=[],
+            observe=[],
             context_map=batch_service.context_map,
             output_directory="/tmp/test"
         )

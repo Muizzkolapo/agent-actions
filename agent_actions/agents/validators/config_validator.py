@@ -14,7 +14,7 @@ from agent_actions.core.constants import (
     SCHEMA_NAME_KEY,
     SCHEMA_KEY,
     CHUNK_CONFIG_KEY,
-    SIDE_COLLECTION_KEY,
+    OBSERVE_KEY,
 )
 
 # ---------------------------------------------------------------------------------------------
@@ -40,8 +40,8 @@ class ConfigValidator(BaseValidator):
         "config",
         "parent",
         "granularity",
-        SIDE_COLLECTION_KEY,
-        "remove_collection",
+        OBSERVE_KEY,
+        "drops",
         MODEL_VENDOR_KEY,
         JSON_MODE_KEY,
         "prompt_debug",
@@ -184,17 +184,17 @@ class ConfigValidator(BaseValidator):
 
         # -------------------------- tool vendor w/ file granularity ------------------
         if model_vendor == "tool" and granularity == "file":
-            if SIDE_COLLECTION_KEY in entry_ci:
+            if OBSERVE_KEY in entry_ci:
                 self.add_error(
-                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'side_collection' defined. "
+                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'observe' defined. "
                     "This key should be removed for this agent configuration as file‑level tools process content wholesale, "
-                    "and side_collection is for record‑level context enrichment."
+                    "and observe is for record‑level context enrichment."
                 )
-            if "remove_collection" in entry_ci:
+            if "drops" in entry_ci:
                 self.add_error(
-                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'remove_collection' defined. "
+                    f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'drops' defined. "
                     "This key should be removed for this agent configuration as file‑level tools process content wholesale, "
-                    "and remove_collection is for modifying record‑level context."
+                    "and drops is for modifying record‑level context."
                 )
         
         # -------------------------- batch mode validation -------------------------------

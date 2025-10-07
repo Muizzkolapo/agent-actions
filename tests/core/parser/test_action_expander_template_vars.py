@@ -139,18 +139,18 @@ class TestTemplateVariableReplacement:
         agents = result["test_workflow"]
 
         # First iteration
-        assert "input_data" in agents[0]['side_collection']
-        assert "output_" in agents[0]['side_collection']
-        assert "temp_1" in agents[0]['remove_collection']
+        assert "input_data" in agents[0]['observe']
+        assert "output_" in agents[0]['observe']
+        assert "temp_1" in agents[0]['drops']
 
         # Later iterations
-        assert "input_data" in agents[1]['side_collection']
-        assert "output_1" in agents[1]['side_collection']
-        assert "temp_2" in agents[1]['remove_collection']
+        assert "input_data" in agents[1]['observe']
+        assert "output_1" in agents[1]['observe']
+        assert "temp_2" in agents[1]['drops']
 
-        assert "input_data" in agents[2]['side_collection']
-        assert "output_2" in agents[2]['side_collection']
-        assert "temp_3" in agents[2]['remove_collection']
+        assert "input_data" in agents[2]['observe']
+        assert "output_2" in agents[2]['observe']
+        assert "temp_3" in agents[2]['drops']
 
     def test_template_vars_in_observe_drops(self):
         """Test template variables in observe and drops fields."""
@@ -182,14 +182,14 @@ class TestTemplateVariableReplacement:
         agents = result["test_workflow"]
 
         # First iteration
-        assert "iteration_1" in agents[0]['side_collection']
-        assert "previous_" in agents[0]['side_collection']
-        assert "temp_1" in agents[0]['remove_collection']
+        assert "iteration_1" in agents[0]['observe']
+        assert "previous_" in agents[0]['observe']
+        assert "temp_1" in agents[0]['drops']
 
         # Second iteration
-        assert "iteration_2" in agents[1]['side_collection']
-        assert "previous_1" in agents[1]['side_collection']
-        assert "temp_2" in agents[1]['remove_collection']
+        assert "iteration_2" in agents[1]['observe']
+        assert "previous_1" in agents[1]['observe']
+        assert "temp_2" in agents[1]['drops']
 
     def test_template_vars_in_nested_dict(self):
         """Test template variables in nested dictionary structures."""
@@ -374,13 +374,13 @@ class TestTemplateVariableReplacement:
 
         # Check template replacement
         assert refine_agents[0]['prompt'] == "Refine stage 1 using output from stage "
-        assert "refined_1" in refine_agents[0]['side_collection']
+        assert "refined_1" in refine_agents[0]['observe']
 
         assert refine_agents[1]['prompt'] == "Refine stage 2 using output from stage 1"
-        assert "refined_2" in refine_agents[1]['side_collection']
+        assert "refined_2" in refine_agents[1]['observe']
 
         assert refine_agents[2]['prompt'] == "Refine stage 3 using output from stage 2"
-        assert "refined_3" in refine_agents[2]['side_collection']
+        assert "refined_3" in refine_agents[2]['observe']
 
         # Check dependency chaining (from Phase 2)
         assert refine_agents[0]['dependencies'] == ['input']

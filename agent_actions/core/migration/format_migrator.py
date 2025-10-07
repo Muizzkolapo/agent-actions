@@ -166,7 +166,7 @@ class WorkflowMigrator:
             impl=agent.get('model_name', action_name),
             granularity=self._map_granularity(agent.get('granularity')),
             guard=self._convert_where_clause(agent.get('where_clause')),
-            reads=self._parse_collection_list(agent.get('side_collection', [])),
+            reads=self._parse_collection_list(agent.get('observe', [])),
             writes=self._infer_writes_from_tool(action_name)
         )
 
@@ -205,20 +205,20 @@ class WorkflowMigrator:
 
     def _extract_data_flow(self, agent: Dict[str, Any]) -> tuple[List[str], List[str], List[str], List[str]]:
         """Extract data flow configuration from agent."""
-        side_collection = self._parse_collection_list(agent.get('side_collection', []))
-        remove_collection = self._parse_collection_list(agent.get('remove_collection', []))
+        observe = self._parse_collection_list(agent.get('observe', []))
+        drops = self._parse_collection_list(agent.get('drops', []))
 
-        # Infer reads from side_collection
-        reads = side_collection.copy()
+        # Infer reads from observe
+        reads = observe.copy()
 
         # Infer writes from schema or agent type
         writes = self._infer_writes_from_agent(agent)
 
         # drops are items to remove
-        drops = remove_collection
+        drops = drops
 
-        # observe includes side_collection items that aren't consumed
-        observe = side_collection.copy()
+        # observe includes observe items that aren't consumed
+        observe = observe.copy()
 
         return reads, writes, drops, observe
 
