@@ -6,7 +6,6 @@ It proves correctness by comparing outputs field-by-field between the two modes.
 
 NOTE: Some tests in this file work with mocks (test_batch_online_output_parity,
 test_batch_online_metadata_parity) and verify structural parity. The final state test
-requires real batch infrastructure and is marked with @pytest.mark.requires_real_batch_backend.
 """
 
 import json
@@ -64,7 +63,7 @@ class TestSequentialLoopParity:
             ]
         }
 
-    def _create_workflow(self, temp_dir, config, run_mode="online"):
+    def _create_workflow(self, temp_dir, config, run_mode="online", mock_batch_provider=None):
         """Helper to create AgentWorkflow with mocked dependencies."""
         config_file = temp_dir / f"config_{run_mode}.yml"
 
@@ -76,8 +75,13 @@ class TestSequentialLoopParity:
              patch('agent_actions.core.bootstrap_factory.create_agent_runner') as mock_create_runner, \
              patch('agent_actions.core.graph.agent_workflow.OutputProcessor'), \
              patch('agent_actions.core.graph.agent_workflow.BatchService') as MockBatchService, \
+             patch('agent_actions.tasks.services.batch_service.BatchProviderFactory.create_provider') as mock_factory, \
              patch('agent_actions.core.graph.agent_workflow.WhereClauseParser'), \
              patch('agent_actions.core.graph.agent_workflow.ManifestArtifact'):
+
+            # Configure mock factory to return the mock batch provider if provided
+            if mock_batch_provider:
+                mock_factory.return_value = mock_batch_provider
 
             # Setup mock ConfigManager
             mock_config_manager = MagicMock()
@@ -201,7 +205,7 @@ class TestSequentialLoopParity:
 
             return workflow, agent_folder
 
-    def test_batch_online_output_parity(self, temp_dir, sequential_loop_config):
+    def test_batch_online_output_parity(self, temp_dir, sequential_loop_config, mock_batch_provider):
         """
         CRITICAL TEST: Verify batch and online modes produce identical outputs.
 
@@ -212,7 +216,7 @@ class TestSequentialLoopParity:
         """
         # Create workflows for both modes
         online_workflow, online_folder = self._create_workflow(temp_dir, sequential_loop_config, "online")
-        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch")
+        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch", mock_batch_provider)
 
         # Run online workflow (single execution)
         with patch.object(online_workflow, '_handle_batch_agent') as mock_batch_handler:
@@ -277,10 +281,10 @@ class TestSequentialLoopParity:
                 assert online_data == batch_data, \
                     f"Data mismatch in {online_dir.name}/{online_file.name}:\nOnline: {online_data}\nBatch: {batch_data}"
 
-    def test_batch_online_metadata_parity(self, temp_dir, sequential_loop_config):
+    def test_batch_online_metadata_parity(self, temp_dir, sequential_loop_config, mock_batch_provider):
         """Verify metadata (lineage, node_ids, loop_correlation_ids) identical between modes."""
         online_workflow, online_folder = self._create_workflow(temp_dir, sequential_loop_config, "online")
-        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch")
+        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch", mock_batch_provider)
 
         # Execute workflows
         with patch.object(online_workflow, '_handle_batch_agent'):
@@ -313,11 +317,10 @@ class TestSequentialLoopParity:
                 assert "node_" in online_data.get("node_id", ""), "Missing node_id in online mode"
                 assert "node_" in batch_data.get("node_id", ""), "Missing node_id in batch mode"
 
-    @pytest.mark.requires_real_batch_backend
-    def test_batch_online_final_state_parity(self, temp_dir, sequential_loop_config):
+    def test_batch_online_final_state_parity(self, temp_dir, sequential_loop_config, mock_batch_provider):
         """Verify final workflow state identical (status, execution order completion)."""
         online_workflow, online_folder = self._create_workflow(temp_dir, sequential_loop_config, "online")
-        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch")
+        batch_workflow, batch_folder = self._create_workflow(temp_dir, sequential_loop_config, "batch", mock_batch_provider)
 
         # Execute workflows
         with patch.object(online_workflow, '_handle_batch_agent'):
@@ -343,10 +346,17 @@ class TestSequentialLoopParity:
 
             # Verify all agents reached 'completed' status in both modes
             for agent_name in ["input", "refine_1", "refine_2", "refine_3", "output"]:
-                assert online_status.get(agent_name) == "completed", \
-                    f"Online mode: {agent_name} not completed"
-                assert batch_status.get(agent_name) == "completed", \
-                    f"Batch mode: {agent_name} not completed"
+                online_agent_status = online_status.get(agent_name, {})
+                if isinstance(online_agent_status, dict):
+                    online_agent_status = online_agent_status.get('status')
+                assert online_agent_status == "completed", \
+                    f"Online mode: {agent_name} not completed (status: {online_agent_status})"
+
+                batch_agent_status = batch_status.get(agent_name, {})
+                if isinstance(batch_agent_status, dict):
+                    batch_agent_status = batch_agent_status.get('status')
+                assert batch_agent_status == "completed", \
+                    f"Batch mode: {agent_name} not completed (status: {batch_agent_status})"
 
 
 if __name__ == "__main__":

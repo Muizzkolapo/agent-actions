@@ -334,3 +334,149 @@ def cleanup_temp_files():
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+
+# ============================================================================
+# Batch Provider Mocking Fixtures
+# ============================================================================
+
+@pytest.fixture
+def mock_batch_provider():
+    """
+    Provide a mock BatchProvider for testing batch operations without real API calls.
+
+    This mock simulates the behavior of a real batch provider (OpenAI, Anthropic, etc.)
+    without making actual API calls. It returns predictable test data.
+
+    Returns:
+        MagicMock: A mock provider configured with submit_batch, check_status, and retrieve_results
+    """
+    from agent_actions.integrations.providers.base import BatchResult
+
+    mock_provider = MagicMock()
+
+    # Mock submit_batch to return a fake batch ID
+    mock_provider.submit_batch.return_value = 'batch_test_id_001'
+
+    # Mock check_status to return 'completed' by default
+    mock_provider.check_status.return_value = 'completed'
+
+    # Mock retrieve_results to return sample BatchResult objects
+    mock_provider.retrieve_results.return_value = [
+        BatchResult(
+            custom_id='1',
+            content={'result': 'test_data_1'},
+            success=True,
+            metadata={'test': True}
+        ),
+        BatchResult(
+            custom_id='2',
+            content={'result': 'test_data_2'},
+            success=True,
+            metadata={'test': True}
+        )
+    ]
+
+    return mock_provider
+
+
+@pytest.fixture
+def mock_batch_provider_with_transitions():
+    """
+    Provide a mock BatchProvider that simulates status transitions.
+
+    Useful for testing status polling logic where batches transition through
+    states like: validating → in_progress → completed
+
+    Returns:
+        MagicMock: A mock provider with dynamic status changes
+    """
+    from agent_actions.integrations.providers.base import BatchResult
+    from itertools import cycle
+
+    mock_provider = MagicMock()
+
+    # Mock submit_batch to return a fake batch ID
+    mock_provider.submit_batch.return_value = 'batch_test_id_002'
+
+    # Mock check_status with side_effect to simulate transitions
+    statuses = ['validating', 'in_progress', 'in_progress', 'completed']
+    mock_provider.check_status.side_effect = cycle(statuses)
+
+    # Mock retrieve_results to return sample BatchResult objects
+    mock_provider.retrieve_results.return_value = [
+        BatchResult(
+            custom_id='1',
+            content={'result': 'test_data_1'},
+            success=True,
+            metadata={'test': True}
+        )
+    ]
+
+    return mock_provider
+
+
+@pytest.fixture
+def mock_batch_provider_with_failure():
+    """
+    Provide a mock BatchProvider that simulates batch failures.
+
+    Useful for testing error handling when batch jobs fail.
+
+    Returns:
+        MagicMock: A mock provider configured to simulate failures
+    """
+    from agent_actions.integrations.providers.base import BatchResult
+
+    mock_provider = MagicMock()
+
+    # Mock submit_batch to return a fake batch ID
+    mock_provider.submit_batch.return_value = 'batch_test_id_003'
+
+    # Mock check_status to return 'failed'
+    mock_provider.check_status.return_value = 'failed'
+
+    # Mock retrieve_results to return results with errors
+    mock_provider.retrieve_results.return_value = [
+        BatchResult(
+            custom_id='1',
+            content=None,
+            success=False,
+            error='Batch processing failed',
+            metadata={'test': True}
+        )
+    ]
+
+    return mock_provider
+
+
+@pytest.fixture
+def mock_batch_results():
+    """
+    Provide sample BatchResult objects for testing.
+
+    Returns:
+        List[BatchResult]: Sample batch results with test data
+    """
+    from agent_actions.integrations.providers.base import BatchResult
+
+    return [
+        BatchResult(
+            custom_id='1',
+            content={'target_id': '1', 'result': 'processed_1'},
+            success=True,
+            metadata={'source_guid': 'input_1'}
+        ),
+        BatchResult(
+            custom_id='2',
+            content={'target_id': '2', 'result': 'processed_2'},
+            success=True,
+            metadata={'source_guid': 'input_2'}
+        ),
+        BatchResult(
+            custom_id='3',
+            content={'target_id': '3', 'result': 'processed_3'},
+            success=True,
+            metadata={'source_guid': 'input_3'}
+        )
+    ]
+
