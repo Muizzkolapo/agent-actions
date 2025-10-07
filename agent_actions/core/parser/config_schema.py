@@ -179,6 +179,16 @@ class AgentConfig(BaseModel):
     add_dispatch: Optional[bool] = None
     run_mode: str = 'online'
     data_source: Optional[str] = None
+
+    # LLM configuration options
+    json_mode: bool = Field(
+        default=True,
+        description="Enable JSON mode for structured output"
+    )
+    prompt_debug: bool = Field(
+        default=False,
+        description="Enable debug output showing prompts being sent to the agent"
+    )
     
     # Anthropic-specific configuration options
     anthropic_version: Optional[str] = Field(
