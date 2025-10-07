@@ -416,7 +416,7 @@ explainer_list:
     model_vendor: openai
     model_name: gpt-4o-mini
     schema_name: summary
-    use_few_shot_samples: 0
+    few_shot: 0
     is_operational: True
     run_mode: batch
     json_mode: true
@@ -429,7 +429,7 @@ explainer_list:
     model_vendor: openai
     model_name: gpt-4o-mini
     schema_name: question_schema
-    use_few_shot_samples: 0
+    few_shot: 0
     is_operational: True
     run_mode: batch
     side_collection:

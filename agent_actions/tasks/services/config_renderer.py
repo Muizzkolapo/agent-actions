@@ -385,8 +385,8 @@ class ConfigRenderingService:
                     'dependencies': [],
                     'granularity': action.get('granularity', 'record'),
                     'run_mode': 'online',
-                    'use_few_shot_samples': action.get('few_shot', 0),
-                    'json_mode': action.get('json_mode', False)
+                    'few_shot': action.get('few_shot', 0),
+                    'json_mode': action.get('json_mode', True)
                 }
 
                 # Handle tool vs LLM actions

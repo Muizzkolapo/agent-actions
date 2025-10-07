@@ -134,7 +134,7 @@ class WorkflowMigrator:
             observe=list(set(observe)) if observe else [],  # Deduplicate
             granularity=granularity,
             guard=guard,
-            few_shot=agent.get('use_few_shot_samples') if agent.get('use_few_shot_samples', 0) > 0 else None,
+            few_shot=agent.get('few_shot') if agent.get('few_shot', 0) > 0 else None,
             prompt=agent.get('prompt')
         )
 

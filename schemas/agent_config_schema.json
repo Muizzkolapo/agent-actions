@@ -293,10 +293,10 @@
       "title": "Is Operational",
       "type": "boolean"
     },
-    "use_few_shot_samples": {
+    "few_shot": {
       "default": 0,
       "minimum": 0,
-      "title": "Use Few Shot Samples",
+      "title": "Few Shot",
       "type": "integer"
     },
     "ephemeral": {

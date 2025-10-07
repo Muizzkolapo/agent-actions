@@ -174,7 +174,7 @@ class AgentConfig(BaseModel):
     observe: List[str] = Field(default_factory=list)
     drops: List[str] = Field(default_factory=list)
     is_operational: bool = True
-    use_few_shot_samples: int = Field(default=0, ge=0)
+    few_shot: int = Field(default=0, ge=0)
     ephemeral: Optional[bool] = None
     add_dispatch: Optional[bool] = None
     run_mode: str = 'online'
