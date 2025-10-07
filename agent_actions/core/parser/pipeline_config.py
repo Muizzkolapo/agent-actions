@@ -67,7 +67,7 @@ class AgentStageConfig(StageConfig):
     agent_config: Dict[str, Any] = Field(default_factory=dict, description="Agent configuration")
     
     # Agent-specific settings
-    use_few_shot_samples: int = Field(default=0, ge=0, description="Number of few-shot samples")
+    few_shot: int = Field(default=0, ge=0, description="Number of few-shot samples")
     parallel_execution: bool = Field(default=False, description="Execute agent in parallel")
     batch_size: Optional[int] = Field(default=None, ge=1, description="Batch size for agent execution")
 

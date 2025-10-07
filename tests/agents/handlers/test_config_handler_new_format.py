@@ -380,7 +380,7 @@ class TestNewFormatConfigHandlerIntegration:
         assert agent['json_mode'] is True
         assert agent['granularity'] == 'File'
         assert agent['run_mode'] == 'offline'
-        assert agent['use_few_shot_samples'] == 3
+        assert agent['few_shot'] == 3
 
     def test_project_config_hierarchy(self, temp_dir, hierarchy_test_workflow, project_config):
         """Test 3-level configuration hierarchy: project → workflow → action."""
@@ -415,7 +415,7 @@ class TestNewFormatConfigHandlerIntegration:
 
             # Should inherit from project defaults (not overridden by workflow)
             assert inheritance_agent['model_vendor'] == 'openai'              # Project default
-            assert inheritance_agent['use_few_shot_samples'] == 2             # Project default
+            assert inheritance_agent['few_shot'] == 2             # Project default
 
             # Check chunk config exists and has project default values
             assert 'chunk_config' in inheritance_agent
@@ -431,7 +431,7 @@ class TestNewFormatConfigHandlerIntegration:
             assert override_agent['model_name'] == 'claude-3-sonnet'          # Action override
             assert override_agent['model_vendor'] == 'anthropic'              # Action override
             assert override_agent['json_mode'] is False                       # Action override
-            assert override_agent['use_few_shot_samples'] == 5                # Action override
+            assert override_agent['few_shot'] == 5                # Action override
 
     def test_tool_actions_handling(self, temp_dir):
         """Test handling of tool-type actions (kind: tool)."""

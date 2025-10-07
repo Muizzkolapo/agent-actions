@@ -207,4 +207,4 @@ class TestActionExpanderHierarchy:
         # Other fields inherited except overridden one
         assert result.get('json_mode') == True
         assert result.get('granularity') == 'Record'  # Capitalized in ActionExpander
-        assert result.get('use_few_shot_samples') == 5  # Overridden
+        assert result.get('few_shot') == 5  # Overridden

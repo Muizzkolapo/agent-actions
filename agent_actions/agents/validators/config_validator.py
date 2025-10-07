@@ -51,7 +51,7 @@ class ConfigValidator(BaseValidator):
         SCHEMA_KEY,
         "tools",
         CHUNK_CONFIG_KEY,
-        "use_few_shot_samples",
+        "few_shot",
         "conditional_clause",
         "is_operational",
         "ephemeral",

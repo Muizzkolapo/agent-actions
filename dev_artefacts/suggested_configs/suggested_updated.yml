@@ -185,6 +185,6 @@ plan:
 # - enable_prompt_caching: For Anthropic's prompt caching feature
 # - where_clause: Alternative to guard for filtering (with behavior: skip/filter)
 # - skip_if: Legacy skip condition field
-# - use_few_shot_samples: Number of few-shot examples (alternative to few_shot)
+# - few_shot: Number of few-shot examples (0 or more)
 # - dependencies: Can be specified instead of plan section
 # - parent: Parent action dependencies

@@ -30,7 +30,7 @@ class SampleEnricher:
             agent_type = agent_config.get("agent_type")
             few_shot_samples_path = None
             _, _, few_shot_samples_path = FileHandler.get_agent_paths(agent_name)
-            sample_count = agent_config.get("use_few_shot_samples", 0)
+            sample_count = agent_config.get("few_shot", 0)
             try:
                 sample_count = int(sample_count)
             except ValueError:

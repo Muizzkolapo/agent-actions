@@ -60,7 +60,7 @@ default_agent_config:
 - `run_mode` (str) - Execution mode: 'online' or 'batch'
 - `is_operational` (bool) - Whether action is enabled
 - `chunk_config` (Dict[str, Any]) - Chunking configuration
-- `use_few_shot_samples` (int) - Number of few-shot examples (≥0)
+- `few_shot` (int) - Number of few-shot examples (≥0)
 
 ### Workflow-Level Configuration
 

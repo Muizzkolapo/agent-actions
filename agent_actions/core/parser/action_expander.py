@@ -7,6 +7,7 @@ handling loop expansion, template variables, and dependency mapping.
 
 from typing import Dict, Any, List, Optional, Union
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
+from .config_field_definitions import inherit_simple_fields
 import logging
 
 logger = logging.getLogger(__name__)
@@ -135,10 +136,13 @@ class ActionExpander:
         Returns:
             Completed agent configuration
         """
-        # Model configuration - standardized on model_vendor/model_name
-        agent['model_vendor'] = action.get('model_vendor', defaults.get('model_vendor'))
-        agent['model_name'] = action.get('model_name', defaults.get('model_name'))
-        agent['api_key'] = action.get('api_key', defaults.get('api_key'))
+        # Auto-inherit all simple config fields (model_vendor, model_name, api_key, run_mode, json_mode, etc.)
+        # See config_field_definitions.py for the list of simple fields
+        # To add a new simple field: just add it to SIMPLE_CONFIG_FIELDS dict
+        inherit_simple_fields(agent, action, defaults)
+
+        # Override is_operational from plan parameter (not from defaults/action)
+        agent['is_operational'] = is_operational
 
         # Validate vendor is a known vendor (catches typos early)
         ActionExpander._validate_vendor_exists(agent['model_vendor'], action.get('name', 'unknown'))
@@ -149,16 +153,8 @@ class ActionExpander:
         if action_kind != 'tool':
             ActionExpander._validate_required_fields(agent, action.get('name', 'unknown'))
 
-        # Execution settings
-        agent['is_operational'] = is_operational
-        # Set run_mode from action first, then defaults - needed for tool validation
-        run_mode = action.get('run_mode', defaults.get('run_mode', 'online'))
-        agent['run_mode'] = run_mode
-        agent['use_few_shot_samples'] = action.get('few_shot', defaults.get('few_shot', 0))
-
-        # Configuration settings
-        agent['json_mode'] = action.get('json_mode', defaults.get('json_mode', False))
-        agent['prompt_debug'] = action.get('prompt_debug', defaults.get('prompt_debug', False))
+        # Get run_mode for tool validation logic below
+        run_mode = agent['run_mode']
 
         # Schema handling - apply template replacement
         schema_value = action.get('schema') or action.get('output_schema')
