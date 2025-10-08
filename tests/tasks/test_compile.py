@@ -537,13 +537,14 @@ class TestRenderClickCommand:
                 mock_command.execute.assert_called_once()
 
     def test_render_click_command_required_agent(self):
-        """Test render Click command requires agent parameter."""
+        """Test render Click command requires either agent or workflow parameter."""
         runner = CliRunner()
 
         result = runner.invoke(render, [])
 
+        # Should fail because it requires a project (no agent or workflow specified)
+        # or validation error about needing one of the two parameters
         assert result.exit_code != 0
-        assert "agent" in result.output.lower() or "required" in result.output.lower()
 
     def test_render_click_command_short_options(self, tmp_path):
         """Test render Click command with short options."""
@@ -635,10 +636,12 @@ class TestRenderClickCommand:
         result = runner.invoke(render, ['--help'])
 
         assert result.exit_code == 0
-        assert 'Render a Jinja template' in result.output
+        assert 'Render Jinja2 templates' in result.output
+        assert 'workflow or agent configuration files' in result.output
         assert '--agent' in result.output
         assert '--output' in result.output
         assert '--template-dir' in result.output
+        assert 'WORKFLOW_NAME' in result.output
 
 
 class TestRenderCommandDeterminism:

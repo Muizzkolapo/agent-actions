@@ -151,13 +151,26 @@ These commands don't require being in a project:
 Execute an agent workflow.
 
 ```bash
-agent-actions run <workflow-file> [options]
+agent-actions run -a <agent-name> [options]
 ```
 
-**Arguments:**
-- `<workflow-file>` - Path to YAML workflow configuration
+**Examples:**
+```bash
+# Run an agent workflow
+agent-actions run -a my_agent
+
+# Run with custom user code
+agent-actions run -a my_agent -u ./user_code --use-tools
+
+# Force parallel execution
+agent-actions run -a my_agent --parallel
+```
 
 **Options:**
+- `-a, --agent TEXT` - Agent configuration file name (required)
+- `-u, --user_code DIRECTORY` - Path to the user's code folder containing UDFs
+- `--use-tools` - Enable tool usage for agents
+- `--force` - Force execution even if validation warnings occur
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
 - `--parallel` - Force parallel execution (overrides auto-detection)
@@ -280,18 +293,70 @@ You can run this command from any subdirectory within your project.
 
 ### `render`
 
-Render workflow templates.
+Render Jinja2 templates in workflow or agent configuration files without executing them.
+
+This command is useful for:
+- **Debugging template issues** - See rendered output before execution
+- **Verifying macro expansion** - Check if macros expand correctly
+- **Troubleshooting YAML parsing errors** - Identify template-induced YAML issues
+- **Learning how templates work** - Understand template expansion
+
+#### Workflow Mode (Template Debugging)
+
+Render workflow YAML files to debug Jinja2 templates:
 
 ```bash
-agent-actions render <workflow-file> [options]
+agent-actions render <workflow-name> [options]
 ```
 
-**Options:**
+**Examples:**
+```bash
+# Render workflow to console
+agent-actions render customer_review_analysis_with_loop
+
+# Render and save to file
+agent-actions render qanalabs-quiz-gen -o rendered.yml
+
+# Use custom templates directory
+agent-actions render my-workflow -t ./custom-templates
+```
+
+The command searches for workflows in:
+1. Current directory: `./{workflow-name}.yml`
+2. Workflows directory: `./workflows/{workflow-name}.yml`
+3. Dev artefacts: `./dev_artefacts/sample_workflows/{workflow-name}.yml`
+
+#### Agent Mode
+
+Render agent configuration files:
+
+```bash
+agent-actions render -a <agent-name> [options]
+```
+
+**Examples:**
+```bash
+# Render agent config to console
+agent-actions render -a my_agent
+
+# Render and save to file
+agent-actions render --agent my_agent -o rendered_output.yml
+```
+
+#### Options
+
+- `-a, --agent TEXT` - Name of the agent to render template for (agent mode)
+- `-o, --output TEXT` - Path to save the rendered template (default: output to console)
+- `-t, --template-dir TEXT` - Directory containing templates (default: `./templates`)
 - `--debug` - Enable debug mode
 - `--verbose` / `-v` - Enable verbose output
 
 :::tip Run from Anywhere
 You can run this command from any subdirectory within your project.
+:::
+
+:::info
+By default, the rendered output is displayed in the console. Use `-o` to save to a file.
 :::
 
 ### `init`

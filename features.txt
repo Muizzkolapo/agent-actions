@@ -5,3 +5,15 @@
 - prompt waste and context distractors with unneded info - premium
 - can tool nodes be like containers that does something and returns json how would that work.
 - batch polling for premium users
+- Need to integrate into existing data engineering workflows
+
+
+
+
+
+
+
+Things i do that are features
+- I use claude code to optimize prompt
+- Use user prompt to create validation 
+e.g user said no identifier in explanation which means we have a prompt that reads this to create validation
