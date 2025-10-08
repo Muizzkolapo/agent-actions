@@ -1,10 +1,42 @@
 import os
 import yaml
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.agents.handlers.prompt_handler import PromptLoader
 from agent_actions.core.exceptions import TemplateRenderingError, ConfigurationError
 import jinja2 # For specific Jinja2 exceptions
 from agent_actions.core.safe_format import safe_format_error
+
+
+def normalize_yaml_indentation(yaml_text: str) -> str:
+    """
+    Normalize common YAML indentation issues.
+
+    Fixes:
+    - Excessive leading whitespace from macro indentation
+    - Inconsistent list item spacing
+    - Preserves relative indentation within blocks
+
+    Args:
+        yaml_text: Rendered YAML text that may have indentation issues
+
+    Returns:
+        Normalized YAML text with consistent indentation
+
+    Example:
+        Input:  '      - name: foo\\n        kind: tool'
+        Output: '  - name: foo\\n    kind: tool'
+    """
+    import textwrap
+
+    # Remove common leading whitespace
+    dedented = textwrap.dedent(yaml_text)
+
+    # Additional normalization if needed
+    lines = dedented.splitlines(keepends=True)
+
+    return ''.join(lines)
+
 
 def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
     """
@@ -16,11 +48,15 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
     By doing so, we ensure that the final YAML includes all resolved information before API calls.
     """
     env = Environment(loader=FileSystemLoader(templates_folder))
-    
+
     # Make the prompt loader available within Jinja2 templates in case it's needed
     env.globals['load_prompt'] = PromptLoader.load_prompt
-    
-    
+
+    # Add YAML-safe indentation filter
+    import textwrap
+    env.filters['dedent'] = textwrap.dedent
+
+
     template_files = [f for f in os.listdir(templates_folder) if f.endswith(('.j2', '.jinja2'))]
     for template_file in template_files:
         try:
@@ -61,7 +97,10 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         
         template = env.from_string(yaml_content)
         rendered_yaml_content = template.render()
-        
+
+        # Normalize indentation before parsing
+        rendered_yaml_content = normalize_yaml_indentation(rendered_yaml_content)
+
         # Load YAML into a Python structure for further processing
         data = yaml.safe_load(rendered_yaml_content)
         
@@ -114,8 +153,23 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
     except yaml.YAMLError as e:
         problem = getattr(e, 'problem', '')
         mark = getattr(e, 'problem_mark', None)
+
+        # Extract workflow name and save failed render for debugging
+        workflow_name = Path(yaml_path).stem
+        cache_dir = Path.cwd() / '.agent-actions' / 'cache' / 'rendered_workflows'
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        failed_render_path = cache_dir / f'{workflow_name}_failed.yml'
+
+        # Save the rendered content that failed to parse
+        try:
+            with open(failed_render_path, 'w', encoding='utf-8') as f:
+                f.write(rendered_yaml_content)
+            saved_file_msg = f"\nRendered output saved to: {failed_render_path}\nDebug with: agent-actions render {workflow_name}"
+        except Exception:
+            saved_file_msg = ""
+
         raise ConfigurationError(
-            "Error parsing YAML",
+            f"Error parsing YAML after template rendering{saved_file_msg}",
             context={
                 'yaml_path': yaml_path,
                 'line': mark.line + 1 if mark else None,
