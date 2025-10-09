@@ -1,5 +1,0 @@
-
-name: combined_test
-actions:
-  - name: action1
-          kind: action
