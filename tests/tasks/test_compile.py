@@ -29,20 +29,15 @@ class TestRenderCommandArgs:
 
     def test_valid_render_command_args(self, tmp_path):
         """Test valid RenderCommandArgs creation."""
-        # Create temporary files and directories
-        output_file = tmp_path / "output.yml"
-        output_file.touch()  # Create the file
         template_dir = tmp_path / "templates"
-        template_dir.mkdir()  # Create the directory
+        template_dir.mkdir()
 
         args = RenderCommandArgs(
             agent_name="test_agent",
-            output_file=str(output_file),
             template_dir=str(template_dir)
         )
 
         assert args.agent_name == "test_agent"
-        assert str(args.output_file) == str(output_file)
         assert str(args.template_dir) == str(template_dir)
 
     def test_render_command_args_required_fields(self):
@@ -50,7 +45,6 @@ class TestRenderCommandArgs:
         args = RenderCommandArgs(agent_name="required_agent")
 
         assert args.agent_name == "required_agent"
-        assert args.output_file is None
         assert args.template_dir is None
 
     def test_render_command_args_validation_empty_agent_name(self):
@@ -79,7 +73,6 @@ class TestRenderCommand:
 
     def test_render_command_initialization_custom_template_dir(self, tmp_path):
         """Test RenderCommand initialization with custom template directory."""
-        # Create temporary template directory
         template_dir = tmp_path / "custom" / "templates"
         template_dir.mkdir(parents=True)
 
@@ -95,15 +88,11 @@ class TestRenderCommand:
 
     def test_render_template_success(self, tmp_path):
         """Test successful template rendering."""
-        # Create required files and directories
-        output_file = tmp_path / "output.yml"
-        output_file.touch()
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
         args = RenderCommandArgs(
             agent_name="test_agent",
-            output_file=str(output_file),
             template_dir=str(template_dir)
         )
         command = RenderCommand(args)
@@ -121,40 +110,11 @@ class TestRenderCommand:
             assert result == expected_output
             mock_render.assert_called_once_with(
                 str(config_file),
-                str(command.template_dir),
-                str(args.output_file)
-            )
-
-    def test_render_template_no_output_file(self, tmp_path):
-        """Test template rendering without output file."""
-        # Create required template directory
-        template_dir = tmp_path / "templates"
-        template_dir.mkdir()
-
-        args = RenderCommandArgs(
-            agent_name="test_agent",
-            template_dir=str(template_dir)
-        )
-        command = RenderCommand(args)
-
-        config_file = tmp_path / "test_agent.yml"
-        expected_output = "console output"
-
-        with patch('agent_actions.tasks.compile.render_pipeline_with_templates') as mock_render:
-            mock_render.return_value = expected_output
-
-            result = command._render_template(config_file)
-
-            assert result == expected_output
-            mock_render.assert_called_once_with(
-                str(config_file),
-                str(command.template_dir),
-                "None"  # No output file
+                str(command.template_dir)
             )
 
     def test_render_template_failure(self, tmp_path):
         """Test template rendering failure handling."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -174,7 +134,6 @@ class TestRenderCommand:
 
     def test_render_template_deterministic_output(self, tmp_path):
         """Test renders configs to artifacts deterministically for same input."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -210,48 +169,8 @@ class TestRenderCommand:
 class TestRenderCommandExecution:
     """Test RenderCommand execute method and full workflow."""
 
-    def test_execute_success_with_output_file(self, tmp_path):
-        """Test successful execution with output file."""
-        # Create required files and directories
-        output_file = tmp_path / "output.yml"
-        output_file.touch()
-        template_dir = tmp_path / "templates"
-        template_dir.mkdir()
-
-        args = RenderCommandArgs(
-            agent_name="execute_test",
-            output_file=str(output_file),
-            template_dir=str(template_dir)
-        )
-        command = RenderCommand(args)
-
-        expected_output = "successfully rendered template"
-
-        # Mock project paths factory
-        mock_paths = Mock()
-        mock_paths.agent_config_dir = tmp_path / "config"
-        mock_paths.agent_config_dir.mkdir()
-
-        config_file = mock_paths.agent_config_dir / "execute_test.yml"
-        config_file.write_text("name: execute_test")
-
-        with patch('agent_actions.tasks.services.project_paths_factory.ProjectPathsFactory') as mock_factory:
-            mock_factory.create_project_paths.return_value = mock_paths
-
-            with patch.object(command, '_render_template') as mock_render:
-                mock_render.return_value = expected_output
-
-                with patch('click.echo') as mock_echo:
-                    command.execute()
-
-                    mock_render.assert_called_once_with(config_file)
-                    mock_echo.assert_called_once_with(
-                        f"Template rendered successfully and saved to {args.output_file}"
-                    )
-
     def test_execute_success_console_output(self, tmp_path):
         """Test successful execution with console output."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -285,7 +204,6 @@ class TestRenderCommandExecution:
 
     def test_execute_file_not_found_error(self, tmp_path):
         """Test execute handles file not found errors."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -298,7 +216,6 @@ class TestRenderCommandExecution:
         # Mock project paths factory
         mock_paths = Mock()
         mock_paths.agent_config_dir = tmp_path / "config"
-        # Don't create the config file
 
         with patch('agent_actions.tasks.services.project_paths_factory.ProjectPathsFactory') as mock_factory:
             mock_factory.create_project_paths.return_value = mock_paths
@@ -311,7 +228,6 @@ class TestRenderCommandExecution:
 
     def test_execute_validation_error(self, tmp_path):
         """Test execute handles validation errors."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -335,7 +251,6 @@ class TestRenderCommandExecution:
 
     def test_execute_template_rendering_error(self, tmp_path):
         """Test execute handles template rendering errors."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -359,7 +274,6 @@ class TestRenderCommandExecution:
 
     def test_execute_unexpected_error(self, tmp_path):
         """Test execute handles unexpected errors."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -381,7 +295,6 @@ class TestRenderCommandConfigValidation:
 
     def test_fails_fast_on_invalid_configs_with_helpful_messages(self, tmp_path):
         """Test fails fast on invalid configs with helpful messages."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -425,7 +338,6 @@ class TestRenderCommandConfigValidation:
 
     def test_config_schema_validation_errors(self, tmp_path):
         """Test various configuration schema validation errors."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -466,7 +378,6 @@ class TestRenderCommandConfigValidation:
 
     def test_template_syntax_errors(self, tmp_path):
         """Test template syntax error handling."""
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -509,9 +420,6 @@ class TestRenderClickCommand:
 
     def test_render_click_command_success(self, tmp_path):
         """Test render Click command executes successfully."""
-        # Create required files and directories
-        output_file = tmp_path / "output.yml"
-        output_file.touch()
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -521,14 +429,11 @@ class TestRenderClickCommand:
             mock_command = Mock()
             mock_command_class.return_value = mock_command
 
-            # CliRunner isolates filesystem, need to create agent_actions.yml in isolated env
             with runner.isolated_filesystem():
-                # Create agent_actions.yml for @requires_project decorator
                 Path('agent_actions.yml').write_text('# Test project')
 
                 result = runner.invoke(render, [
                     '--agent', 'test_agent',
-                    '--output', str(output_file),
                     '--template-dir', str(template_dir)
                 ])
 
@@ -537,20 +442,16 @@ class TestRenderClickCommand:
                 mock_command.execute.assert_called_once()
 
     def test_render_click_command_required_agent(self):
-        """Test render Click command requires either agent or workflow parameter."""
+        """Test render Click command requires agent parameter."""
         runner = CliRunner()
 
         result = runner.invoke(render, [])
 
-        # Should fail because it requires a project (no agent or workflow specified)
-        # or validation error about needing one of the two parameters
+        # Should fail because agent is required
         assert result.exit_code != 0
 
     def test_render_click_command_short_options(self, tmp_path):
         """Test render Click command with short options."""
-        # Create required files and directories
-        output_file = tmp_path / "output.yml"
-        output_file.touch()
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -565,7 +466,6 @@ class TestRenderClickCommand:
 
                 result = runner.invoke(render, [
                     '-a', 'short_test',
-                    '-o', str(output_file),
                     '-t', str(template_dir)
                 ])
 
@@ -573,7 +473,6 @@ class TestRenderClickCommand:
                 # Verify correct arguments were passed
                 args_call = mock_command_class.call_args[0][0]
                 assert args_call.agent_name == "short_test"
-                assert str(args_call.output_file) == str(output_file)
                 assert str(args_call.template_dir) == str(template_dir)
 
     def test_render_click_command_minimal_args(self):
@@ -593,7 +492,6 @@ class TestRenderClickCommand:
                 # Verify optional arguments are None
                 args_call = mock_command_class.call_args[0][0]
                 assert args_call.agent_name == "minimal_test"
-                assert args_call.output_file is None
                 assert args_call.template_dir is None
 
     def test_render_click_command_validation_error(self):
@@ -637,11 +535,9 @@ class TestRenderClickCommand:
 
         assert result.exit_code == 0
         assert 'Render Jinja2 templates' in result.output
-        assert 'workflow or agent configuration files' in result.output
+        assert 'agent configuration files' in result.output
         assert '--agent' in result.output
-        assert '--output' in result.output
         assert '--template-dir' in result.output
-        assert 'WORKFLOW_NAME' in result.output
 
 
 class TestRenderCommandDeterminism:
@@ -661,7 +557,6 @@ settings:
         config_file = tmp_path / "config.yml"
         config_file.write_text(config_content)
 
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -674,8 +569,6 @@ settings:
         results = []
         for i in range(3):
             command = RenderCommand(args)
-
-            expected_output = f"rendered output {i}"  # Should be same for deterministic
 
             with patch('agent_actions.tasks.compile.render_pipeline_with_templates') as mock_render:
                 # Simulate deterministic rendering
@@ -698,7 +591,6 @@ settings:
         ]
 
         results = []
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -727,7 +619,6 @@ settings:
         config_file = tmp_path / "cache_test.yml"
         config_file.write_text("name: cache_test\ntype: generator")
 
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -756,7 +647,6 @@ class TestRenderCommandIntegration:
 
     def test_end_to_end_render_command(self, tmp_path):
         """Test end-to-end render command with minimal mocking."""
-        # Setup test environment
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
 
@@ -810,7 +700,6 @@ settings:
         config_file = tmp_path / "complex_agent.yml"
         config_file.write_text(complex_config)
 
-        # Create required template directory
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
 
@@ -835,6 +724,5 @@ settings:
                 # Verify complex config was passed to renderer
                 mock_render.assert_called_once_with(
                     str(config_file),
-                    str(command.template_dir),
-                    "None"
+                    str(command.template_dir)
                 )

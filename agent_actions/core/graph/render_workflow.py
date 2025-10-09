@@ -38,13 +38,13 @@ def normalize_yaml_indentation(yaml_text: str) -> str:
     return ''.join(lines)
 
 
-def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None):
+def render_pipeline_with_templates(yaml_path, templates_folder):
     """
     Render a YAML pipeline configuration by resolving macros from Jinja2 templates.
     This function also processes any prompt fields starting with '$', such as:
-    
+
         prompt: $code_quiz_generator.code_generation_agent we call or code for rendering the prompt
-    
+
     By doing so, we ensure that the final YAML includes all resolved information before API calls.
     """
     env = Environment(loader=FileSystemLoader(templates_folder))
@@ -133,10 +133,7 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         # Resolve any prompt references in the YAML structure.
         resolve_prompt_fields(data)
         rendered_yaml_content = yaml.dump(data, sort_keys=False)
-        
-        if output_file:
-            with open(output_file, 'w', encoding='utf-8') as out_file:
-                out_file.write(rendered_yaml_content)
+
         return rendered_yaml_content
     except FileNotFoundError as e:
         raise ConfigurationError(
@@ -146,8 +143,8 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         )
     except IOError as e:
         raise ConfigurationError(
-            "IO error reading or writing YAML file",
-            context={'yaml_path': yaml_path, 'output_file': output_file, 'operation': 'file_io'},
+            "IO error reading YAML file",
+            context={'yaml_path': yaml_path, 'operation': 'file_io'},
             cause=e
         )
     except yaml.YAMLError as e:
@@ -189,6 +186,6 @@ def render_pipeline_with_templates(yaml_path, templates_folder, output_file=None
         # General catch-all for unexpected issues during rendering or file operations
         raise TemplateRenderingError(
             f"Unexpected error rendering YAML from '{yaml_path}': {safe_format_error(e)}",
-            context={'yaml_path': yaml_path, 'templates_folder': templates_folder, 'output_file': output_file},
+            context={'yaml_path': yaml_path, 'templates_folder': templates_folder},
             cause=e
         ) from e
