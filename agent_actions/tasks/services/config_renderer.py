@@ -178,8 +178,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
             logger.info("All path validations passed. Proceeding to render template.")
             rendered_template = render_pipeline_with_templates(
                 config_path,    # Pass original string path
-                template_dir,   # Pass original string path
-                output_file_to_write # This is the full file path string, or None
+                template_dir   # Pass original string path
             )
 
             ServiceLogger.log_operation_success(logger, "render template",
