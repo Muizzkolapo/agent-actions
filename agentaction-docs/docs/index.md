@@ -69,12 +69,14 @@ Agent Actions excels at:
 # Simple workflow example
 agents:
   - name: data_extractor
-    model: gpt-4
+    model_vendor: openai
+    model_name: gpt-4
     schema: data_schema.json
     depends_on: []
 
   - name: data_enricher
-    model: gpt-4
+    model_vendor: openai
+    model_name: gpt-4
     schema: enriched_schema.json
     depends_on: [data_extractor]
 

@@ -235,9 +235,9 @@ class VendorRegistry(BaseModel):
         default_factory=dict,
         description="Map of vendor name to vendor configuration"
     )
-    default_vendor: str = Field(
-        default="openai",
-        description="Default vendor to use when not specified"
+    default_vendor: Optional[str] = Field(
+        default=None,
+        description="Default vendor to use when not specified (must be explicitly configured)"
     )
     
     def get_vendor_config(self, vendor_name: str) -> Optional[VendorConfig]:

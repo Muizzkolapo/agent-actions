@@ -539,7 +539,8 @@ Configuration Error: Invalid model specified
 
   Fix: Update your agent config:
 
-  model: claude-3-5-sonnet-20241022
+  model_vendor: anthropic
+  model_name: claude-3-5-sonnet-20241022
 ```
 
 ### With Debug Mode

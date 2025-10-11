@@ -158,6 +158,19 @@ class ConfigValidator(BaseValidator):
         if "name" in entry_ci and not isinstance(name, str):
             self.add_error(f"{desc} 'name' must be string.")
 
+        # -------------------------- field name validation ---------------------------
+        # Reject unsupported field names that may cause confusion
+        if "vendor" in entry_ci:
+            self.add_error(
+                f"{desc} uses unsupported field 'vendor'. "
+                "Use 'model_vendor' instead to specify the LLM provider."
+            )
+        if "model" in entry_ci:
+            self.add_error(
+                f"{desc} uses unsupported field 'model'. "
+                "Use 'model_name' instead to specify the model."
+            )
+
         # -------------------------- agent‑type specific ------------------------------
         if "agent_type" in entry_ci:
             if not isinstance(self._ci_get(entry, "agent_type"), str):

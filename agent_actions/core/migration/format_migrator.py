@@ -125,8 +125,8 @@ class WorkflowMigrator:
             name=action_name,
             intent=self._generate_intent(agent_type),
             kind=kind,
-            vendor=agent.get('model_vendor') if agent.get('model_vendor') != defaults.vendor else None,
-            model=agent.get('model_name') if agent.get('model_name') != defaults.model else None,
+            model_vendor=agent.get('model_vendor') if agent.get('model_vendor') != defaults.model_vendor else None,
+            model_name=agent.get('model_name') if agent.get('model_name') != defaults.model_name else None,
             output_schema=self._extract_schema(agent),
             reads=list(set(reads)) if reads else [],  # Deduplicate
             writes=list(set(writes)) if writes else [],  # Deduplicate
