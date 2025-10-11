@@ -155,10 +155,10 @@ Agent Actions supports multiple AI providers:
   model_vendor: "anthropic"
   model_name: "claude-3-sonnet-20240229"
 
-# Google
-- name: "google_agent"
-  model_vendor: "google"
-  model_name: "gemini-pro"
+# Gemini
+- name: "gemini_agent"
+  model_vendor: "gemini"
+  model_name: "gemini-1.5-pro"
 
 # Local/Ollama
 - name: "local_agent"

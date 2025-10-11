@@ -253,12 +253,17 @@ class BatchService:
                 }
             )
 
-        # Get provider type from config - prioritize model_vendor, fallback to batch_provider for backward compatibility
-        provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
+        # Get provider type from config - require explicit model_vendor
+        provider_type = agent_config.get('model_vendor')
+        if not provider_type:
+            from agent_actions.core.exceptions import ConfigValidationError
+            raise ConfigValidationError(
+                "model_vendor",
+                "Missing required field 'model_vendor' for batch processing. "
+                "Specify the LLM provider (e.g., openai, anthropic, gemini)."
+            )
         
-        # Log deprecation warning if using batch_provider without model_vendor
-        if agent_config.get('batch_provider') and not agent_config.get('model_vendor'):
-            print(f"⚠️ DEPRECATION WARNING: 'batch_provider' is deprecated. Use 'model_vendor' instead. Found: batch_provider='{agent_config.get('batch_provider')}'")
+        provider_type = provider_type.lower()
         
         # Handle special case: 'tool' vendor doesn't support batch processing
         if provider_type == 'tool':
@@ -730,7 +735,14 @@ class BatchService:
         try:
             # Get the appropriate provider for this agent configuration
             provider = self._get_provider_for_config(agent_config)
-            provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
+            provider_type = agent_config.get('model_vendor')
+            if not provider_type:
+                from agent_actions.core.exceptions import ConfigValidationError
+                raise ConfigValidationError(
+                    "model_vendor",
+                    "Missing required field 'model_vendor' for batch processing."
+                )
+            provider_type = provider_type.lower()
             
             # Use provider to submit the batch
             batch_id = provider.submit_batch(tasks, batch_name, output_directory)
@@ -790,7 +802,7 @@ class BatchService:
                 'batch_id': batch_id,
                 'status': 'submitted',
                 'timestamp': datetime.now().isoformat(),
-                'provider': provider_type or 'openai',  # Store provider type
+                'provider': provider_type,  # Store provider type
                 'parent_batch_id': parent_batch_id,  # Track parent batch for retries
                 'retry_attempt': retry_attempt,  # Track retry depth
                 'has_retry_batch': False,  # Will be set to True if a retry is created
@@ -1926,7 +1938,14 @@ class BatchService:
         # Step 5: Submit retry batch
         try:
             provider = self._get_provider_for_config(agent_config)
-            provider_type = (agent_config.get('model_vendor') or agent_config.get('batch_provider') or 'openai').lower()
+            provider_type = agent_config.get('model_vendor')
+            if not provider_type:
+                from agent_actions.core.exceptions import ConfigValidationError
+                raise ConfigValidationError(
+                    "model_vendor",
+                    "Missing required field 'model_vendor' for batch retry processing."
+                )
+            provider_type = provider_type.lower()
 
             retry_batch_name = f"{Path(file_name).stem}_retry_{next_retry_attempt}"
             retry_batch_id = provider.submit_batch(retry_tasks, retry_batch_name, output_directory)

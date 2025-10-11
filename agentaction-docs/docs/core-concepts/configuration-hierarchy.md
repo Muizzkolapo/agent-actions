@@ -106,8 +106,7 @@ This consistency ensures clarity across project, workflow, and action levels.
 
 This is due to historical reasons and backward compatibility:
 
-- **Project-level** (`agent_actions.yml`) was added later and uses more explicit names (`model_vendor`, `model_name`)
-- **Workflow/Action-level** uses shorter, more convenient names (`vendor`, `model`)
+- **All levels** use consistent, explicit field names (`model_vendor`, `model_name`)
 
 ### What Should You Use?
 
@@ -309,8 +308,8 @@ After the configuration hierarchy is resolved (project → workflow → action m
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `vendor` (or `model_vendor`) | ✅ Yes | Specifies the LLM provider (anthropic, openai, gemini, groq, etc.) |
-| `model` (or `model_name`) | ✅ Yes | Specifies the model name (claude-3-5-sonnet-20241022, gpt-4, etc.) |
+| `model_vendor` | ✅ Yes | Specifies the LLM provider (anthropic, openai, gemini, groq, etc.) |
+| `model_name` | ✅ Yes | Specifies the model name (claude-3-5-sonnet-20241022, gpt-4, etc.) |
 | `api_key` | ✅ Yes | API key for the vendor (can use `${ENV_VAR}` syntax) |
 
 ### What "After Hierarchy Resolution" Means
@@ -493,9 +492,9 @@ Each level completely overrides the previous level for any field it specifies.
 
 Yes! If you omit the `defaults` section, actions will inherit directly from project-level config.
 
-### Can I mix vendor field names?
+### What field names should I use?
 
-The system handles both `vendor`/`model_vendor` and `model`/`model_name` automatically. Just use the conventional name for each level (see [Field Name Differences](#field-name-differences)).
+Always use `model_vendor` and `model_name` at all configuration levels. These are the only supported field names.
 
 ### What happens if I don't have an agent_actions.yml?
 
