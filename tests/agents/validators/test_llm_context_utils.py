@@ -92,21 +92,6 @@ class TestComputeLLMContext:
 
         assert result == {'original_id', 'timestamp'}
 
-    def test_with_return_collection(self):
-        """Should add input_data when return_collection is True."""
-        config = {
-            'output_schema': {
-                'properties': {
-                    'result': {},
-                    'count': {}
-                }
-            },
-            'return_collection': True
-        }
-
-        result = LLMContextUtils.compute_llm_context(config)
-
-        assert result == {'result', 'count', 'input_data'}
 
     def test_all_directives_combined(self):
         """Should correctly handle all directives together."""
@@ -121,17 +106,15 @@ class TestComputeLLMContext:
                 }
             },
             'observe': ['document_id', 'author', 'original_text'],
-            'drops': ['internal_id', 'temp'],
-            'return_collection': True
+            'drops': ['internal_id', 'temp']
         }
 
         result = LLMContextUtils.compute_llm_context(config)
 
-        # Should have: schema - drops + observe + input_data
+        # Should have: schema - drops + observe
         assert result == {
             'summary', 'metrics', 'sentiment',  # From schema (not dropped)
-            'document_id', 'author', 'original_text',  # From observe
-            'input_data'  # From return_collection
+            'document_id', 'author', 'original_text'  # From observe
         }
         assert 'internal_id' not in result  # Dropped
         assert 'temp' not in result  # Dropped
@@ -255,25 +238,6 @@ class TestComputeOutputFields:
         # Should be identical (no return_collection)
         assert output_fields == llm_context
 
-    def test_output_vs_llm_context_with_return_collection(self):
-        """Output fields should not include input_data (LLM context does)."""
-        config = {
-            'output_schema': {
-                'properties': {
-                    'result': {}
-                }
-            },
-            'return_collection': True
-        }
-
-        output_fields = LLMContextUtils.compute_output_fields(config)
-        llm_context = LLMContextUtils.compute_llm_context(config)
-
-        assert output_fields == {'result'}
-        assert llm_context == {'result', 'input_data'}
-        assert 'input_data' not in output_fields  # Not in actual output file
-        assert 'input_data' in llm_context  # But available to LLM
-
     def test_output_all_directives(self):
         """Should handle all directives correctly for output."""
         config = {
@@ -285,12 +249,10 @@ class TestComputeOutputFields:
                 }
             },
             'observe': ['original_id', 'author'],
-            'drops': ['internal_id'],
-            'return_collection': True  # Should NOT affect output_fields
+            'drops': ['internal_id']
         }
 
         result = LLMContextUtils.compute_output_fields(config)
 
         assert result == {'summary', 'metrics', 'original_id', 'author'}
         assert 'internal_id' not in result  # Dropped
-        assert 'input_data' not in result  # return_collection doesn't affect output_fields

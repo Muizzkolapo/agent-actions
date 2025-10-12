@@ -319,26 +319,6 @@ class TestValidateAgentInputs:
         assert result.is_valid()
         assert len(result.successes) == 1
 
-    def test_return_collection_adds_input_data(self):
-        """Should validate input_data field when return_collection is True."""
-        agent_config = {
-            'prompt': 'Process {extractor.input_data}',
-            'dependencies': ['extractor']
-        }
-        dep_configs = {
-            'extractor': {
-                'output_schema': {'properties': {'summary': {}}},
-                'return_collection': True
-            }
-        }
-
-        result = InputSignatureValidator.validate_agent_inputs(
-            agent_config, dep_configs, 'processor'
-        )
-
-        assert result.is_valid()
-        assert len(result.successes) == 1
-        assert result.successes[0].field_name == 'input_data'
 
     def test_complex_scenario_all_directives(self):
         """Should handle complex scenario with all directives."""
@@ -349,7 +329,6 @@ class TestValidateAgentInputs:
             Review {loop.index}: {loop.item.text}
             Summary: {extractor.summary}
             Document ID: {extractor.document_id}
-            Collection: {extractor.input_data}
             ''',
             'dependencies': ['extractor']
         }
@@ -363,8 +342,7 @@ class TestValidateAgentInputs:
                     }
                 },
                 'observe': ['document_id', 'author'],
-                'drops': ['temp'],
-                'return_collection': True
+                'drops': ['temp']
             }
         }
 
@@ -373,7 +351,7 @@ class TestValidateAgentInputs:
         )
 
         assert result.is_valid()
-        assert len(result.successes) == 7
+        assert len(result.successes) == 6
         assert len(result.errors) == 0
 
         # Check special references
@@ -382,9 +360,9 @@ class TestValidateAgentInputs:
 
         # Check agent references
         agent_refs = [s for s in result.successes if s.agent_name == 'extractor']
-        assert len(agent_refs) == 3
+        assert len(agent_refs) == 2
         field_names = {r.field_name for r in agent_refs}
-        assert field_names == {'summary', 'document_id', 'input_data'}
+        assert field_names == {'summary', 'document_id'}
 
 
 class TestFormatValidationErrors:

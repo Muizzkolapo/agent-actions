@@ -103,6 +103,54 @@ class ActionConfig(BaseModel):
                 )
         return v
 
+    def input_signature(
+        self, 
+        dependency_configs: Dict[str, Union['ActionConfig', Dict[str, Any]]], 
+        schema_registry: Optional[Dict[str, Any]] = None
+    ) -> 'InputSignature':
+        """Get input signature showing what fields this action requires.
+        
+        Args:
+            dependency_configs: Map of dependency names to their configurations
+            schema_registry: Optional registry for resolving schema references
+            
+        Returns:
+            InputSignature with field requirements from dependencies, source, etc.
+        """
+        from agent_actions.core.signature_computer import SignatureComputer
+        
+        # Convert self to dict format
+        action_dict = self.model_dump()
+        
+        # Convert dependency configs (handle both Pydantic objects and dicts)
+        dep_dicts = {}
+        for name, config in dependency_configs.items():
+            if hasattr(config, 'model_dump'):
+                dep_dicts[name] = config.model_dump()
+            else:
+                dep_dicts[name] = config
+        
+        return SignatureComputer.compute_input_signature(
+            action_dict, dep_dicts, schema_registry
+        )
+
+    def output_signature(
+        self, 
+        schema_registry: Optional[Dict[str, Any]] = None
+    ) -> 'OutputSignature':
+        """Get output signature showing what fields this action provides.
+        
+        Args:
+            schema_registry: Optional registry for resolving schema references
+            
+        Returns:
+            OutputSignature with available fields from schema, observe, drops
+        """
+        from agent_actions.core.signature_computer import SignatureComputer
+        
+        action_dict = self.model_dump()
+        return SignatureComputer.compute_output_signature(action_dict, schema_registry)
+
 
 class DefaultsConfig(BaseModel):
     """Default configuration applied to all actions."""

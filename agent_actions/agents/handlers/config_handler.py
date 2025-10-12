@@ -439,6 +439,220 @@ class ConfigManager:
 
         return "\n".join(lines)
 
+    def get_all_signatures(self, schema_registry: Optional[Dict[str, Any]] = None) -> Dict[str, Dict[str, Any]]:
+        """Get input and output signatures for all agents in the workflow.
+        
+        Returns complete signature information for every agent, enabling
+        workflow-level analysis and visualization.
+        
+        Args:
+            schema_registry: Optional registry for resolving schema references
+            
+        Returns:
+            Dict mapping agent names to their signature information:
+            {
+                'agent_name': {
+                    'input_signature': InputSignature,
+                    'output_signature': OutputSignature,
+                    'dependencies': List[str],
+                    'execution_order_index': int
+                }
+            }
+        """
+        signatures = {}
+        
+        for agent_name, agent_config in self.agent_configs.items():
+            try:
+                # Build dependency configs for this agent
+                dependency_configs = {}
+                for dep_name in agent_config.dependencies:
+                    if dep_name in self.agent_configs:
+                        dependency_configs[dep_name] = self.agent_configs[dep_name]
+                
+                # Get signatures using Phase 2 APIs
+                input_sig = agent_config.input_signature(dependency_configs, schema_registry)
+                output_sig = agent_config.output_signature(schema_registry)
+                
+                # Get execution order index (if available)
+                execution_index = -1
+                if agent_name in self.execution_order:
+                    execution_index = self.execution_order.index(agent_name)
+                
+                signatures[agent_name] = {
+                    'input_signature': input_sig,
+                    'output_signature': output_sig,
+                    'dependencies': agent_config.dependencies.copy(),
+                    'execution_order_index': execution_index,
+                    'is_operational': agent_config.is_operational
+                }
+                
+            except Exception as e:
+                # If signature computation fails, include error info
+                signatures[agent_name] = {
+                    'error': f"Failed to compute signatures: {str(e)}",
+                    'dependencies': getattr(agent_config, 'dependencies', []),
+                    'execution_order_index': -1,
+                    'is_operational': getattr(agent_config, 'is_operational', True)
+                }
+        
+        return signatures
+
+    def validate_field_flow(self, schema_registry: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Validate complete field flow through the entire workflow.
+        
+        Performs comprehensive field dependency validation across all agents
+        following execution order, tracking field availability as it progresses.
+        
+        Args:
+            schema_registry: Optional registry for resolving schema references
+            
+        Returns:
+            Dict with validation results:
+            {
+                'valid': bool,
+                'errors': List[str],
+                'warnings': List[str],
+                'agent_validations': Dict[str, Dict],
+                'field_flow_summary': Dict[str, Set[str]]
+            }
+        """
+        from agent_actions.core.signature_computer import SignatureComputer
+        
+        result = {
+            'valid': True,
+            'errors': [],
+            'warnings': [],
+            'agent_validations': {},
+            'field_flow_summary': {}
+        }
+        
+        # Track available fields at each step
+        available_fields = set()  # Fields available from previous agents
+        
+        # Process agents in execution order
+        for agent_name in self.execution_order:
+            if agent_name not in self.agent_configs:
+                result['errors'].append(f"Agent '{agent_name}' in execution order but not in configs")
+                result['valid'] = False
+                continue
+                
+            agent_config = self.agent_configs[agent_name]
+            agent_validation = {
+                'valid': True,
+                'errors': [],
+                'warnings': [],
+                'available_fields_before': available_fields.copy()
+            }
+            
+            try:
+                # Build dependency configs
+                dependency_configs = {}
+                dependency_signatures = {}
+                
+                for dep_name in agent_config.dependencies:
+                    if dep_name in self.agent_configs:
+                        dependency_configs[dep_name] = self.agent_configs[dep_name]
+                        dep_output = self.agent_configs[dep_name].output_signature(schema_registry)
+                        dependency_signatures[dep_name] = dep_output
+                
+                # Get this agent's signatures
+                input_sig = agent_config.input_signature(dependency_configs, schema_registry)
+                output_sig = agent_config.output_signature(schema_registry)
+                
+                # Validate field availability using existing SignatureComputer
+                validation = SignatureComputer.validate_field_availability(input_sig, dependency_signatures)
+                
+                if not validation['valid']:
+                    agent_validation['valid'] = False
+                    agent_validation['errors'].extend(validation['errors'])
+                    result['valid'] = False
+                    result['errors'].extend([f"{agent_name}: {error}" for error in validation['errors']])
+                
+                # Update available fields with this agent's output
+                agent_available_fields = output_sig.get_available_fields()
+                available_fields.update(agent_available_fields)
+                
+                agent_validation['output_fields'] = agent_available_fields
+                agent_validation['required_fields'] = input_sig.get_all_fields()
+                
+            except Exception as e:
+                agent_validation['valid'] = False
+                agent_validation['errors'].append(f"Error computing signatures: {str(e)}")
+                result['valid'] = False
+                result['errors'].append(f"{agent_name}: Error computing signatures: {str(e)}")
+            
+            result['agent_validations'][agent_name] = agent_validation
+            result['field_flow_summary'][agent_name] = available_fields.copy()
+        
+        return result
+
+    def detect_field_conflicts(self, agent_name: str, schema_registry: Optional[Dict[str, Any]] = None) -> Dict[str, List[str]]:
+        """Detect field name conflicts between dependencies.
+        
+        Identifies cases where multiple dependency agents provide fields
+        with the same name, which could cause ambiguity in field references.
+        
+        Args:
+            agent_name: Name of the agent to check for conflicts
+            schema_registry: Optional registry for resolving schema references
+            
+        Returns:
+            Dict with conflict information:
+            {
+                'conflicts': {
+                    'field_name': ['provider1', 'provider2', ...]
+                },
+                'all_available_fields': {
+                    'dependency_name': Set[field_names]
+                },
+                'agent_dependencies': List[str]
+            }
+        """
+        if agent_name not in self.agent_configs:
+            return {
+                'error': f"Agent '{agent_name}' not found in configurations",
+                'conflicts': {},
+                'all_available_fields': {},
+                'agent_dependencies': []
+            }
+        
+        agent_config = self.agent_configs[agent_name]
+        conflicts = {}
+        all_available_fields = {}
+        field_providers = {}  # field_name -> list of providers
+        
+        # Analyze each dependency's output fields
+        for dep_name in agent_config.dependencies:
+            if dep_name not in self.agent_configs:
+                continue
+                
+            try:
+                dep_config = self.agent_configs[dep_name]
+                dep_output = dep_config.output_signature(schema_registry)
+                dep_fields = dep_output.get_available_fields()
+                
+                all_available_fields[dep_name] = dep_fields
+                
+                # Track which dependencies provide each field
+                for field_name in dep_fields:
+                    if field_name not in field_providers:
+                        field_providers[field_name] = []
+                    field_providers[field_name].append(dep_name)
+                    
+            except Exception as e:
+                all_available_fields[dep_name] = f"Error: {str(e)}"
+        
+        # Find conflicts (fields provided by multiple dependencies)
+        for field_name, providers in field_providers.items():
+            if len(providers) > 1:
+                conflicts[field_name] = providers
+        
+        return {
+            'conflicts': conflicts,
+            'all_available_fields': all_available_fields,
+            'agent_dependencies': agent_config.dependencies.copy()
+        }
+
 
 class DuplicateAgentError(Exception):
     """Raised when duplicate agents are found in the configuration."""
