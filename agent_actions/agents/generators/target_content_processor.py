@@ -357,6 +357,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
+                # Check if item was filtered out (generated_data is None)
+                if generated_data is None:
+                    # Item was filtered out, return empty list (no output)
+                    return []
+                
                 # When conditional clause is False, return the original data unchanged
                 # Create a single item with the original content structure
                 node_id = ProcessorUtils.generate_node_id(self.idx)
@@ -460,15 +465,28 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     timeout=self._get_config_value('max_execution_time', 5)
                 )
                 
-                if filter_result.success and filter_result.matched:
-                    filtered_data.append(item)
-                elif not filter_result.success:
+                # Get behavior from either AgentConfig model or dictionary  
+                behavior = where_clause_config.behavior if hasattr(where_clause_config, 'behavior') else where_clause_config.get('behavior', 'filter')
+                
+                if filter_result.success:
+                    if behavior == 'filter':
+                        # Filter behavior: only include items that match the condition
+                        if filter_result.matched:
+                            filtered_data.append(item)
+                        # Non-matching items are filtered out (not added to filtered_data)
+                    elif behavior == 'skip':  
+                        # Skip behavior: include all items (filtering handled at processing level)
+                        filtered_data.append(item)
+                    else:
+                        # Unknown behavior, default to filter behavior
+                        if filter_result.matched:
+                            filtered_data.append(item)
+                else:
                     # Handle filter error based on configuration
                     passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
                     if passthrough_on_error:
                         filtered_data.append(item)
-                    # Otherwise skip this item
-                # If filter_result.matched is False, skip the item
+                    # Otherwise skip this item on error
                 
             return filtered_data
             
@@ -521,6 +539,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
+                # Check if item was filtered out (generated_data is None)
+                if generated_data is None:
+                    # Item was filtered out, return empty list (no output)
+                    return []
+                
                 # When conditional clause is False, return the original data unchanged
                 # Create a single item with the original content structure
                 node_id = ProcessorUtils.generate_node_id(self.idx)
