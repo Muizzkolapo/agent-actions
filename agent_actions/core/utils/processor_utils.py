@@ -9,6 +9,7 @@ This module provides shared functionality for processors including:
 
 import uuid
 import json
+import threading
 from typing import Dict, List, Any, Optional, Union
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
@@ -316,6 +317,7 @@ class ProcessorUtils:
 
     # Class-level registry for loop correlation IDs
     _loop_correlation_registry: Dict[str, str] = {}
+    _loop_correlation_lock = threading.RLock()
 
     @staticmethod
     def get_or_create_loop_correlation_id(source_guid: str, loop_base_name: str) -> str:
@@ -332,10 +334,11 @@ class ProcessorUtils:
         # Create a key that combines source_guid with loop context
         registry_key = f"{loop_base_name}:{source_guid}"
 
-        if registry_key not in ProcessorUtils._loop_correlation_registry:
-            ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
+        with ProcessorUtils._loop_correlation_lock:
+            if registry_key not in ProcessorUtils._loop_correlation_registry:
+                ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
 
-        return ProcessorUtils._loop_correlation_registry[registry_key]
+            return ProcessorUtils._loop_correlation_registry[registry_key]
 
     @staticmethod
     def get_or_create_position_based_loop_correlation_id(
@@ -357,15 +360,17 @@ class ProcessorUtils:
         # Create a key that combines position with loop context
         registry_key = f"{loop_base_name}:position_{record_index}:{file_context}"
 
-        if registry_key not in ProcessorUtils._loop_correlation_registry:
-            ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
+        with ProcessorUtils._loop_correlation_lock:
+            if registry_key not in ProcessorUtils._loop_correlation_registry:
+                ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
 
-        return ProcessorUtils._loop_correlation_registry[registry_key]
+            return ProcessorUtils._loop_correlation_registry[registry_key]
 
     @staticmethod
     def clear_loop_correlation_registry():
         """Clear the loop correlation ID registry (useful for testing or workflow resets)."""
-        ProcessorUtils._loop_correlation_registry.clear()
+        with ProcessorUtils._loop_correlation_lock:
+            ProcessorUtils._loop_correlation_registry.clear()
 
     @staticmethod
     def add_loop_correlation_id(obj: Dict, agent_config: Dict, record_index: Optional[int] = None) -> Dict:
