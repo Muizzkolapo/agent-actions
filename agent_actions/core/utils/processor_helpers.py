@@ -50,6 +50,10 @@ def run_dynamic_agent(
     if _should_skip_where_clause(agent_config, context):
         return context, False
 
+    # Check WHERE clause with filter behavior
+    if _should_filter_where_clause(agent_config, context):
+        return None, False  # Return None to indicate filtered out
+
     # Execute agent after all guard checks pass
     processed_context = apply_drops(context, agent_config)
 
@@ -89,6 +93,34 @@ def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
         # On error, check passthrough_on_error setting
         passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
         return passthrough_on_error
+
+
+def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
+    """Check if item should be filtered out based on WHERE clause with filter behavior."""
+    where_clause_config = agent_config.get("where_clause")
+
+    if not (where_clause_config and where_clause_config.get("behavior") == "filter"):
+        return False
+
+    try:
+        filter_service = get_global_filter()
+        filter_result = filter_service.filter_item(context, where_clause_config["clause"])
+        
+        if hasattr(filter_result, 'success'):
+            # FilterResult object
+            if not filter_result.success:
+                # Handle filter error based on configuration
+                passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+                return not passthrough_on_error  # Filter out if passthrough_on_error is False
+            # Item should be filtered out if condition doesn't match
+            return not filter_result.matched
+        else:
+            # Boolean return (legacy)
+            return not filter_result
+    except Exception:
+        # On error, check passthrough_on_error setting
+        passthrough_on_error = where_clause_config.get("passthrough_on_error", True)
+        return not passthrough_on_error  # Filter out if passthrough_on_error is False
 
 
 def transform_with_observe(
