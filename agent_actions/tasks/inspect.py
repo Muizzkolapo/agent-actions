@@ -7,7 +7,6 @@ which includes signatures, field-flow, and conflicts inspection commands.
 
 import click
 import json
-from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
 from rich.table import Table
@@ -21,7 +20,35 @@ from agent_actions.agents.validators.inspect_validator import (
 )
 from agent_actions.core.cli_decorators import requires_project
 from agent_actions.core.exceptions import ConfigurationError
+from agent_actions.tasks.services.project_paths_factory import ProjectPathsFactory
 from pydantic import ValidationError
+
+
+def _create_config_manager(agent_name: str) -> ConfigManager:
+    """
+    Create and initialize ConfigManager using ProjectPathsFactory.
+    
+    This shared function eliminates code duplication across all inspect commands.
+    
+    Args:
+        agent_name: Name of the agent to inspect
+        
+    Returns:
+        Configured ConfigManager instance
+    """
+    # Use ProjectPathsFactory to get consistent path resolution
+    paths = ProjectPathsFactory.create_project_paths(agent_name, agent_name)
+    workflow_path = paths.agent_config_dir / f"{agent_name}.yml"
+    
+    config_manager = ConfigManager(str(workflow_path), str(paths.default_config_path))
+    config_manager.load_configs()
+    config_manager.validate_agent_name()
+    
+    user_agents = config_manager.get_user_agents()
+    config_manager.merge_agent_configs(user_agents)
+    config_manager.determine_execution_order(user_agents)
+    
+    return config_manager
 
 
 class InspectSignaturesCommand:
@@ -42,11 +69,11 @@ class InspectSignaturesCommand:
             all_signatures = config_manager.get_all_signatures()
             
             # Filter by agent if specified
-            if self.args.agent:
-                if self.args.agent not in all_signatures:
-                    self.console.print(f"[red]Agent '{self.args.agent}' not found in workflow[/red]")
+            if self.args.filter_agent:
+                if self.args.filter_agent not in all_signatures:
+                    self.console.print(f"[red]Agent '{self.args.filter_agent}' not found in workflow[/red]")
                     return
-                all_signatures = {self.args.agent: all_signatures[self.args.agent]}
+                all_signatures = {self.args.filter_agent: all_signatures[self.args.filter_agent]}
             
             # Render output
             if self.args.format == "json":
@@ -58,34 +85,8 @@ class InspectSignaturesCommand:
             self.console.print(f"[red]Error: {str(e)}[/red]")
 
     def _load_config_manager(self) -> ConfigManager:
-        """Load and initialize ConfigManager."""
-        # Look for defaults file in same directory as workflow
-        defaults_path = Path(self.args.workflow_path).parent / "defaults.yml"
-        if not defaults_path.exists():
-            # Create minimal defaults if none exist
-            defaults_path = Path(self.args.workflow_path).parent / "temp_defaults.yml"
-            defaults_content = """default_agent_config:
-  model_vendor: anthropic
-  model_name: claude-3-haiku-20240307
-  api_key: fake-key-for-testing
-  anthropic_version: "2023-06-01"
-  max_tokens: 1000
-  temperature: 0.1"""
-            defaults_path.write_text(defaults_content)
-        
-        config_manager = ConfigManager(self.args.workflow_path, str(defaults_path))
-        config_manager.load_configs()
-        config_manager.validate_agent_name()
-        
-        user_agents = config_manager.get_user_agents()
-        config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
-        
-        # Clean up temp file if we created it
-        if defaults_path.name == "temp_defaults.yml":
-            defaults_path.unlink(missing_ok=True)
-        
-        return config_manager
+        """Load and initialize ConfigManager using shared function."""
+        return _create_config_manager(self.args.agent_name)
 
     def _render_json(self, signatures: Dict[str, Dict[str, Any]]) -> None:
         """Render signatures as JSON."""
@@ -185,34 +186,8 @@ class InspectFieldFlowCommand:
             self.console.print(f"[red]Error: {str(e)}[/red]")
 
     def _load_config_manager(self) -> ConfigManager:
-        """Load and initialize ConfigManager."""
-        # Look for defaults file in same directory as workflow
-        defaults_path = Path(self.args.workflow_path).parent / "defaults.yml"
-        if not defaults_path.exists():
-            # Create minimal defaults if none exist
-            defaults_path = Path(self.args.workflow_path).parent / "temp_defaults.yml"
-            defaults_content = """default_agent_config:
-  model_vendor: anthropic
-  model_name: claude-3-haiku-20240307
-  api_key: fake-key-for-testing
-  anthropic_version: "2023-06-01"
-  max_tokens: 1000
-  temperature: 0.1"""
-            defaults_path.write_text(defaults_content)
-        
-        config_manager = ConfigManager(self.args.workflow_path, str(defaults_path))
-        config_manager.load_configs()
-        config_manager.validate_agent_name()
-        
-        user_agents = config_manager.get_user_agents()
-        config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
-        
-        # Clean up temp file if we created it
-        if defaults_path.name == "temp_defaults.yml":
-            defaults_path.unlink(missing_ok=True)
-        
-        return config_manager
+        """Load and initialize ConfigManager using shared function."""
+        return _create_config_manager(self.args.agent_name)
 
     def _render_json(self, validation: Dict[str, Any]) -> None:
         """Render field flow validation as JSON."""
@@ -297,10 +272,10 @@ class InspectConflictsCommand:
             # Load workflow configuration
             config_manager = self._load_config_manager()
             
-            if self.args.agent_name:
+            if self.args.filter_agent:
                 # Check specific agent
-                conflicts = config_manager.detect_field_conflicts(self.args.agent_name)
-                conflicts_data = {self.args.agent_name: conflicts}
+                conflicts = config_manager.detect_field_conflicts(self.args.filter_agent)
+                conflicts_data = {self.args.filter_agent: conflicts}
             else:
                 # Check all agents
                 conflicts_data = {}
@@ -317,34 +292,8 @@ class InspectConflictsCommand:
             self.console.print(f"[red]Error: {str(e)}[/red]")
 
     def _load_config_manager(self) -> ConfigManager:
-        """Load and initialize ConfigManager."""
-        # Look for defaults file in same directory as workflow
-        defaults_path = Path(self.args.workflow_path).parent / "defaults.yml"
-        if not defaults_path.exists():
-            # Create minimal defaults if none exist
-            defaults_path = Path(self.args.workflow_path).parent / "temp_defaults.yml"
-            defaults_content = """default_agent_config:
-  model_vendor: anthropic
-  model_name: claude-3-haiku-20240307
-  api_key: fake-key-for-testing
-  anthropic_version: "2023-06-01"
-  max_tokens: 1000
-  temperature: 0.1"""
-            defaults_path.write_text(defaults_content)
-        
-        config_manager = ConfigManager(self.args.workflow_path, str(defaults_path))
-        config_manager.load_configs()
-        config_manager.validate_agent_name()
-        
-        user_agents = config_manager.get_user_agents()
-        config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
-        
-        # Clean up temp file if we created it
-        if defaults_path.name == "temp_defaults.yml":
-            defaults_path.unlink(missing_ok=True)
-        
-        return config_manager
+        """Load and initialize ConfigManager using shared function."""
+        return _create_config_manager(self.args.agent_name)
 
     def _render_json(self, conflicts_data: Dict[str, Dict[str, Any]]) -> None:
         """Render conflicts as JSON."""
@@ -403,28 +352,36 @@ class InspectConflictsCommand:
 # Click command group and individual commands
 @click.group()
 def inspect():
-    """Inspect workflow signatures and field dependencies."""
+    """Inspect agent workflows, signatures and field dependencies.
+    
+    All inspect commands use the -a/--agent flag to specify which agent's workflow to analyze."""
     pass
 
 
 @inspect.command()
-@click.argument('workflow_path', type=click.Path(exists=True))
+@click.option('-a', '--agent', 'agent_name', required=True, help='Agent name to inspect')
 @click.option('--format', 'output_format', default='table', 
               type=click.Choice(['table', 'json']),
               help='Output format (default: table)')
-@click.option('--agent', help='Show signatures for specific agent only')
-def signatures(workflow_path: str, output_format: str, agent: Optional[str]) -> None:
+@click.option('--filter-agent', help='Show signatures for specific agent only')
+@requires_project
+def signatures(agent_name: str, output_format: str, filter_agent: Optional[str]) -> None:
     """
-    Display input and output signatures for workflow agents.
+    Display input and output signatures for agents in the specified workflow.
     
     Shows the field dependencies and outputs for each agent in the workflow,
     helping to understand data flow between agents.
+    
+    Examples:
+        agent inspect signatures -a my_agent
+        agent inspect signatures -a my_agent --format json
+        agent inspect signatures -a my_agent --filter-agent specific_agent
     """
     try:
         args = SignaturesCommandArgs(
-            workflow_path=workflow_path,
+            agent_name=agent_name,
             format=output_format,
-            agent=agent
+            filter_agent=filter_agent
         )
         command = InspectSignaturesCommand(args)
         command.execute()
@@ -435,20 +392,25 @@ def signatures(workflow_path: str, output_format: str, agent: Optional[str]) -> 
 
 
 @inspect.command(name='field-flow')
-@click.argument('workflow_path', type=click.Path(exists=True))
+@click.option('-a', '--agent', 'agent_name', required=True, help='Agent name to inspect')
 @click.option('--format', 'output_format', default='table',
               type=click.Choice(['table', 'json']),
               help='Output format (default: table)')
-def field_flow(workflow_path: str, output_format: str) -> None:
+@requires_project
+def field_flow(agent_name: str, output_format: str) -> None:
     """
-    Validate field flow through the entire workflow.
+    Validate field flow through the workflow containing the specified agent.
     
     Analyzes field dependencies across all agents to detect missing fields,
     validate references, and ensure proper data flow through the workflow.
+    
+    Examples:
+        agent inspect field-flow -a my_agent
+        agent inspect field-flow -a my_agent --format json
     """
     try:
         args = FieldFlowCommandArgs(
-            workflow_path=workflow_path,
+            agent_name=agent_name,
             format=output_format
         )
         command = InspectFieldFlowCommand(args)
@@ -460,22 +422,28 @@ def field_flow(workflow_path: str, output_format: str) -> None:
 
 
 @inspect.command()
-@click.argument('workflow_path', type=click.Path(exists=True))
-@click.argument('agent_name', required=False)
+@click.option('-a', '--agent', 'agent_name', required=True, help='Agent name to inspect')
+@click.option('--filter-agent', help='Check conflicts for specific agent only')
 @click.option('--format', 'output_format', default='table',
               type=click.Choice(['table', 'json']),
               help='Output format (default: table)')
-def conflicts(workflow_path: str, agent_name: Optional[str], output_format: str) -> None:
+@requires_project
+def conflicts(agent_name: str, filter_agent: Optional[str], output_format: str) -> None:
     """
-    Detect field name conflicts between dependency agents.
+    Detect field name conflicts in the workflow containing the specified agent.
     
     Identifies cases where multiple dependency agents provide fields with
     the same name, which could cause ambiguity in field references.
+    
+    Examples:
+        agent inspect conflicts -a my_agent
+        agent inspect conflicts -a my_agent --filter-agent specific_agent
+        agent inspect conflicts -a my_agent --format json
     """
     try:
         args = ConflictsCommandArgs(
-            workflow_path=workflow_path,
             agent_name=agent_name,
+            filter_agent=filter_agent,
             format=output_format
         )
         command = InspectConflictsCommand(args)
