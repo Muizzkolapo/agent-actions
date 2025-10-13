@@ -13,9 +13,9 @@ from pathlib import Path
 class SignaturesCommandArgs(BaseModel):
     """Pydantic model for the signatures command arguments."""
     
-    workflow_path: str = Field(..., description="Path to workflow configuration file")
+    agent_name: str = Field(..., description="Agent name to inspect")
     format: str = Field(default="table", description="Output format: table or json")
-    agent: Optional[str] = Field(default=None, description="Specific agent name to show signatures for")
+    filter_agent: Optional[str] = Field(default=None, description="Specific agent name to show signatures for")
     
     @validator('format')
     def validate_format(cls, v):
@@ -24,21 +24,18 @@ class SignaturesCommandArgs(BaseModel):
             raise ValueError("format must be 'table' or 'json'")
         return v
     
-    @validator('workflow_path')
-    def validate_workflow_path(cls, v):
-        """Validate the workflow path exists."""
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Workflow file does not exist: {v}")
-        if not path.is_file():
-            raise ValueError(f"Workflow path must be a file: {v}")
-        return v
+    @validator('agent_name')
+    def validate_agent_name(cls, v):
+        """Validate the agent name is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()
 
 
 class FieldFlowCommandArgs(BaseModel):
     """Pydantic model for the field-flow command arguments."""
     
-    workflow_path: str = Field(..., description="Path to workflow configuration file")
+    agent_name: str = Field(..., description="Agent name to inspect")
     format: str = Field(default="table", description="Output format: table or json")
     
     @validator('format')
@@ -48,22 +45,19 @@ class FieldFlowCommandArgs(BaseModel):
             raise ValueError("format must be 'table' or 'json'")
         return v
     
-    @validator('workflow_path')
-    def validate_workflow_path(cls, v):
-        """Validate the workflow path exists."""
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Workflow file does not exist: {v}")
-        if not path.is_file():
-            raise ValueError(f"Workflow path must be a file: {v}")
-        return v
+    @validator('agent_name')
+    def validate_agent_name(cls, v):
+        """Validate the agent name is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()
 
 
 class ConflictsCommandArgs(BaseModel):
     """Pydantic model for the conflicts command arguments."""
     
-    workflow_path: str = Field(..., description="Path to workflow configuration file")
-    agent_name: Optional[str] = Field(default=None, description="Specific agent name to check for conflicts")
+    agent_name: str = Field(..., description="Agent name to inspect")
+    filter_agent: Optional[str] = Field(default=None, description="Specific agent name to check for conflicts")
     format: str = Field(default="table", description="Output format: table or json")
     
     @validator('format')
@@ -73,12 +67,9 @@ class ConflictsCommandArgs(BaseModel):
             raise ValueError("format must be 'table' or 'json'")
         return v
     
-    @validator('workflow_path')
-    def validate_workflow_path(cls, v):
-        """Validate the workflow path exists."""
-        path = Path(v)
-        if not path.exists():
-            raise ValueError(f"Workflow file does not exist: {v}")
-        if not path.is_file():
-            raise ValueError(f"Workflow path must be a file: {v}")
-        return v
+    @validator('agent_name')
+    def validate_agent_name(cls, v):
+        """Validate the agent name is not empty."""
+        if not v or not v.strip():
+            raise ValueError("Agent name cannot be empty")
+        return v.strip()

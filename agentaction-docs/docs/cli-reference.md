@@ -516,6 +516,91 @@ Fix:
 Run this command before deploying workflows to catch UDF reference errors early. Ideal for CI/CD pipelines.
 :::
 
+### `inspect`
+
+Analyze agent workflows, signatures, and field dependencies. All inspect commands use the `-a/--agent` flag pattern for consistency with other CLI commands.
+
+#### Common Options
+
+All inspect commands share these common options:
+
+- `-a, --agent TEXT` - **Required.** Agent name to inspect
+- `--format [table|json]` - Output format (default: table)
+
+#### Project Detection
+
+All inspect commands use the `@requires_project` decorator:
+- Work from any subdirectory within your project
+- Automatically detect project root by finding `agent_actions.yml`
+- Show project root detection: `📁 Project root: <path>`
+
+#### `inspect signatures`
+
+Display input and output signatures for agents in the specified workflow.
+
+```bash
+agent inspect signatures -a my_agent
+agent inspect signatures -a my_agent --format json
+agent inspect signatures -a my_agent --filter-agent specific_agent
+```
+
+**Options:**
+- `--filter-agent TEXT` - Show signatures for specific agent only
+
+**Output:**
+Shows field dependencies and outputs for each agent in the workflow, helping understand data flow between agents.
+
+#### `inspect field-flow`
+
+Validate field flow through the workflow containing the specified agent.
+
+```bash
+agent inspect field-flow -a my_agent
+agent inspect field-flow -a my_agent --format json
+```
+
+**Output:**
+Analyzes field dependencies across all agents to detect missing fields, validate references, and ensure proper data flow through the workflow.
+
+#### `inspect conflicts`
+
+Detect field name conflicts in the workflow containing the specified agent.
+
+```bash
+agent inspect conflicts -a my_agent
+agent inspect conflicts -a my_agent --filter-agent specific_agent
+agent inspect conflicts -a my_agent --format json
+```
+
+**Options:**
+- `--filter-agent TEXT` - Check conflicts for specific agent only
+
+**Output:**
+Identifies cases where multiple dependency agents provide fields with the same name, which could cause ambiguity in field references.
+
+#### Migration from Previous Versions
+
+**Previous CLI pattern (deprecated):**
+```bash
+agent inspect signatures /path/to/workflow.yml
+agent inspect field-flow /path/to/workflow.yml
+agent inspect conflicts /path/to/workflow.yml [agent_name]
+```
+
+**New CLI pattern:**
+```bash
+agent inspect signatures -a my_agent
+agent inspect field-flow -a my_agent  
+agent inspect conflicts -a my_agent --filter-agent specific_agent
+```
+
+**Key improvements:**
+- ✅ Consistent `-a/--agent` flag across all commands
+- ✅ Works from any project subdirectory
+- ✅ Automatic project root detection
+- ✅ No need to provide full workflow file paths
+- ✅ Clear, predictable command patterns
+
 ## Error Messages
 
 Agent Actions provides user-friendly error messages designed for configuration authors.
