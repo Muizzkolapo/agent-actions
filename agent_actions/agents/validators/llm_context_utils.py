@@ -21,13 +21,12 @@ class LLMContextUtils:
         """
         Compute the fields that will be available to the next agent's LLM.
 
-        Formula: (schema_fields + observe) - drops + (input_data if return_collection)
+        Formula: (schema_fields + observe) - drops
 
         The next agent's LLM sees:
         - All fields from the output schema
         - Plus any fields from 'observe' (pass-through from input)
         - Minus any fields in 'drops' (removed from output)
-        - Plus 'input_data' if return_collection is True
 
         Args:
             agent_config: Agent configuration dictionary
@@ -58,10 +57,6 @@ class LLMContextUtils:
 
         # Compute LLM context: (schema + observe) - drops
         llm_context = (schema_fields | observe) - drops
-
-        # Special case: return_collection adds input_data
-        if agent_config.get('return_collection'):
-            llm_context.add('input_data')
 
         return llm_context
 

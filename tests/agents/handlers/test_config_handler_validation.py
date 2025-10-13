@@ -287,7 +287,7 @@ class TestConfigManagerInputValidation:
     @patch('agent_actions.agents.handlers.config_handler.Utils.topological_sort')
     @patch('agent_actions.agents.handlers.config_handler.ConfigValidator')
     def test_complex_workflow_with_all_directives(self, mock_validator_class, mock_topo_sort):
-        """Should validate complex workflow with schema, observe, drops, return_collection."""
+        """Should validate complex workflow with schema, observe, drops."""
         # Setup
         config_manager = ConfigManager("test.yml", "default.yml")
 
@@ -295,8 +295,7 @@ class TestConfigManagerInputValidation:
             'extractor': self.create_agent_config(
                 output_schema={'properties': {'summary': {}, 'metrics': {}, 'temp': {}}},
                 observe=['document_id'],
-                drops=['temp'],
-                return_collection=True
+                drops=['temp']
             ),
             'analyzer': self.create_agent_config(
                 prompt='''
@@ -304,7 +303,6 @@ class TestConfigManagerInputValidation:
                 Summary: {extractor.summary}
                 Metrics: {extractor.metrics}
                 Document ID: {extractor.document_id}
-                Collection: {extractor.input_data}
                 ''',
                 dependencies=['extractor']
             )
