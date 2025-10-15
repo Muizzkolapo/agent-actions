@@ -13,6 +13,11 @@ from concurrent.futures import ThreadPoolExecutor
 from agent_actions.core.utils.processor_utils import ProcessorUtils
 
 
+def get_demo_session_id() -> str:
+    """Get a consistent session ID for demo purposes."""
+    return "demo_session_12345"
+
+
 def demonstrate_race_condition_fix():
     """
     Demonstrate that the thread-safe fix prevents race conditions.
@@ -45,7 +50,7 @@ def demonstrate_race_condition_fix():
         
         # This is the critical operation that was experiencing race conditions
         correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-            source_guid, loop_base_name
+            source_guid, loop_base_name, get_demo_session_id()
         )
         
         # Simulate some processing time
@@ -109,7 +114,7 @@ def demonstrate_position_based_consistency():
     def worker(position: int, worker_id: int):
         """Worker for position-based correlation."""
         correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-            position, loop_base_name, file_context
+            position, loop_base_name, get_demo_session_id(), file_context
         )
         
         with results_lock:
@@ -177,7 +182,7 @@ def demonstrate_mixed_usage():
     def guid_worker(source_guid: str):
         """Worker using source GUID strategy."""
         correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-            source_guid, loop_base_name
+            source_guid, loop_base_name, get_demo_session_id()
         )
         
         with results_lock:
@@ -188,7 +193,7 @@ def demonstrate_mixed_usage():
     def position_worker(position: int):
         """Worker using position strategy."""
         correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-            position, loop_base_name
+            position, loop_base_name, get_demo_session_id()
         )
         
         with results_lock:

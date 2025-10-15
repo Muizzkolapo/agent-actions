@@ -2,6 +2,8 @@ import sys
 import json
 import os
 import asyncio  # Added for async processing
+import hashlib
+import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List
@@ -330,6 +332,12 @@ class AgentWorkflow:
             self.console.print(f"[yellow]Warning: Could not initialize artifact system: {e}[/yellow]")
             self.artifact_manager = None
 
+        # Generate workflow session ID for deterministic correlation across all batches
+        self.workflow_session_id = self._generate_workflow_session_id()
+        
+        # Inject workflow session ID into all agent configs for correlation
+        self._inject_workflow_session_id()
+
     def _load_configs(self):
         self.config_manager.load_configs()
         self.config_manager.validate_agent_name()
@@ -343,6 +351,29 @@ class AgentWorkflow:
         self.agent_indices = {agent: i for i, agent in enumerate(self.execution_order)}
         self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
         self.child_pipeline = self.config_manager.child_pipeline
+
+    def _generate_workflow_session_id(self) -> str:
+        """
+        Generate a deterministic yet unique workflow session ID.
+        
+        Returns:
+            Workflow session ID in format: workflow_{timestamp}_{config_hash}
+        """
+        timestamp = int(time.time())
+        
+        # Create a hash based on the workflow configuration for determinism
+        config_content = f"{self.constructor_path}:{self.agent_name}"
+        config_hash = hashlib.md5(config_content.encode()).hexdigest()[:8]
+        
+        return f"workflow_{timestamp}_{config_hash}"
+    
+    def _inject_workflow_session_id(self):
+        """
+        Inject the workflow session ID into all agent configurations.
+        This enables deterministic correlation IDs across all agents and batches.
+        """
+        for agent_name, agent_config in self.agent_configs.items():
+            agent_config['workflow_session_id'] = self.workflow_session_id
 
     def _initialize_manifest(self):
         """Initialize the manifest artifact with project and agent information."""
