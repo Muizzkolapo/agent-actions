@@ -14,6 +14,11 @@ from agent_actions.core.utils.processor_utils import ProcessorUtils
 class TestProcessorUtilsIntegration:
     """Integration tests for ProcessorUtils in realistic parallel processing scenarios."""
 
+    @classmethod
+    def get_test_session_id(cls) -> str:
+        """Get a consistent session ID for testing."""
+        return "test_session_integration"
+
     def setup_method(self):
         """Clear the registry before each test."""
         ProcessorUtils.clear_loop_correlation_registry()
@@ -47,7 +52,7 @@ class TestProcessorUtilsIntegration:
                 
                 # This is the critical operation that was experiencing race conditions
                 correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name
+                    source_guid, loop_base_name, self.get_test_session_id()
                 )
                 
                 # Simulate some processing time
@@ -108,7 +113,7 @@ class TestProcessorUtilsIntegration:
             """Simulate a batch processor working on specific positions."""
             for position in range(batch_size):
                 correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-                    position, loop_base_name, file_context
+                    position, loop_base_name, self.get_test_session_id(), file_context
                 )
                 
                 # Simulate processing time
@@ -164,7 +169,7 @@ class TestProcessorUtilsIntegration:
             """Worker using source_guid strategy."""
             for _ in range(3):  # Multiple calls to increase concurrency
                 correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name
+                    source_guid, loop_base_name, self.get_test_session_id()
                 )
                 
                 with results_lock:
@@ -176,7 +181,7 @@ class TestProcessorUtilsIntegration:
             """Worker using position strategy."""
             for _ in range(3):  # Multiple calls to increase concurrency
                 correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-                    position, loop_base_name
+                    position, loop_base_name, self.get_test_session_id()
                 )
                 
                 with results_lock:
@@ -235,7 +240,8 @@ class TestProcessorUtilsIntegration:
         
         agent_config = {
             'is_loop_agent': True,
-            'loop_base_name': 'workflow_loop'
+            'loop_base_name': 'workflow_loop',
+            'workflow_session_id': self.get_test_session_id()
         }
         
         all_outputs: List[Dict[str, Any]] = []

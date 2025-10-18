@@ -14,6 +14,11 @@ from agent_actions.core.utils.processor_utils import ProcessorUtils
 class TestProcessorUtilsThreadSafety:
     """Test suite for ProcessorUtils thread safety."""
 
+    @classmethod
+    def get_test_session_id(cls) -> str:
+        """Get a consistent session ID for testing."""
+        return "test_session_12345"
+
     def setup_method(self):
         """Clear the registry before each test."""
         ProcessorUtils.clear_loop_correlation_registry()
@@ -37,7 +42,7 @@ class TestProcessorUtilsThreadSafety:
             local_ids = []
             for _ in range(num_calls_per_thread):
                 correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name
+                    source_guid, loop_base_name, self.get_test_session_id()
                 )
                 local_ids.append(correlation_id)
                 # Add small delay to increase chance of race condition
@@ -75,7 +80,7 @@ class TestProcessorUtilsThreadSafety:
         def worker():
             """Worker function that generates position-based correlation IDs."""
             correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-                record_index, loop_base_name, file_context
+                record_index, loop_base_name, self.get_test_session_id(), file_context
             )
             with correlation_ids_lock:
                 correlation_ids.append(correlation_id)
@@ -107,7 +112,7 @@ class TestProcessorUtilsThreadSafety:
         def worker(source_guid: str):
             """Worker function for a specific source_guid."""
             correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(
-                source_guid, loop_base_name
+                source_guid, loop_base_name, self.get_test_session_id()
             )
             with results_lock:
                 if source_guid not in all_results:
@@ -145,16 +150,16 @@ class TestProcessorUtilsThreadSafety:
         assert len(all_unique_ids) == num_different_guids
 
     def test_concurrent_registry_clearing(self):
-        """Test that registry clearing is thread-safe."""
+        """Test that registry clearing is thread-safe and deterministic generation persists."""
         source_guid = "clear-test-guid"
         loop_base_name = "clear_test_loop"
         
         # First, populate the registry
-        original_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name)
+        original_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
         assert original_id is not None
         
         # Verify it's consistent
-        same_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name)
+        same_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
         assert same_id == original_id
         
         clear_completed = threading.Event()
@@ -168,7 +173,7 @@ class TestProcessorUtilsThreadSafety:
             """Worker that tries to access the registry during clearing."""
             # Wait a bit to let clear start
             time.sleep(0.01)
-            return ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name)
+            return ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
         
         # Start clear thread
         clear_thread = threading.Thread(target=clear_worker)
@@ -182,9 +187,9 @@ class TestProcessorUtilsThreadSafety:
         clear_thread.join()
         access_thread.join()
         
-        # After clearing, should get a new ID
-        new_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name)
-        assert new_id != original_id
+        # After clearing, should get the SAME ID (deterministic behavior)
+        new_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
+        assert new_id == original_id, f"Deterministic generation should produce same ID after clearing: {original_id} vs {new_id}"
 
     def test_stress_test_many_concurrent_operations(self):
         """Stress test with many concurrent operations of different types."""
@@ -198,17 +203,17 @@ class TestProcessorUtilsThreadSafety:
                 if i % 3 == 0:
                     # Source GUID based
                     ProcessorUtils.get_or_create_loop_correlation_id(
-                        f"guid-{worker_id}-{i}", f"loop-{worker_id % 5}"
+                        f"guid-{worker_id}-{i}", f"loop-{worker_id % 5}", self.get_test_session_id()
                     )
                 elif i % 3 == 1:
                     # Position based
                     ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-                        i, f"pos-loop-{worker_id % 3}", f"file-{worker_id % 2}"
+                        i, f"pos-loop-{worker_id % 3}", self.get_test_session_id(), f"file-{worker_id % 2}"
                     )
                 else:
                     # Same source GUID to test consistency
                     ProcessorUtils.get_or_create_loop_correlation_id(
-                        "shared-guid", "shared-loop"
+                        "shared-guid", "shared-loop", self.get_test_session_id()
                     )
         
         # Start all workers
@@ -223,15 +228,16 @@ class TestProcessorUtilsThreadSafety:
             thread.join()
         
         # Verify the shared correlation ID is consistent
-        shared_id_1 = ProcessorUtils.get_or_create_loop_correlation_id("shared-guid", "shared-loop")
-        shared_id_2 = ProcessorUtils.get_or_create_loop_correlation_id("shared-guid", "shared-loop")
+        shared_id_1 = ProcessorUtils.get_or_create_loop_correlation_id("shared-guid", "shared-loop", self.get_test_session_id())
+        shared_id_2 = ProcessorUtils.get_or_create_loop_correlation_id("shared-guid", "shared-loop", self.get_test_session_id())
         assert shared_id_1 == shared_id_2
 
     def test_add_loop_correlation_id_thread_safety(self):
         """Test that add_loop_correlation_id is thread-safe."""
         agent_config = {
             'is_loop_agent': True,
-            'loop_base_name': 'concurrent_loop'
+            'loop_base_name': 'concurrent_loop',
+            'workflow_session_id': self.get_test_session_id()
         }
         
         results: List[str] = []
@@ -274,7 +280,7 @@ class TestProcessorUtilsThreadSafety:
         
         def get_correlation_id():
             """Function to be executed in thread pool."""
-            return ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name)
+            return ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
         
         # Use ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=10) as executor:

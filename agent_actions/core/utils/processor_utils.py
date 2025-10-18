@@ -10,6 +10,9 @@ This module provides shared functionality for processors including:
 import uuid
 import json
 import threading
+import hashlib
+import time
+import os
 from typing import Dict, List, Any, Optional, Union
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
@@ -320,23 +323,28 @@ class ProcessorUtils:
     _loop_correlation_lock = threading.RLock()
 
     @staticmethod
-    def get_or_create_loop_correlation_id(source_guid: str, loop_base_name: str) -> str:
+    def get_or_create_loop_correlation_id(source_guid: str, loop_base_name: str, workflow_session_id: str) -> str:
         """
         Get or create a loop correlation ID for a given source_guid within a loop context.
 
         Args:
             source_guid: Source GUID of the record
             loop_base_name: Base name of the loop (e.g., 'generate_distractors')
+            workflow_session_id: Workflow session identifier for deterministic correlation
 
         Returns:
-            Consistent loop correlation ID for this source_guid + loop combination
+            Consistent loop correlation ID for this source_guid + loop + session combination
         """
-        # Create a key that combines source_guid with loop context
-        registry_key = f"{loop_base_name}:{source_guid}"
+        # Create a session-scoped key that combines workflow session with loop context
+        registry_key = f"{workflow_session_id}:{loop_base_name}:{source_guid}"
 
         with ProcessorUtils._loop_correlation_lock:
             if registry_key not in ProcessorUtils._loop_correlation_registry:
-                ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
+                # Generate deterministic correlation ID instead of random UUID
+                content = f"{loop_base_name}:{source_guid}"
+                ProcessorUtils._loop_correlation_registry[registry_key] = ProcessorUtils._generate_deterministic_correlation_id(
+                    workflow_session_id, content
+                )
 
             return ProcessorUtils._loop_correlation_registry[registry_key]
 
@@ -344,6 +352,7 @@ class ProcessorUtils:
     def get_or_create_position_based_loop_correlation_id(
         record_index: int,
         loop_base_name: str,
+        workflow_session_id: str,
         file_context: str = ""
     ) -> str:
         """
@@ -352,19 +361,41 @@ class ProcessorUtils:
         Args:
             record_index: Position/index of the record in the input list
             loop_base_name: Base name of the loop (e.g., 'generate_distractors')
+            workflow_session_id: Workflow session identifier for deterministic correlation
             file_context: Optional file context for uniqueness
 
         Returns:
             Consistent loop correlation ID for this position across all loop iterations
         """
-        # Create a key that combines position with loop context
-        registry_key = f"{loop_base_name}:position_{record_index}:{file_context}"
+        # Create a session-scoped key that combines workflow session with position context
+        registry_key = f"{workflow_session_id}:{loop_base_name}:position_{record_index}:{file_context}"
 
         with ProcessorUtils._loop_correlation_lock:
             if registry_key not in ProcessorUtils._loop_correlation_registry:
-                ProcessorUtils._loop_correlation_registry[registry_key] = str(uuid.uuid4())
+                # Generate deterministic correlation ID instead of random UUID
+                content = f"{loop_base_name}:position_{record_index}:{file_context}"
+                ProcessorUtils._loop_correlation_registry[registry_key] = ProcessorUtils._generate_deterministic_correlation_id(
+                    workflow_session_id, content
+                )
 
             return ProcessorUtils._loop_correlation_registry[registry_key]
+
+    @staticmethod
+    def _generate_deterministic_correlation_id(workflow_session_id: str, content: str) -> str:
+        """
+        Generate a deterministic correlation ID based on session and content.
+        
+        Args:
+            workflow_session_id: The workflow session identifier
+            content: The content to hash (loop_base_name:source_guid or position info)
+            
+        Returns:
+            Deterministic correlation ID in format: corr_{16_char_hash}
+        """
+        hash_input = f"{workflow_session_id}:{content}"
+        hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()
+        return f"corr_{hash_digest[:16]}"
+    
 
     @staticmethod
     def clear_loop_correlation_registry():
@@ -393,20 +424,29 @@ class ProcessorUtils:
         if not loop_base_name:
             return obj
 
+        # Extract workflow session ID from agent_config
+        workflow_session_id = agent_config.get('workflow_session_id')
+        if not workflow_session_id:
+            raise ValueError(
+                "Missing workflow_session_id in agent_config. "
+                "This is required for deterministic correlation IDs. "
+                "Ensure AgentWorkflow properly injects session IDs."
+            )
+
         obj = obj.copy()  # Don't modify original
 
         # Prefer position-based correlation ID if record_index is provided
         if record_index is not None:
             # Use position-based ID for better correlation across loops
             obj['loop_correlation_id'] = ProcessorUtils.get_or_create_position_based_loop_correlation_id(
-                record_index, loop_base_name
+                record_index, loop_base_name, workflow_session_id
             )
         else:
             # Fallback to source_guid-based correlation (original behavior)
             source_guid = obj.get('source_guid')
             if source_guid:
                 obj['loop_correlation_id'] = ProcessorUtils.get_or_create_loop_correlation_id(
-                    source_guid, loop_base_name
+                    source_guid, loop_base_name, workflow_session_id
                 )
 
         return obj
