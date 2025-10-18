@@ -38,39 +38,27 @@ class PromptFormatter:
             )
     
     @staticmethod
-    def format_prompt(raw_prompt, source_content, context_data, field_context=None):
+    def format_prompt(raw_prompt, source_content=None, context_data=None, field_context=None):
         """
-        Replace placeholders in the raw prompt with source content and input documentation.
+        Replace {reference.field} patterns in the prompt.
 
         Parameters:
-            raw_prompt: Template prompt with placeholders
-            source_content: Content to replace source placeholders (from source file)
-            context_data: Content to replace context placeholders (current context)
-            field_context: Optional dict with field references (source, agent outputs) for {reference.field} pattern
+            raw_prompt: Template prompt with field references
+            source_content: Deprecated - kept for backward compatibility
+            context_data: Deprecated - kept for backward compatibility
+            field_context: Dict with field references (source, agent outputs, loop, workflow)
 
         Returns:
-            Formatted prompt with all placeholders replaced
+            Formatted prompt with all {reference.field} patterns replaced
 
         Raises:
             ValueError: If prompt formatting fails
         """
         try:
-            # 1. Old pattern: source_context{{}} (backward compat)
-            source_loaded_prompt = PromptUtils.replace_source_context_placeholder(
-                raw_prompt,
-                source_content
-            )
-
-            # 2. NEW: {reference.field} pattern
+            # ONLY pattern: {reference.field}
             if field_context:
-                source_loaded_prompt = PromptUtils.replace_field_references(
-                    source_loaded_prompt,
-                    field_context
-                )
-
-            # 3. Old pattern: return_collection[] (backward compat)
-            formatted_prompt, _ = PromptUtils.replace_placeholders(source_loaded_prompt, context_data)
-            return formatted_prompt
+                return PromptUtils.replace_field_references(raw_prompt, field_context)
+            return raw_prompt
         except Exception as e:
             from agent_actions.core.exceptions import PromptValidationError
             raise PromptValidationError(

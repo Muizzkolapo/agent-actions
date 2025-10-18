@@ -190,7 +190,7 @@ class DataGenerator(IGenerator):
         workflow_metadata: Optional[Dict] = None
     ) -> Tuple[str, Dict]:
         """
-        Format the prompt with contents and source content.
+        Format the prompt using {reference.field} pattern.
 
         Args:
             contents: Content for prompt formatting
@@ -199,7 +199,7 @@ class DataGenerator(IGenerator):
             workflow_metadata: Optional workflow metadata for {workflow.*} references
 
         Returns:
-            Tuple of the formatted prompt and cleaned content
+            Tuple of the formatted prompt and contents (unchanged)
         """
         # Get raw prompt
         raw_prompt = self.agent_config.get(PROMPT_KEY, '')
@@ -216,18 +216,10 @@ class DataGenerator(IGenerator):
             workflow_metadata
         )
 
-        # Replace patterns in order
-        source_loaded_prompt = PromptUtils.replace_source_context_placeholder(
-            raw_prompt,
-            source_content
-        )
-
-        # NEW: Replace field references
+        # ONLY pattern: {reference.field}
         if field_context:
-            source_loaded_prompt = PromptUtils.replace_field_references(
-                source_loaded_prompt,
-                field_context
-            )
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
+        else:
+            formatted_prompt = raw_prompt
 
-        prompt, cleaned_contents = PromptUtils.replace_placeholders(source_loaded_prompt, contents)
-        return prompt, cleaned_contents
+        return formatted_prompt, contents  # No cleaning needed - field_context handles everything

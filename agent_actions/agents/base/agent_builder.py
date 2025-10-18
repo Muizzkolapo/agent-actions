@@ -96,6 +96,14 @@ def create_dynamic_agent(
               if not isinstance(context_data_str, str) else context_data_str)
     )
 
+    # Build field context and replace {reference.field} patterns BEFORE dispatch
+    field_context = _build_field_context_from_context_data(context_data_str, agent_config)
+    if field_context:
+        prompt_config_base = PromptUtils.replace_field_references(
+            prompt_config_base,
+            field_context
+        )
+
     # Inject user-defined function outputs into the prompt, if any
     prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
         prompt_config_base,
@@ -143,10 +151,48 @@ def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str
     prompt_cfg = agent_config.get(PROMPT_KEY, '')
     if isinstance(prompt_cfg, str) and prompt_cfg.startswith('$'):
         return PromptLoader.load_prompt(prompt_cfg[1:])
-    
+
 
 
     return prompt_cfg
+
+
+def _build_field_context_from_context_data(
+    context_data: Union[str, Dict],
+    agent_config: Dict
+) -> Optional[Dict]:
+    """
+    Build field_context dict from context_data for field reference replacement.
+
+    In agent_builder, we don't have the full dependency graph like DataGenerator,
+    but we can build a basic field_context from available data.
+
+    Args:
+        context_data: The context data (str or dict)
+        agent_config: Agent configuration
+
+    Returns:
+        field_context dict or None
+
+    Example:
+        Input: context_data = '{"page_content": "Hello", "title": "Test"}'
+        Output: {'source': {'page_content': 'Hello', 'title': 'Test'}}
+    """
+    # Parse context_data to dict
+    if isinstance(context_data, str):
+        try:
+            parsed = json.loads(context_data)
+        except (json.JSONDecodeError, TypeError):
+            return None
+    elif isinstance(context_data, dict):
+        parsed = context_data
+    else:
+        return None
+
+    # Build field_context
+    # In agent_builder, context_data typically contains flattened source + dependency data
+    # We create a 'source' namespace with all available data
+    return {'source': parsed}
 
 
 def _debug_print_prompt(agent_config: Dict[str, Any], prompt_config: str, context_data: str = "") -> None:
@@ -320,6 +366,14 @@ def _execute_with_interceptors(
                 else context_data_str
             )
         )
+
+        # Build field context and replace {reference.field} patterns BEFORE dispatch
+        field_context = _build_field_context_from_context_data(context_data_str, agent_config)
+        if field_context:
+            prompt_config_base = PromptUtils.replace_field_references(
+                prompt_config_base,
+                field_context
+            )
 
         prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
             prompt_config_base,

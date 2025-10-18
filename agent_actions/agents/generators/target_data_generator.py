@@ -102,14 +102,14 @@ class DataGenerator(IGenerator):
         self, contents: Dict, source_content: Optional[Any] = None
     ) -> Tuple[str, Dict]:
         """
-        Format the prompt with contents and source content.
-        
+        Format the prompt using {reference.field} pattern.
+
         Args:
             contents: Content for prompt formatting
-            source_content: Optional source content for prompt formatting
-            
+            source_content: Optional source content for {source.field} references
+
         Returns:
-            Tuple of the formatted prompt and cleaned content
+            Tuple of the formatted prompt and contents (unchanged)
         """
         # Get raw prompt
         raw_prompt = self.agent_config.get(PROMPT_KEY, '')
@@ -118,9 +118,15 @@ class DataGenerator(IGenerator):
         if not raw_prompt:
             raw_prompt = "Process the following content: {content}"
 
-        source_loaded_prompt = PromptUtils.replace_source_context_placeholder(
-            raw_prompt,
-            source_content
-        )
-        prompt, cleaned_contents = PromptUtils.replace_placeholders(source_loaded_prompt, contents)
-        return prompt, cleaned_contents
+        # Build simple field context with source
+        field_context = {}
+        if source_content:
+            field_context['source'] = source_content
+
+        # ONLY pattern: {reference.field}
+        if field_context:
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
+        else:
+            formatted_prompt = raw_prompt
+
+        return formatted_prompt, contents  # No cleaning needed
