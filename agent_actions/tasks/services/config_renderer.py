@@ -181,6 +181,12 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 template_dir   # Pass original string path
             )
 
+            # Write rendered template to output file if output path was provided
+            if output_file_to_write:
+                with open(output_file_to_write, 'w', encoding='utf-8') as f:
+                    f.write(rendered_template)
+                logger.info(f"Rendered template saved to: {output_file_to_write}")
+
             ServiceLogger.log_operation_success(logger, "render template",
                                              config_path=config_path)
             return rendered_template
