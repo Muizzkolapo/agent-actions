@@ -2304,7 +2304,7 @@ class BatchService:
                 registry = json.load(f)
 
             entry = registry.get(file_name, {})
-            return "parent_batch_id" in entry
+            return entry.get("parent_batch_id") is not None
 
         except Exception:
             return False
