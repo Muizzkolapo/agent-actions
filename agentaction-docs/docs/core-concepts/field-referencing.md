@@ -337,28 +337,261 @@ output_schema:
           description: "Reference via {agent_name.metrics.accuracy}"
 ```
 
-## Migration from Old Patterns
+## Using Functions in Prompts with `dispatch_task()`
 
-If you have existing workflows using old patterns, update them as follows:
+You can call custom Python functions directly within your prompts using `dispatch_task()`. This allows you to execute custom logic, data transformations, or validations as part of prompt processing.
 
-### Old: `source_context{{}}`
+### Basic Syntax
+
 ```yaml
-# ❌ Old
-prompt: "Process source_context{{['page_content']}}"
-
-# ✅ New
-prompt: "Process {source.page_content}"
+prompt: |
+  Process this data:
+  dispatch_task('function_name')
 ```
 
-### Old: `return_collection[]`
-```yaml
-# ❌ Old (ambiguous source)
-prompt: "Use return_collection[metrics]"
+The syntax is intentionally simple:
+- **Function name only** - No arguments passed
+- **Receives context** - Function gets the same `context_data` as the LLM
+- **Returns string** - Function output replaces the `dispatch_task()` call in the prompt
 
-# ✅ New (explicit source)
-prompt: "Use {extractor.metrics}"
-depends_on: ["extractor"]
+### Function Signature
+
+Your functions must parse the `context_data` JSON string to access fields:
+
+```python
+# workflow_tools/my_function.py
+import json
+
+def my_function(context_data):
+    """
+    Process data from workflow context.
+
+    Args:
+        context_data: JSON string containing all available context
+
+    Returns:
+        String to insert into the prompt
+    """
+    # Parse the JSON string
+    data = json.loads(context_data)
+
+    # Access fields from the context
+    content = data.get('content', '')
+    title = data.get('title', '')
+
+    # Process and return
+    return f"Processed: {content.upper()}"
 ```
+
+**Important:** The `context_data` parameter is a **JSON string**, not a dict. You must use `json.loads()` to parse it.
+
+### Working with Field References
+
+Field references (`{source.field}`, `{agent.field}`) are **replaced BEFORE** `dispatch_task()` is processed, so your functions always receive resolved values.
+
+```yaml
+agents:
+  - name: analyzer
+    prompt: |
+      Title: {source.title}
+
+      Analysis:
+      dispatch_task('analyze_content')
+    tools:
+      path: "./workflow_tools"
+```
+
+```python
+# workflow_tools/analyze_content.py
+import json
+
+def analyze_content(context_data):
+    """Analyze content from context."""
+    data = json.loads(context_data)
+
+    # Access source fields
+    content = data.get('content', '')
+    title = data.get('title', 'Untitled')
+
+    # Access dependency outputs (if available)
+    extracted_keywords = data.get('keywords', '')
+
+    return f"Analysis of '{title}': {len(content)} characters, keywords: {extracted_keywords}"
+```
+
+### Processing Order
+
+Understanding the processing order is crucial:
+
+1. **Field references** (`{reference.field}`) are replaced first
+2. **dispatch_task()** functions are called with resolved context
+3. **LLM** receives the final prompt with all replacements
+
+This ensures functions always receive actual values, never placeholder strings.
+
+### Multiple Function Calls
+
+You can call multiple functions in a single prompt:
+
+```yaml
+prompt: |
+  Summary: dispatch_task('generate_summary')
+
+  Keywords: dispatch_task('extract_keywords')
+
+  Sentiment: dispatch_task('analyze_sentiment')
+```
+
+Each function receives the same `context_data` context.
+
+### Accessing Dependency Outputs
+
+Functions can access outputs from dependency agents through the context:
+
+```yaml
+agents:
+  - name: extractor
+    prompt: "Extract data from {source.content}"
+    schema:
+      fields:
+        - name: metrics
+          type: object
+    depends_on: []
+
+  - name: analyzer
+    prompt: |
+      Analysis: dispatch_task('create_report')
+    depends_on: ["extractor"]
+    tools:
+      path: "./workflow_tools"
+```
+
+```python
+# workflow_tools/create_report.py
+import json
+
+def create_report(context_data):
+    """Create report using dependency outputs."""
+    data = json.loads(context_data)
+
+    # Access source data
+    content = data.get('content', '')
+
+    # Access dependency outputs (flattened into context)
+    metrics = data.get('metrics', {})
+
+    return f"Report: {len(content)} chars, metrics: {metrics}"
+```
+
+### Configuration
+
+Functions are loaded from the `tools.path` directory specified in your agent config:
+
+```yaml
+agents:
+  - name: my_agent
+    prompt: "dispatch_task('my_function')"
+    tools:
+      path: "./workflow_tools"  # Directory containing your functions
+```
+
+### Complete Example
+
+```yaml
+# workflow.yml
+settings:
+  workflow_name: "document_analysis"
+
+source:
+  file_path: "documents.jsonl"
+  # Format: {"content": "...", "title": "...", "category": "..."}
+
+agents:
+  - name: extract_keywords
+    model_vendor: "tool"
+    prompt: |
+      Extract keywords:
+      dispatch_task('extract_keywords')
+    tools:
+      path: "./workflow_tools"
+    schema:
+      fields:
+        - name: keywords
+          type: string
+    granularity: record
+
+  - name: create_summary
+    model_vendor: "tool"
+    prompt: |
+      Title: {source.title}
+      Keywords: {extract_keywords.keywords}
+
+      Summary:
+      dispatch_task('generate_summary')
+    dependencies:
+      - extract_keywords
+    tools:
+      path: "./workflow_tools"
+    schema:
+      fields:
+        - name: summary
+          type: string
+    granularity: record
+```
+
+```python
+# workflow_tools/extract_keywords.py
+import json
+
+def extract_keywords(context_data):
+    """Extract keywords from document."""
+    data = json.loads(context_data)
+    content = data.get('content', '')
+
+    # Simple keyword extraction
+    words = content.lower().split()
+    keywords = [w for w in words if len(w) > 5]
+    return ", ".join(keywords[:5])
+```
+
+```python
+# workflow_tools/generate_summary.py
+import json
+
+def generate_summary(context_data):
+    """Generate summary using all available context."""
+    data = json.loads(context_data)
+
+    title = data.get('title', 'Untitled')
+    content = data.get('content', '')
+    keywords = data.get('keywords', '')  # From dependency
+
+    summary = f"{title}: {content[:100]}... (Keywords: {keywords})"
+    return summary
+```
+
+### Error Handling
+
+If a function doesn't exist or returns `None`, you'll see an error:
+
+```yaml
+prompt: "dispatch_task('nonexistent_function')"
+```
+**Error:** `No module named 'nonexistent_function'` or similar import error.
+
+```python
+def my_function(context_data):
+    return None  # Returns None
+```
+**Error in prompt:** `Error: No valid return from function.`
+
+### Best Practices
+
+1. **Always parse context_data** - Use `json.loads()` to convert the JSON string to a dict
+2. **Handle missing fields** - Use `.get()` with defaults to avoid KeyError
+3. **Return strings** - Functions should return string values for prompt insertion
+4. **Keep functions focused** - Each function should do one thing well
+5. **Use field references** - Let the system resolve references before dispatch
 
 ## See Also
 

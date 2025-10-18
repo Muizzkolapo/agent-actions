@@ -670,13 +670,17 @@ class BatchService:
             # Apply drops only for rows that pass the conditional check
             processed_row = apply_drops(row_content, agent_config)
 
-            formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
+            # Build field context and replace {reference.field} patterns BEFORE dispatch
+            field_context = {'source': processed_row}
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
+
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
                 tools_path,
                 json.dumps(processed_row, ensure_ascii=False),
                 agent_config=agent_config
             )
+            cleaned_row = processed_row  # No cleaning needed
             
             # Create a prepared data item with all necessary info
             prepared_item = {
@@ -1810,14 +1814,17 @@ class BatchService:
             # Apply drops
             processed_row = apply_drops(row_content, agent_config)
 
-            # Format prompt
-            formatted_prompt, cleaned_row = PromptUtils.replace_placeholders(raw_prompt, processed_row)
+            # Build field context and replace {reference.field} patterns BEFORE dispatch
+            field_context = {'source': processed_row}
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
+
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
                 tools_path,
                 json.dumps(processed_row, ensure_ascii=False),
                 agent_config=agent_config
             )
+            cleaned_row = processed_row  # No cleaning needed
 
             # Create prepared item
             prepared_item = {
