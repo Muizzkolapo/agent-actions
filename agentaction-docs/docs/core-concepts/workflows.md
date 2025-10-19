@@ -670,7 +670,7 @@ actions:
     drops: [temp_data]
 ```
 
-The `schema` field now fully replaces `writes` by defining what the LLM generates, while all input fields are implicitly available unless excluded via `drops` or `observe`.
+The `schema` field now fully replaces `writes` by defining what the LLM generates, while all input fields are implicitly available unless excluded via `drops`.
 :::
 
 ## Execution Control

@@ -23,16 +23,25 @@ def run_dynamic_agent(
     tool_args: Optional[Dict[str, Any]] = None,
     source_content: Optional[Any] = None,
 ) -> tuple[Any, bool]:
-    """Execute an agent with conditional guard processing.
+    """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
     with skip behavior. When skip conditions are met, returns the original context
     unchanged without executing the agent.
 
+    Data Structure Handling:
+        When context has nested structure (e.g., {source_guid, content{}, target_id}),
+        this function extracts the 'content' dict before applying drops and sending
+        to the LLM. This ensures:
+        - Metadata fields (source_guid, target_id, node_id, lineage) never reach LLM
+        - Only actual data fields from 'content' are sent to LLM
+        - drops/observe configurations only affect fields inside 'content'
+
     Args:
-        agent_config: Agent configuration including guard conditions
+        agent_config: Agent configuration including guard conditions, drops, and observe
         agent_name: Name of the agent being executed
-        context: Data context for agent execution
+        context: Data context for agent execution. May be flat dict or nested structure
+                 with 'content' key containing the actual data
         formatted_prompt: Formatted prompt for the agent
         tools_path: Optional path to tool functions
         tool_args: Optional tool arguments
@@ -55,7 +64,15 @@ def run_dynamic_agent(
         return None, False  # Return None to indicate filtered out
 
     # Execute agent after all guard checks pass
-    processed_context = apply_drops(context, agent_config)
+    # If context has a 'content' dict, extract and apply drops to it
+    if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):
+        # Extract the content dict and apply drops to it
+        # The LLM should ONLY see the content, not metadata (source_guid, target_id, node_id, lineage)
+        content_dict = context['content']
+        processed_context = apply_drops(content_dict, agent_config)
+    else:
+        # Flat structure - apply drops directly
+        processed_context = apply_drops(context, agent_config)
 
     response = agent_builder.create_dynamic_agent(
         agent_config,
