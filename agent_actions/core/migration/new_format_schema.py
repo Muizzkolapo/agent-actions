@@ -56,7 +56,7 @@ class ActionConfig(BaseModel):
     # Schema and data handling
     output_schema: Optional[Union[str, Dict[str, Any]]] = Field(default=None, description="Output schema", alias="schema")
     drops: List[str] = Field(default_factory=list, description="Fields to exclude from LLM prompt and final output")
-    observe: List[str] = Field(default_factory=list, description="Fields to exclude from LLM prompt but include in output (passthrough)")
+    observe: List[str] = Field(default_factory=list, description="Fields to pass-through from input to output without LLM generation (visible to LLM but not regenerated)")
 
     # Execution settings
     granularity: Optional[Granularity] = Field(default=None, description="Execution granularity")
@@ -161,7 +161,7 @@ class DefaultsConfig(BaseModel):
     granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
     run_mode: Optional[str] = Field(default=None, description="Default run mode")
     drops: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt and output")
-    observe: Optional[List[str]] = Field(default=None, description="Default fields to exclude from LLM prompt but include in output")
+    observe: Optional[List[str]] = Field(default=None, description="Default fields to pass-through from input to output (visible to LLM but not regenerated)")
 
 
 class DependencyEdge(BaseModel):
