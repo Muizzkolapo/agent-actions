@@ -164,6 +164,9 @@ Agent Actions supports multiple AI providers:
 - name: "local_agent"
   model_vendor: "ollama"
   model_name: "llama2"
+  json_mode: false            # REQUIRED: Ollama does not support JSON mode
+  output_field: "response"    # Optional: Field name for response (default: raw_response)
+  base_url: "http://localhost:11434"  # Optional: Ollama server URL
 ```
 
 ### Model-Specific Parameters
@@ -180,6 +183,58 @@ agents:
       max_tokens: 1000      # Longer responses
       top_p: 0.9           # Nucleus sampling
     prompt: "Write creative content..."
+```
+
+### Vendor-Specific Constraints
+
+#### Ollama (Local Models)
+
+**IMPORTANT**: Ollama does **NOT** support `json_mode: true`. All Ollama configurations must explicitly set `json_mode: false`.
+
+```yaml
+defaults:
+  model_vendor: ollama
+  model_name: deepseek-r1:latest
+  json_mode: false  # REQUIRED: Ollama fails with json_mode: true
+
+actions:
+  - name: my_action
+    output_field: extracted_facts  # Customize response field name (default: raw_response)
+    base_url: http://localhost:11434  # Optional: Ollama server URL (default: localhost:11434)
+```
+
+**Configuration Details**:
+
+| Field | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `json_mode` | **Yes** | N/A | Must be `false`. Ollama does not support structured JSON mode. |
+| `output_field` | No | `raw_response` | Field name wrapping the LLM's raw text response. |
+| `base_url` | No | `http://localhost:11434` | Ollama server URL. Falls back to `OLLAMA_HOST` environment variable. |
+
+**Error Handling**:
+
+If you configure `json_mode: true` with `model_vendor: ollama`, the system will **fail immediately** with:
+
+```
+ConfigurationError: Ollama does not support json_mode=true.
+Structured output is unreliable with Ollama models.
+
+Hint: Set json_mode: false in your agent configuration or workflow defaults
+```
+
+**Example - Correct Ollama Configuration**:
+
+```yaml
+defaults:
+  model_vendor: ollama
+  model_name: llama2
+  json_mode: false        # Required for Ollama
+  output_field: response  # Optional customization
+
+actions:
+  - name: analyze_text
+    prompt: "Analyze the following text..."
+    # LLM output will be in: {"response": "raw text from llama2"}
 ```
 
 ## Prompt Engineering

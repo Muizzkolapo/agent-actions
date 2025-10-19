@@ -33,6 +33,7 @@ SIMPLE_CONFIG_FIELDS = {
     'model_vendor': None,
     'model_name': None,
     'api_key': None,
+    'base_url': None,               # Optional: base URL for vendors like Ollama
 
     # Execution settings
     'run_mode': 'online',           # Default: online mode
@@ -42,6 +43,10 @@ SIMPLE_CONFIG_FIELDS = {
     'json_mode': True,              # Default: True (JSON-based system)
     'prompt_debug': False,          # Default: False (no debug output)
     'few_shot': 0,                  # Default: 0 (no few-shot examples)
+    'output_field': 'raw_response', # Default: 'raw_response' (for non-JSON vendors like Ollama)
+
+    # Tool configuration
+    'side_output': False,           # Default: False (tool-specific conditional output)
 }
 
 

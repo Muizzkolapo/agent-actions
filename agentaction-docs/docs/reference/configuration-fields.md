@@ -199,6 +199,8 @@ This page documents every configuration field available in Agent Actions, organi
   - Forces LLM to return valid JSON
   - Required for schema validation to work
   - Most vendors support this
+  - **EXCEPTION**: Ollama does **NOT** support `json_mode: true` and will fail fast with a `ConfigurationError`
+  - When using Ollama, you **MUST** set `json_mode: false`
 
 ### `few_shot`
 - **Type**: `integer`
@@ -213,6 +215,43 @@ This page documents every configuration field available in Agent Actions, organi
   - Improves output quality by providing examples
   - Must be ≥ 0
   - Examples must exist in the system
+
+### `output_field`
+- **Type**: `string`
+- **Required**: No
+- **Default**: `raw_response`
+- **Description**: Field name for wrapping LLM response when `json_mode: false`
+- **Example**:
+  ```yaml
+  # Ollama configuration with custom output field
+  model_vendor: ollama
+  json_mode: false
+  output_field: extracted_facts
+  ```
+- **Notes**:
+  - Only applies when `json_mode: false` (non-JSON mode)
+  - Used by vendors like Ollama and OpenAI for plain text responses
+  - Response will be wrapped as: `{"<output_field>": "LLM response text"}`
+  - Default wrapping: `{"raw_response": "LLM response text"}`
+
+### `base_url`
+- **Type**: `string`
+- **Required**: No
+- **Default**: Vendor-specific (Ollama: `http://localhost:11434`)
+- **Description**: Base URL for vendor API endpoint
+- **Example**:
+  ```yaml
+  # Ollama on custom server
+  model_vendor: ollama
+  base_url: http://192.168.1.100:11434
+
+  # Ollama using environment variable
+  # (Leave base_url unset, set OLLAMA_HOST env var instead)
+  ```
+- **Notes**:
+  - Primarily used by Ollama for local model servers
+  - Falls back to environment variables (e.g., `OLLAMA_HOST` for Ollama)
+  - Other vendors use their standard cloud endpoints
 
 ### `temperature`
 - **Type**: `number`
