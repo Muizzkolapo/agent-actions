@@ -259,26 +259,35 @@ class ProcessorUtils:
             output = data
         elif observe:
             # Apply observe logic
+            # If context_data has nested 'content' structure, extract it for observe fields.
+            # This is critical: observe fields are user data inside 'content', not metadata
+            # at the top level (source_guid, target_id, etc.)
+            context_for_observe = context_data
+            if isinstance(context_data, dict) and 'content' in context_data and isinstance(context_data['content'], dict):
+                # Extract content dict so we look for observe fields in the right place
+                # e.g., context_data['content']['question'] instead of context_data['question']
+                context_for_observe = context_data['content']
+
             if already_structured:
                 # Extract content from structured data for observe processing
                 contents = [item['content'] for item in data]
                 updated = []
                 for content in contents:
                     if isinstance(content, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_data, content, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content, observe))
                     else:
                         # Convert non-dict content to dict format for processing
                         content_dict = {"content": content}
-                        updated.append(DataTransformer.update_schema_objects(context_data, content_dict, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content_dict, observe))
             else:
                 updated = []
                 for item in data:
                     if isinstance(item, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_data, item, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item, observe))
                     else:
                         # Convert non-dict items to dict format for processing
                         item_dict = {"content": item}
-                        updated.append(DataTransformer.update_schema_objects(context_data, item_dict, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item_dict, observe))
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
             # Apply transform_structure to ensure consistent output format

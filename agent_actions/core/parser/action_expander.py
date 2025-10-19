@@ -262,7 +262,7 @@ class ActionExpander:
 
         if not (is_file_level and is_tool_action):
             # Data flow field mappings:
-            # - observe: Fields excluded from LLM prompt but included in output (passthrough)
+            # - observe: Fields passed-through from input to output (visible to LLM but not regenerated)
             # - drops: Fields excluded from LLM prompt AND from output
             # Note: Schema defines LLM output fields (replaces deprecated 'writes')
             # Both observe and drops are ADDITIVE - action-level fields extend defaults rather than replace them
