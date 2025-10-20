@@ -23,6 +23,8 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+import json
 
 
 @dataclass
@@ -224,3 +226,129 @@ class BatchProvider(ABC):
             Tuple of (is_valid, error_message)
         """
         return True, None
+
+    # ============================================================================
+    # CONCRETE HELPER METHODS (Reusable across all providers)
+    # ============================================================================
+    # These methods handle common batch workflow tasks that are the same across
+    # all providers. They abstract "our code" (directory structure, file formats)
+    # from "vendor code" (API calls).
+
+    def _get_batch_directory(self, output_directory: Optional[str] = None) -> Path:
+        """
+        Get or create the batch directory.
+
+        This is OUR code - all providers use the same directory structure.
+
+        Args:
+            output_directory: Optional output directory
+
+        Returns:
+            Path to batch directory
+        """
+        from agent_actions.core.utils.path_utils import ensure_directory_exists
+
+        if output_directory:
+            batch_dir = Path(output_directory) / "batch"
+        else:
+            batch_dir = Path.cwd() / "batch"
+
+        ensure_directory_exists(batch_dir)
+        return batch_dir
+
+    def _write_jsonl_file(
+        self,
+        tasks: List[Dict[str, Any]],
+        batch_dir: Path,
+        batch_name: str,
+        provider_name: str
+    ) -> Path:
+        """
+        Write tasks to JSONL file.
+
+        This is OUR code - we chose JSONL format for consistency across providers.
+
+        Args:
+            tasks: List of task dictionaries
+            batch_dir: Directory to write to
+            batch_name: Base name for the file
+            provider_name: Provider name for file suffix (e.g., "openai", "ollama")
+
+        Returns:
+            Path to created file
+        """
+        file_name = f"{Path(batch_name).stem}_{provider_name}_batch_input.jsonl"
+        file_path = batch_dir / file_name
+
+        with open(file_path, 'w') as file:
+            for task in tasks:
+                file.write(json.dumps(task) + '\n')
+
+        print(f"{provider_name.title()} batch input file: {file_path}")
+        return file_path
+
+    def _read_jsonl_file(self, file_path: Path) -> List[BatchResult]:
+        """
+        Read JSONL file and parse to BatchResults.
+
+        This is OUR code - we handle JSONL parsing the same way everywhere.
+
+        Args:
+            file_path: Path to JSONL file
+
+        Returns:
+            List of BatchResult objects
+        """
+        if not file_path.exists():
+            from agent_actions.core.exceptions import VendorAPIError
+            raise VendorAPIError(
+                "Batch output file not found",
+                context={
+                    'expected_path': str(file_path),
+                    'vendor': self.__class__.__name__
+                }
+            )
+
+        batch_results = []
+        with open(file_path, 'r') as f:
+            for line_num, line in enumerate(f, 1):
+                if line.strip():
+                    try:
+                        raw_result = json.loads(line)
+                        batch_result = self.parse_provider_response(raw_result)
+                        batch_results.append(batch_result)
+                    except json.JSONDecodeError as e:
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        # Create error result for unparseable lines
+                        batch_results.append(BatchResult(
+                            custom_id=f"error_line_{line_num}",
+                            content=None,
+                            success=False,
+                            error=f"JSON parsing error: {e}",
+                            metadata={"line_number": line_num, "raw_line": line[:100]}
+                        ))
+
+        return batch_results
+
+    def _add_optional_param(
+        self,
+        target: Dict[str, Any],
+        key: str,
+        value: Any,
+        default: Any = None
+    ) -> None:
+        """
+        Add parameter to target dict only if value is not None.
+
+        This is OUR code - standardizes optional parameter handling across providers.
+
+        Args:
+            target: Dict to add parameter to
+            key: Parameter key
+            value: Parameter value (only added if not None)
+            default: Default value to use if value is None and this is provided
+        """
+        if value is not None:
+            target[key] = value
+        elif default is not None:
+            target[key] = default

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BatchProvider, BatchTask, BatchResult
-from agent_actions.core.utils.path_utils import ensure_directory_exists
 from agent_actions.core.parser.schema_change import compile_unified_schema
 
 
@@ -102,17 +101,17 @@ class AnthropicBatchProvider(BatchProvider):
         
         params = {
             "model": batch_task.model_config.get("model_name", "claude-3-5-sonnet-20241022"),
-            "max_tokens": batch_task.model_config.get("max_tokens", 1024),
             "messages": messages
         }
-        
+
         # Add system message as top-level parameter if prompt exists
         if batch_task.prompt:
             params["system"] = batch_task.prompt
-        
-        # Add optional parameters from model_config
-        if "temperature" in batch_task.model_config:
-            params["temperature"] = batch_task.model_config["temperature"]
+
+        # Use base helper to add optional parameters
+        self._add_optional_param(params, "temperature", batch_task.model_config.get("temperature"))
+        # Anthropic requires max_tokens, so provide reasonable default if not specified
+        self._add_optional_param(params, "max_tokens", batch_task.model_config.get("max_tokens"), default=4096)
             
         # Add tools for structured JSON output if schema is provided
         if schema:
@@ -325,26 +324,26 @@ class AnthropicBatchProvider(BatchProvider):
                 metadata={"result_type": result_type, "raw_result": str(result)}
             )
     
-    def prepare_tasks(self, 
-                     data: List[Dict[str, Any]], 
+    def prepare_tasks(self,
+                     data: List[Dict[str, Any]],
                      agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Convert agent-actions data to Anthropic batch format.
-        
+
         This method orchestrates the transformation of multiple data items
         into Anthropic-formatted tasks.
         """
         tasks = []
-        
-        # Get schema if configured
-        # The batch service already compiles and passes the schema as "compiled_schema"
-        schema = agent_config.get("compiled_schema")
-            
+
+        # Get schema if json_mode is enabled (matching OpenAI/Ollama)
+        json_mode = agent_config.get("json_mode", True)
+        schema = agent_config.get("compiled_schema") if json_mode else None
+
         # Debug logging for schema
         if schema:
-            print(f"🔧 Anthropic provider using schema: {schema}")
+            print(f"🔧 Anthropic provider using schema (json_mode: {json_mode}): {schema}")
         else:
-            print("ℹ️ Anthropic provider: No schema found, using regular text mode")
+            print(f"ℹ️ Anthropic provider: No schema (json_mode: {json_mode}), using regular text mode")
         
         for row in data:
             # Create BatchTask from row data
@@ -382,21 +381,16 @@ class AnthropicBatchProvider(BatchProvider):
             Anthropic batch job ID
         """
         try:
-            # Create batch directory for saving reference files
-            if output_directory:
-                batch_dir = Path(output_directory) / "batch"
-            else:
-                batch_dir = Path.cwd() / "batch"
-            
-            ensure_directory_exists(batch_dir)
-            
-            # Save tasks to JSON file for reference
+            # Use base class helper for directory setup
+            batch_dir = self._get_batch_directory(output_directory)
+
+            # Save tasks to JSON file for reference (Anthropic uses JSON, not JSONL)
             file_name = f"{Path(batch_name).stem}_anthropic_batch_input.json"
             file_path = batch_dir / file_name
-            
+
             with open(file_path, 'w') as file:
                 json.dump({"requests": tasks}, file, indent=2)
-            
+
             print(f"Anthropic batch input saved at: {file_path}")
             
             # Submit batch to Anthropic API
@@ -533,14 +527,13 @@ class AnthropicBatchProvider(BatchProvider):
             
             # Save raw results for debugging/reference
             if output_directory and raw_entries:
-                batch_dir = Path(output_directory) / "batch"
-                ensure_directory_exists(batch_dir)
-                
+                batch_dir = self._get_batch_directory(output_directory)
+
                 raw_results_file = batch_dir / f"{batch_id}_anthropic_raw_results.jsonl"
                 with open(raw_results_file, 'w') as f:
                     for entry in raw_entries:
                         f.write(json.dumps(entry) + '\n')
-                
+
                 print(f"Raw results saved to: {raw_results_file}")
             
             return batch_results

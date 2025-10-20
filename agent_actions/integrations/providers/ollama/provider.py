@@ -5,9 +5,9 @@ This provider simulates batch processing by:
 1. Writing input JSONL files
 2. Processing all requests immediately using Ollama
 3. Writing output JSONL files
-4. Tracking batches in a local JSON registry
 
 No external API server needed - everything runs in-process.
+Registry tracking is handled by BatchService, not this provider.
 """
 
 import json
@@ -15,11 +15,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
 
 from ollama import Client
 from ..base import BatchProvider, BatchTask, BatchResult
-from agent_actions.core.utils.path_utils import ensure_directory_exists
 
 
 class OllamaLocalBatchProvider(BatchProvider):
@@ -183,29 +181,18 @@ class OllamaLocalBatchProvider(BatchProvider):
         1. Writes input JSONL file
         2. Processes all tasks using Ollama
         3. Writes output JSONL file
-        4. Updates batch registry
-        5. Returns batch_id
-        """
-        # Setup directories
-        if output_directory:
-            batch_dir = Path(output_directory) / "batch"
-        else:
-            batch_dir = Path.cwd() / "batch"
+        4. Returns batch_id
 
-        ensure_directory_exists(batch_dir)
+        Note: Registry is managed by BatchService, not this provider.
+        """
+        # Use base class helper for directory setup
+        batch_dir = self._get_batch_directory(output_directory)
 
         # Generate batch ID
         batch_id = f"batch_{uuid.uuid4().hex}"
 
-        # Write input JSONL file
-        input_file_name = f"{Path(batch_name).stem}_ollama_batch_input.jsonl"
-        input_file_path = batch_dir / input_file_name
-
-        with open(input_file_path, 'w') as f:
-            for task in tasks:
-                f.write(json.dumps(task) + '\n')
-
-        print(f"Ollama batch input file: {input_file_path}")
+        # Use base class helper to write input JSONL
+        input_file_path = self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
         # Process all tasks immediately
         results = []
@@ -282,18 +269,9 @@ class OllamaLocalBatchProvider(BatchProvider):
                 f.write(json.dumps(result) + '\n')
 
         print(f"Ollama batch output file: {output_file_path}")
-
-        # Update batch registry
-        self._update_registry(
-            batch_dir,
-            batch_name,
-            batch_id,
-            len(tasks),
-            completed,
-            failed
-        )
-
         print(f"Batch completed: {completed} succeeded, {failed} failed")
+
+        # Note: Registry is managed by BatchService, not this provider
         return batch_id
 
     def check_status(self, batch_id: str) -> str:
@@ -312,45 +290,12 @@ class OllamaLocalBatchProvider(BatchProvider):
         """
         Retrieve results from output JSONL file.
         """
-        # Find output file
-        if output_directory:
-            batch_dir = Path(output_directory) / "batch"
-        else:
-            batch_dir = Path.cwd() / "batch"
-
+        # Use base class helper for directory
+        batch_dir = self._get_batch_directory(output_directory)
         output_file_path = batch_dir / f"{batch_id}_results.jsonl"
 
-        if not output_file_path.exists():
-            from agent_actions.core.exceptions import VendorAPIError
-            raise VendorAPIError(
-                "Batch output file not found",
-                context={
-                    'batch_id': batch_id,
-                    'expected_path': str(output_file_path),
-                    'vendor': 'ollama'
-                }
-            )
-
-        # Parse results
-        batch_results = []
-        with open(output_file_path, 'r') as f:
-            for line_num, line in enumerate(f, 1):
-                if line.strip():
-                    try:
-                        raw_result = json.loads(line)
-                        batch_result = self.parse_provider_response(raw_result)
-                        batch_results.append(batch_result)
-                    except json.JSONDecodeError as e:
-                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
-                        batch_results.append(BatchResult(
-                            custom_id=f"error_line_{line_num}",
-                            content=None,
-                            success=False,
-                            error=f"JSON parsing error: {e}",
-                            metadata={"line_number": line_num}
-                        ))
-
-        return batch_results
+        # Use base class helper to read and parse JSONL
+        return self._read_jsonl_file(output_file_path)
 
     def _transform_ollama_response(self,
                                    ollama_response: dict,
@@ -424,51 +369,3 @@ class OllamaLocalBatchProvider(BatchProvider):
             },
             "error": None
         }
-
-    def _update_registry(self,
-                        batch_dir: Path,
-                        batch_name: str,
-                        batch_id: str,
-                        total: int,
-                        completed: int,
-                        failed: int):
-        """
-        Update local batch registry file.
-
-        Registry format matches existing agent-actions pattern:
-        {
-            "batch_name.json": {
-                "batch_id": "batch_abc123",
-                "status": "completed",
-                "timestamp": "2025-10-20T...",
-                "provider": "ollama",
-                "record_count": 100
-            }
-        }
-        """
-        registry_path = batch_dir / ".batch_registry.json"
-
-        # Read existing registry
-        if registry_path.exists():
-            with open(registry_path, 'r') as f:
-                registry = json.load(f)
-        else:
-            registry = {}
-
-        # Update registry
-        registry[batch_name] = {
-            "batch_id": batch_id,
-            "status": "completed",
-            "timestamp": datetime.now().isoformat(),
-            "provider": "ollama",
-            "parent_batch_id": None,
-            "retry_attempt": 0,
-            "has_retry_batch": False,
-            "record_count": total,
-            "completed_count": completed,
-            "failed_count": failed
-        }
-
-        # Write registry
-        with open(registry_path, 'w') as f:
-            json.dump(registry, f, indent=2)
