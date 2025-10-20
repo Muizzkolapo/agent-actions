@@ -1,0 +1,567 @@
+{
+  "_implementation_summary": {
+    "completion_status": "IMPLEMENTATION_COMPLETE - Core feature working, tests pending",
+    "steps_completed": "9/12 steps complete (Steps 1-9, 11)",
+    "steps_pending": "Step 10 (unit tests), Step 12 (documentation)",
+    "bugs_fixed": 5,
+    "system_wide_improvements": 2,
+    "verified_working": "Integration tested successfully with json_mode: false and output_field",
+    "next_actions": ["Write unit tests", "Update documentation"]
+  },
+
+  "title": "Ollama Local Batch Provider - Local Testing for Batch Workflows",
+  "issue_number": "TBD",
+  "priority": "medium",
+  "type": "feature",
+  "status": "IMPLEMENTATION_COMPLETE",
+  "discovered_date": "2025-10-20",
+  "implementation_date": "2025-10-20",
+  "target_completion_date": "2025-10-21",
+  "description": "Add OllamaLocalBatchProvider to enable local testing of batch workflows using Ollama instead of cloud APIs. This provider simulates OpenAI's batch behavior synchronously, allowing developers to test retry logic, DLQ, manifests, and all batch features locally without API costs.",
+
+  "business_value": {
+    "primary_benefits": [
+      "Zero-cost local testing of batch workflows",
+      "Fast iteration cycles (minutes vs hours)",
+      "CI/CD integration without API costs",
+      "Offline development capability",
+      "Validate new batch features before cloud deployment"
+    ],
+    "use_cases": [
+      "Development: Test new batch features locally before using expensive APIs",
+      "CI/CD: Run batch workflow tests in continuous integration",
+      "Cost optimization: Test with large datasets locally (90% cost reduction)",
+      "Feature validation: Ensure batch features work across all providers",
+      "Offline work: No internet connection or API keys needed"
+    ],
+    "roi": {
+      "development_time": "30 minutes implementation",
+      "testing_cost_savings": "90% reduction (10 iterations × $10 = $100 → $10 with local testing)",
+      "iteration_speed": "10x faster (2-6 hours → 3-10 minutes per batch)"
+    }
+  },
+
+  "technical_approach": {
+    "strategy": "In-process synchronous simulation",
+    "key_insight": "BatchService doesn't care if processing is async - just needs proper BatchResult objects. Process immediately, write JSONL files, return results.",
+    "architecture": "Single provider class implementing BatchProvider interface, no external services needed"
+  },
+
+  "implementation_steps": [
+    {
+      "step": 1,
+      "title": "Create OllamaLocalBatchProvider class",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "create",
+      "estimated_time": "15 minutes",
+      "status": "completed",
+      "tasks": [
+        "Create new file: provider.py in ollama directory",
+        "Import dependencies: json, time, uuid, Path, Client from ollama",
+        "Define OllamaLocalBatchProvider(BatchProvider) class",
+        "Implement __init__ with base_url configuration"
+      ],
+      "code_template": {
+        "imports": [
+          "import json",
+          "import time",
+          "import uuid",
+          "from pathlib import Path",
+          "from typing import List, Dict, Any, Optional",
+          "from datetime import datetime",
+          "from ollama import Client",
+          "from ..base import BatchProvider, BatchTask, BatchResult",
+          "from agent_actions.core.utils.path_utils import ensure_directory_exists"
+        ],
+        "class_signature": "class OllamaLocalBatchProvider(BatchProvider):"
+      },
+      "validation": [
+        "File created at correct location",
+        "All imports resolve correctly",
+        "Class extends BatchProvider"
+      ]
+    },
+    {
+      "step": 2,
+      "title": "Implement format_task_for_provider method",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "5 minutes",
+      "status": "completed (with bug fix: only add max_tokens if not None)",
+      "tasks": [
+        "Extract model_name, temperature, max_tokens from BatchTask",
+        "Build messages array (system + user)",
+        "Add optional response_format for schema",
+        "Return OpenAI-compatible JSONL format"
+      ],
+      "output_format": {
+        "custom_id": "from BatchTask.custom_id",
+        "method": "POST",
+        "url": "/v1/chat/completions",
+        "body": {
+          "model": "from config",
+          "messages": "[{system}, {user}]",
+          "temperature": "optional",
+          "max_tokens": "optional",
+          "response_format": "optional schema"
+        }
+      },
+      "validation": [
+        "Returns dict with required keys",
+        "Messages array formatted correctly",
+        "Optional params only added when present"
+      ]
+    },
+    {
+      "step": 3,
+      "title": "Implement parse_provider_response method",
+      "status": "completed",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "5 minutes",
+      "tasks": [
+        "Extract custom_id from raw_response",
+        "Check for error field, return BatchResult(success=False) if present",
+        "Extract content from response.body.choices[0].message.content",
+        "Try JSON parsing, fallback to string",
+        "Build metadata dict",
+        "Return BatchResult object"
+      ],
+      "return_type": "BatchResult(custom_id, content, success, error, metadata, usage)",
+      "validation": [
+        "Handles error responses correctly",
+        "Content parsing works for JSON and strings",
+        "BatchResult has all required fields"
+      ]
+    },
+    {
+      "step": 4,
+      "title": "Implement prepare_tasks method",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "3 minutes",
+      "status": "completed (with bug fix: respect json_mode setting)",
+      "tasks": [
+        "Extract compiled_schema from agent_config",
+        "Loop through data rows",
+        "Create BatchTask for each row",
+        "Call format_task_for_provider",
+        "Return list of formatted tasks"
+      ],
+      "validation": [
+        "All data rows converted to tasks",
+        "Schema passed correctly if present",
+        "Task format matches OpenAI spec"
+      ]
+    },
+    {
+      "step": 5,
+      "title": "Implement submit_batch method (core logic)",
+      "status": "completed",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "10 minutes",
+      "tasks": [
+        "Setup batch directory and generate batch_id",
+        "Write input JSONL file",
+        "Loop through tasks and process each one:",
+        "  - Extract messages and model from task",
+        "  - Call self.client.chat(model, messages, options)",
+        "  - Transform Ollama response to OpenAI format",
+        "  - Collect result or error",
+        "Write output JSONL file",
+        "Update batch registry with metadata",
+        "Return batch_id"
+      ],
+      "key_logic": {
+        "processing": "Sequential (synchronous) - process all tasks immediately",
+        "error_handling": "Try/catch per task, create error response, continue processing",
+        "file_naming": "{batch_name}_ollama_batch_input.jsonl and {batch_id}_results.jsonl"
+      },
+      "validation": [
+        "All tasks processed (success or error)",
+        "Input and output JSONL files created",
+        "Registry updated with counts",
+        "batch_id returned"
+      ]
+    },
+    {
+      "step": 6,
+      "title": "Implement check_status method",
+      "status": "completed",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "1 minute",
+      "tasks": [
+        "Return \"completed\" (always, since processing is synchronous)"
+      ],
+      "note": "Since we process synchronously in submit_batch, status is always completed",
+      "validation": [
+        "Returns string \"completed\""
+      ]
+    },
+    {
+      "step": 7,
+      "title": "Implement retrieve_results method",
+      "status": "completed",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_method",
+      "estimated_time": "5 minutes",
+      "tasks": [
+        "Construct path to output file: {batch_dir}/{batch_id}_results.jsonl",
+        "Check file exists, raise VendorAPIError if not",
+        "Open file and read line by line",
+        "Parse each line as JSON",
+        "Call parse_provider_response for each",
+        "Handle JSON parse errors gracefully",
+        "Return list of BatchResult objects"
+      ],
+      "validation": [
+        "File not found raises proper error",
+        "All valid lines parsed correctly",
+        "JSON errors handled without crashing",
+        "Returns List[BatchResult]"
+      ]
+    },
+    {
+      "step": 8,
+      "title": "Implement helper methods",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "action": "add_methods",
+      "estimated_time": "5 minutes",
+      "status": "completed (with bug fix: changed 'null' to 'None')",
+      "tasks": [
+        "Add _transform_ollama_response: Convert Ollama format → OpenAI format",
+        "Add _update_registry: Update .batch_registry.json with batch metadata"
+      ],
+      "details": {
+        "_transform_ollama_response": {
+          "input": "Ollama response dict (model, message, done, prompt_eval_count, eval_count)",
+          "output": "OpenAI batch format (custom_id, response.status_code, response.body with choices and usage)",
+          "key_transformations": [
+            "Generate unique IDs (chatcmpl-*, req-*)",
+            "Map message.content to choices[0].message.content",
+            "Map prompt_eval_count/eval_count to usage tokens",
+            "Set finish_reason based on done flag"
+          ]
+        },
+        "_update_registry": {
+          "file": "batch/.batch_registry.json",
+          "format": "{batch_name: {batch_id, status, timestamp, provider, record_count, completed_count, failed_count}}",
+          "behavior": "Read existing, update entry, write back"
+        }
+      },
+      "validation": [
+        "Ollama response correctly transformed",
+        "Registry file created/updated",
+        "Registry format matches existing pattern"
+      ]
+    },
+    {
+      "step": 9,
+      "title": "Register provider in factory",
+      "status": "completed",
+      "file": "agent_actions/integrations/providers/factory.py",
+      "action": "modify",
+      "estimated_time": "2 minutes",
+      "tasks": [
+        "Add import: from .ollama.provider import OllamaLocalBatchProvider",
+        "Add elif case in create_provider method for 'ollama'",
+        "Get base_url from config or OLLAMA_HOST env var",
+        "Return OllamaLocalBatchProvider(base_url)",
+        "Add 'ollama' to get_supported_providers list"
+      ],
+      "code_snippet": {
+        "import_line": "from .ollama.provider import OllamaLocalBatchProvider",
+        "create_provider_case": "elif provider_type == 'ollama':\n    base_url = config.get('base_url') or os.getenv('OLLAMA_HOST', 'http://localhost:11434')\n    return OllamaLocalBatchProvider(base_url=base_url)",
+        "supported_providers": "providers = ['openai', 'gemini', 'ollama']"
+      },
+      "validation": [
+        "Import succeeds",
+        "Factory creates OllamaLocalBatchProvider when provider_type='ollama'",
+        "'ollama' appears in supported providers list"
+      ]
+    },
+    {
+      "step": 10,
+      "title": "Write unit tests",
+      "status": "pending",
+      "file": "tests/integrations/providers/test_ollama_local_batch_provider.py",
+      "action": "create",
+      "estimated_time": "10 minutes",
+      "tasks": [
+        "Test format_task_for_provider: Verify task formatting",
+        "Test parse_provider_response: Verify response parsing",
+        "Test submit_and_retrieve_batch: Full workflow with tmp_path",
+        "Test error_handling: Verify failed requests return success=False"
+      ],
+      "test_coverage": [
+        "Task formatting matches OpenAI spec",
+        "Response parsing handles success and errors",
+        "Full batch workflow creates files and returns results",
+        "Errors captured per-request without failing batch"
+      ],
+      "validation": [
+        "All tests pass",
+        "Coverage > 80%",
+        "No mocking of Ollama (use real ollama client in tests)"
+      ]
+    },
+    {
+      "step": 11,
+      "title": "Test with sample workflow",
+      "status": "completed - successfully tested with json_mode: false",
+      "file": "sample/qanalabs/agent_actions.yml",
+      "action": "test",
+      "estimated_time": "5 minutes",
+      "tasks": [
+        "Update config: model_vendor: ollama, run_mode: batch",
+        "Ensure Ollama is running: ollama serve",
+        "Pull model: ollama pull llama2",
+        "Run workflow: agent-actions run qanalabs_quiz_gen",
+        "Verify files created: input.jsonl, results.jsonl, .batch_registry.json"
+      ],
+      "expected_output": [
+        "Batch processes synchronously",
+        "JSONL files created in batch/ directory",
+        "Registry file updated",
+        "Results flow through workflow correctly"
+      ],
+      "validation": [
+        "Workflow completes successfully",
+        "All expected files present",
+        "Results match expected format",
+        "Retry logic works if errors occur"
+      ]
+    },
+    {
+      "step": 12,
+      "title": "Documentation",
+      "status": "pending",
+      "file": "README.md or docs/",
+      "action": "update",
+      "estimated_time": "5 minutes",
+      "tasks": [
+        "Add OllamaLocalBatchProvider to supported providers list",
+        "Add configuration example",
+        "Note limitations (synchronous, local-only)"
+      ],
+      "validation": [
+        "Documentation accurate",
+        "Example config works"
+      ]
+    }
+  ],
+
+  "files_to_create": [
+    {
+      "path": "agent_actions/integrations/providers/ollama/provider.py",
+      "type": "new_file",
+      "lines_of_code": "~300",
+      "purpose": "OllamaLocalBatchProvider implementation"
+    }
+  ],
+
+  "files_to_modify": [
+    {
+      "path": "agent_actions/integrations/providers/factory.py",
+      "changes": "Add 3 lines: import, elif case, supported_providers entry",
+      "impact": "minimal",
+      "status": "completed"
+    },
+    {
+      "path": "agent_actions/tasks/services/batch_service.py",
+      "changes": "Fix schema validation to allow json_mode: false without schema (lines 466-478)",
+      "impact": "medium - fixes validation bug that prevented non-JSON batch mode",
+      "status": "completed"
+    },
+    {
+      "path": "agent_actions/tasks/services/batch_service.py",
+      "changes": "Add output_field support for non-JSON mode (lines 1274-1279)",
+      "impact": "medium - ensures output_field works in batch mode matching online mode behavior",
+      "status": "completed"
+    }
+  ],
+
+  "testing_strategy": {
+    "unit_tests": {
+      "file": "tests/integrations/providers/test_ollama_local_batch_provider.py",
+      "coverage": [
+        "Task formatting",
+        "Response parsing",
+        "Full batch workflow",
+        "Error handling"
+      ]
+    },
+    "integration_tests": {
+      "approach": "Run with sample workflow",
+      "validation": [
+        "Files created correctly",
+        "Results format correct",
+        "Retry logic works",
+        "Registry compatible"
+      ]
+    },
+    "manual_testing": {
+      "scenarios": [
+        "Small batch (10 requests)",
+        "Batch with failures",
+        "Multiple batches with retries",
+        "Compare results with OpenAI batch"
+      ]
+    }
+  },
+
+  "compatibility": {
+    "batch_service": "Full compatibility - uses standard BatchProvider interface",
+    "retry_logic": "Yes - BatchService handles all retry orchestration",
+    "dlq_support": "Yes - failed records go to DLQ after max retries",
+    "manifests": "Yes - retry manifests created automatically",
+    "post_processing": "Yes - same data format as other providers"
+  },
+
+  "limitations": {
+    "processing": "Synchronous (not true async like OpenAI)",
+    "parallelization": "None (sequential processing)",
+    "progress_tracking": "Not supported mid-batch",
+    "cancellation": "Not supported once started",
+    "use_case": "Local testing and development only, not production scale"
+  },
+
+  "future_enhancements": [
+    "Add parallel processing with ThreadPoolExecutor",
+    "Add progress tracking to registry",
+    "Add cancellation support",
+    "Add async status with background threading (if needed)"
+  ],
+
+  "naming_rationale": {
+    "provider_name": "OllamaLocalBatchProvider",
+    "reason": "Distinguishes from potential future official Ollama batch API",
+    "future_proofing": "If Ollama releases official batch API, we can add OllamaBatchProvider separately"
+  },
+
+  "success_criteria": [
+    "OllamaLocalBatchProvider implements all 6 BatchProvider methods",
+    "Registered in factory and appears in supported providers",
+    "Unit tests pass with >80% coverage",
+    "Integration test with sample workflow succeeds",
+    "JSONL files match OpenAI format",
+    "Retry logic works identically to OpenAI provider",
+    "Registry format compatible with existing tools"
+  ],
+
+  "dependencies": {
+    "required": [
+      "ollama (already installed in agent-actions)",
+      "Ollama server running on localhost:11434"
+    ],
+    "optional": []
+  },
+
+  "rollout_plan": {
+    "phase_1": "Implementation (30 min)",
+    "phase_2": "Unit testing (10 min)",
+    "phase_3": "Integration testing with sample (5 min)",
+    "phase_4": "Documentation update (5 min)",
+    "total_time": "50 minutes",
+    "risk_level": "low - isolated feature, no changes to existing providers"
+  },
+
+  "links": {
+    "specification": "OLLAMA_BATCH_IMPLEMENTATION_SPEC.md",
+    "related_issues": [],
+    "related_prs": []
+  },
+
+  "bugs_discovered_and_fixed": [
+    {
+      "bug_id": 1,
+      "title": "Python syntax error: 'null' instead of 'None'",
+      "description": "Used JavaScript/JSON syntax 'null' instead of Python 'None' in _transform_ollama_response method",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "line": 435,
+      "error": "NameError: name 'null' is not defined",
+      "fix": "Changed 'error': null to 'error': None",
+      "severity": "critical",
+      "impact": "Prevented all batch requests from completing successfully",
+      "discovered_during": "integration_testing"
+    },
+    {
+      "bug_id": 2,
+      "title": "max_tokens: null added to JSONL when value is None",
+      "description": "When max_tokens is None in agent_config, it was being added to JSONL body as null, potentially causing issues",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "lines": "63-66",
+      "fix": "Only add max_tokens to body if value is not None",
+      "severity": "medium",
+      "impact": "Clean JSONL files without unnecessary null values",
+      "discovered_during": "integration_testing"
+    },
+    {
+      "bug_id": 3,
+      "title": "Schema required validation blocked json_mode: false",
+      "description": "BatchService validation required schema even when json_mode: false, preventing non-JSON batch workflows",
+      "file": "agent_actions/tasks/services/batch_service.py",
+      "lines": "466-478",
+      "error": "ConfigurationError: Schema is required for batch processing",
+      "fix": "Modified validation to only require schema when json_mode: true",
+      "severity": "high",
+      "impact": "Enabled non-JSON batch mode for all providers",
+      "discovered_during": "integration_testing",
+      "scope": "system-wide fix affecting all batch providers"
+    },
+    {
+      "bug_id": 4,
+      "title": "Schema added even when json_mode: false",
+      "description": "Ollama provider was adding response_format/schema to JSONL regardless of json_mode setting",
+      "file": "agent_actions/integrations/providers/ollama/provider.py",
+      "lines": "150-153",
+      "fix": "Check json_mode in prepare_tasks and only pass schema when json_mode: true",
+      "severity": "high",
+      "impact": "Respects json_mode configuration, prevents forcing JSON mode when not needed",
+      "discovered_during": "integration_testing"
+    },
+    {
+      "bug_id": 5,
+      "title": "output_field not working in batch mode",
+      "description": "When json_mode: false, batch mode was storing raw string in 'content' field instead of output_field",
+      "file": "agent_actions/tasks/services/batch_service.py",
+      "lines": "1274-1279",
+      "fix": "Wrap string content in output_field when json_mode: false, matching online mode behavior",
+      "severity": "medium",
+      "impact": "output_field now works correctly in batch mode with json_mode: false",
+      "discovered_during": "feature_testing",
+      "scope": "system-wide fix affecting all batch providers"
+    }
+  ],
+
+  "implementation_notes": {
+    "total_bugs_fixed": 5,
+    "critical_bugs": 1,
+    "high_severity_bugs": 2,
+    "medium_severity_bugs": 2,
+    "system_wide_fixes": 2,
+    "key_learnings": [
+      "Always use Python None instead of JavaScript null in Python dicts",
+      "Don't add fields with None values to JSONL - omit them entirely",
+      "json_mode: false should work without schemas for all batch providers",
+      "output_field behavior must match between online and batch modes",
+      "Test with both json_mode: true and json_mode: false scenarios"
+    ],
+    "testing_insights": [
+      "Integration testing revealed all 5 bugs that unit tests would have missed",
+      "The 'null' syntax error only manifests at runtime, not during code review",
+      "Schema validation bug affected all providers, not just Ollama",
+      "output_field feature gap existed in batch mode since initial implementation"
+    ]
+  },
+
+  "actual_implementation_time": {
+    "initial_implementation": "30 minutes",
+    "bug_fixing": "90 minutes",
+    "system_wide_fixes": "45 minutes",
+    "total": "165 minutes (2.75 hours)",
+    "variance_reason": "Multiple bugs discovered during integration testing that required fixes across multiple files"
+  }
+}

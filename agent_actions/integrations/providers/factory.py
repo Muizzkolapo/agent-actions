@@ -8,6 +8,7 @@ import os
 from .base import BatchProvider
 from .openai.provider import OpenAIBatchProvider
 from .gemini.provider import GeminiBatchProvider
+from .ollama.provider import OllamaLocalBatchProvider
 
 # Import Anthropic provider with graceful fallback
 try:
@@ -68,6 +69,11 @@ class BatchProviderFactory:
                     cause=e
                 )
             
+        elif provider_type == "ollama":
+            # Get Ollama server URL from config or environment
+            base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
+            return OllamaLocalBatchProvider(base_url=base_url)
+
         elif provider_type == "anthropic":
             if not ANTHROPIC_AVAILABLE:
                 from agent_actions.core.exceptions import DependencyError
@@ -79,14 +85,14 @@ class BatchProviderFactory:
                         'install_command': 'pip install anthropic'
                     }
                 )
-            
+
             # Get API key from config or environment
             api_key = config.get("api_key") or os.getenv("CLAUDE_API_KEY")
-            
+
             # Get Anthropic-specific config options
             anthropic_version = config.get("anthropic_version")
             enable_prompt_caching = config.get("enable_prompt_caching", False)
-            
+
             try:
                 return AnthropicBatchProvider(
                     api_key=api_key,
@@ -104,7 +110,7 @@ class BatchProviderFactory:
                     },
                     cause=e
                 )
-            
+
         else:
             supported_providers = ["openai", "gemini"]
             if ANTHROPIC_AVAILABLE:
@@ -122,7 +128,7 @@ class BatchProviderFactory:
     @staticmethod
     def get_supported_providers() -> list[str]:
         """Get list of supported provider types."""
-        providers = ["openai", "gemini"]
+        providers = ["openai", "gemini", "ollama"]
         if ANTHROPIC_AVAILABLE:
             providers.append("anthropic")
         return providers
