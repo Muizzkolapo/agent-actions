@@ -57,3 +57,6 @@ env/
 
 # UV specific
 uv.lock.bak
+
+# Ignore generated documentation
+pdoc_docs/
