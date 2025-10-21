@@ -112,16 +112,12 @@ class BatchProviderFactory:
                 )
 
         else:
-            supported_providers = ["openai", "gemini"]
-            if ANTHROPIC_AVAILABLE:
-                supported_providers.append("anthropic")
-
             from agent_actions.core.exceptions import ConfigurationError
             raise ConfigurationError(
                 "Unknown provider type",
                 context={
                     'provider_type': provider_type,
-                    'supported_providers': supported_providers
+                    'supported_providers': BatchProviderFactory.get_supported_providers()
                 }
             )
     

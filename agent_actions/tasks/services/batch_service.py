@@ -13,7 +13,7 @@ from agent_actions.agents.handlers.schema_handler import SchemaLoader
 from agent_actions.core.parser.schema_change import compile_unified_schema
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY
+from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY, JSON_MODE_KEY
 from agent_actions.core.utils.processor_helpers import apply_drops
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.core.parser.where_parser import get_global_filter, evaluate_safe_skip_condition
@@ -465,7 +465,7 @@ class BatchService:
 
         # Schema is only required when json_mode is enabled (default: True)
         # When json_mode is False, batch can process without schemas
-        json_mode = agent_config.get("json_mode", True)
+        json_mode = agent_config.get(JSON_MODE_KEY, True)
         if not schema and json_mode:
             from agent_actions.core.exceptions import ConfigurationError
             raise ConfigurationError(
