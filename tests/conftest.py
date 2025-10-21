@@ -480,3 +480,106 @@ def mock_batch_results():
         )
     ]
 
+
+# ============================================================================
+# Batch Provider Testing Fixtures (for Provider Implementation Tests)
+# ============================================================================
+
+@pytest.fixture
+def sample_batch_task():
+    """
+    Standard BatchTask for testing all batch providers.
+
+    Includes all common fields that every provider should handle correctly.
+    Used for basic format_task_for_provider() testing.
+    """
+    from agent_actions.integrations.providers.base import BatchTask
+
+    return BatchTask(
+        custom_id="test-123",
+        prompt="You are a helpful assistant",
+        user_content='{"question": "What is 2+2?"}',
+        model_config={
+            "model_name": "test-model",
+            "temperature": 0.7,
+            "max_tokens": 100
+        }
+    )
+
+
+@pytest.fixture
+def sample_batch_task_no_max_tokens():
+    """
+    BatchTask without max_tokens (for Bug #2 validation).
+
+    Tests that providers correctly handle missing max_tokens and don't
+    add it as null/None to the request body.
+    """
+    from agent_actions.integrations.providers.base import BatchTask
+
+    return BatchTask(
+        custom_id="test-456",
+        prompt="You are helpful",
+        user_content='{"test": "data"}',
+        model_config={
+            "model_name": "test-model",
+            "temperature": 0.5
+            # Intentionally no max_tokens
+        }
+    )
+
+
+@pytest.fixture
+def sample_data():
+    """
+    Sample data list for testing prepare_tasks() method.
+
+    Represents typical input data that would be passed to a batch provider's
+    prepare_tasks() method. Contains 3 records with target_id and content.
+    """
+    return [
+        {"target_id": "1", "content": {"question": "Question 1"}},
+        {"target_id": "2", "content": {"question": "Question 2"}},
+        {"target_id": "3", "content": {"question": "Question 3"}}
+    ]
+
+
+@pytest.fixture
+def sample_agent_config_json_mode():
+    """
+    Agent config with json_mode: true and compiled schema.
+
+    Tests that providers correctly handle structured JSON output mode,
+    including proper schema formatting for the specific provider.
+    """
+    return {
+        "model_name": "test-model",
+        "temperature": 0.7,
+        "max_tokens": 100,
+        "json_mode": True,
+        "compiled_schema": {
+            "type": "object",
+            "properties": {
+                "answer": {"type": "string"}
+            }
+        },
+        "prompt": "You are helpful"
+    }
+
+
+@pytest.fixture
+def sample_agent_config_no_json_mode():
+    """
+    Agent config with json_mode: false (plain text output).
+
+    Tests that providers correctly handle non-JSON output mode and
+    don't add schema/response_format when not needed (Bug #4 validation).
+    """
+    return {
+        "model_name": "test-model",
+        "temperature": 0.7,
+        "max_tokens": 100,
+        "json_mode": False,
+        "prompt": "You are helpful"
+    }
+

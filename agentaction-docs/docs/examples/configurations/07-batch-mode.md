@@ -532,28 +532,361 @@ actions:
 
 ## Vendor Support
 
-| Vendor | Batch API | Cost Savings | Max Items/Batch |
-|--------|-----------|--------------|-----------------|
-| OpenAI | ✅ Yes | 50% | 50,000 |
-| Anthropic | ✅ Yes | 50% | 10,000 |
-| Gemini | ⏳ Coming | TBD | TBD |
-| Groq | ❌ No | - | - |
-| DeepSeek | ❌ No | - | - |
-| Perplexity | ❌ No | - | - |
+| Vendor | Batch API | Cost Savings | Max Items/Batch | Use Case |
+|--------|-----------|--------------|-----------------|----------|
+| OpenAI | ✅ Yes | 50% | 50,000 | Production, cost optimization |
+| Anthropic | ✅ Yes | 50% | 10,000 | Production, cost optimization |
+| Gemini | ✅ Yes | TBD | TBD | Production (Google Cloud) |
+| Ollama | ✅ Yes (Local) | 100% (Free) | Unlimited | Local testing, development |
+| Groq | ❌ No | - | - | - |
+| DeepSeek | ❌ No | - | - | - |
+| Perplexity | ❌ No | - | - | - |
+
+## Local Testing with Ollama
+
+### What is Ollama Batch Mode?
+
+Ollama provides a **local, zero-cost batch processing mode** for testing and development. Unlike cloud batch APIs (OpenAI, Anthropic) that process asynchronously, Ollama batch mode processes synchronously on your local machine.
+
+### Benefits of Ollama Batch Mode
+
+✅ **Zero cost** - Completely free, runs locally
+✅ **Fast iteration** - Test batch workflows in minutes, not hours
+✅ **Offline capability** - No internet connection required
+✅ **CI/CD friendly** - Run batch tests in continuous integration
+✅ **Same interface** - Drop-in replacement for cloud providers
+✅ **Privacy** - Your data never leaves your machine
+
+### Use Cases
+
+**Development & Testing**
+- Test batch workflow logic before using expensive cloud APIs
+- Validate retry logic, DLQ handling, and manifest generation
+- Develop batch features offline
+
+**CI/CD Pipelines**
+- Run batch workflow tests in GitHub Actions, GitLab CI, etc.
+- Validate batch processing without API costs
+- Test at scale locally before production deployment
+
+**Cost Optimization**
+- Test with large datasets locally (10 iterations × $10 = $100 saved)
+- Prototype and debug with real batch sizes
+- Validate results before submitting to paid APIs
+
+### Ollama Batch Configuration
+
+#### Basic Setup
+
+```yaml
+# workflows/local-batch-test.yml
+model_vendor: ollama          # Use Ollama local provider
+model_name: llama3.2          # Any Ollama model
+base_url: http://localhost:11434  # Optional, defaults to this
+
+actions:
+  - name: process_items
+    batch_mode: true           # Enable batch processing
+
+    reads:
+      - text
+
+    writes:
+      - summary
+
+    prompt: |
+      Summarize: {{ text }}
+
+    schema:
+      summary: string
+```
+
+#### Prerequisites
+
+Make sure Ollama is installed and running:
+
+```bash
+# Install Ollama (if not already installed)
+# Visit: https://ollama.com/download
+
+# Start Ollama server
+ollama serve
+
+# Pull a model (in another terminal)
+ollama pull llama3.2
+
+# Verify it's running
+curl http://localhost:11434/api/tags
+```
+
+#### Running Ollama Batch Job
+
+```bash
+# Submit batch job (processes immediately)
+agent-actions run local-batch-test --input test-data.jsonl
+
+# Output:
+# ✅ Batch processing complete (synchronous)
+# Processed: 100 items in 45 seconds
+# Results saved to: outputs/batch_20240115_143000/
+```
+
+### Example: Testing Batch Workflow Locally
+
+Before running an expensive OpenAI batch job with 10,000 items, test locally with Ollama:
+
+```yaml
+# workflows/test-batch-workflow.yml
+
+# STEP 1: Test locally with Ollama
+model_vendor: ollama
+model_name: llama3.2
+# base_url: http://localhost:11434  # Optional
+
+actions:
+  - name: extract_data
+    batch_mode: true
+    batch_size: 100
+
+    reads:
+      - article_text
+
+    writes:
+      - extracted_facts
+      - key_themes
+
+    prompt: |
+      Extract key facts and themes from:
+      {{ article_text }}
+
+    schema:
+      extracted_facts:
+        type: array
+        items: string
+        minItems: 3
+      key_themes:
+        type: array
+        items: string
+        minItems: 2
+```
+
+Test with sample data:
+
+```bash
+# Test with 100 items locally (takes ~2 minutes)
+agent-actions run test-batch-workflow --input sample-100.jsonl
+
+# Verify:
+# ✅ Batch files created correctly
+# ✅ Retry logic works
+# ✅ DLQ handling works
+# ✅ Output format is correct
+
+# STEP 2: Switch to production API (just change one line!)
+# model_vendor: openai  # Change this line
+# model_name: gpt-4o-mini
+
+# Now run with full dataset (10,000 items)
+agent-actions run test-batch-workflow --input full-dataset.jsonl
+```
+
+### Ollama vs Cloud Batch APIs
+
+| Feature | Ollama | OpenAI/Anthropic |
+|---------|--------|------------------|
+| **Processing** | Synchronous (immediate) | Asynchronous (24h window) |
+| **Cost** | Free | 50% off standard rates |
+| **Speed** | Depends on your hardware | 2-12 hours typical |
+| **Internet** | Not required | Required |
+| **Scale** | Limited by your machine | Millions of items |
+| **Use Case** | Testing, development | Production, cost optimization |
+
+### Important Differences
+
+#### 1. Synchronous Processing
+
+Ollama processes all items **immediately** and **sequentially**:
+
+```yaml
+# Ollama batch workflow
+actions:
+  - name: process
+    batch_mode: true
+    # Runs synchronously - waits until all items complete
+```
+
+**Behavior**:
+- `submit_batch()` processes all items before returning
+- `check_status()` always returns "completed"
+- `retrieve_results()` immediately returns results
+
+#### 2. No Parallelization
+
+Ollama processes one item at a time:
+
+```bash
+# With 100 items, Ollama processes:
+# Item 1 → Item 2 → Item 3 → ... → Item 100
+
+# Cloud APIs process:
+# Items 1-100 in parallel (faster for large batches)
+```
+
+**Performance Consideration**:
+- Small batches (< 1000): Ollama is fine for testing
+- Large batches (> 10,000): Cloud APIs are much faster
+
+#### 3. Local Resource Limits
+
+Ollama uses your machine's resources:
+
+```yaml
+# Your batch size is limited by:
+# - Available RAM
+# - CPU/GPU capacity
+# - Storage space
+
+# Recommended for testing:
+batch_size: 100-500   # Good for local testing
+```
+
+### Limitations
+
+⚠️ **Not for production scale**
+- Sequential processing (not parallel)
+- Limited by local hardware
+- No distributed processing
+
+⚠️ **Model quality differences**
+- Llama, Mistral, etc. may produce different outputs than GPT-4
+- Use for workflow testing, not output quality validation
+
+⚠️ **No async status tracking**
+- Status is always "completed" (synchronous)
+- No progress tracking mid-batch
+
+### Best Practices
+
+#### 1. Use Ollama for Workflow Testing
+
+```yaml
+# Test these batch features locally with Ollama:
+# ✅ Batch file generation (JSONL format)
+# ✅ Retry logic (force failures to test)
+# ✅ DLQ handling (max_retries exceeded)
+# ✅ Manifest generation
+# ✅ WHERE clause filtering
+# ✅ Multi-step batch workflows
+```
+
+#### 2. Switch to Cloud for Production
+
+```yaml
+# Development/Testing:
+model_vendor: ollama
+model_name: llama3.2
+
+# Production (just change 2 lines):
+model_vendor: openai
+model_name: gpt-4o-mini
+```
+
+#### 3. Validate Logic, Not Outputs
+
+```yaml
+# Use Ollama to test:
+# ✅ Workflow logic
+# ✅ Error handling
+# ✅ Retry mechanisms
+# ✅ File formats
+
+# Use cloud APIs to test:
+# ✅ Output quality
+# ✅ Schema compliance
+# ✅ Final results
+```
+
+### Complete Ollama Batch Example
+
+```yaml
+# workflows/ollama-batch-development.yml
+
+# Local batch testing configuration
+model_vendor: ollama
+model_name: llama3.2
+base_url: http://localhost:11434  # Optional
+temperature: 0.7
+
+actions:
+  - name: analyze_feedback
+    batch_mode: true
+    batch_size: 50           # Small batch for local testing
+
+    reads:
+      - customer_feedback
+      - feedback_id
+
+    writes:
+      - sentiment
+      - key_issues
+      - priority
+
+    prompt: |
+      Analyze this customer feedback:
+      {{ customer_feedback }}
+
+      Determine:
+      1. Sentiment (positive/negative/neutral)
+      2. Key issues mentioned
+      3. Priority level (low/medium/high)
+
+    schema:
+      sentiment:
+        type: string
+        enum: [positive, negative, neutral]
+      key_issues:
+        type: array
+        items: string
+        minItems: 1
+        maxItems: 5
+      priority:
+        type: string
+        enum: [low, medium, high]
+```
+
+Run it:
+
+```bash
+# Test with sample data
+agent-actions run ollama-batch-development --input feedback-sample-50.jsonl
+
+# Output (immediate):
+# 🔄 Processing batch with Ollama...
+# ✅ Processed 50 items in 23 seconds
+# 📁 Results: outputs/batch_20240115_143000/batch_results.jsonl
+# 📊 Summary: 50 success, 0 failed
+
+# Once validated, switch to production:
+# 1. Change model_vendor to "openai"
+# 2. Run with full dataset
+agent-actions run ollama-batch-development --input feedback-full-5000.jsonl
+```
 
 ## When to Use Batch Mode
 
 ✅ **Use batch mode when:**
 - Processing thousands+ items
 - Cost is more important than speed
-- You can wait hours/days for results
+- You can wait hours/days for results (cloud APIs)
 - Data is ready upfront (not streaming)
-- Using OpenAI or Anthropic
+- Using OpenAI, Anthropic, Gemini, or Ollama
+- Testing batch workflows locally (use Ollama)
+- Running in CI/CD without API costs (use Ollama)
 
 ❌ **Don't use batch mode when:**
-- Need real-time results
-- Processing small datasets (less than 100 items)
-- Using unsupported vendors (Groq, Gemini, etc.)
+- Need real-time results (unless testing with Ollama)
+- Processing small datasets (less than 100 items, unless testing)
+- Using unsupported vendors (Groq, DeepSeek, Perplexity)
 - Workflow includes tool actions
 - Need interactive feedback
 

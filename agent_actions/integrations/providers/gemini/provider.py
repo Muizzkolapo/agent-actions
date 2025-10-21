@@ -83,12 +83,7 @@ class GeminiBatchProvider(BatchProvider):
             generation_config["temperature"] = batch_task.model_config["temperature"]
         if "max_tokens" in batch_task.model_config:
             generation_config["max_tokens"] = batch_task.model_config["max_tokens"]
-        
-        # Add native schema support for structured output
-        if schema:
-            request["response_schema"] = schema
-            request["response_mime_type"] = "application/json"
-        
+
         request = {
             "contents": [{
                 "parts": [{
@@ -96,10 +91,15 @@ class GeminiBatchProvider(BatchProvider):
                 }]
             }]
         }
-        
+
         # Only add generation_config if it has values
         if generation_config:
             request["generation_config"] = generation_config
+
+        # Add native schema support for structured output
+        if schema:
+            request["response_schema"] = schema
+            request["response_mime_type"] = "application/json"
         
         return {
             "key": batch_task.custom_id,
@@ -284,11 +284,11 @@ class GeminiBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to submit Gemini batch job",
+                vendor='gemini',
+                endpoint='batches.create',
                 context={
-                    'batch_name': batch_name,
-                    'vendor': 'gemini',
-                    'api_operation': 'batches.create'
+                    'message': 'Failed to submit Gemini batch job',
+                    'batch_name': batch_name
                 },
                 cause=e
             )
@@ -313,11 +313,11 @@ class GeminiBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to check Gemini batch status",
+                vendor='gemini',
+                endpoint='batches.get',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'gemini',
-                    'api_operation': 'batches.get'
+                    'message': 'Failed to check Gemini batch status',
+                    'batch_id': batch_id
                 },
                 cause=e
             )
@@ -371,10 +371,11 @@ class GeminiBatchProvider(BatchProvider):
                     if not result_content or len(result_content) == 0:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Retrieved empty content from batch results",
+                            vendor='gemini',
+                            endpoint='files.download',
                             context={
+                                'message': 'Retrieved empty content from batch results',
                                 'batch_id': batch_id,
-                                'vendor': 'gemini',
                                 'result_file_name': result_file_name
                             }
                         )
@@ -387,10 +388,11 @@ class GeminiBatchProvider(BatchProvider):
                     else:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Failed to retrieve batch results after retries",
+                            vendor='gemini',
+                            endpoint='files.download',
                             context={
+                                'message': 'Failed to retrieve batch results after retries',
                                 'batch_id': batch_id,
-                                'vendor': 'gemini',
                                 'max_retries': max_retries,
                                 'last_error': str(last_error)
                             },
@@ -433,11 +435,11 @@ class GeminiBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to retrieve Gemini batch results",
+                vendor='gemini',
+                endpoint='retrieve_results',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'gemini',
-                    'api_operation': 'retrieve_results'
+                    'message': 'Failed to retrieve Gemini batch results',
+                    'batch_id': batch_id
                 },
                 cause=e
             )

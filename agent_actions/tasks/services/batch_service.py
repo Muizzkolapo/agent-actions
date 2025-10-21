@@ -13,7 +13,7 @@ from agent_actions.agents.handlers.schema_handler import SchemaLoader
 from agent_actions.core.parser.schema_change import compile_unified_schema
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY
+from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY, JSON_MODE_KEY
 from agent_actions.core.utils.processor_helpers import apply_drops
 from agent_actions.core.tooling import execute_user_defined_function
 from agent_actions.core.parser.where_parser import get_global_filter, evaluate_safe_skip_condition
@@ -460,13 +460,21 @@ class BatchService:
     def prepare_batch_tasks_from_data(self, agent_config, data):
         # Get the appropriate provider for this agent configuration
         provider = self._get_provider_for_config(agent_config)
-        
+
         schema = self._prepare_schema(agent_config, provider)
-        if not schema:
+
+        # Schema is only required when json_mode is enabled (default: True)
+        # When json_mode is False, batch can process without schemas
+        json_mode = agent_config.get(JSON_MODE_KEY, True)
+        if not schema and json_mode:
             from agent_actions.core.exceptions import ConfigurationError
             raise ConfigurationError(
-                "Schema is required for batch processing",
-                context={'agent_config': agent_config.get('agent_type', 'unknown')}
+                "Schema is required for batch processing when json_mode is enabled",
+                context={
+                    'agent_config': agent_config.get('agent_type', 'unknown'),
+                    'json_mode': json_mode,
+                    'hint': 'Either provide a schema or set json_mode: false'
+                }
             )
             
         raw_prompt = agent_config.get(PROMPT_KEY, '')
@@ -1262,7 +1270,14 @@ class BatchService:
                 try:
                     # Content is already parsed by the provider
                     generated_obj = batch_result.content
-                    
+
+                    # When json_mode is False and content is a string, wrap it in output_field
+                    # This matches the behavior of online mode vendors
+                    json_mode = agent_config.get("json_mode", True)
+                    if not json_mode and isinstance(generated_obj, str):
+                        output_field = agent_config.get("output_field", "content")
+                        generated_obj = {output_field: generated_obj}
+
                     # Normalize to a list for consistent processing
                     generated_list = DataTransformer.ensure_list(generated_obj)
 

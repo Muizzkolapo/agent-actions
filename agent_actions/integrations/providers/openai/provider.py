@@ -13,7 +13,6 @@ from typing import List, Dict, Any, Optional
 from openai import OpenAI
 
 from ..base import BatchProvider, BatchTask, BatchResult
-from agent_actions.core.utils.path_utils import ensure_directory_exists
 from agent_actions.core.parser.schema_change import compile_unified_schema
 
 
@@ -156,20 +155,20 @@ class OpenAIBatchProvider(BatchProvider):
             usage=response_body.get("usage")
         )
     
-    def prepare_tasks(self, 
-                     data: List[Dict[str, Any]], 
+    def prepare_tasks(self,
+                     data: List[Dict[str, Any]],
                      agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Convert agent-actions data to OpenAI batch format.
-        
+
         This method orchestrates the transformation of multiple data items
         into OpenAI-formatted tasks.
         """
         tasks = []
-        
-        # Get schema if configured
-        # The batch service already compiles and passes the schema as "compiled_schema"
-        schema = agent_config.get("compiled_schema")
+
+        # Get schema if json_mode is enabled
+        json_mode = agent_config.get("json_mode", True)
+        schema = agent_config.get("compiled_schema") if json_mode else None
         
         for row in data:
             # Create BatchTask from row data
@@ -191,28 +190,16 @@ class OpenAIBatchProvider(BatchProvider):
         
         return tasks
     
-    def submit_batch(self, 
-                    tasks: List[Dict[str, Any]], 
+    def submit_batch(self,
+                    tasks: List[Dict[str, Any]],
                     batch_name: str,
                     output_directory: Optional[str] = None) -> str:
         """Submit batch job to OpenAI."""
-        # Create batch directory
-        if output_directory:
-            batch_dir = Path(output_directory) / "batch"
-        else:
-            batch_dir = Path.cwd() / "batch"
-        
-        ensure_directory_exists(batch_dir)
-        
-        # Write tasks to JSONL file
-        file_name = f"{Path(batch_name).stem}_batch_input.jsonl"
-        file_path = batch_dir / file_name
-        
-        with open(file_path, 'w') as file:
-            for task in tasks:
-                file.write(json.dumps(task) + '\n')
-        
-        print(f"OpenAI batch file created at: {file_path}")
+        # Use base class helper for directory setup
+        batch_dir = self._get_batch_directory(output_directory)
+
+        # Use base class helper for JSONL file writing
+        file_path = self._write_jsonl_file(tasks, batch_dir, batch_name, "openai")
         
         # Upload file to OpenAI
         batch_file = self.client.files.create(
@@ -238,11 +225,11 @@ class OpenAIBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to check OpenAI batch status",
+                vendor='openai',
+                endpoint='batches.retrieve',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'openai',
-                    'api_operation': 'batches.retrieve'
+                    'message': 'Failed to check OpenAI batch status',
+                    'batch_id': batch_id
                 },
                 cause=e
             )
@@ -280,10 +267,11 @@ class OpenAIBatchProvider(BatchProvider):
                     if not result_content or len(result_content) == 0:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Retrieved empty content from batch results",
+                            vendor='openai',
+                            endpoint='files.content',
                             context={
+                                'message': 'Retrieved empty content from batch results',
                                 'batch_id': batch_id,
-                                'vendor': 'openai',
                                 'result_file_id': result_file_id
                             }
                         )
@@ -296,10 +284,11 @@ class OpenAIBatchProvider(BatchProvider):
                     else:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Failed to retrieve batch results after retries",
+                            vendor='openai',
+                            endpoint='files.content',
                             context={
+                                'message': 'Failed to retrieve batch results after retries',
                                 'batch_id': batch_id,
-                                'vendor': 'openai',
                                 'max_retries': max_retries,
                                 'last_error': str(last_error)
                             },
@@ -308,44 +297,44 @@ class OpenAIBatchProvider(BatchProvider):
             
             # Save raw results if directory provided
             if output_directory:
-                batch_dir = Path(output_directory) / "batch"
-                ensure_directory_exists(batch_dir)
+                batch_dir = self._get_batch_directory(output_directory)
                 result_file_path = batch_dir / f"{batch_id}_results.jsonl"
                 with open(result_file_path, 'wb') as f:
                     f.write(result_content)
-            
-            # Parse results and transform to our format
-            batch_results = []
-            lines = result_content.decode('utf-8').strip().split('\n')
-            
-            for line_num, line in enumerate(lines, 1):
-                if line.strip():
-                    try:
-                        raw_result = json.loads(line)
-                        # Transform OpenAI format to our BatchResult format
-                        batch_result = self.parse_provider_response(raw_result)
-                        batch_results.append(batch_result)
-                    except json.JSONDecodeError as e:
-                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
-                        # Create error result for this line
-                        batch_results.append(BatchResult(
-                            custom_id=f"error_line_{line_num}",
-                            content=None,
-                            success=False,
-                            error=f"JSON parsing error: {e}",
-                            metadata={"line_number": line_num, "raw_line": line[:500]}
-                        ))
-            
-            return batch_results
+
+                # Use base class helper to read and parse JSONL
+                return self._read_jsonl_file(result_file_path)
+            else:
+                # No output directory - parse in memory
+                batch_results = []
+                lines = result_content.decode('utf-8').strip().split('\n')
+
+                for line_num, line in enumerate(lines, 1):
+                    if line.strip():
+                        try:
+                            raw_result = json.loads(line)
+                            batch_result = self.parse_provider_response(raw_result)
+                            batch_results.append(batch_result)
+                        except json.JSONDecodeError as e:
+                            print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                            batch_results.append(BatchResult(
+                                custom_id=f"error_line_{line_num}",
+                                content=None,
+                                success=False,
+                                error=f"JSON parsing error: {e}",
+                                metadata={"line_number": line_num, "raw_line": line[:500]}
+                            ))
+
+                return batch_results
             
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to retrieve OpenAI batch results",
+                vendor='openai',
+                endpoint='retrieve_results',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'openai',
-                    'api_operation': 'retrieve_results'
+                    'message': 'Failed to retrieve OpenAI batch results',
+                    'batch_id': batch_id
                 },
                 cause=e
             )
