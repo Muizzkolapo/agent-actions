@@ -225,11 +225,11 @@ class OpenAIBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to check OpenAI batch status",
+                vendor='openai',
+                endpoint='batches.retrieve',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'openai',
-                    'api_operation': 'batches.retrieve'
+                    'message': 'Failed to check OpenAI batch status',
+                    'batch_id': batch_id
                 },
                 cause=e
             )
@@ -267,10 +267,11 @@ class OpenAIBatchProvider(BatchProvider):
                     if not result_content or len(result_content) == 0:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Retrieved empty content from batch results",
+                            vendor='openai',
+                            endpoint='files.content',
                             context={
+                                'message': 'Retrieved empty content from batch results',
                                 'batch_id': batch_id,
-                                'vendor': 'openai',
                                 'result_file_id': result_file_id
                             }
                         )
@@ -283,10 +284,11 @@ class OpenAIBatchProvider(BatchProvider):
                     else:
                         from agent_actions.core.exceptions import VendorAPIError
                         raise VendorAPIError(
-                            "Failed to retrieve batch results after retries",
+                            vendor='openai',
+                            endpoint='files.content',
                             context={
+                                'message': 'Failed to retrieve batch results after retries',
                                 'batch_id': batch_id,
-                                'vendor': 'openai',
                                 'max_retries': max_retries,
                                 'last_error': str(last_error)
                             },
@@ -328,11 +330,11 @@ class OpenAIBatchProvider(BatchProvider):
         except Exception as e:
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Failed to retrieve OpenAI batch results",
+                vendor='openai',
+                endpoint='retrieve_results',
                 context={
-                    'batch_id': batch_id,
-                    'vendor': 'openai',
-                    'api_operation': 'retrieve_results'
+                    'message': 'Failed to retrieve OpenAI batch results',
+                    'batch_id': batch_id
                 },
                 cause=e
             )

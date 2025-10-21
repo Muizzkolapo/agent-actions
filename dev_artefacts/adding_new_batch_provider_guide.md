@@ -822,6 +822,215 @@ class MinimalProvider(BatchProvider):
 
 ---
 
+## Testing Your Provider
+
+### Testing Architecture
+
+Agent-actions uses a **3-tier testing architecture** to ensure all batch providers work correctly:
+
+```
+Tier 1: Shared Fixtures (conftest.py)
+         ↓
+Tier 2: Contract Tests (BaseBatchProviderTests)
+         ↓
+Tier 3: Provider-Specific Tests
+```
+
+### Quick Start
+
+Create your test file:
+
+**File: `tests/integrations/providers/your_provider/test_your_provider_batch_provider.py`**
+
+```python
+from tests.integrations/providers.base_batch_provider_tests import BaseBatchProviderTests
+import pytest
+from unittest.mock import Mock, patch
+
+class TestYourProviderBatchProvider(BaseBatchProviderTests):
+    """
+    Tests for YourProviderBatchProvider.
+
+    Inherits 11 contract tests from BaseBatchProviderTests.
+    Only implements required fixtures and provider-specific tests.
+    """
+
+    # ==================== Required Fixtures ====================
+
+    @pytest.fixture
+    def provider(self):
+        """Provide YourProviderBatchProvider instance with mocked client."""
+        # Your mocking strategy here
+        provider = YourProviderBatchProvider(api_key="test-key")
+
+        # Mock the client to avoid real API calls
+        mock_client = Mock()
+        provider.client = mock_client
+
+        # Configure mock responses
+        mock_client.method.return_value = Mock(id="test-id")
+
+        return provider
+
+    @pytest.fixture
+    def provider_success_response_json(self):
+        """Mock successful response with JSON content."""
+        return {
+            "custom_id": "test-123",
+            "response": {
+                # Your provider's success format with JSON
+            }
+        }
+
+    @pytest.fixture
+    def provider_success_response_string(self):
+        """Mock successful response with plain text."""
+        return {
+            "custom_id": "test-456",
+            "response": {
+                # Your provider's success format with string
+            }
+        }
+
+    @pytest.fixture
+    def provider_error_response(self):
+        """Mock error response."""
+        return {
+            "custom_id": "test-789",
+            "error": {
+                # Your provider's error format
+            }
+        }
+
+    # ==================== Provider-Specific Tests ====================
+
+    def test_your_provider_specific_feature(self, provider):
+        """Test unique feature of your provider."""
+        # Test something specific to your provider
+        pass
+```
+
+### What You Get Automatically
+
+By inheriting from `BaseBatchProviderTests`, you get **11 contract tests** for free:
+
+1. ✅ `test_format_task_basic` - Basic task formatting
+2. ✅ `test_format_task_with_schema` - Task formatting with schema
+3. ✅ `test_format_task_no_max_tokens` - Optional parameter handling
+4. ✅ `test_parse_success_response_json` - Parse JSON responses
+5. ✅ `test_parse_success_response_string` - Parse text responses
+6. ✅ `test_parse_error_response` - Parse error responses
+7. ✅ `test_prepare_tasks_json_mode_true` - Prepare tasks with schema
+8. ✅ `test_prepare_tasks_json_mode_false` - Prepare tasks without schema
+9. ✅ `test_check_status_returns_valid_state` - Status checking
+10. ✅ `test_submit_and_retrieve_workflow` - Full batch workflow
+11. ✅ `test_retrieve_invalid_batch_id_raises_error` - Error handling
+
+### Running Your Tests
+
+```bash
+# Run your provider tests
+python -m pytest tests/integrations/providers/your_provider/ -v
+
+# Expected output:
+# ========================== test session starts ==========================
+# tests/.../test_your_provider_batch_provider.py::...test_format_task_basic PASSED
+# tests/.../test_your_provider_batch_provider.py::...test_format_task_with_schema PASSED
+# ... (11 contract tests + your specific tests)
+# ========================== 14 passed ==========================
+```
+
+### Mocking Strategies
+
+**Strategy 1: Direct Client Replacement** (for simple clients like OpenAI)
+
+```python
+@pytest.fixture
+def provider(self):
+    provider = YourProvider(api_key="test-key")
+    mock_client = Mock()
+    provider.client = mock_client
+    # Configure mocks...
+    return provider
+```
+
+**Strategy 2: sys.modules Patching** (for external libraries like Anthropic/Gemini)
+
+```python
+@pytest.fixture
+def provider(self):
+    mock_module = Mock()
+    mock_client = Mock()
+    mock_module.Client.return_value = mock_client
+
+    with patch.dict('sys.modules', {'external_lib': mock_module}):
+        provider = YourProvider(api_key="test-key")
+        provider.client = mock_client
+        yield provider  # Use yield to maintain patch context
+```
+
+**Strategy 3: No Mocking** (for local providers like Ollama)
+
+```python
+@pytest.fixture
+def provider(self):
+    # No mocking needed for local processing
+    return YourProvider(base_url="http://localhost:11434")
+```
+
+### Overriding Contract Tests
+
+If your provider has format differences (e.g., uses "key" instead of "custom_id" like Gemini):
+
+```python
+def test_format_task_basic(self, provider, sample_batch_task):
+    """Override: YourProvider uses 'request_id' not 'custom_id'."""
+    result = provider.format_task_for_provider(sample_batch_task, schema=None)
+
+    assert isinstance(result, dict)
+    assert "request_id" in result  # Your provider's format
+    assert result["request_id"] == "test-123"
+```
+
+### Skipping Incompatible Tests
+
+If your provider has a different batch API (like Anthropic/Gemini):
+
+```python
+def test_submit_and_retrieve_workflow(self, tmp_path, sample_data, sample_agent_config_no_json_mode):
+    """Override to skip - YourProvider has different batch API."""
+    pytest.skip("YourProvider uses different batch endpoints - needs custom implementation")
+```
+
+### Test Coverage Goals
+
+Aim for:
+- ✅ All 11 contract tests passing (or overridden with explanation)
+- ✅ 2-5 provider-specific tests for unique features
+- ✅ 90%+ pass rate (skips are OK if justified)
+
+### Example Test Patterns
+
+**Current Providers:**
+- **OpenAI**: 14 tests (11 contract + 3 specific) - 100% passing
+- **Anthropic**: 16 tests (11 contract + 5 specific) - 93.75% passing (1 skipped)
+- **Gemini**: 14 tests (8 contract + 3 specific + 3 overrides) - 78.5% passing (3 skipped)
+- **Ollama**: 13 tests (11 contract + 2 specific) - 100% passing
+
+### Comprehensive Testing Guide
+
+For detailed testing documentation, see:
+- [Batch Provider Testing Guide](./batch_provider_testing_guide.md)
+
+This guide covers:
+- Testing architecture in detail
+- Writing tests for new providers
+- Mocking strategies
+- Debugging test failures
+- Best practices
+
+---
+
 ## Final Checklist
 
 Before submitting PR:
@@ -829,10 +1038,13 @@ Before submitting PR:
 - [ ] All 6 methods implemented
 - [ ] Registered in `factory.py`
 - [ ] `json_mode: true/false` both work
-- [ ] Errors wrapped in appropriate exceptions
+- [ ] Errors wrapped in VendorAPIError with correct signature
 - [ ] Files saved to `batch/` directory
 - [ ] Returns `List[BatchResult]` from `retrieve_results()`
 - [ ] Status mapping to standard values
+- [ ] **Test file created inheriting from BaseBatchProviderTests**
+- [ ] **All 4 required fixtures implemented**
+- [ ] **At least 90% of tests passing (excluding justified skips)**
 - [ ] Tested end-to-end with sample workflow
 - [ ] Updated this guide with any new patterns discovered
 

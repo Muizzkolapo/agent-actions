@@ -302,10 +302,11 @@ class BatchProvider(ABC):
         if not file_path.exists():
             from agent_actions.core.exceptions import VendorAPIError
             raise VendorAPIError(
-                "Batch output file not found",
+                vendor=self.__class__.__name__,
+                endpoint="retrieve_results",
                 context={
-                    'expected_path': str(file_path),
-                    'vendor': self.__class__.__name__
+                    'message': 'Batch output file not found',
+                    'expected_path': str(file_path)
                 }
             )
 
