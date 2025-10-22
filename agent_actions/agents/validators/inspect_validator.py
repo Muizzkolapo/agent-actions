@@ -7,7 +7,6 @@ including signatures, field-flow, and conflicts commands.
 
 from pydantic import BaseModel, Field, validator
 from typing import Optional
-from pathlib import Path
 
 
 class SignaturesCommandArgs(BaseModel):

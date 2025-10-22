@@ -4,7 +4,7 @@ import json
 from typing import Optional
 from agent_actions.agents.handlers.file_reader import FileReader
 from agent_actions.agents.handlers.file_writer import FileWriter
-from agent_actions.agents.generators.target_content_processor import TargetContentProcessor
+from agent_actions.agents.generators.target_content_processor import TargetContentProcessor  # noqa: F401 - needed for registry
 from agent_actions.agents.handlers.output_handler import OutputHandler
 from agent_actions.core.exceptions import AgentActionsException, ConfigurationError, DependencyError
 from agent_actions.core.constants import MODEL_VENDOR_KEY

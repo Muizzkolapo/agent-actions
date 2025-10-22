@@ -344,7 +344,7 @@ class AgentWorkflow:
         self.config_manager.check_child_pipeline()
         user_agents = self.config_manager.get_user_agents()
         self.config_manager.merge_agent_configs(user_agents)
-        self.config_manager.determine_execution_order(user_agents)
+        self.config_manager.determine_execution_order()
         self.agent_name = self.config_manager.agent_name
         self.execution_order = self.config_manager.execution_order
         # Pre-compute agent indices for O(1) lookup instead of O(n) execution_order.index()

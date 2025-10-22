@@ -137,9 +137,16 @@ For High Violations:
   3. Clean up style issues
 
 For Dead Code:
-  1. Verify truly unused (check across project)
-  2. Remove carefully
-  3. Run full test suite
+  1. **CRITICAL**: Verify truly unused (check across project)
+     - Use grep/ripgrep to search entire codebase for usage
+     - Check for dynamic imports (getattr, __import__, importlib)
+     - Look for string-based references in configs/tests
+  2. **Confidence Levels Matter**:
+     - 90%+ confidence: Likely safe (unused imports)
+     - 60-80% confidence: VERIFY - often false positives
+     - Base classes, Pydantic models, abstract methods = false positives
+  3. Remove carefully (start with high confidence items)
+  4. Run full test suite after EACH removal
 
 ═══════════════════════════════════════════════════════════════════════════════
 📊 SUCCESS METRICS
@@ -179,7 +186,42 @@ Week 1 Goal:
 ═══════════════════════════════════════════════════════════════════════════════
 ```
 
-## Step 4: Provide Detailed Breakdown
+## Step 4: Validate Dead Code Claims
+
+**IMPORTANT**: Before recommending dead code removal, validate the claims:
+
+For each file with dead code:
+1. **Check confidence level** from vulture output
+2. **For 60% confidence items**, use grep to verify:
+   ```bash
+   # Example: Check if BaseValidator is used
+   grep -r "BaseValidator" --include="*.py" .
+   grep -r "from.*base_validator import" --include="*.py" .
+   ```
+3. **Classify the dead code**:
+   - ✅ **Safe to remove**: Unused imports (90%+ confidence)
+   - ⚠️ **Verify first**: Class methods, attributes (60% confidence)
+   - ❌ **False positive**: Base classes, Pydantic models, abstract methods
+   - 🔍 **Investigate**: Entire unused files (check git history, planned features)
+
+4. **Create verification checklist**:
+   ```
+   Dead Code Verification:
+
+   HIGH CONFIDENCE (90%+) - Safe to Remove:
+   - [ ] file.py:10 - unused import 'Foo'
+   - [ ] file.py:20 - unused import 'Bar'
+
+   MEDIUM CONFIDENCE (60-80%) - Verify First:
+   - [ ] base_class.py - Check if inherited elsewhere
+   - [ ] model.py - Check if used by Pydantic/ORM
+
+   FALSE POSITIVES - Do NOT Remove:
+   - BaseValidator (used by 6 subclasses)
+   - Pydantic model fields (used by framework)
+   ```
+
+## Step 5: Provide Detailed Breakdown
 
 For each file in the priority list, provide:
 - **File**: Full path
@@ -190,16 +232,17 @@ For each file in the priority list, provide:
 - **Estimated Effort**: Time needed
 - **Dependencies**: What else might break
 
-## Step 5: Offer to Deep Dive
+## Step 6: Offer to Deep Dive
 
 After presenting the action plan, ask:
 
 ```
 Would you like me to:
 1. Deep dive into the #1 priority file? (/review-clean-code <module>)
-2. Explain refactoring strategies for a specific pattern?
-3. Help implement fixes for a specific file?
-4. Rerun analysis after your changes?
+2. **Clean up verified dead code** (with grep verification for safety)
+3. Explain refactoring strategies for a specific pattern?
+4. Help implement fixes for a specific file?
+5. Rerun analysis after your changes?
 ```
 
 ## Important Guidelines
@@ -211,6 +254,47 @@ Would you like me to:
 - **Explain Why**: Always explain the business/technical impact
 - **Provide Examples**: Show concrete refactoring approaches
 - **Track Progress**: Suggest how to measure improvement
+
+## Dead Code Detection - Common False Positives
+
+**ALWAYS verify before removing** - vulture has known false positives:
+
+### 100% False Positives (Never Remove):
+- Base/Abstract classes (ABC, BaseClass)
+- Pydantic model fields (they're used by the framework)
+- SQLAlchemy model columns
+- Abstract methods (@abstractmethod)
+- Protocol/Interface definitions
+- Django model fields
+- Dataclass fields
+
+### High Risk of False Positives (60% confidence):
+- Class methods/attributes (check if class is instantiated elsewhere)
+- Functions in utility modules (might be imported with *)
+- __init__.py exports (used for public API)
+- Callback functions (passed as references)
+- Plugin/hook functions (called dynamically)
+
+### Usually Safe to Remove (90%+ confidence):
+- Unused imports at top of file
+- Variables assigned but never read
+- Commented out code
+
+### Verification Strategy:
+```bash
+# 1. Check if symbol is used anywhere
+grep -r "SymbolName" --include="*.py" .
+
+# 2. Check for imports
+grep -r "from.*module import.*Symbol" --include="*.py" .
+grep -r "import.*module" --include="*.py" . | grep -v "^Binary"
+
+# 3. Check for inheritance
+grep -r "class.*\(.*SymbolName" --include="*.py" .
+
+# 4. Check git history (maybe it's new or planned)
+git log --all --oneline -- path/to/file.py
+```
 
 ## ASCII Art Encouragement
 

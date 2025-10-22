@@ -649,7 +649,7 @@ class TestNewFormatConfigHandlerIntegration:
 
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
 
         # Should have execution order based on dependencies
         assert len(config_manager.execution_order) == 2
@@ -724,7 +724,7 @@ class TestNewFormatFeatureIntegration:
         # Get agents and process
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
 
         # Verify complete processing
         assert len(user_agents) == 3

@@ -47,7 +47,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['extractor', 'analyzer']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         # Verify topological sort was called (validation passed)
         assert mock_topo_sort.called
@@ -74,7 +74,7 @@ class TestConfigManagerInputValidation:
 
         # Execute and expect error
         with pytest.raises(ConfigValidationError) as exc_info:
-            config_manager.determine_execution_order([])
+            config_manager.determine_execution_order()
 
         # Verify error details
         assert 'input_signatures' in str(exc_info.value)
@@ -103,7 +103,7 @@ class TestConfigManagerInputValidation:
 
         # Execute and expect error
         with pytest.raises(ConfigValidationError) as exc_info:
-            config_manager.determine_execution_order([])
+            config_manager.determine_execution_order()
 
         assert 'temp' in exc_info.value.context['error_details']
         assert 'not available' in exc_info.value.context['error_details']
@@ -130,7 +130,7 @@ class TestConfigManagerInputValidation:
 
         # Execute and expect error
         with pytest.raises(ConfigValidationError) as exc_info:
-            config_manager.determine_execution_order([])
+            config_manager.determine_execution_order()
 
         assert 'unknown' in exc_info.value.context['error_details']
         assert 'not in dependencies' in exc_info.value.context['error_details']
@@ -158,7 +158,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['extractor', 'analyzer']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -181,7 +181,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['extractor']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -204,7 +204,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['processor']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -227,7 +227,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['reporter']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -253,7 +253,7 @@ class TestConfigManagerInputValidation:
 
         # Execute and expect error
         with pytest.raises(ConfigValidationError) as exc_info:
-            config_manager.determine_execution_order([])
+            config_manager.determine_execution_order()
 
         # Both errors should be in the message
         error_details = exc_info.value.context['error_details']
@@ -280,7 +280,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['function_agent']
 
         # Execute - should not raise
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -313,7 +313,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['extractor', 'analyzer']
 
         # Execute - should not raise (all references valid)
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 
@@ -340,7 +340,7 @@ class TestConfigManagerInputValidation:
         mock_topo_sort.return_value = ['active_agent']
 
         # Execute - should not raise (disabled agent not validated)
-        config_manager.determine_execution_order([])
+        config_manager.determine_execution_order()
 
         assert mock_topo_sort.called
 

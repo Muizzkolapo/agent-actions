@@ -6,7 +6,7 @@ match the actual fields available in the agent's LLM context.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Any, List, Optional, Set
+from typing import Dict, Any, List, Optional
 from agent_actions.agents.transformers.prompt_utils import PromptUtils
 from agent_actions.agents.validators.llm_context_utils import LLMContextUtils
 
