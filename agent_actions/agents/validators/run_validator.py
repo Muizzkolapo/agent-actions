@@ -1,5 +1,5 @@
 
-from pydantic import BaseModel, FilePath, DirectoryPath, Field, model_validator
+from pydantic import BaseModel, DirectoryPath, Field, model_validator
 from typing import Optional
 
 class RunCommandArgs(BaseModel):

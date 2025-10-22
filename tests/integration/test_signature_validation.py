@@ -207,7 +207,7 @@ class TestCompleteWorkflowSignatureValidation:
         
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
         
         # Test get_all_signatures
         all_signatures = config_manager.get_all_signatures()
@@ -327,7 +327,7 @@ class TestCompleteWorkflowSignatureValidation:
             
             # This should raise ConfigValidationError due to missing field
             with pytest.raises(Exception) as exc_info:
-                config_manager.determine_execution_order(user_agents)
+                config_manager.determine_execution_order()
             
             # Should be a validation error about missing field
             assert "input_signatures" in str(exc_info.value) or "missing_field" in str(exc_info.value)
@@ -347,7 +347,7 @@ class TestCompleteWorkflowSignatureValidation:
         
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
         
         # Test conflict detection for combiner agent
         conflicts = config_manager.detect_field_conflicts("combiner")
@@ -379,7 +379,7 @@ class TestCompleteWorkflowSignatureValidation:
         
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
         
         # Test field flow validation
         validation = config_manager.validate_field_flow()
@@ -421,7 +421,7 @@ class TestCompleteWorkflowSignatureValidation:
         
         # This should succeed if signature validation is consistent
         # with existing InputSignatureValidator used in determine_execution_order
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
         
         # If we get here, signature validation is consistent
         assert len(config_manager.execution_order) == 3
@@ -499,7 +499,7 @@ class TestComplexWorkflowScenarios:
             
             user_agents = config_manager.get_user_agents()
             config_manager.merge_agent_configs(user_agents)
-            config_manager.determine_execution_order(user_agents)
+            config_manager.determine_execution_order()
             
             # Test signature operations - should complete quickly
             all_signatures = config_manager.get_all_signatures()
@@ -591,7 +591,7 @@ class TestComplexWorkflowScenarios:
             
             user_agents = config_manager.get_user_agents()
             config_manager.merge_agent_configs(user_agents)
-            config_manager.determine_execution_order(user_agents)
+            config_manager.determine_execution_order()
             
             # Get signatures
             all_signatures = config_manager.get_all_signatures()
@@ -628,7 +628,7 @@ class TestComplexWorkflowScenarios:
         
         user_agents = config_manager.get_user_agents()
         config_manager.merge_agent_configs(user_agents)
-        config_manager.determine_execution_order(user_agents)
+        config_manager.determine_execution_order()
         
         # Test with schema registry
         all_signatures = config_manager.get_all_signatures(schema_registry)
@@ -683,7 +683,7 @@ class TestSignatureValidationEdgeCases:
             
             user_agents = config_manager.get_user_agents()
             config_manager.merge_agent_configs(user_agents)
-            config_manager.determine_execution_order(user_agents)
+            config_manager.determine_execution_order()
             
             # Should handle empty workflow gracefully
             all_signatures = config_manager.get_all_signatures()
@@ -753,7 +753,7 @@ class TestSignatureValidationEdgeCases:
             
             user_agents = config_manager.get_user_agents()
             config_manager.merge_agent_configs(user_agents)
-            config_manager.determine_execution_order(user_agents)
+            config_manager.determine_execution_order()
             
             # Test single agent signatures
             all_signatures = config_manager.get_all_signatures()

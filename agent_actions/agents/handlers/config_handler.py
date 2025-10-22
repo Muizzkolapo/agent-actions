@@ -14,7 +14,6 @@ from agent_actions.core.parser.pipeline_config import WorkflowConfig, PipelineCo
 from agent_actions.core.context.path_config import load_project_config
 from agent_actions.core.context.path_manager import PathManager
 from agent_actions.core.parser.action_expander import ActionExpander
-from agent_actions.core.safe_format import safe_format_error
 
 
 
@@ -220,7 +219,7 @@ class ConfigManager:
             merged_agent_config = AgentConfig.model_validate(merged_dict)
             self.agent_configs[agent_type] = merged_agent_config
 
-    def determine_execution_order(self, user_agents: List[Dict[str, Any]]) -> None:
+    def determine_execution_order(self) -> None:
         """
         Determines the execution order of agents based on their dependencies,
         considering only is_operational agents.

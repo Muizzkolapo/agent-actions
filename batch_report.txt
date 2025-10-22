@@ -1,0 +1,237 @@
+════════════════════════════════════════════════════════════════════════════════════════════════════
+📊 BATCH CODE ANALYSIS SUMMARY REPORT
+════════════════════════════════════════════════════════════════════════════════════════════════════
+Directory: agent_actions/agents
+Files Analyzed: 63
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📈 OVERALL STATISTICS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Total Lines of Code: 8,296
+  Total Violations: 456
+  Total Dead Code Findings: 305
+  Average Complexity Score: 25.0
+  Average Maintainability Index: 76.0
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+🔥 TOP 10 MOST COMPLEX FILES (Highest Complexity Score)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. agents/validators/config_validator.py
+     Complexity: 153, MI: 25.0, LOC: 530
+     High complexity functions: _validate_single_agent_entry_logic (CC=56), _validate_operational_dependencies_logic (CC=14), _is_valid_schema_type (CC=13)
+  2. agents/handlers/config_handler.py
+     Complexity: 113, MI: 35.5, LOC: 659
+     High complexity functions: load_configs (CC=12)
+  3. agents/generators/target_content_processor.py
+     Complexity: 86, MI: 46.9, LOC: 572
+     High complexity functions: _apply_where_clause_filtering (CC=15), process_file_level (CC=14)
+  4. agents/validators/schema_validator.py
+     Complexity: 76, MI: 49.7, LOC: 287
+     High complexity functions: _check_common_schema_issues_static (CC=16), validate (CC=16), _process_schema_file (CC=12)
+  5. agents/base/agent_builder.py
+     Complexity: 76, MI: 45.8, LOC: 436
+     High complexity functions: _execute_with_interceptors (CC=43), create_dynamic_agent (CC=15)
+  6. agents/validators/directory_validator.py
+     Complexity: 69, MI: 55.0, LOC: 203
+     High complexity functions: validate (CC=19), DirectoryValidator (CC=12), _check_required_directories_logic (CC=12)
+  7. agents/validators/path_validator.py
+     Complexity: 60, MI: 56.9, LOC: 239
+     High complexity functions: validate (CC=16), _validate_path_entity_logic (CC=15), PathValidator (CC=13)
+  8. agents/transformers/string_transformer.py
+     Complexity: 58, MI: 51.8, LOC: 295
+     High complexity functions: split_text_content (CC=11)
+  9. agents/transformers/pure_transformers.py
+     Complexity: 54, MI: 60.1, LOC: 289
+  10. agents/validators/prompt_validator.py
+     Complexity: 52, MI: 55.8, LOC: 249
+     High complexity functions: _validate_prompt_format_logic (CC=11)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+⚠️  TOP 10 FILES WITH MOST VIOLATIONS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. agents/generators/target_content_processor.py
+     Violations: 45 (unknown: 45)
+  2. agents/handlers/config_handler.py
+     Violations: 39 (unknown: 39)
+  3. agents/validators/config_validator.py
+     Violations: 33 (unknown: 33)
+  4. agents/generators/target_generator.py
+     Violations: 30 (unknown: 30)
+  5. agents/validators/schema_validator.py
+     Violations: 27 (unknown: 27)
+  6. agents/base/agent_builder.py
+     Violations: 25 (unknown: 25)
+  7. agents/validators/path_validator.py
+     Violations: 24 (unknown: 24)
+  8. agents/validators/directory_validator.py
+     Violations: 24 (unknown: 24)
+  9. agents/validators/validation_interceptor.py
+     Violations: 23 (unknown: 23)
+  10. agents/transformers/string_transformer.py
+     Violations: 16 (unknown: 16)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+📉 TOP 10 LOWEST MAINTAINABILITY INDEX (Needs Refactoring)
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. agents/validators/config_validator.py
+     MI: 25.0 (Rank: A), Complexity: 153
+  2. agents/handlers/config_handler.py
+     MI: 35.5 (Rank: A), Complexity: 113
+  3. agents/validators/llm_context_utils.py
+     MI: 41.6 (Rank: A), Complexity: 4
+  4. agents/base/agent_builder.py
+     MI: 45.8 (Rank: A), Complexity: 76
+  5. agents/generators/target_content_processor.py
+     MI: 46.9 (Rank: A), Complexity: 86
+  6. agents/validators/schema_validator.py
+     MI: 49.7 (Rank: A), Complexity: 76
+  7. agents/transformers/string_transformer.py
+     MI: 51.8 (Rank: A), Complexity: 58
+  8. agents/handlers/file_writer.py
+     MI: 52.1 (Rank: A), Complexity: 18
+  9. agents/handlers/file_reader.py
+     MI: 53.8 (Rank: A), Complexity: 22
+  10. agents/validators/directory_validator.py
+     MI: 55.0 (Rank: A), Complexity: 69
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+💀 TOP 10 FILES WITH MOST DEAD CODE
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  1. agents/handlers/config_handler.py
+     Dead code findings: 26
+  2. agents/validators/inspect_validator.py
+     Dead code findings: 24
+  3. agents/base/base_validator.py
+     Dead code findings: 17
+  4. agents/transformers/pure_transformers.py
+     Dead code findings: 12
+  5. agents/base/base_loader.py
+     Dead code findings: 12
+  6. agents/validators/run_validator.py
+     Dead code findings: 8
+  7. agents/validators/input_signature_validator.py
+     Dead code findings: 8
+  8. agents/transformers/data_processor.py
+     Dead code findings: 7
+  9. agents/validators/config_validator.py
+     Dead code findings: 7
+  10. agents/generators/target_data_processor.py
+     Dead code findings: 7
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+🔍 DETAILED ANALYSIS - TOP PROBLEM FILES
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+📄 agents/generators/target_content_processor.py
+   Violations: 45, Complexity: 86, MI: 46.9, LOC: 572
+   ⚠️  Downstream Impact: 1 files depend on this
+      Used by: target_generator.py
+   Sample violations:
+      • Line 6: [pylint] Unused ProcessingMode imported from agent_actions.core.contracts.interfaces
+      • Line 6: [pylint] Line too long (126/100)
+      • Line 357: [pylint] Undefined variable 'record_index'
+   Dead code findings (showing first 3):
+      • agent_actions/agents/generators/target_content_processor.py:6: unused import 'ProcessingMode' (90% confidence)
+      • agent_actions/agents/generators/target_content_processor.py:13: unused class 'TargetContentProcessor' (60% confidence)
+      • agent_actions/agents/generators/target_content_processor.py:75: unused method 'process_async' (60% confidence)
+
+📄 agents/handlers/config_handler.py
+   Violations: 39, Complexity: 113, MI: 35.5, LOC: 659
+   Sample violations:
+      • Line 17: [pylint] Unused safe_format_error imported from agent_actions.core.safe_format
+      • Line 10: [pylint] Line too long (107/100)
+      • Line 46: [pylint] Line too long (110/100)
+   Dead code findings (showing first 3):
+      • agent_actions/agents/handlers/config_handler.py:17: unused import 'safe_format_error' (90% confidence)
+      • agent_actions/agents/handlers/config_handler.py:21: unused class 'ConfigManager' (60% confidence)
+      • agent_actions/agents/handlers/config_handler.py:30: unused attribute 'child_pipeline' (60% confidence)
+
+📄 agents/validators/config_validator.py
+   Violations: 33, Complexity: 153, MI: 25.0, LOC: 530
+   ⚠️  Downstream Impact: 1 files depend on this
+      Used by: config_handler.py
+   Sample violations:
+      • Line 132: [pylint] Too many branches (38/12)
+      • Line 132: [pylint] Too many statements (89/50)
+      • Line 132: [pylint] Too many local variables (28/15)
+   Dead code findings (showing first 3):
+      • agent_actions/agents/validators/config_validator.py:23: unused class 'ConfigValidator' (60% confidence)
+      • agent_actions/agents/validators/config_validator.py:135: unused variable 'entry_idx' (100% confidence)
+      • agent_actions/agents/validators/config_validator.py:392: unused method '_validate_config_dependencies_logic' (60% confidence)
+
+📄 agents/generators/target_generator.py
+   Violations: 30, Complexity: 30, MI: 63.2, LOC: 214
+   Sample violations:
+      • Line 151: [pylint] Line too long (167/100)
+      • Line 157: [pylint] Line too long (167/100)
+      • Line 7: [pylint] Unused TargetContentProcessor imported from agent_actions.agents.generators.targ
+   Dead code findings (showing first 3):
+      • agent_actions/agents/generators/target_generator.py:7: unused import 'TargetContentProcessor' (90% confidence)
+      • agent_actions/agents/generators/target_generator.py:17: unused variable 'SOURCE_FOLDER' (60% confidence)
+      • agent_actions/agents/generators/target_generator.py:64: unused method 'generate' (60% confidence)
+
+📄 agents/validators/schema_validator.py
+   Violations: 27, Complexity: 76, MI: 49.7, LOC: 287
+   Sample violations:
+      • Line 89: [pycodestyle] over-indented
+      • Line 89: [pylint] Line too long (127/100)
+      • Line 89: [pylint] Bad indentation. Found 13 spaces, expected 12
+   Dead code findings (showing first 3):
+      • agent_actions/agents/validators/schema_validator.py:178: unused method 'validate' (60% confidence)
+      • agent_actions/agents/validators/schema_validator.py:178: unused variable 'config' (100% confidence)
+      • agent_actions/agents/validators/schema_validator.py:244: unused method 'check_schema_compatibility' (60% confidence)
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+🎯 PRIORITY RECOMMENDATIONS
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Files needing immediate attention:
+
+  🔴 agents/validators/config_validator.py
+     Priority Score: 6/10
+     Issues: High complexity (153), 33 violations, 7 dead code items
+
+  🔴 agents/generators/target_content_processor.py
+     Priority Score: 6/10
+     Issues: High complexity (86), 45 violations, 7 dead code items
+
+  🔴 agents/handlers/config_handler.py
+     Priority Score: 6/10
+     Issues: High complexity (113), 39 violations, 26 dead code items
+
+  🔴 agents/validators/schema_validator.py
+     Priority Score: 5/10
+     Issues: High complexity (76), 27 violations
+
+  🔴 agents/validators/path_validator.py
+     Priority Score: 5/10
+     Issues: High complexity (60), 24 violations
+
+  🔴 agents/validators/directory_validator.py
+     Priority Score: 5/10
+     Issues: High complexity (69), 24 violations
+
+  🔴 agents/base/agent_builder.py
+     Priority Score: 5/10
+     Issues: High complexity (76), 25 violations
+
+  🔴 agents/transformers/pure_transformers.py
+     Priority Score: 4/10
+     Issues: High complexity (54), 12 dead code items
+
+  🔴 agents/transformers/string_transformer.py
+     Priority Score: 3/10
+     Issues: High complexity (58)
+
+  🔴 agents/validators/prompt_validator.py
+     Priority Score: 3/10
+     Issues: High complexity (52)
+
+════════════════════════════════════════════════════════════════════════════════════════════════════
+
+💡 NEXT STEPS:
+  1. Review files in the priority list above
+  2. Run detailed analysis on specific files:
+     python .claude/helpers/code_analyzer.py <file_path>
+  3. Use /review-clean-code command for detailed Feynman-style review
+
+════════════════════════════════════════════════════════════════════════════════════════════════════

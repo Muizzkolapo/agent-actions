@@ -10,7 +10,6 @@ import json
 from typing import Dict, Any, Optional
 from rich.console import Console
 from rich.table import Table
-from rich.text import Text
 
 from agent_actions.agents.handlers.config_handler import ConfigManager
 from agent_actions.agents.validators.inspect_validator import (
@@ -19,7 +18,6 @@ from agent_actions.agents.validators.inspect_validator import (
     ConflictsCommandArgs
 )
 from agent_actions.core.cli_decorators import requires_project
-from agent_actions.core.exceptions import ConfigurationError
 from agent_actions.tasks.services.project_paths_factory import ProjectPathsFactory
 from pydantic import ValidationError
 
@@ -46,7 +44,7 @@ def _create_config_manager(agent_name: str) -> ConfigManager:
     
     user_agents = config_manager.get_user_agents()
     config_manager.merge_agent_configs(user_agents)
-    config_manager.determine_execution_order(user_agents)
+    config_manager.determine_execution_order()
     
     return config_manager
 
