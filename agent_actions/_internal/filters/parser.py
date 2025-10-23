@@ -6,18 +6,17 @@ expressions with proper grammar handling and comprehensive error reporting.
 """
 
 import re
-import json
 import ast
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Union
 from functools import lru_cache
 from dataclasses import dataclass
 import logging
 
 try:
     from pyparsing import (
-        Word, Literal, Regex, QuotedString, nums, alphas, alphanums,
-        Forward, Group, ZeroOrMore, OneOrMore, Optional as PyOptional,
-        Keyword, CaselessKeyword, ParserElement, ParseException,
+        Word, Literal, Regex, QuotedString, alphas, alphanums,
+        Forward, ZeroOrMore, Optional as PyOptional,
+        CaselessKeyword, ParserElement, ParseException,
         infixNotation, opAssoc, pyparsing_common, Suppress
     )
 except ImportError:
@@ -27,7 +26,7 @@ except ImportError:
     )
 
 from .ast_nodes import (
-    ASTNode, FieldNode, LiteralNode, ComparisonNode, LogicalNode, FunctionNode,
+    FieldNode, LiteralNode, ComparisonNode, LogicalNode, FunctionNode,
     ComparisonOperator, LogicalOperator, WhereClauseAST
 )
 from .operator_registry import get_global_registry, OperatorRegistry
