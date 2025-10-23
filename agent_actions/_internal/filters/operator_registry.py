@@ -5,12 +5,11 @@ This module provides a registry system for operators that can be extended
 with custom operators and functions.
 """
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 import re
-import fnmatch
 
 
 class OperatorType(Enum):

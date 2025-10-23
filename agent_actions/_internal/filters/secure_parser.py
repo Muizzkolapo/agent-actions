@@ -4,10 +4,9 @@ Replaces unsafe eval() with AST-based evaluation and comprehensive security chec
 """
 import re
 import ast
-import json
 import time
 import threading
-from typing import Any, Dict, List, Optional, Union, Set
+from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass
 from enum import Enum
 from functools import lru_cache
@@ -26,8 +25,7 @@ from agent_actions._internal.common.resilience.circuit_breaker import circuit_br
 from agent_actions._internal.common.resilience.retry import where_clause_retry
 from agent_actions._internal.common.feature_flags.manager import (
     where_clause_enabled, where_clause_caching_enabled,
-    where_clause_debug_enabled, where_clause_security_enabled,
-    FeatureFlagContext
+    where_clause_debug_enabled, where_clause_security_enabled
 )
 
 logger = logging.getLogger(__name__)
