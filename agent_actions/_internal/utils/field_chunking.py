@@ -250,7 +250,7 @@ class FieldChunker:
                     # Add enhanced metadata if configured
                     if self._should_add_enhanced_metadata():
                         enhanced_metadata = self._create_enhanced_metadata(
-                            record, field_name, field_value, chunk, idx, len(chunks)
+                            record, field_name, field_value, chunk, idx
                         )
                         # Add chunk ID and parent ID fields to root level of record
                         chunk_id_field = self.chunk_metadata.get("chunk_id_field")
@@ -360,9 +360,8 @@ class FieldChunker:
         """Check if enhanced metadata should be added."""
         return self.chunk_metadata.get("add_chunk_info", False)
     
-    def _create_enhanced_metadata(self, record: Dict[str, Any], field_name: str, 
-                                 field_value: str, chunk: str, chunk_index: int, 
-                                 total_chunks: int) -> Dict[str, Any]:
+    def _create_enhanced_metadata(self, record: Dict[str, Any], field_name: str,
+                                 field_value: str, chunk: str, chunk_index: int) -> Dict[str, Any]:
         """Create enhanced metadata for a chunk."""
         metadata = {}
         

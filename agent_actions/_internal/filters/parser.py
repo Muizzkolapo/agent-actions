@@ -75,7 +75,6 @@ class WhereClauseParser:
         """
         self.registry = operator_registry or get_global_registry()
         self._grammar = None
-        self._cache_size = 1000
         self._build_grammar()
     
     def _build_grammar(self):
@@ -558,20 +557,6 @@ def get_global_parser() -> WhereClauseParser:
     if _global_parser is None:
         _global_parser = WhereClauseParser()
     return _global_parser
-
-
-def parse_where_clause(where_clause: str) -> ParseResult:
-    """
-    Parse a WHERE clause using the global parser.
-    
-    Args:
-        where_clause: The WHERE clause string to parse
-        
-    Returns:
-        ParseResult containing the AST or error information
-    """
-    parser = get_global_parser()
-    return parser.parse_cached(where_clause)
 
 
 def evaluate_safe_expression(expression: str, context: Dict[str, Any]) -> Any:
