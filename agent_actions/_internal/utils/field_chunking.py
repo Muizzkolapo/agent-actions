@@ -355,21 +355,7 @@ class FieldChunker:
             return chunks
         else:
             return chunks
-    
-    def _handle_chunking_error(self, record: Dict[str, Any], field_name: str, error_msg: str) -> List[Dict[str, Any]]:
-        """Handle chunking errors based on fallback strategy."""
-        if self.fallback_strategy == "preserve_original":
-            # Return original record with error metadata
-            error_record = record.copy()
-            error_record["chunk_info"] = {
-                "source_field": field_name,
-                "chunk_index": 1,
-                "total_chunks": 1,
-                "chunking_error": error_msg,
-                "fallback_applied": "preserve_original_on_error"
-            }
-            return [error_record]
-    
+
     def _should_add_enhanced_metadata(self) -> bool:
         """Check if enhanced metadata should be added."""
         return self.chunk_metadata.get("add_chunk_info", False)
