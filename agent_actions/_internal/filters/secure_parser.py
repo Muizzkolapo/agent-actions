@@ -12,22 +12,6 @@ from enum import Enum
 from functools import lru_cache
 import logging
 
-from agent_actions._internal.common.monitoring.metrics import (
-    get_metrics_collector, record_where_clause_evaluation, 
-    record_where_clause_cache_hit, record_where_clause_cache_miss,
-    record_where_clause_error
-)
-from agent_actions._internal.common.monitoring.logging import (
-    get_logger, log_where_clause_start, log_where_clause_success,
-    log_where_clause_error, log_security_violation
-)
-from agent_actions._internal.common.resilience.circuit_breaker import circuit_breaker
-from agent_actions._internal.common.resilience.retry import where_clause_retry
-from agent_actions._internal.common.feature_flags.manager import (
-    where_clause_enabled, where_clause_caching_enabled,
-    where_clause_debug_enabled, where_clause_security_enabled
-)
-
 logger = logging.getLogger(__name__)
 
 
@@ -133,10 +117,7 @@ class SecureWhereClauseParser:
             max_conditions=10,
             max_evaluation_time_ms=100.0
         )
-        
-        self.metrics = get_metrics_collector()
-        self.structured_logger = get_logger()
-        
+
         # Caching
         self._parse_cache = {}
         self._cache_lock = threading.RLock()
@@ -144,33 +125,22 @@ class SecureWhereClauseParser:
     
     def _validate_security(self, clause: str, agent_type: str) -> None:
         """Perform comprehensive security validation."""
-        if not where_clause_security_enabled(agent_type):
-            return
-        
         # Check clause length
         if len(clause) > self.security_context.max_clause_length:
-            violation = {
-                'clause_length': len(clause),
-                'max_length': self.security_context.max_clause_length,
-                'clause_preview': clause[:100] + '...' if len(clause) > 100 else clause
-            }
-            log_security_violation("clause_too_long", "high", violation)
+            logger.warning(
+                f"WHERE clause too long: {len(clause)} > {self.security_context.max_clause_length}"
+            )
             raise SecurityViolationError(f"WHERE clause too long: {len(clause)} > {self.security_context.max_clause_length}")
-        
+
         # Check for security patterns
         for pattern, violation_type in self.SECURITY_PATTERNS:
             if re.search(pattern, clause, re.IGNORECASE):
-                violation = {
-                    'pattern': pattern,
-                    'violation_type': violation_type,
-                    'clause': clause
-                }
-                log_security_violation(violation_type, "critical", violation)
+                logger.error(f"Security violation detected: {violation_type} in clause")
                 raise SecurityViolationError(f"Security violation detected: {violation_type}")
-        
+
         # Check for suspicious repeated patterns (ReDoS protection)
         if self._detect_redos_patterns(clause):
-            log_security_violation("potential_redos", "high", {'clause': clause})
+            logger.error("Potential ReDoS attack detected in WHERE clause")
             raise SecurityViolationError("Potential ReDoS attack detected")
     
     def _detect_redos_patterns(self, clause: str) -> bool:
@@ -297,65 +267,43 @@ class SecureWhereClauseParser:
             InvalidWhereClauseError: For invalid syntax
         """
         start_time = time.time()
-        
-        # Check if WHERE clause functionality is enabled
-        if not where_clause_enabled(agent_type):
-            raise InvalidWhereClauseError("WHERE clause functionality is disabled")
-        
+
         # Security validation
         self._validate_security(clause, agent_type)
-        
+
         # Check cache first
         cache_key = self._get_cache_key(clause)
-        use_cache = where_clause_caching_enabled(agent_type)
-        
-        if use_cache:
-            with self._cache_lock:
-                if cache_key in self._parse_cache:
-                    self._cache_stats['hits'] += 1
-                    record_where_clause_cache_hit("parse")
-                    return self._parse_cache[cache_key].copy()
-                else:
-                    self._cache_stats['misses'] += 1
-                    record_where_clause_cache_miss("parse")
-        
+
+        with self._cache_lock:
+            if cache_key in self._parse_cache:
+                self._cache_stats['hits'] += 1
+                return self._parse_cache[cache_key].copy()
+            else:
+                self._cache_stats['misses'] += 1
+
         try:
             # Parse the clause
             conditions = self._parse_clause(clause)
-            
+
             # Validate condition count
             if len(conditions) > self.security_context.max_conditions:
                 raise SecurityViolationError(
                     f"Too many conditions: {len(conditions)} > {self.security_context.max_conditions}"
                 )
-            
+
             # Cache the result
-            if use_cache:
-                with self._cache_lock:
-                    self._parse_cache[cache_key] = conditions.copy()
-            
-            # Record success metrics
-            evaluation_time = (time.time() - start_time) * 1000
-            record_where_clause_evaluation("parse", agent_type, "success", evaluation_time)
-            
+            with self._cache_lock:
+                self._parse_cache[cache_key] = conditions.copy()
+
             # Log success
-            if where_clause_debug_enabled(agent_type):
-                log_where_clause_success(
-                    clause, "parse", evaluation_time, len(conditions), 0, 0
-                )
-            
+            evaluation_time = (time.time() - start_time) * 1000
+            logger.debug(f"WHERE clause parsed successfully in {evaluation_time:.2f}ms: {len(conditions)} conditions")
+
             return conditions
-        
+
         except Exception as e:
             evaluation_time = (time.time() - start_time) * 1000
-            record_where_clause_error(type(e).__name__, agent_type, "parse")
-            
-            # Log error
-            log_where_clause_error(
-                clause, "parse", evaluation_time, 0, e, 
-                {'agent_type': agent_type}
-            )
-            
+            logger.error(f"WHERE clause parse error after {evaluation_time:.2f}ms: {type(e).__name__}: {e}")
             raise
     
     def _parse_clause(self, clause: str) -> List[WhereCondition]:
@@ -464,14 +412,7 @@ class SecureWhereClauseParser:
         
         # If no operator found, it's invalid
         raise InvalidWhereClauseError(f"No valid operator found in condition: {condition_str}")
-    
-    @circuit_breaker(
-        failure_threshold=3,
-        recovery_timeout=30.0,
-        timeout=1.0,  # 1 second timeout for WHERE clause evaluation
-        name="where_clause_evaluation"
-    )
-    @where_clause_retry("unknown", "evaluation", max_attempts=2)
+
     def evaluate(
         self,
         data: Dict[str, Any],
@@ -490,13 +431,11 @@ class SecureWhereClauseParser:
             True if all conditions match, False otherwise
         """
         start_time = time.time()
-        
+
         try:
             # Check timeout
             max_time = self.security_context.max_evaluation_time_ms / 1000.0
-            
-            log_where_clause_start("evaluation", "item", len(conditions), 1)
-            
+
             for condition in conditions:
                 # Check timeout during evaluation
                 elapsed = time.time() - start_time
@@ -504,36 +443,18 @@ class SecureWhereClauseParser:
                     raise WhereClauseTimeoutError(
                         f"WHERE clause evaluation timeout: {elapsed:.3f}s > {max_time:.3f}s"
                     )
-                
+
                 if not self._evaluate_condition(condition, data):
-                    # Record filtered result
-                    record_where_clause_filter_result(agent_type, "filtered", 1)
                     return False
-            
+
             # All conditions passed
             evaluation_time = (time.time() - start_time) * 1000
-            
-            # Record success
-            record_where_clause_filter_result(agent_type, "passed", 1)
-            record_where_clause_evaluation("item", agent_type, "success", evaluation_time)
-            
-            if where_clause_debug_enabled(agent_type):
-                log_where_clause_success(
-                    "evaluation", "item", evaluation_time, len(conditions), 1, 1
-                )
-            
+            logger.debug(f"WHERE clause evaluation passed in {evaluation_time:.2f}ms: {len(conditions)} conditions")
             return True
-        
+
         except Exception as e:
             evaluation_time = (time.time() - start_time) * 1000
-            record_where_clause_error(type(e).__name__, agent_type, "item")
-            
-            log_where_clause_error(
-                "evaluation", "item", evaluation_time, len(conditions), e,
-                {'agent_type': agent_type, 'data_keys': list(data.keys()) if data else []}
-            )
-            
-            # Re-raise the exception
+            logger.error(f"WHERE clause evaluation error after {evaluation_time:.2f}ms: {type(e).__name__}: {e}")
             raise
     
     def _evaluate_condition(self, condition: WhereCondition, data: Dict[str, Any]) -> bool:
