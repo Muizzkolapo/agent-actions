@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from pydantic import ValidationError
 
-from agent_actions.core.context.environment_config import EnvironmentConfig, Environment
+from agent_actions.core.context.environment_config import EnvironmentConfig
 from agent_actions.core.exceptions import ConfigurationError
 from agent_actions.agents.handlers.config_handler import ConfigManager
 
@@ -124,9 +124,6 @@ class StartupValidator:
             return required_vendors
         
         try:
-            import yaml
-            from pathlib import Path
-            
             config_file = Path(constructor_path)
             if not config_file.exists():
                 return required_vendors

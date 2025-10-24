@@ -14,7 +14,7 @@ from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from .parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
-from .ast_nodes import WhereClauseAST, EvaluationContext
+from .ast_nodes import WhereClauseAST
 from .operator_registry import get_global_registry
 
 logger = logging.getLogger(__name__)
@@ -331,11 +331,7 @@ class WhereClauseFilter:
                 return None
         
         return value
-    
-    def get_metrics(self) -> Optional[FilterMetrics]:
-        """Get performance metrics."""
-        return self.metrics if self.enable_metrics else None
-    
+
     def get_cache_info(self) -> Dict[str, Any]:
         """Get cache statistics."""
         parser_cache = self.parser.get_cache_info()
@@ -362,57 +358,6 @@ class WhereClauseFilter:
         self.executor.shutdown(wait=True)
 
 
-# Legacy compatibility functions
-class LegacyWhereClauseParser:
-    """
-    Legacy compatibility wrapper for the old WHERE clause parser.
-    
-    This provides the same interface as the old parser while using
-    the new secure implementation underneath.
-    """
-    
-    def __init__(self):
-        """Initialize the legacy parser."""
-        self.filter_service = WhereClauseFilter()
-    
-    @staticmethod
-    def parse(where_clause: str) -> List[Dict[str, Any]]:
-        """
-        Parse WHERE clause (legacy interface).
-        
-        This method maintains compatibility with the old interface
-        but uses the new parser internally.
-        """
-        # This is a simplified version that returns a basic structure
-        # for backwards compatibility
-        parser = WhereClauseFilter()
-        parse_result = parser.parser.parse(where_clause)
-        
-        if parse_result.success:
-            # Convert AST back to a simple structure for compatibility
-            return [{"parsed": True, "ast": parse_result.ast}]
-        else:
-            return []
-    
-    @staticmethod
-    def evaluate(data: Dict[str, Any], conditions: List[Dict[str, Any]]) -> bool:
-        """
-        Evaluate conditions against data (legacy interface).
-        
-        This method maintains compatibility but is deprecated.
-        Use WhereClauseFilter.filter_item() instead.
-        """
-        # For legacy compatibility, assume the first condition contains the AST
-        if not conditions:
-            return True
-        
-        condition = conditions[0]
-        if "ast" in condition and isinstance(condition["ast"], WhereClauseAST):
-            return condition["ast"].evaluate(data)
-        
-        return True
-
-
 # Global filter instance for convenience
 _global_filter = None
 
@@ -423,47 +368,6 @@ def get_global_filter() -> WhereClauseFilter:
     if _global_filter is None:
         _global_filter = WhereClauseFilter()
     return _global_filter
-
-
-def filter_data_with_where_clause(data: Dict[str, Any], 
-                                 where_clause: str,
-                                 passthrough_on_error: bool = True) -> bool:
-    """
-    Filter a single data item with a WHERE clause.
-    
-    Args:
-        data: The data item to filter
-        where_clause: The WHERE clause string
-        passthrough_on_error: Whether to pass through items that fail evaluation
-        
-    Returns:
-        True if the item matches or should be passed through, False otherwise
-    """
-    filter_service = get_global_filter()
-    result = filter_service.filter_item(data, where_clause)
-    
-    if result.success:
-        return result.matched
-    else:
-        return passthrough_on_error
-
-
-def filter_batch_with_where_clause(data_items: List[Dict[str, Any]], 
-                                  where_clause: str,
-                                  passthrough_on_error: bool = True) -> List[Dict[str, Any]]:
-    """
-    Filter a batch of data items with a WHERE clause.
-    
-    Args:
-        data_items: List of data items to filter
-        where_clause: The WHERE clause string
-        passthrough_on_error: Whether to pass through items that fail evaluation
-        
-    Returns:
-        List of items that match the WHERE clause
-    """
-    filter_service = get_global_filter()
-    return filter_service.filter_batch(data_items, where_clause, passthrough_on_error=passthrough_on_error)
 
 
 def evaluate_safe_skip_condition(condition_config: Dict[str, Any], 

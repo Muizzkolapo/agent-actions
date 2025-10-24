@@ -250,7 +250,7 @@ class FieldChunker:
                     # Add enhanced metadata if configured
                     if self._should_add_enhanced_metadata():
                         enhanced_metadata = self._create_enhanced_metadata(
-                            record, field_name, field_value, chunk, idx, len(chunks)
+                            record, field_name, field_value, chunk, idx
                         )
                         # Add chunk ID and parent ID fields to root level of record
                         chunk_id_field = self.chunk_metadata.get("chunk_id_field")
@@ -355,28 +355,13 @@ class FieldChunker:
             return chunks
         else:
             return chunks
-    
-    def _handle_chunking_error(self, record: Dict[str, Any], field_name: str, error_msg: str) -> List[Dict[str, Any]]:
-        """Handle chunking errors based on fallback strategy."""
-        if self.fallback_strategy == "preserve_original":
-            # Return original record with error metadata
-            error_record = record.copy()
-            error_record["chunk_info"] = {
-                "source_field": field_name,
-                "chunk_index": 1,
-                "total_chunks": 1,
-                "chunking_error": error_msg,
-                "fallback_applied": "preserve_original_on_error"
-            }
-            return [error_record]
-    
+
     def _should_add_enhanced_metadata(self) -> bool:
         """Check if enhanced metadata should be added."""
         return self.chunk_metadata.get("add_chunk_info", False)
     
-    def _create_enhanced_metadata(self, record: Dict[str, Any], field_name: str, 
-                                 field_value: str, chunk: str, chunk_index: int, 
-                                 total_chunks: int) -> Dict[str, Any]:
+    def _create_enhanced_metadata(self, record: Dict[str, Any], field_name: str,
+                                 field_value: str, chunk: str, chunk_index: int) -> Dict[str, Any]:
         """Create enhanced metadata for a chunk."""
         metadata = {}
         
