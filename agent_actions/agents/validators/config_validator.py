@@ -132,7 +132,6 @@ class ConfigValidator(BaseValidator):
     def _validate_single_agent_entry_logic(
         self,
         entry: Dict[str, Any],
-        entry_idx: int,
         cfg_ctx_name: str,
         proj_root: Optional[Path] = None,
     ) -> None:
@@ -373,8 +372,8 @@ class ConfigValidator(BaseValidator):
         if not agent_cfg_list:
             self.add_warning(f"Agent configuration list for '{agent_name_ctx}' is empty.")
             return
-        for i, entry in enumerate(agent_cfg_list):
-            self._validate_single_agent_entry_logic(entry, i, agent_name_ctx, proj_root)
+        for entry in agent_cfg_list:
+            self._validate_single_agent_entry_logic(entry, agent_name_ctx, proj_root)
 
     # -----------------------------------------------------------------------------------------
     # DEPENDENCY HELPERS (CI)

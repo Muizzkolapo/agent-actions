@@ -49,7 +49,7 @@ class StagingContentLoader:
         results = await asyncio.gather(*(process_one(item) for item in content))
         return self.content_generator.generate_from_json(results)
 
-    def _apply_field_chunking_if_enabled(self, processed_content, content_type="json", agent_config=None):
+    def _apply_field_chunking_if_enabled(self, processed_content, agent_config=None):
         """Apply field chunking if enabled and return processed content."""
         from agent_actions._internal.utils.field_chunking import FieldAnalyzer, FieldChunker
         from agent_actions.core.constants import CHUNK_CONFIG_KEY
@@ -98,7 +98,7 @@ class StagingContentLoader:
     def _process_json_content(self, content, file_path=None):
         """Process JSON content with field chunking support."""
         processed_content = self.json_loader.process(content, file_path)
-        chunked_content = self._apply_field_chunking_if_enabled(processed_content, "json")
+        chunked_content = self._apply_field_chunking_if_enabled(processed_content)
         return self.content_generator.generate_from_json(chunked_content)
         
     async def _process_tabular_content_async(self, content, agent_config=None, agent_name=None):
@@ -111,7 +111,7 @@ class StagingContentLoader:
     def _process_tabular_content(self, content, agent_config=None, agent_name=None):
         """Process tabular content with field chunking support."""
         processed_content = self.tabular_loader.process(content)
-        chunked_content = self._apply_field_chunking_if_enabled(processed_content, "tabular", agent_config)
+        chunked_content = self._apply_field_chunking_if_enabled(processed_content, agent_config)
         return self.content_generator.generate_from_tabular(chunked_content)
         
     async def _process_xml_content_async(self, content, agent_config=None, agent_name=None):
@@ -124,5 +124,5 @@ class StagingContentLoader:
     def _process_xml_content(self, content, agent_config=None, agent_name=None):
         """Process XML content with field chunking support."""
         processed_content = self.xml_loader.process(content)
-        chunked_content = self._apply_field_chunking_if_enabled(processed_content, "xml", agent_config)
+        chunked_content = self._apply_field_chunking_if_enabled(processed_content, agent_config)
         return self.content_generator.generate_from_xml(chunked_content)

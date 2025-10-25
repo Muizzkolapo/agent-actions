@@ -75,29 +75,25 @@ class BaseValidator(ABC):
 
     # --- Static Utility Helper Methods ---
     @staticmethod
-    def _ensure_path_exists(path: Path, path_description: Optional[str] = None) -> bool:
+    def _ensure_path_exists(path: Path) -> bool:
         """
         Checks if a given filesystem path exists.
 
         Args:
             path: The Path object to check.
-            path_description: An optional description of the path (e.g., "Schema file")
-                              for constructing more informative error messages by the caller.
 
         Returns:
             bool: True if the path exists, False otherwise.
         """
-        # The path_description is for the caller to use when creating an error message.
         return path.exists()
 
     @staticmethod
-    def _is_file(path: Path, path_description: Optional[str] = None) -> bool:
+    def _is_file(path: Path) -> bool:
         """
         Checks if a given filesystem path exists and is a file.
 
         Args:
             path: The Path object to check.
-            path_description: An optional description of the path.
 
         Returns:
             bool: True if the path exists and is a file, False otherwise.
@@ -105,13 +101,12 @@ class BaseValidator(ABC):
         return path.is_file()
 
     @staticmethod
-    def _is_directory(path: Path, path_description: Optional[str] = None) -> bool:
+    def _is_directory(path: Path) -> bool:
         """
         Checks if a given filesystem path exists and is a directory.
 
         Args:
             path: The Path object to check.
-            path_description: An optional description of the path.
 
         Returns:
             bool: True if the path exists and is a directory, False otherwise.
