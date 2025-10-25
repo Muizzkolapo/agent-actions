@@ -1,7 +1,6 @@
 """Tests for DataGenerator._build_namespaced_field_context() method."""
 import pytest
-from agent_actions.agents.generators.data_generator import DataGenerator
-
+from agent_actions.prompt_generation.data_generator import DataGenerator
 
 class TestBuildNamespacedFieldContext:
     """Test the _build_namespaced_field_context method."""
@@ -10,22 +9,10 @@ class TestBuildNamespacedFieldContext:
         """Test that fields are grouped by agent based on output signature."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {
-                        'field1': {},
-                        'field2': {}
-                    }
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}, 'field2': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'value1', 'field2': 'value2', 'field3': 'value3'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
         assert 'agent_A' in field_context
         assert field_context['agent_A'] == {'field1': 'value1', 'field2': 'value2'}
         assert 'field3' not in field_context['agent_A']
@@ -34,50 +21,21 @@ class TestBuildNamespacedFieldContext:
         """Test that observe fields are included in agent's namespace."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {
-                        'result': {}
-                    }
-                },
-                'observe': ['id', 'metadata']
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'result': {}}}, 'observe': ['id', 'metadata']}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'result': 'success', 'id': '123', 'metadata': {'key': 'value'}}
-
         field_context = generator._build_namespaced_field_context(contents)
-
         assert 'agent_A' in field_context
-        assert field_context['agent_A'] == {
-            'result': 'success',
-            'id': '123',
-            'metadata': {'key': 'value'}
-        }
+        assert field_context['agent_A'] == {'result': 'success', 'id': '123', 'metadata': {'key': 'value'}}
 
     def test_handles_drops_correctly(self):
         """Test that dropped fields are excluded from agent's namespace."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {
-                        'field1': {},
-                        'field2': {}
-                    }
-                },
-                'drops': ['field2']
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}, 'field2': {}}}, 'drops': ['field2']}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1', 'field2': 'v2'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
         assert 'agent_A' in field_context
         assert field_context['agent_A'] == {'field1': 'v1'}
         assert 'field2' not in field_context['agent_A']
@@ -86,51 +44,21 @@ class TestBuildNamespacedFieldContext:
         """Test that no namespacing happens when dependency_configs not provided."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {}  # Empty
-
+        dependency_configs = {}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1', 'field2': 'v2'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
-        # No agent namespaces should be created
         assert 'agent_A' not in field_context
-        # Only special contexts would be present (none in this case)
         assert field_context == {}
 
     def test_multiple_dependencies(self):
         """Test that multiple dependencies are correctly namespaced."""
         agent_config = {'dependencies': ['agent_A', 'agent_B']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {
-                        'field1': {},
-                        'field2': {}
-                    }
-                }
-            },
-            'agent_B': {
-                'output_schema': {
-                    'properties': {
-                        'field3': {},
-                        'field4': {}
-                    }
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}, 'field2': {}}}}, 'agent_B': {'output_schema': {'properties': {'field3': {}, 'field4': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
-        contents = {
-            'field1': 'v1',
-            'field2': 'v2',
-            'field3': 'v3',
-            'field4': 'v4'
-        }
-
+        contents = {'field1': 'v1', 'field2': 'v2', 'field3': 'v3', 'field4': 'v4'}
         field_context = generator._build_namespaced_field_context(contents)
-
         assert 'agent_A' in field_context
         assert field_context['agent_A'] == {'field1': 'v1', 'field2': 'v2'}
         assert 'agent_B' in field_context
@@ -140,23 +68,11 @@ class TestBuildNamespacedFieldContext:
         """Test that source content is preserved in field_context."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {'field1': {}}
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1'}
         source_content = {'text': 'source text'}
-
-        field_context = generator._build_namespaced_field_context(
-            contents,
-            source_content=source_content
-        )
-
+        field_context = generator._build_namespaced_field_context(contents, source_content=source_content)
         assert 'source' in field_context
         assert field_context['source'] == {'text': 'source text'}
         assert 'agent_A' in field_context
@@ -165,23 +81,11 @@ class TestBuildNamespacedFieldContext:
         """Test that loop context is preserved alongside agent namespaces."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {'field1': {}}
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1'}
         loop_context = {'index': 0, 'total': 5}
-
-        field_context = generator._build_namespaced_field_context(
-            contents,
-            loop_context=loop_context
-        )
-
+        field_context = generator._build_namespaced_field_context(contents, loop_context=loop_context)
         assert 'loop' in field_context
         assert field_context['loop'] == {'index': 0, 'total': 5}
         assert 'agent_A' in field_context
@@ -190,23 +94,11 @@ class TestBuildNamespacedFieldContext:
         """Test that workflow metadata is preserved alongside agent namespaces."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {'field1': {}}
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1'}
         workflow_metadata = {'name': 'test_workflow', 'version': '1.0'}
-
-        field_context = generator._build_namespaced_field_context(
-            contents,
-            workflow_metadata=workflow_metadata
-        )
-
+        field_context = generator._build_namespaced_field_context(contents, workflow_metadata=workflow_metadata)
         assert 'workflow' in field_context
         assert field_context['workflow'] == {'name': 'test_workflow', 'version': '1.0'}
         assert 'agent_A' in field_context
@@ -215,27 +107,13 @@ class TestBuildNamespacedFieldContext:
         """Test that all contexts (source, agent, loop, workflow) coexist properly."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {'field1': {}}
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1'}
         source_content = {'text': 'source'}
         loop_context = {'index': 0}
         workflow_metadata = {'name': 'test'}
-
-        field_context = generator._build_namespaced_field_context(
-            contents,
-            source_content=source_content,
-            loop_context=loop_context,
-            workflow_metadata=workflow_metadata
-        )
-
+        field_context = generator._build_namespaced_field_context(contents, source_content=source_content, loop_context=loop_context, workflow_metadata=workflow_metadata)
         assert 'source' in field_context
         assert 'agent_A' in field_context
         assert 'loop' in field_context
@@ -246,26 +124,11 @@ class TestBuildNamespacedFieldContext:
         """Test that missing fields from dependency signature are gracefully skipped."""
         agent_config = {'dependencies': ['agent_A']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {
-                        'field1': {},
-                        'field2': {},
-                        'field3': {}
-                    }
-                }
-            }
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}, 'field2': {}, 'field3': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
-        # Only some fields present
         contents = {'field1': 'v1', 'field3': 'v3'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
         assert 'agent_A' in field_context
-        # Only fields present in contents should be included
         assert field_context['agent_A'] == {'field1': 'v1', 'field3': 'v3'}
         assert 'field2' not in field_context['agent_A']
 
@@ -274,33 +137,18 @@ class TestBuildNamespacedFieldContext:
         agent_config = {'dependencies': []}
         agent_name = 'test_agent'
         dependency_configs = {}
-
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
-        # Should return empty dict (no dependencies to namespace)
         assert field_context == {}
 
     def test_dependency_not_in_configs(self):
         """Test when dependency is declared but config not available."""
         agent_config = {'dependencies': ['agent_A', 'agent_B']}
         agent_name = 'test_agent'
-        dependency_configs = {
-            'agent_A': {
-                'output_schema': {
-                    'properties': {'field1': {}}
-                }
-            }
-            # agent_B config missing
-        }
-
+        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}}}}}
         generator = DataGenerator(agent_config, agent_name, dependency_configs)
         contents = {'field1': 'v1', 'field2': 'v2'}
-
         field_context = generator._build_namespaced_field_context(contents)
-
-        # Only agent_A should be namespaced
         assert 'agent_A' in field_context
         assert 'agent_B' not in field_context

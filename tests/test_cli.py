@@ -221,7 +221,7 @@ class TestCLIKeyboardInterrupt:
 class TestCLICommandDispatch:
     """Test CLI command routing and dispatch."""
 
-    @patch('agent_actions.tasks.init.init')
+    @patch('agent_actions.cli.init.init')
     def test_dispatch_routes_to_init_with_correct_args(self, mock_init, cli_runner):
         """Test dispatch routes to init command with correct arguments."""
         # Configure mock to avoid actual execution
@@ -232,7 +232,7 @@ class TestCLICommandDispatch:
         # Should route to init command (help should work)
         assert result.exit_code == 0 or 'Usage:' in result.output
 
-    @patch('agent_actions.tasks.compile.render')
+    @patch('agent_actions.cli.compile.render')
     def test_dispatch_routes_to_compile_with_correct_args(self, mock_render, cli_runner):
         """Test dispatch routes to compile/render command with correct arguments."""
         # Configure mock to avoid actual execution
@@ -243,7 +243,7 @@ class TestCLICommandDispatch:
         # Should route to render command (help should work)
         assert result.exit_code == 0 or 'Usage:' in result.output
 
-    @patch('agent_actions.tasks.run.run')
+    @patch('agent_actions.cli.run.run')
     def test_dispatch_routes_to_run_with_correct_args(self, mock_run, cli_runner):
         """Test dispatch routes to run command with correct arguments."""
         # Configure mock to avoid actual execution
@@ -254,7 +254,7 @@ class TestCLICommandDispatch:
         # Should route to run command (help should work)
         assert result.exit_code == 0 or 'Usage:' in result.output
 
-    @patch('agent_actions.tasks.status.status')
+    @patch('agent_actions.cli.status.status')
     def test_dispatch_routes_to_status_with_correct_args(self, mock_status, cli_runner):
         """Test dispatch routes to status command with correct arguments."""
         # Configure mock to avoid actual execution
@@ -265,7 +265,7 @@ class TestCLICommandDispatch:
         # Should route to status command (help should work)
         assert result.exit_code == 0 or 'Usage:' in result.output
 
-    @patch('agent_actions.tasks.batch.batch')
+    @patch('agent_actions.llm_invocation.batch.batch.batch')
     def test_dispatch_routes_to_batch_with_correct_args(self, mock_batch, cli_runner):
         """Test dispatch routes to batch command with correct arguments."""
         # Configure mock to avoid actual execution

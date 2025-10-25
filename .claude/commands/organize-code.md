@@ -7,7 +7,7 @@ Analyze the codebase structure, identify processing stages, and detect organizat
 This command uses the enhanced Code Organizer tool to:
 1. **Analyze directory structure** and module organization
 2. **Identify processing stages** in the agent pipeline (Input → Pre-processing → LLM → Output)
-3. **Detect architectural layers** (_internal, core, agents, integrations, tasks, cli, artifacts)
+3. **Detect architectural layers** using the 13-stage architecture
 4. **Find organizational issues** (circular dependencies, large modules, missing `__init__.py` files)
 5. **Generate recommendations** for improving code organization
 
@@ -30,69 +30,68 @@ The tool identifies 13 processing stages in the agent pipeline:
 
 ### 1️⃣ Input Loading & Extraction
 **Purpose:** Load and extract data from various sources
-**Modules:** `agents/extractors/`, `file_reader`, loaders
+**Modules:** `input_loading/`, `file_reader`, loaders
 **Keywords:** loader, extractor, reader, load, extract, read
 
 ### 2️⃣ Pre-Processing & Data Preparation
 **Purpose:** Transform, filter, chunk data before LLM
-**Modules:** `staging/`, `filters/`, `field_chunking`
+**Modules:** `preprocessing/`, `staging`, `filters`, `field_chunking`
 **Keywords:** staging, filter, chunk, transform, prepare
 
-### 3️⃣ Pre-LLM Validation
-**Purpose:** Validate inputs, prompts, configs
-**Modules:** `agents/validators/`, validation logic
+### 3️⃣ Validation
+**Purpose:** Validate inputs, prompts, configs, and outputs
+**Modules:** `validation/`, validation logic
 **Keywords:** validator, validate, validation, check
 
 ### 4️⃣ Prompt Generation & Context Building
 **Purpose:** Build prompts, manage context, apply templates
-**Modules:** `agents/generators/`, `render_workflow`
+**Modules:** `prompt_generation/`, `render_workflow`
 **Keywords:** generator, prompt, template, render, context
 
 ### 5️⃣ LLM Invocation & Provider Integration
-**Purpose:** Call LLM providers for real-time processing
-**Modules:** `integrations/providers/`, vendor handlers
-**Keywords:** provider, vendor, handler, llm, model
-
-### 5️⃣B Batch Processing & Queue Management
-**Purpose:** Manage batch operations, queue submissions, async result polling
-**Modules:** `tasks/services/batch_service.py`, `tasks/batch.py`, provider batch APIs
-**Keywords:** batch, batch_service, queue, async, poll, submit, result, bulk
-**Note:** Cross-cutting concern that spans multiple stages but primarily focused on bulk LLM processing
+**Purpose:** Call LLM providers for real-time and batch processing
+**Modules:** `llm_invocation/`, `llm_invocation/batch/`, vendor handlers
+**Keywords:** provider, vendor, handler, llm, model, batch
 
 ### 6️⃣ Response Processing & Transformation
 **Purpose:** Process LLM responses, parse JSON, transform outputs
-**Modules:** `response_transformer`, `interceptors/`
+**Modules:** `response_processing/`, response transformers, interceptors
 **Keywords:** transformer, response, interceptor, strategy, parse
 
 ### 7️⃣ Post-Processing & Output Generation
 **Purpose:** Generate final outputs, apply post-processing
-**Modules:** `target_generator`, `output_handler`, `file_writer`
+**Modules:** `postprocessing/`, `target_generator`, `output_handler`
 **Keywords:** target, output, writer, write, generate
 
 ### 8️⃣ Workflow Orchestration & Execution
 **Purpose:** Manage workflow execution, dependencies
-**Modules:** `core/graph/`, `runtime/`, `agent_workflow`
+**Modules:** `orchestration/`, `agent_workflow`, `agent_runner`
 **Keywords:** workflow, runtime, runner, orchestrate, execute
 
 ### 9️⃣ State Management & Context
 **Purpose:** Manage application state, context, artifacts
-**Modules:** `artifacts/`, `lineage/`, `context/`
-**Keywords:** context, artifact, state, lineage, signature
+**Modules:** `state_management/`, `artifacts`, `manifest`, `path_manager`
+**Keywords:** context, artifact, state, manifest, path_manager
 
 ### 🔟 Configuration & Schema Management
-**Purpose:** Parse and manage configuration, schemas
-**Modules:** `core/parser/`, `contracts/`, `migration/`
-**Keywords:** parser, config, schema, contract, migration
+**Purpose:** Parse and manage configuration, schemas, DI
+**Modules:** `configuration/`, DI configurator, bootstrap
+**Keywords:** config, schema, bootstrap, di_configurator, container
 
 ### 1️⃣1️⃣ CLI & User Interface
 **Purpose:** Command-line interface and user interactions
-**Modules:** `cli/`, `tasks/`
-**Keywords:** cli, command, task, interface
+**Modules:** `cli/`, command handlers
+**Keywords:** cli, command, interface
 
 ### 1️⃣2️⃣ Utilities & Common Functions
 **Purpose:** Shared utilities, helpers, common functions
-**Modules:** `utils/`, `common/`, helpers
-**Keywords:** utils, helper, common, utility
+**Modules:** `utilities/`, helpers
+**Keywords:** utils, helper, utility
+
+### 1️⃣3️⃣ Shared Components
+**Purpose:** Shared types, exceptions, and base classes
+**Modules:** `shared/`, exceptions
+**Keywords:** exception, error, base, shared
 
 ### 1️⃣3️⃣ Testing & Quality Assurance
 **Purpose:** Test suites, fixtures, mocks, and quality checks

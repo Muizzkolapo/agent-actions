@@ -1,0 +1,360 @@
+"""Module for processing target content with specialized components."""
+from typing import Dict, List, Tuple, Optional
+import asyncio
+from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.configuration.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
+from agent_actions.llm_invocation.batch.batch_service import BatchService
+from agent_actions.orchestration.dependency_injection import registry
+from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
+from agent_actions.shared.exceptions import DependencyError
+
+@registry.register_processor('target_content')
+class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
+    """Orchestrates the target content processing workflow."""
+
+    def __init__(self, agent_config: Dict, agent_name: str, idx: int, source_loader: IDataLoader, data_generator: IGenerator, data_processor: IDataProcessor, batch_service: BatchService, concurrency_limit: Optional[int]=None):
+        """
+        Initialize the target content processor with injected dependencies.
+        
+        Args:
+            agent_config: Configuration for the agent
+            agent_name: Name of the agent
+            idx: Index of the config being processed
+            source_loader: Required data loader service (must be provided)
+            data_generator: Required data generator service (must be provided)
+            data_processor: Required data processor service (must be provided)
+            batch_service: Required batch service (must be provided)
+            concurrency_limit: Maximum number of concurrent operations
+            
+        Raises:
+            DependencyError: If any required dependency is not provided
+        """
+        super().__init__(concurrency_limit)
+        self.agent_config = agent_config
+        self.agent_name = agent_name
+        self.idx = idx
+        if source_loader is None:
+            raise DependencyError('TargetContentProcessor', 'source_loader')
+        if data_generator is None:
+            raise DependencyError('TargetContentProcessor', 'data_generator')
+        if data_processor is None:
+            raise DependencyError('TargetContentProcessor', 'data_processor')
+        if batch_service is None:
+            raise DependencyError('TargetContentProcessor', 'batch_service')
+        self.source_loader = source_loader
+        self.data_generator = data_generator
+        self.data_processor = data_processor
+        self.batch_service = batch_service
+
+    def _get_config_value(self, key: str, default=None):
+        """Get configuration value, supporting both AgentConfig models and dictionaries."""
+        if hasattr(self.agent_config, key):
+            return getattr(self.agent_config, key, default)
+        elif hasattr(self.agent_config, 'get'):
+            return self.agent_config.get(key, default)
+        else:
+            return default
+
+    async def process_async(self, data: List[Dict], file_path: str, output_directory: str=None) -> List[Dict]:
+        """
+        Async version: process a list of data items in parallel using proper async patterns.
+        """
+        if self._get_config_value('run_mode') == 'batch':
+            source_file_info = self._extract_source_file_info(data)
+            result = await asyncio.to_thread(self.batch_service.submit_batch_job_from_data, self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
+            return []
+        try:
+            source_data = await self._load_source_data_async(file_path)
+            results = await self.process_items_parallel(data, self._process_single_item_async, source_data)
+            processed_data = []
+            for result in results:
+                processed_data.extend(result)
+            return processed_data
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError(f'Failed to process content: {str(e)}', cause=e)
+
+    def process(self, data: List[Dict], file_path: str, output_directory: str=None) -> List[Dict]:
+        """
+        Process a list of data items with WHERE clause filtering support.
+        
+        Args:
+            data: List of data items to process
+            file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
+            
+        Returns:
+            List of processed data items
+            
+        Raises:
+            RuntimeError: If processing fails
+        """
+        if self._get_config_value('run_mode') == 'batch':
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
+            return []
+        try:
+            source_data = self.source_loader.load_source_data(file_path)
+            filtered_data = self._apply_where_clause_filtering(data)
+            processed_data = []
+            for idx, item in enumerate(filtered_data):
+                try:
+                    processed_item = self._process_single_item(item, source_data, record_index=idx)
+                    processed_data.extend(processed_item)
+                except Exception as e:
+                    source_guid = item.get('source_guid', 'unknown')
+                    from agent_actions.shared.exceptions import ProcessingError
+                    raise ProcessingError('Failed to process item', context={'source_guid': source_guid, 'agent_name': self.agent_name}, cause=e)
+            return processed_data
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError(f'Failed to process content: {str(e)}', cause=e)
+
+    def process_for_side_output(self, data: List[Dict], file_path: str, output_directory: str=None) -> Tuple[List[Dict], List[Dict]]:
+        """
+        Process data and separate into main and side outputs.
+        
+        Args:
+            data: List of data items to process
+            file_path: Path to the file containing the data
+            output_directory: Directory where batch files should be created
+            
+        Returns:
+            Tuple of (main_output, side_output)
+            
+        Raises:
+            RuntimeError: If processing fails
+        """
+        if self._get_config_value('run_mode') == 'batch':
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return self.data_processor.separate_side_output(result['data'])
+            return ([], [])
+        try:
+            source_data = self.source_loader.load_source_data(file_path)
+            all_processed_items = []
+            for item in data:
+                try:
+                    processed_item = self._process_single_item(item, source_data)
+                    all_processed_items.extend(processed_item)
+                except Exception as e:
+                    source_guid = item.get('source_guid', 'unknown')
+                    from agent_actions.shared.exceptions import ProcessingError
+                    raise ProcessingError('Failed to process item', context={'source_guid': source_guid, 'agent_name': self.agent_name}, cause=e)
+            return self.data_processor.separate_side_output(all_processed_items)
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError(f'Failed to process for side output: {str(e)}', cause=e)
+
+    def process_file_level(self, data: List[Dict], file_path: str=None, output_directory: str=None) -> List[Dict]:
+        """
+        Process data at the file level.
+
+        Args:
+            data: List of data items to process
+            file_path: Path to the file containing the data (needed for source_data loading)
+            output_directory: Directory where batch files should be created
+
+        Returns:
+            Processed data
+
+        Raises:
+            RuntimeError: If processing fails
+        """
+        if self._get_config_value('run_mode') == 'batch':
+            source_file_info = self._extract_source_file_info(data)
+            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            if isinstance(result, dict) and result.get('type') == 'passthrough':
+                return result['data']
+            return []
+        try:
+            source_guid = data[0]['source_guid'] if data else None
+            source_data = self.source_loader.load_source_data(file_path) if file_path else []
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid) if source_guid else None
+            generated_data, _ = self.data_generator.create_agent_with_data(data, source_content)
+            model_vendor = (self._get_config_value('model_vendor') or '').lower()
+            granularity = (self._get_config_value('granularity') or 'record').lower()
+            if model_vendor == 'tool' and granularity == 'file':
+                if isinstance(generated_data, list):
+                    return generated_data
+                else:
+                    return [generated_data]
+            contents = data[0]['content'] if data else {}
+            return self.data_processor.process_item(contents, generated_data, source_guid)
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError(f'Failed to process at file level: {str(e)}', cause=e)
+
+    async def _load_source_data_async(self, file_path: str) -> List[Dict]:
+        """
+        Load source data asynchronously.
+        
+        Args:
+            file_path: Path to the file containing processed data
+            
+        Returns:
+            List of source data items
+        """
+        if hasattr(self.source_loader, 'load_source_data_async'):
+            return await self.source_loader.load_source_data_async(file_path)
+        else:
+            return await asyncio.to_thread(self.source_loader.load_source_data, file_path)
+
+    async def _process_single_item_async(self, item: Dict, source_data: List[Dict]) -> List[Dict]:
+        """
+        Process a single data item asynchronously using proper async patterns.
+        
+        Args:
+            item: Data item to process
+            source_data: Source data for reference
+            
+        Returns:
+            Processed data item
+            
+        Raises:
+            ValueError: If item processing fails
+        """
+        try:
+            contents, source_guid = (item['content'], item['source_guid'])
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            if hasattr(self.data_generator, 'create_agent_with_data_async'):
+                generated_data, executed = await self.data_generator.create_agent_with_data_async(contents, source_content)
+            else:
+                generated_data, executed = await asyncio.to_thread(self.data_generator.create_agent_with_data, contents, source_content)
+            if executed:
+                if hasattr(self.data_processor, 'process_item_async'):
+                    processed = await self.data_processor.process_item_async(contents, generated_data, source_guid)
+                else:
+                    processed = await asyncio.to_thread(self.data_processor.process_item, contents, generated_data, source_guid)
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                for i, obj in enumerate(processed):
+                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    processed[i] = obj
+            else:
+                if generated_data is None:
+                    return []
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                lineage = ProcessorUtils.build_lineage(item, node_id)
+                processed = [ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)]
+            return processed
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError('Failed to process item', context={'agent_name': self.agent_name, 'item_source_guid': item.get('source_guid', 'unknown')}, cause=e)
+
+    def _extract_source_file_info(self, data: List[Dict]) -> Dict:
+        """
+        Extract source file information from aggregated data.
+        Groups data by source_guid to determine which items belong to which source files.
+        """
+        source_file_info = {}
+        source_groups = {}
+        for item in data:
+            source_guid = item.get('source_guid')
+            if source_guid:
+                if source_guid not in source_groups:
+                    source_groups[source_guid] = []
+                source_groups[source_guid].append(item)
+        try:
+            if len(source_groups) == 1:
+                source_file_info['single_file'] = True
+                source_file_info['source_guids'] = list(source_groups.keys())
+            else:
+                source_file_info['multiple_files'] = True
+                source_file_info['source_guid_groups'] = {guid: len(items) for guid, items in source_groups.items()}
+        except Exception:
+            source_file_info['extracted'] = True
+            source_file_info['source_groups_count'] = len(source_groups)
+        return source_file_info
+
+    def _apply_where_clause_filtering(self, data: List[Dict]) -> List[Dict]:
+        """
+        Apply WHERE clause filtering at item level if configured.
+        
+        Args:
+            data: List of data items to filter
+            
+        Returns:
+            Filtered list of data items
+        """
+        where_clause_config = self._get_config_value('where_clause')
+        if not where_clause_config:
+            return data
+        scope = where_clause_config.scope if hasattr(where_clause_config, 'scope') else where_clause_config.get('scope')
+        if scope != 'item':
+            return data
+        try:
+            from agent_actions.response_processing.where_parser import get_global_filter
+            filter_service = get_global_filter()
+            filtered_data = []
+            for item in data:
+                content = item.get('content', item)
+                clause = where_clause_config.clause if hasattr(where_clause_config, 'clause') else where_clause_config['clause']
+                filter_result = filter_service.filter_item(content, clause, timeout=self._get_config_value('max_execution_time', 5))
+                behavior = where_clause_config.behavior if hasattr(where_clause_config, 'behavior') else where_clause_config.get('behavior', 'filter')
+                if filter_result.success:
+                    if behavior == 'filter':
+                        if filter_result.matched:
+                            filtered_data.append(item)
+                    elif behavior == 'skip':
+                        filtered_data.append(item)
+                    elif filter_result.matched:
+                        filtered_data.append(item)
+                else:
+                    passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+                    if passthrough_on_error:
+                        filtered_data.append(item)
+            return filtered_data
+        except Exception as e:
+            passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+            if passthrough_on_error:
+                return data
+            else:
+                from agent_actions.shared.exceptions import ValidationError
+                raise ValidationError(f'WHERE clause filtering failed: {str(e)}', cause=e)
+
+    def _process_single_item(self, item: Dict, source_data: List[Dict], record_index: Optional[int]=None) -> List[Dict]:
+        """
+        Process a single data item synchronously (kept for backward compatibility).
+        
+        Args:
+            item: Data item to process
+            source_data: Source data for reference
+            
+        Returns:
+            Processed data item
+            
+        Raises:
+            ValueError: If item processing fails
+        """
+        try:
+            contents, source_guid = (item['content'], item['source_guid'])
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            generated_data, executed = self.data_generator.create_agent_with_data(contents, source_content)
+            if executed:
+                processed = self.data_processor.process_item(contents, generated_data, source_guid)
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                for i, obj in enumerate(processed):
+                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
+                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    processed[i] = obj
+            else:
+                if generated_data is None:
+                    return []
+                node_id = ProcessorUtils.generate_node_id(self.idx)
+                lineage = ProcessorUtils.build_lineage(item, node_id)
+                processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                processed_item = ProcessorUtils.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
+                processed = [processed_item]
+            return processed
+        except Exception as e:
+            from agent_actions.shared.exceptions import ProcessingError
+            raise ProcessingError('Failed to process item', context={'agent_name': self.agent_name, 'item_source_guid': item.get('source_guid', 'unknown')}, cause=e)

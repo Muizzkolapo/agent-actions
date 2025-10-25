@@ -1,13 +1,15 @@
 from functools import wraps
 from typing import Callable, Type
-from agent_actions.core.exceptions import ConfigurationError
+from agent_actions.shared.exceptions import ConfigurationError
 
-def as_validation_error(exc_cls: Type[ConfigurationError] = ConfigurationError) -> Callable:
+def as_validation_error(exc_cls: Type[ConfigurationError]=ConfigurationError) -> Callable:
     """
     Any exception inside the wrapped function is re-raised as `exc_cls`
     **from None**, so Python prints zero traceback / file paths.
     """
+
     def _decorator(fn: Callable):
+
         @wraps(fn)
         def _wrapper(*a, **k):
             try:
