@@ -255,31 +255,6 @@ class ConfigValidationError(ConfigurationError):
         super().__init__(message, context=ctx, cause=cause)
 
 
-class EnvironmentConfigError(ConfigurationError):
-    """Raised when environment variable configuration is invalid or missing."""
-
-    def __init__(
-        self,
-        var_name: str,
-        reason: str = "not set",
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize EnvironmentConfigError.
-
-        Args:
-            var_name: Name of the environment variable
-            reason: Why the variable is invalid/missing
-            context: Additional context dict (merged with var_name/reason)
-            cause: The underlying exception that caused this error
-        """
-        message = f"Environment variable '{var_name}' {reason}"
-        ctx = context or {}
-        ctx.update({'var_name': var_name, 'reason': reason})
-        super().__init__(message, context=ctx, cause=cause)
-
-
 class DuplicateFunctionError(ConfigurationError):
     """Raised when duplicate @udf_tool function names detected."""
 
@@ -376,35 +351,6 @@ class UDFLoadError(ConfigurationError):
         super().__init__(message, context=ctx, cause=cause)
 
 
-class InvalidImplSyntaxError(ConfigurationError):
-    """Raised when old module.path syntax used instead of @udf_tool decorator."""
-
-    def __init__(
-        self,
-        old_syntax: str,
-        example: str,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize InvalidImplSyntaxError.
-
-        Args:
-            old_syntax: The invalid module.path syntax that was used
-            example: Suggested new syntax (function name only)
-            context: Additional context dict
-            cause: The underlying exception that caused this error
-        """
-        message = f"Module path syntax no longer supported: '{old_syntax}'"
-        ctx = context or {}
-        ctx.update({
-            'old_syntax': old_syntax,
-            'fix': 'Use @udf_tool decorator and function name only',
-            'example': example
-        })
-        super().__init__(message, context=ctx, cause=cause)
-
-
 # Processing-related exceptions
 class ProcessingError(AgentActionsException):
     """Base exception for processing operations."""
@@ -414,31 +360,6 @@ class ProcessingError(AgentActionsException):
 class ValidationError(ProcessingError):
     """Raised when data validation fails."""
     pass
-
-
-class SchemaValidationError(ValidationError):
-    """Raised when schema validation fails."""
-
-    def __init__(
-        self,
-        schema_type: str,
-        validation_errors: Any,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize SchemaValidationError.
-
-        Args:
-            schema_type: Type/name of the schema that failed
-            validation_errors: The validation errors encountered
-            context: Additional context dict (merged with schema_type/errors)
-            cause: The underlying exception that caused this error
-        """
-        message = f"Schema validation failed for {schema_type}: {validation_errors}"
-        ctx = context or {}
-        ctx.update({'schema_type': schema_type, 'validation_errors': str(validation_errors)})
-        super().__init__(message, context=ctx, cause=cause)
 
 
 class PromptValidationError(ValidationError):
@@ -605,28 +526,6 @@ class VendorAPIError(ExternalServiceError):
         super().__init__(vendor, reason, context=ctx, cause=cause)
 
 
-class OpenAIError(VendorAPIError):
-    """Specific error for OpenAI API failures."""
-
-    def __init__(
-        self,
-        endpoint: str,
-        status_code: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize OpenAIError.
-
-        Args:
-            endpoint: API endpoint that was called
-            status_code: HTTP status code if applicable
-            context: Additional context dict (merged with vendor/endpoint/status_code)
-            cause: The underlying exception that caused this error
-        """
-        super().__init__("OpenAI", endpoint, status_code=status_code, context=context, cause=cause)
-
-
 class AnthropicError(VendorAPIError):
     """Specific error for Anthropic API failures."""
 
@@ -647,79 +546,6 @@ class AnthropicError(VendorAPIError):
             cause: The underlying exception that caused this error
         """
         super().__init__("Anthropic", endpoint, status_code=status_code, context=context, cause=cause)
-
-
-class GeminiError(VendorAPIError):
-    """Specific error for Google Gemini API failures."""
-
-    def __init__(
-        self,
-        endpoint: str,
-        status_code: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize GeminiError.
-
-        Args:
-            endpoint: API endpoint that was called
-            status_code: HTTP status code if applicable
-            context: Additional context dict (merged with vendor/endpoint/status_code)
-            cause: The underlying exception that caused this error
-        """
-        super().__init__("Gemini", endpoint, status_code=status_code, context=context, cause=cause)
-
-
-class NetworkError(ExternalServiceError):
-    """Raised when network-related errors occur."""
-
-    def __init__(
-        self,
-        operation: str,
-        reason: str,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize NetworkError.
-
-        Args:
-            operation: Network operation that failed
-            reason: Reason for the network failure
-            context: Additional context dict (merged with operation/reason)
-            cause: The underlying exception that caused this error
-        """
-        ctx = context or {}
-        ctx.update({'operation': operation, 'reason': reason})
-        super().__init__("Network", f"{operation} failed: {reason}", context=ctx, cause=cause)
-
-
-class RateLimitError(ExternalServiceError):
-    """Raised when API rate limits are exceeded."""
-
-    def __init__(
-        self,
-        service: str,
-        retry_after: Optional[int] = None,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize RateLimitError.
-
-        Args:
-            service: Name of the service with rate limit
-            retry_after: Number of seconds to wait before retrying
-            context: Additional context dict (merged with service/retry_after)
-            cause: The underlying exception that caused this error
-        """
-        reason = "Rate limit exceeded"
-        if retry_after:
-            reason += f", retry after {retry_after} seconds"
-        ctx = context or {}
-        ctx.update({'service': service, 'retry_after': retry_after})
-        super().__init__(service, reason, context=ctx, cause=cause)
 
 
 # Resource-related exceptions
@@ -932,33 +758,6 @@ class TemplateRenderingError(OperationalError):
             message = f"Failed to render template '{template_name}': {reason}"
             ctx = context or {}
             ctx.update({'template_name': template_name, 'reason': reason})
-        super().__init__(message, context=ctx, cause=cause)
-
-
-class SerializationError(OperationalError):
-    """Raised when data serialization/deserialization fails."""
-
-    def __init__(
-        self,
-        operation: str,
-        data_type: str,
-        reason: str,
-        context: Optional[Dict[str, Any]] = None,
-        *,
-        cause: Optional[Exception] = None
-    ) -> None:
-        """Initialize SerializationError.
-
-        Args:
-            operation: Serialization operation that failed (e.g., 'encode', 'decode')
-            data_type: Type of data being serialized
-            reason: Reason for the serialization failure
-            context: Additional context dict (merged with operation/data_type/reason)
-            cause: The underlying exception that caused this error
-        """
-        message = f"Serialization {operation} failed for {data_type}: {reason}"
-        ctx = context or {}
-        ctx.update({'operation': operation, 'data_type': data_type, 'reason': reason})
         super().__init__(message, context=ctx, cause=cause)
 
 

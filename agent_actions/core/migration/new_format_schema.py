@@ -1,7 +1,7 @@
 """Schema definitions for the new workflow format."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Dict, Any, Literal, Union
+from typing import List, Optional, Dict, Any, Union
 from enum import Enum
 
 

@@ -5,10 +5,9 @@ This module provides a lightweight dependency injection container and registry
 for managing processor dependencies and improving testability.
 """
 
-from typing import Dict, Type, Any, TypeVar, Callable, Optional, get_type_hints
+from typing import Dict, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
-from abc import ABC, abstractmethod
 
 T = TypeVar('T')
 

@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional, Literal
+from typing import Optional
 from enum import Enum
 
 

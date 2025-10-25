@@ -1,9 +1,8 @@
 """Pipeline configuration models for workflow and stage management."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Dict, Any, Optional, List, Literal, Union, Callable
+from typing import Dict, Any, Optional, List, Literal
 from enum import Enum
-from datetime import datetime
 
 
 class ExecutionMode(str, Enum):

@@ -1,7 +1,7 @@
 """Base async processor implementation with proper async patterns."""
 import asyncio
-from abc import ABC, abstractmethod
-from typing import List, Dict, Optional, Any, Tuple
+from abc import abstractmethod
+from typing import List, Optional, Any
 from .interfaces import ProcessingMode, IAsyncCapable
 
 
