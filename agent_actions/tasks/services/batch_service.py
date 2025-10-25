@@ -5,18 +5,15 @@ from pathlib import Path
 import yaml
 from typing import Optional, Dict, Any, List, Set
 from agent_actions.agents.handlers.agent_handlers import AgentManager
-from agent_actions.agents.handlers.config_handler import ConfigManager
 from agent_actions.integrations.loaders.batch_data_loader import BatchDataLoader
 from agent_actions.agents.handlers.prompt_handler import PromptLoader
 from agent_actions.agents.transformers.prompt_utils import PromptUtils
-from agent_actions.agents.handlers.schema_handler import SchemaLoader
-from agent_actions.core.parser.schema_change import compile_unified_schema
 from agent_actions.agents.handlers.file_writer import FileWriter
 from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, OBSERVE_KEY, JSON_MODE_KEY
+from agent_actions.core.constants import PROMPT_KEY, OBSERVE_KEY, JSON_MODE_KEY
 from agent_actions.core.utils.processor_helpers import apply_drops
 from agent_actions.core.tooling import execute_user_defined_function
-from agent_actions.core.parser.where_parser import get_global_filter, evaluate_safe_skip_condition
+from agent_actions.core.parser.where_parser import get_global_filter
 from agent_actions.core.utils.path_utils import (
     ensure_directory_exists,
     create_side_output_directory,
@@ -26,8 +23,7 @@ from agent_actions.core.utils.processor_utils import ProcessorUtils
 from agent_actions.core.parser.where_parser import WhereClauseParser
 
 from agent_actions.core.graph.dependency_injection import registry
-from agent_actions.integrations.providers.base import BatchProvider, BatchTask, BatchResult
-from agent_actions.integrations.providers.openai.provider import OpenAIBatchProvider
+from agent_actions.integrations.providers.base import BatchProvider, BatchResult
 from agent_actions.integrations.providers.factory import BatchProviderFactory
 
 
@@ -343,33 +339,6 @@ class BatchService:
 
         return max_retry_depth
 
-    def _process_batch(self, *args, **kwargs):
-        """Placeholder batch processing method for testing/mocking."""
-        return None
-
-    def _should_process_item(self, item_data: dict, agent_config: dict) -> bool:
-        """Enhanced item filtering with WHERE clause support"""
-
-        if agent_config.get("conditional_clause"):
-            try:
-                if not execute_user_defined_function(
-                    agent_config["conditional_clause"], item_data
-                ):
-                    return False
-            except Exception as e:
-                logger.warning(f"Error in conditional_clause: {e}")
-
-        where_config = agent_config.get("where_clause")
-        if where_config and where_config.get("scope") == "item":
-            try:
-                conditions = self.where_parser.parse(where_config["clause"])
-                return self.where_parser.evaluate(item_data, conditions)
-            except Exception as e:
-                logger.warning(f"Error in WHERE clause evaluation: {e}")
-                return where_config.get("passthrough_on_empty", True)
-
-        return True
-    
     @staticmethod
     def _separate_side_output(items):
         """Split processed items into main and side output collections."""
@@ -1428,144 +1397,6 @@ class BatchService:
         
         return processed_data
 
-    def check_and_process_completed_batches(self, output_directory: str, base_directory: str):
-        """
-        Check for completed batch jobs and process their results into workflow output.
-        
-        Args:
-            output_directory: The target output directory
-            base_directory: The base directory for relative paths
-            
-        Returns:
-            List of processed file paths
-        """
-        processed_files = []
-        
-        # Look for batch placeholder files in the output directory
-        placeholder_files = list(Path(output_directory).rglob("*.json"))
-        
-        for placeholder_file in placeholder_files:
-            try:
-                with open(placeholder_file, 'r') as f:
-                    placeholder_data = json.load(f)
-                
-                # Check if this is a batch placeholder
-                if (isinstance(placeholder_data, dict) and 
-                    placeholder_data.get('status') == 'submitted' and
-                    'batch_job_id' in placeholder_data):
-                    
-                    batch_id = placeholder_data['batch_job_id']
-                    
-                    # Check if batch is completed
-                    if self.check_status(batch_id, str(output_directory)) == 'completed':
-                        # Process the batch results
-                        original_file_path = placeholder_file
-                        processed_file = self.process_batch_results_to_workflow_output(
-                            batch_id, 
-                            output_directory, 
-                            base_directory, 
-                            str(original_file_path)
-                        )
-                        processed_files.append(processed_file)
-                        
-            except Exception as e:
-                print(f"Warning: Failed to process batch placeholder {placeholder_file}: {e}")
-                continue
-        
-        return processed_files
-
-    def process_batch_results_to_workflow_output_direct(self, batch_id: str, output_directory: str, agent_config: Optional[Dict[str, Any]] = None):
-        """
-        Retrieves, processes, and saves batch results directly without a placeholder.
-        Uses the locally saved results file from retrieve_results.
-
-        Args:
-            batch_id: The batch job ID
-            output_directory: The target output directory
-            agent_config: Agent configuration (optional, enables automatic retry on missing records)
-        """
-        try:
-            # Get the appropriate provider for this batch ID
-            provider = self._get_provider_for_batch_id(batch_id, output_directory)
-
-            # Load context map and registry for validation
-            batch_dir = Path(output_directory) / "batch"
-            context_map, observe = self._load_context_map(batch_dir)
-
-            # Get registry metadata
-            registry_entry = None
-            file_name = None
-            registry_file = batch_dir / ".batch_registry.json"
-            if registry_file.exists():
-                with open(registry_file, 'r') as f:
-                    registry = json.load(f)
-                for key, entry in registry.items():
-                    if entry.get('batch_id') == batch_id:
-                        registry_entry = entry
-                        file_name = key
-                        break
-
-            # Use validation wrapper with agent_config for automatic retry
-            batch_results = self._retrieve_results_with_validation_and_retry(
-                provider,
-                batch_id,
-                output_directory,
-                context_map=context_map,
-                agent_config=agent_config,
-                record_count=registry_entry.get('record_count') if registry_entry else None,
-                file_name=file_name,
-            )
-
-            print(f"Retrieved {len(batch_results)} batch results")
-
-            # Process results into workflow format
-            processed_data = self._convert_batch_results_to_workflow_format(
-                batch_results,
-                observe=observe,
-                context_map=context_map,
-                output_directory=output_directory,
-            )
-
-            print(f"Processed {len(processed_data)} items into workflow format")
-
-            main_output, side_output_data = self._separate_side_output(processed_data)
-
-            # Find the original staging file to use its name (like batch_15.json)
-            staging_dir = Path(output_directory).parent.parent / "staging"
-            original_file_name = None
-            
-            if staging_dir.exists():
-                # Look for .json files in staging directory
-                json_files = list(staging_dir.glob("*.json"))
-                if json_files:
-                    # Use the first json file found (or you could match by some other criteria)
-                    original_file_name = json_files[0].stem  # Gets 'batch_15' from 'batch_15.json'
-            
-            # Create output filename based on original file name or fallback to batch_id
-            if original_file_name:
-                output_file_path = Path(output_directory) / f"{original_file_name}.json"
-            else:
-                output_file_path = Path(output_directory) / f"{batch_id}_processed_output.json"
-            
-            ensure_directory_exists(output_file_path, is_file=True)
-            
-            file_writer = FileWriter(str(output_file_path))
-            file_writer.write_target(main_output)
-
-            if side_output_data:
-                side_output_dir = create_side_output_directory(output_directory)
-                if original_file_name:
-                    side_output_file = side_output_dir / f"{original_file_name}.json"
-                else:
-                    side_output_file = side_output_dir / f"{batch_id}_processed_output.json"
-                self._save_side_output(side_output_data, side_output_file)
-
-            return str(output_file_path)
-            
-        except Exception as e:
-            from agent_actions.core.exceptions import ProcessingError
-            raise ProcessingError(f"Failed to process batch results to workflow output: {e}", cause=e)
-
     def process_all_batch_results_to_workflow_output(self, output_directory: str, agent_config: Dict[str, Any] = None):
         """
         Process all completed batch jobs in the registry, maintaining file-to-file mapping.
@@ -2206,92 +2037,6 @@ class BatchService:
                 f.write(json.dumps(dlq_entry) + '\n')
 
         print(f"📝 Archived {len(missing_custom_ids)} record(s) to DLQ: {dlq_file}")
-
-    def _collect_retry_batches(
-        self,
-        parent_batch_id: str,
-        output_directory: str,
-    ) -> List[Dict[str, Any]]:
-        """
-        Collect all retry batches for a given parent batch.
-
-        Searches the batch registry for all retry batches linked to a parent batch
-        and returns them sorted by retry attempt number.
-
-        Args:
-            parent_batch_id: Parent batch ID
-            output_directory: Output directory
-
-        Returns:
-            List of retry batch registry entries, sorted by retry_attempt
-        """
-        batch_dir = Path(output_directory) / "batch"
-        registry_file = batch_dir / ".batch_registry.json"
-
-        if not registry_file.exists():
-            return []
-
-        try:
-            with open(registry_file, 'r') as f:
-                registry = json.load(f)
-
-            retry_batches = []
-            for file_name, entry in registry.items():
-                if entry.get("parent_batch_id") == parent_batch_id:
-                    entry["file_name"] = file_name
-                    retry_batches.append(entry)
-
-            # Sort by retry_attempt ascending (1, 2, 3...)
-            retry_batches.sort(key=lambda x: x.get("retry_attempt", 0))
-            return retry_batches
-
-        except Exception as e:
-            print(f"[WARN] Failed to collect retry batches: {e}")
-            return []
-
-    def _merge_batch_results(
-        self,
-        parent_results: List[BatchResult],
-        retry_results_list: List[List[BatchResult]],
-    ) -> List[BatchResult]:
-        """
-        Merge results from parent batch and retry batches.
-
-        Combines results by custom_id. If a custom_id appears in multiple
-        batches (parent + retries), the latest result (from retry) is used.
-
-        Args:
-            parent_results: Results from parent batch
-            retry_results_list: List of results from each retry batch
-
-        Returns:
-            Merged list of BatchResult objects with no duplicates
-        """
-        merged_dict: Dict[str, BatchResult] = {}
-
-        # Add parent results
-        for result in parent_results:
-            custom_id = str(getattr(result, "custom_id", None))
-            if custom_id and custom_id != "None":
-                merged_dict[custom_id] = result
-
-        # Add retry results (overwrites if duplicate - prefer fresher result)
-        for retry_results in retry_results_list:
-            for result in retry_results:
-                custom_id = str(getattr(result, "custom_id", None))
-                if custom_id and custom_id != "None":
-                    merged_dict[custom_id] = result
-
-        parent_count = len(parent_results)
-        retry_count = sum(len(r) for r in retry_results_list)
-        final_count = len(merged_dict)
-
-        print(
-            f"[MERGE] Merged results: parent={parent_count}, "
-            f"retries={retry_count}, final={final_count}"
-        )
-
-        return list(merged_dict.values())
 
     def _is_retry_batch(
         self,

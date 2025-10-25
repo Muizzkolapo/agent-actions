@@ -1,7 +1,7 @@
 """Processor configuration models for standardized configuration management."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Dict, Any, Optional, List, Literal
+from typing import Dict, Optional, Literal
 from enum import Enum
 
 

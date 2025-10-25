@@ -4,6 +4,40 @@ This directory contains custom commands and helpers for Claude Code.
 
 ## Available Commands
 
+### `/find-dead-code <file_or_directory>`
+
+Performs focused dead code analysis to find unused functions, classes, imports, variables, and methods.
+
+**Usage:**
+```bash
+# Analyze a single file
+/find-dead-code agent_actions/core/parser/parser.py
+
+# Analyze an entire directory
+/find-dead-code agent_actions/agents
+```
+
+**What it detects:**
+- Unused functions and methods
+- Unused classes
+- Unused variables
+- Unused imports (high-confidence removals)
+- Unused properties and attributes
+- Confidence levels (🔴 80%+ high, 🟡 60-79% medium)
+
+**Report includes:**
+- Summary statistics by type
+- Distribution visualization
+- Detailed findings by file with line numbers
+- Estimated lines that can be removed
+- Prioritized cleanup recommendations
+
+**Perfect for:**
+- Spring cleaning dead code
+- Reducing codebase size
+- Improving import times
+- Removing legacy/unused features
+
 ### `/review-clean-code <module>`
 
 Performs a comprehensive clean code review of a **single module** using AST analysis, lineage tracking, and Feynman-style explanations.
@@ -61,6 +95,49 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 - Team code health assessments
 
 ## Helpers
+
+### `dead_code_analyzer.py`
+
+Focused dead code analyzer for **finding unused code** in files or directories.
+
+**Usage:**
+```bash
+# Analyze a single file
+python .claude/helpers/dead_code_analyzer.py agent_actions/core/parser.py
+
+# Analyze a directory
+python .claude/helpers/dead_code_analyzer.py agent_actions/agents
+
+# Brief summary only (no detailed findings)
+python .claude/helpers/dead_code_analyzer.py agent_actions/agents --brief
+```
+
+**Detection Methods:**
+- **Vulture**: Industry-standard dead code detector (60%+ confidence threshold)
+- **AST Analysis**: Custom unused import detection
+- **Line Span Calculation**: Determines actual size of dead code
+
+**What it finds:**
+- Unused functions (never called)
+- Unused classes (never instantiated)
+- Unused methods (never invoked)
+- Unused variables (assigned but never read)
+- Unused imports (imported but never used)
+- Unused properties and attributes
+
+**Output:**
+- Summary statistics with breakdown by type
+- ASCII bar chart of dead code distribution
+- Detailed findings grouped by file
+- Confidence indicators (🔴 high, 🟡 medium, ⚪ low)
+- Line numbers and size for each dead item
+- Estimated total removable lines
+
+**Perfect for:**
+- Finding safe-to-remove code
+- Cleaning up unused imports
+- Reducing codebase bloat
+- Pre-refactoring cleanup
 
 ### `code_analyzer.py`
 
@@ -129,15 +206,29 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 ```
 .claude/
 ├── commands/
+│   ├── find-dead-code.md         # Dead code analysis for cleanup
 │   ├── review-clean-code.md      # Single module review (Feynman + clean code)
 │   └── review-batch-report.md    # Batch report analysis & action plan
 ├── helpers/
+│   ├── dead_code_analyzer.py     # Focused dead code detection
 │   ├── code_analyzer.py          # Single file analysis (radon, prospector, vulture)
 │   └── batch_analyzer.py         # Directory batch analysis
 └── README.md                      # This file
 ```
 
 ## Typical Workflow
+
+### For Dead Code Cleanup
+```bash
+# Option 1: Quick dead code check
+/find-dead-code agent_actions/core/parser.py
+
+# Option 2: Full directory scan
+/find-dead-code agent_actions/agents
+
+# Option 3: Manual run for saving to file
+python .claude/helpers/dead_code_analyzer.py agent_actions/agents > dead_code_report.txt
+```
 
 ### For Single Module Review
 ```bash
@@ -166,6 +257,22 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 
 # Step 4: Deep dive into priority files
 /review-clean-code agent_actions.agents.transformers.data_processor
+```
+
+### Complete Codebase Health Check
+```bash
+# Step 1: Find and remove dead code first
+/find-dead-code agent_actions
+# Review and remove high-confidence dead code
+
+# Step 2: Run batch analysis after cleanup
+python .claude/helpers/batch_analyzer.py agent_actions > batch_report.txt
+
+# Step 3: Get prioritized action plan
+/review-batch-report batch_report.txt
+
+# Step 4: Deep dive into critical modules
+/review-clean-code [high-priority-module]
 ```
 
 ## Principles

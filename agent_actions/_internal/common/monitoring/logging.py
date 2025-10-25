@@ -1,7 +1,7 @@
 """Logging utilities for agent actions."""
 
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 
 class LoggerFactory:

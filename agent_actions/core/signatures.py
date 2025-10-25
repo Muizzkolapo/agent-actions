@@ -7,7 +7,7 @@ between agents in a workflow.
 """
 
 from enum import Enum
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Set
 from pydantic import BaseModel
 
 

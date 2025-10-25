@@ -8,14 +8,12 @@ security measures.
 
 import logging
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
 from .parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
-from .ast_nodes import WhereClauseAST
-from .operator_registry import get_global_registry
 
 logger = logging.getLogger(__name__)
 
