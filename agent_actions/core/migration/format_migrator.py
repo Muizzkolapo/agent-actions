@@ -5,7 +5,7 @@ import yaml
 from typing import Dict, Any, List, Optional, Union
 from .new_format_schema import (
     WorkflowConfigV2, ActionConfig, DefaultsConfig,
-    ActionKind, Granularity, LoopConfig
+    ActionKind, Granularity
 )
 from .template_yaml_loader import TemplateYamlLoader
 

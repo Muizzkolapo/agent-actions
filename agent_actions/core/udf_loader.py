@@ -13,7 +13,7 @@ Key Features:
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from agent_actions.core.udf_registry import UDF_REGISTRY, get_udf
 from agent_actions.core.exceptions import (

@@ -1,203 +1,386 @@
 ---
-description: Analyze a file or directory for dead code (unused functions, classes, imports, variables)
+description: Analyze a file or directory for dead code with multi-tool validation
 ---
 
-# Dead Code Analysis: {{arg1}}
+# Enhanced Dead Code Analysis: {{arg1}}
 
-Perform a comprehensive dead code analysis on: **{{arg1}}**
+Perform a comprehensive multi-tool dead code analysis on: **{{arg1}}**
 
-## Step 1: Run Dead Code Analyzer
+## Overview
 
-Run the specialized dead code analyzer that uses vulture + AST analysis:
+This command uses **multiple detection tools** to find dead code while minimizing false positives:
+
+- **Ruff**: Fast, accurate import/variable detection (95% confidence)
+- **Vulture**: Comprehensive dead code detection (filtered for false positives)
+- **AST Analysis**: Pattern-based import detection
+- **Smart Filters**: Filters out dispatch tables, abstract methods, vendor handlers, etc.
+
+## Step 1: Run Enhanced Dead Code Analyzer
 
 ```bash
 python .claude/helpers/dead_code_analyzer.py {{arg1}}
 ```
 
-This will detect:
-- **Unused Functions**: Functions that are defined but never called
-- **Unused Classes**: Classes that are defined but never instantiated
-- **Unused Methods**: Methods that are never invoked
-- **Unused Variables**: Variables that are assigned but never read
-- **Unused Imports**: Import statements for modules/objects that are never used
-- **Unused Properties**: Properties that are never accessed
-- **Unused Attributes**: Class attributes that are never referenced
+The analyzer will:
+1. Run Ruff for accurate import/variable detection
+2. Run Vulture for comprehensive scanning
+3. Run AST analysis for additional validation
+4. Merge results and score confidence levels
+5. Filter known false positive patterns
 
-The output includes:
-- Summary statistics of dead code by type
-- Distribution visualization (ASCII bar chart)
-- Detailed findings organized by file
-- Line numbers and confidence levels for each finding
-- Estimated lines that could be removed
+### Confidence Tiers
+
+**🔴 HIGH (90-100%)**: Very safe to remove
+- Multiple tools agree, OR
+- Ruff confirms (highly accurate)
+- Focus on these first
+
+**🟡 MEDIUM (70-89%)**: Review before removing
+- Vulture detects but may be used indirectly
+- Check for dispatch tables, abstract methods, dynamic usage
+
+**⚪ LOW (<70%)**: Likely false positives
+- High risk of being used via polymorphism, dispatch, etc.
+- Usually vendor handlers, providers, or base class methods
+- Skip these
 
 ## Step 2: Analyze the Results
 
-Review the output and categorize the findings:
+### Focus on HIGH Confidence Items First
 
-### High Confidence (🔴 80%+)
-These items are very likely dead code and can be safely removed after a quick verification:
-- List the most impactful high-confidence items
-- Note which files have the most dead code
+These are the safest to remove:
+- Unused imports confirmed by Ruff
+- Items detected by multiple tools
+- Clear, provable unused code
 
-### Medium Confidence (🟡 60-79%)
-These items require more careful review:
-- May be used indirectly (reflection, dynamic imports, etc.)
-- May be part of a public API
-- May be test fixtures or utilities
+Example output:
+```
+🎯 HIGH CONFIDENCE ITEMS (90-100%) - Safe to Remove
 
-### Files with Most Dead Code
-Identify files that need the most cleanup:
-- Which files have the highest number of dead items?
-- Which files have the most dead lines?
+📄 agent_actions/integrations/providers/gemini/vendor.py
+   Line 3: import 'Any' [95% | ruff,ast]
+   Line 3: import 'Dict' [95% | ruff,ast]
+   Line 3: import 'List' [95% | ruff,ast]
+```
 
-## Step 3: Generate Cleanup Report
+### Review MEDIUM Confidence Items
 
-Create a prioritized cleanup report:
+These require verification:
+- May be used via dispatch tables
+- May be abstract methods
+- May be part of public APIs
+
+Example with warning:
+```
+⚠️  MEDIUM CONFIDENCE ITEMS (70-89%) - Review Before Removing
+
+📄 agent_actions/integrations/providers/anthropic/provider.py
+   Line 327: method 'prepare_tasks' [70% | vulture]
+   ⚠️  Located in vendor/provider/handler directory (likely used via dispatch)
+```
+
+### Skip LOW Confidence Items
+
+These are almost always false positives:
+- Vendor handlers (e.g., `ClaudeHandler`, `GeminiHandler`)
+- Provider classes ending in `Provider`
+- Factory classes ending in `Factory`
+- Base class methods
+
+## Step 3: Generate Cleanup Plan
+
+Create a prioritized cleanup plan based on confidence tiers:
 
 ```
 ═══════════════════════════════════════════════════════
-🧹 DEAD CODE CLEANUP REPORT
+🧹 DEAD CODE CLEANUP PLAN
 ═══════════════════════════════════════════════════════
 Target: {{arg1}}
 Date: [current date]
 
-📊 EXECUTIVE SUMMARY
+📊 ANALYSIS SUMMARY
 ───────────────────────────────────────────────────────
-Total Dead Items: [X]
-Estimated Dead Lines: [X,XXX]
-Potential Impact: [X]% reduction in codebase size
+Tools Used: ruff, vulture, ast
+Total Items Found: [X]
+High Confidence: [X] items
+Medium Confidence: [X] items
+Low Confidence: [X] items (skip these)
 
-🎯 PRIORITY 1 - QUICK WINS (High Confidence)
+🎯 PHASE 1: HIGH CONFIDENCE CLEANUP (Safe)
 ───────────────────────────────────────────────────────
-These can be safely removed now:
+These can be removed immediately:
 
-1. [file_path:line]
-   • Type: [function/class/import]
-   • Name: '[name]'
-   • Impact: [X] lines removed
-   • Reason: [why it's dead]
+Unused Imports ([X] items):
+1. [file:line] - [import_name] [tools: ruff,ast]
+2. [file:line] - [import_name] [tools: ruff,vulture]
 
-2. ...
+Unused Variables ([X] items):
+1. [file:line] - [var_name] [tools: ruff]
 
-🟡 PRIORITY 2 - VERIFY BEFORE REMOVING (Medium Confidence)
+Estimated Impact: ~[X] lines removed
+Risk Level: Very Low ✅
+
+⚠️  PHASE 2: MEDIUM CONFIDENCE REVIEW (Verify First)
 ───────────────────────────────────────────────────────
-Review these carefully before removal:
+Review these before removal:
 
-1. [file_path:line]
-   • Type: [function/class]
-   • Name: '[name]'
-   • Why verify: [might be used via reflection/API/etc]
+1. [file:line] - [item_name]
+   • Why flagged: [reason]
+   • False positive risk: [risk_description]
+   • Verification needed: [check dispatch tables/tests/etc]
 
-📁 PRIORITY 3 - FILES NEEDING CLEANUP
+⛔ PHASE 3: LOW CONFIDENCE ITEMS (Skip)
 ───────────────────────────────────────────────────────
-Files with the most dead code:
+DO NOT REMOVE: [X] items
 
-1. [file_path]
-   • Dead items: [X]
-   • Dead lines: [X]
-   • Main issues: [summary]
-
-🔍 DETAILED ANALYSIS
-───────────────────────────────────────────────────────
-
-For each major file with dead code:
-
-📄 [file_path]
-
-UNUSED IMPORTS (Easy Cleanup):
-• Line [X]: [import name] - never referenced
-• Line [Y]: [import name] - never used
-→ Impact: Faster import times, cleaner dependencies
-
-UNUSED FUNCTIONS:
-• Line [X]: '[function_name]' ([Z] lines)
-  - Was it replaced by something else?
-  - Is it legacy code?
-  - Should it be deprecated instead of removed?
-
-UNUSED CLASSES:
-• Line [X]: '[class_name]' ([Z] lines)
-  - Check for subclasses
-  - Check for serialization dependencies
-  - Document reason for removal
+These are likely false positives:
+- [X] vendor/provider/handler classes
+- [X] base class methods
+- [X] factory pattern classes
 
 ═══════════════════════════════════════════════════════
 🛠️ RECOMMENDED ACTIONS
-═══════════════════════════════════════════════════════
+═══════════════════════════════════════════────────────
 
-Immediate Actions (High Confidence):
-1. Remove unused imports in [file1, file2, file3]
-2. Delete dead utility functions in [file4]
-3. Remove unused helper classes in [file5]
+Immediate Actions (HIGH confidence):
+1. Remove [X] unused imports - safest cleanup
+2. Remove [X] unused variables
+3. Run tests to verify
 
-Careful Review Required:
-1. Verify [function_name] in [file] - may be API endpoint
-2. Check [class_name] in [file] - may be used in tests
-3. Investigate [method_name] - may be callback/hook
+Manual Review Required (MEDIUM confidence):
+1. Check if [item_name] is used in tests
+2. Search for dynamic usage: grep -r "[item_name]" .
+3. Check git history: git log -S"[item_name]"
 
-Not Recommended to Remove:
-1. [name] - Part of public API (deprecate instead)
-2. [name] - Used via reflection/dynamic import
-3. [name] - Test fixture
-
-═══════════════════════════════════════════════════════
-📈 EXPECTED BENEFITS
-═══════════════════════════════════════════════════════
-
-After cleanup:
-• ✅ Reduced codebase size: ~[X,XXX] lines
-• ✅ Faster imports: [X] unused imports removed
-• ✅ Lower maintenance: Fewer dead code paths
-• ✅ Better clarity: Remove confusing unused code
-• ✅ Improved metrics: Better code coverage visibility
+Do Not Remove (LOW confidence):
+All items ending in Handler, Provider, Factory, or in base classes
 
 ═══════════════════════════════════════════════════════
 ```
 
-## Step 4: Ask for Next Actions
+## Step 4: Execute Cleanup
 
-After presenting the report, ask the user:
+### Phase 1: Remove HIGH Confidence Items
 
-"Would you like me to:
-1. Start removing high-confidence dead code items?
-2. Generate a detailed cleanup plan for a specific file?
-3. Create a git branch for systematic dead code removal?
-4. Run dead code analysis on a different module/directory?"
+```bash
+# Start with unused imports (safest)
+# The analyzer shows exactly which lines to modify
+
+# Example: Remove unused imports from gemini/vendor.py line 3
+# Before: from typing import Any, Dict, List, Optional, Union
+# After:  (remove the line or keep only used imports)
+
+# Run tests after each file
+pytest tests/
+```
+
+### Phase 2: Review MEDIUM Confidence Items
+
+For each medium-confidence item:
+
+1. **Search for usage**:
+   ```bash
+   grep -r "item_name" agent_actions/
+   grep -r "item_name" tests/
+   ```
+
+2. **Check git history**:
+   ```bash
+   git log -S"item_name" --oneline
+   ```
+
+3. **Check for indirect usage**:
+   - Dispatch tables (VENDOR_HANDLERS, etc.)
+   - Abstract methods (base classes)
+   - Dynamic imports
+   - Reflection/getattr calls
+
+4. **If truly unused**: Remove and run tests
+
+### Phase 3: Document Findings
+
+Create a summary:
+```
+Dead Code Cleanup Summary
+=========================
+High Confidence Removed: [X] items, [X] lines
+Medium Confidence Reviewed: [X] items
+  - Removed: [X] items
+  - Kept (in use): [X] items
+Low Confidence Skipped: [X] items
+
+Total Lines Removed: [X,XXX]
+Tests Status: ✅ All passing
+```
 
 ## Important Guidelines
 
-- **Always verify before removing**: Even high-confidence findings should be checked
-- **Check for indirect usage**: Look for reflection, `getattr()`, dynamic imports, serialization
-- **Consider public APIs**: Don't remove public methods even if unused internally
-- **Check tests**: Look in test files for usage
-- **Be conservative with methods**: Methods might be hooks, callbacks, or overrides
-- **Group deletions logically**: Remove related dead code together
-- **Update documentation**: Remove references to deleted code
-- **Run tests after removal**: Ensure nothing breaks
+### Always Verify Before Removing
 
-## Special Cases to Watch For
+Even high-confidence items should be checked:
+- Run tests after removal
+- Check for indirect usage
+- Review git history
 
-1. **Test fixtures**: May look unused but are required by test framework
-2. **Abstract methods**: Must exist even if not called directly
-3. **API endpoints**: May be called externally even if not in codebase
-4. **CLI commands**: May be invoked via command line
-5. **Configuration handlers**: May be used via config files
-6. **Serialization**: Classes used for JSON/pickle may look unused
-7. **Plugins/Extensions**: May be loaded dynamically
-8. **Deprecated code**: Should be marked deprecated, not immediately removed
+### Known False Positive Patterns
 
-## For Directory Analysis
+The analyzer automatically filters these, but be aware:
 
-If {{arg1}} is a directory, provide:
-1. **Cross-file analysis**: Show which files are never imported
-2. **Dependency graph**: Identify isolated modules
-3. **Cleanup order**: Suggest order of removal (bottom-up)
-4. **Impact assessment**: Which removals have the most impact
+1. **Dispatch Tables**: `FooHandler`, `FooProvider`, `FooProcessor`
+2. **Abstract Methods**: Methods in base classes
+3. **Magic Methods**: `__init__`, `__str__`, etc.
+4. **Test Fixtures**: `setUp`, `tearDown`, `pytest_*`
+5. **Vendor/Provider Directories**: Code in `vendor/`, `provider/`, `handler/` dirs
+
+### When NOT to Remove
+
+❌ **Abstract methods** in base classes
+❌ **Public API methods** (even if unused internally)
+❌ **Vendor handler classes** (used via dispatch)
+❌ **Plugin/extension points**
+❌ **Methods called via reflection**
+❌ **Test fixtures** (pytest hooks)
+
+## Understanding the Confidence Scores
+
+### How Confidence is Calculated
+
+**HIGH (90-100%)**:
+- Ruff detects it (95% base confidence)
+- Multiple tools agree (+5% bonus per tool)
+- Clear, provable unused code
+
+**MEDIUM (70-89%)**:
+- Vulture detects it (60-80% base)
+- Filtered for known false positive patterns
+- May be used indirectly
+
+**LOW (<70%)**:
+- Vulture only (60% base)
+- Matches false positive patterns (-20% penalty)
+- High risk of indirect usage
+
+### Which Tools Detected It
+
+Check the `[tools]` indicator:
+- `[ruff]` - Very reliable for imports/variables
+- `[ruff,vulture]` - Both agree, very confident
+- `[vulture]` - Check carefully, may be false positive
+- `[ast,ruff]` - Both static analysis tools agree
+
+## Example Workflow
+
+### 1. Run Analysis
+
+```bash
+/find-dead-code agent_actions/integrations
+```
+
+### 2. Review HIGH Confidence Items
+
+Output shows:
+```
+🎯 HIGH CONFIDENCE ITEMS (90-100%) - 11 items
+
+📄 gemini/vendor.py
+   Line 3: import 'Any' [95% | ruff,ast]
+   Line 3: import 'Dict' [95% | ruff,ast]
+   ...
+```
+
+### 3. Remove HIGH Confidence Items
+
+Remove the 11 unused imports shown.
+
+### 4. Run Tests
+
+```bash
+pytest tests/integrations/providers/
+```
+
+### 5. Review MEDIUM Confidence Items
+
+Output shows:
+```
+⚠️  MEDIUM CONFIDENCE ITEMS (70-89%) - 3 items
+
+📄 base.py
+   Line 188: method 'compile_schema' [70% | vulture]
+   ⚠️  Method in base class (may be abstract or overridden)
+```
+
+Check if `compile_schema` is actually used:
+```bash
+grep -r "compile_schema" agent_actions/
+# Found: It's deprecated but documented - keep for now
+```
+
+### 6. Skip LOW Confidence Items
+
+Output shows:
+```
+⚪ LOW CONFIDENCE ITEMS (<70%) - 47 items
+
+These are likely false positives (vendor handlers, etc.)
+```
+
+Don't waste time reviewing these.
+
+## Command Options
+
+```bash
+# Full analysis with details
+python .claude/helpers/dead_code_analyzer.py agent_actions/core
+
+# Summary only
+python .claude/helpers/dead_code_analyzer.py agent_actions/core --brief
+
+# Show all items including low-confidence
+python .claude/helpers/dead_code_analyzer.py agent_actions/core --show-all
+```
+
+## Tool Installation
+
+For best results, install all tools:
+
+```bash
+# Required
+pip install vulture  # Comprehensive detection
+
+# Highly recommended
+pip install ruff     # Fast, accurate import detection
+
+# Note: AST analysis is built-in (no installation needed)
+```
 
 ## After Analysis
 
-Summarize:
-- Total dead code found
-- Estimated lines that can be removed
-- Top files needing cleanup
-- Recommended next steps
+Summarize your findings:
+
+**Cleanup Summary**:
+- HIGH confidence items removed: [X]
+- MEDIUM confidence reviewed: [X] (removed [X], kept [X])
+- LOW confidence skipped: [X]
+- Total lines removed: [X,XXX]
+- Tests: ✅ All passing
+
+**Next Steps**:
+1. Commit high-confidence cleanups
+2. Document any kept medium-confidence items (why they're in use)
+3. Run analysis on next module
+
+## Ask for Next Actions
+
+"Based on the analysis:
+
+**HIGH confidence items** ([X] items):
+- Would you like me to remove these now?
+
+**MEDIUM confidence items** ([X] items):
+- Should I investigate specific items?
+- Do you want a detailed review of any file?
+
+**Next steps**:
+1. Remove high-confidence items?
+2. Create cleanup branch?
+3. Analyze different module?"

@@ -10,7 +10,6 @@ from typing import Optional, Union
 import logging
 
 from agent_actions.core.context.path_manager import PathManager
-from agent_actions.core.context.path_config import PathConfigManager
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +113,6 @@ def find_project_root(start_path: Optional[Path] = None, marker_file: str = "age
     Raises:
         ProjectRootNotFoundError: If project root cannot be found
     """
-    config = PathConfigManager()
     pm = PathManager()
     return pm.get_project_root(start_path)
 

@@ -1,9 +1,6 @@
 """Module for processing generated data."""
-import logging
 from typing import Dict, List
 
-from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import OBSERVE_KEY
 from agent_actions.core.utils.processor_helpers import transform_with_observe
 from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.core.exceptions import TransformationError

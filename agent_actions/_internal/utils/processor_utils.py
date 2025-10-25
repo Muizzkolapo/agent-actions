@@ -9,7 +9,7 @@ This module provides shared functionality for processors including:
 
 import uuid
 import json
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
 from agent_actions.core.constants import OBSERVE_KEY

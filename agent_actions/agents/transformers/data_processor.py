@@ -1,5 +1,4 @@
 """Module for processing generated data."""
-import logging
 from typing import Dict, List
 
 from agent_actions.core.utils.processor_helpers import transform_with_observe

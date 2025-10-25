@@ -7,7 +7,7 @@ expressions with proper grammar handling and comprehensive error reporting.
 
 import re
 import ast
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from functools import lru_cache
 from dataclasses import dataclass
 import logging

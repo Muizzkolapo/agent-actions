@@ -1,7 +1,6 @@
 """Guard expression parser for handling both UDF and SQL-like conditions."""
 
 import re
-from typing import Tuple, Literal, Optional
 from enum import Enum
 
 
