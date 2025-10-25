@@ -1,14 +1,11 @@
 """Module for loading and running user-defined functions from a specified module."""
-
 import importlib
 import importlib.util
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
-
-from agent_actions.core.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
 from agent_actions.core.safe_format import safe_format_error
-
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:
     """
@@ -25,14 +22,9 @@ def _split_udf_name(udf_name: str) -> Tuple[str, str]:
     """
     try:
         module_name, func_name = udf_name.rsplit('.', 1)
-        return module_name, func_name
+        return (module_name, func_name)
     except ValueError as e:
-        raise ConfigurationError(
-            "Invalid UDF format. Expected 'module.function'",
-            context={'udf_name': udf_name},
-            cause=e
-        ) from e
-
+        raise ConfigurationError("Invalid UDF format. Expected 'module.function'", context={'udf_name': udf_name}, cause=e) from e
 
 def load_user_defined_function(module_name: str, function_name: str) -> Callable:
     """
@@ -54,7 +46,7 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     except ImportError as e:
         module = None
         for path in sys.path:
-            potential_file = Path(path) / f"{module_name}.py"
+            potential_file = Path(path) / f'{module_name}.py'
             if potential_file.exists():
                 spec = importlib.util.spec_from_file_location(module_name, potential_file)
                 if spec and spec.loader:
@@ -62,25 +54,14 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
                     spec.loader.exec_module(module)
                     break
         if module is None:
-            search_paths = ", ".join(sys.path)
-            raise ConfigurationError(
-                f"Module '{module_name}' for UDF not found",
-                context={'module_name': module_name, 'search_paths': search_paths},
-                cause=e
-            ) from e
-    
+            search_paths = ', '.join(sys.path)
+            raise ConfigurationError(f"Module '{module_name}' for UDF not found", context={'module_name': module_name, 'search_paths': search_paths}, cause=e) from e
     try:
         function = getattr(module, function_name)
     except AttributeError as e:
-        search_paths = ", ".join(sys.path)
-        raise ConfigurationError(
-            f"Function '{function_name}' not found in module '{module_name}'",
-            context={'function_name': function_name, 'module_name': module_name, 'search_paths': search_paths},
-            cause=e
-        ) from e
-    
+        search_paths = ', '.join(sys.path)
+        raise ConfigurationError(f"Function '{function_name}' not found in module '{module_name}'", context={'function_name': function_name, 'module_name': module_name, 'search_paths': search_paths}, cause=e) from e
     return function
-
 
 def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **kwargs: Any) -> Any:
     """
@@ -100,16 +81,9 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
         Exception: If there's an error executing the function.
     """
     from agent_actions.core.udf_registry import get_udf
-
-    # Get function from registry
     udf = get_udf(udf_name)
-
     try:
         result = udf(input_data, **kwargs)
         return result
     except Exception as e:
-        raise AgentActionsException(
-            f"Error executing user defined function '{udf_name}': {safe_format_error(e)}",
-            context={'function': udf_name, 'operation': 'execute_udf'},
-            cause=e
-        ) from e
+        raise AgentActionsException(f"Error executing user defined function '{udf_name}': {safe_format_error(e)}", context={'function': udf_name, 'operation': 'execute_udf'}, cause=e) from e

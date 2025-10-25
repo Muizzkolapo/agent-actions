@@ -35,18 +35,11 @@ Contract Tests Overview:
     10. test_submit_and_retrieve_workflow - Full end-to-end workflow
     11. test_retrieve_invalid_batch_id_raises_error - Error handling
 """
-
 import pytest
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Any
-
-from agent_actions.integrations.providers.base import (
-    BatchProvider,
-    BatchTask,
-    BatchResult
-)
-
+from agent_actions.llm_invocation.realtime.providers.base import BatchProvider, BatchTask, BatchResult
 
 class BaseBatchProviderTests(ABC):
     """
@@ -62,8 +55,6 @@ class BaseBatchProviderTests(ABC):
     - Optionally override tests for provider-specific behavior
     - Optionally add provider-specific edge case tests
     """
-
-    # ==================== Abstract Fixtures (MUST IMPLEMENT) ====================
 
     @pytest.fixture
     @abstractmethod
@@ -152,8 +143,6 @@ class BaseBatchProviderTests(ABC):
         """
         pass
 
-    # ==================== Contract Test 1: format_task_basic ====================
-
     def test_format_task_basic(self, provider, sample_batch_task):
         """
         Test basic task formatting without schema.
@@ -165,12 +154,9 @@ class BaseBatchProviderTests(ABC):
         - custom_id matches input
         """
         result = provider.format_task_for_provider(sample_batch_task, schema=None)
-
-        assert isinstance(result, dict), "format_task_for_provider must return dict"
-        assert "custom_id" in result, "Result must contain custom_id field"
-        assert result["custom_id"] == "test-123", "custom_id must match input"
-
-    # ==================== Contract Test 2: format_task_with_schema ====================
+        assert isinstance(result, dict), 'format_task_for_provider must return dict'
+        assert 'custom_id' in result, 'Result must contain custom_id field'
+        assert result['custom_id'] == 'test-123', 'custom_id must match input'
 
     def test_format_task_with_schema(self, provider, sample_batch_task):
         """
@@ -181,22 +167,11 @@ class BaseBatchProviderTests(ABC):
         - Returns valid dict structure
         - custom_id preserved
         """
-        schema = {
-            "type": "object",
-            "properties": {
-                "answer": {"type": "string"}
-            }
-        }
-
+        schema = {'type': 'object', 'properties': {'answer': {'type': 'string'}}}
         result = provider.format_task_for_provider(sample_batch_task, schema=schema)
-
-        assert isinstance(result, dict), "Must return dict even with schema"
-        assert "custom_id" in result, "custom_id must be present with schema"
-        assert result["custom_id"] == "test-123", "custom_id must match"
-
-        # Provider-specific schema validation happens in subclass
-
-    # ==================== Contract Test 3: format_task_no_max_tokens ====================
+        assert isinstance(result, dict), 'Must return dict even with schema'
+        assert 'custom_id' in result, 'custom_id must be present with schema'
+        assert result['custom_id'] == 'test-123', 'custom_id must match'
 
     def test_format_task_no_max_tokens(self, provider, sample_batch_task_no_max_tokens):
         """
@@ -207,18 +182,9 @@ class BaseBatchProviderTests(ABC):
         - Doesn't add max_tokens: null to output
         - Returns valid dict
         """
-        result = provider.format_task_for_provider(
-            sample_batch_task_no_max_tokens,
-            schema=None
-        )
-
-        assert isinstance(result, dict), "Must handle missing max_tokens"
-        assert "custom_id" in result, "custom_id must be present"
-
-        # Provider-specific: verify max_tokens not added as null
-        # (validated in provider-specific tests)
-
-    # ==================== Contract Test 4: parse_success_response_json ====================
+        result = provider.format_task_for_provider(sample_batch_task_no_max_tokens, schema=None)
+        assert isinstance(result, dict), 'Must handle missing max_tokens'
+        assert 'custom_id' in result, 'custom_id must be present'
 
     def test_parse_success_response_json(self, provider, provider_success_response_json):
         """
@@ -232,15 +198,12 @@ class BaseBatchProviderTests(ABC):
         - error is None
         """
         result = provider.parse_provider_response(provider_success_response_json)
-
-        assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Success response must have success=True"
-        assert result.custom_id == "test-123", "custom_id must match response"
-        assert result.error is None, "Successful response should have no error"
-        assert isinstance(result.content, dict), "JSON content should be parsed as dict"
-        assert "answer" in result.content, "Content should contain expected fields"
-
-    # ==================== Contract Test 5: parse_success_response_string ====================
+        assert isinstance(result, BatchResult), 'Must return BatchResult'
+        assert result.success == True, 'Success response must have success=True'
+        assert result.custom_id == 'test-123', 'custom_id must match response'
+        assert result.error is None, 'Successful response should have no error'
+        assert isinstance(result.content, dict), 'JSON content should be parsed as dict'
+        assert 'answer' in result.content, 'Content should contain expected fields'
 
     def test_parse_success_response_string(self, provider, provider_success_response_string):
         """
@@ -253,14 +216,11 @@ class BaseBatchProviderTests(ABC):
         - custom_id matches
         """
         result = provider.parse_provider_response(provider_success_response_string)
-
-        assert isinstance(result, BatchResult), "Must return BatchResult"
-        assert result.success == True, "Success response must have success=True"
-        assert result.custom_id == "test-456", "custom_id must match"
-        assert isinstance(result.content, str), "Plain text should remain as string"
-        assert result.error is None, "No error for successful response"
-
-    # ==================== Contract Test 6: parse_error_response ====================
+        assert isinstance(result, BatchResult), 'Must return BatchResult'
+        assert result.success == True, 'Success response must have success=True'
+        assert result.custom_id == 'test-456', 'custom_id must match'
+        assert isinstance(result.content, str), 'Plain text should remain as string'
+        assert result.error is None, 'No error for successful response'
 
     def test_parse_error_response(self, provider, provider_error_response):
         """
@@ -273,22 +233,14 @@ class BaseBatchProviderTests(ABC):
         - custom_id preserved
         """
         result = provider.parse_provider_response(provider_error_response)
+        assert isinstance(result, BatchResult), 'Must return BatchResult even for errors'
+        assert result.success == False, 'Error response must have success=False'
+        assert result.custom_id == 'test-789', 'custom_id must match error response'
+        assert result.error is not None, 'Error field must be populated'
+        assert isinstance(result.error, str), 'Error must be a string'
+        assert len(result.error) > 0, 'Error message must not be empty'
 
-        assert isinstance(result, BatchResult), "Must return BatchResult even for errors"
-        assert result.success == False, "Error response must have success=False"
-        assert result.custom_id == "test-789", "custom_id must match error response"
-        assert result.error is not None, "Error field must be populated"
-        assert isinstance(result.error, str), "Error must be a string"
-        assert len(result.error) > 0, "Error message must not be empty"
-
-    # ==================== Contract Test 7: prepare_tasks_json_mode_true ====================
-
-    def test_prepare_tasks_json_mode_true(
-        self,
-        provider,
-        sample_data,
-        sample_agent_config_json_mode
-    ):
+    def test_prepare_tasks_json_mode_true(self, provider, sample_data, sample_agent_config_json_mode):
         """
         Test task preparation with json_mode: true.
 
@@ -299,26 +251,16 @@ class BaseBatchProviderTests(ABC):
         - Schema passed when json_mode enabled
         """
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_json_mode)
+        assert isinstance(tasks, list), 'Must return list'
+        assert len(tasks) == 3, 'Must convert all data rows'
+        assert all((isinstance(task, dict) for task in tasks)), 'All tasks must be dicts'
+        assert all(('custom_id' in task for task in tasks)), 'All tasks must have custom_id'
+        custom_ids = [task['custom_id'] for task in tasks]
+        assert '1' in custom_ids, 'custom_id from target_id must be preserved'
+        assert '2' in custom_ids
+        assert '3' in custom_ids
 
-        assert isinstance(tasks, list), "Must return list"
-        assert len(tasks) == 3, "Must convert all data rows"
-        assert all(isinstance(task, dict) for task in tasks), "All tasks must be dicts"
-        assert all("custom_id" in task for task in tasks), "All tasks must have custom_id"
-
-        # Verify custom_ids match source data
-        custom_ids = [task["custom_id"] for task in tasks]
-        assert "1" in custom_ids, "custom_id from target_id must be preserved"
-        assert "2" in custom_ids
-        assert "3" in custom_ids
-
-    # ==================== Contract Test 8: prepare_tasks_json_mode_false ====================
-
-    def test_prepare_tasks_json_mode_false(
-        self,
-        provider,
-        sample_data,
-        sample_agent_config_no_json_mode
-    ):
+    def test_prepare_tasks_json_mode_false(self, provider, sample_data, sample_agent_config_no_json_mode):
         """
         Test task preparation with json_mode: false (Bug #4 validation).
 
@@ -328,15 +270,9 @@ class BaseBatchProviderTests(ABC):
         - Returns valid task format
         """
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
-
-        assert isinstance(tasks, list), "Must return list"
-        assert len(tasks) == 3, "Must convert all data rows"
-        assert all("custom_id" in task for task in tasks), "All tasks need custom_id"
-
-        # Provider-specific: verify schema not added
-        # (validated in provider-specific tests)
-
-    # ==================== Contract Test 9: check_status ====================
+        assert isinstance(tasks, list), 'Must return list'
+        assert len(tasks) == 3, 'Must convert all data rows'
+        assert all(('custom_id' in task for task in tasks)), 'All tasks need custom_id'
 
     def test_check_status_returns_valid_state(self, provider):
         """
@@ -347,30 +283,12 @@ class BaseBatchProviderTests(ABC):
         - String is one of valid batch states
         - Doesn't crash with arbitrary batch_id
         """
-        status = provider.check_status("test-batch-id")
-
-        assert isinstance(status, str), "Status must be a string"
-
-        valid_states = [
-            "validating",
-            "in_progress",
-            "completed",
-            "failed",
-            "expired",
-            "cancelling",
-            "cancelled"
-        ]
+        status = provider.check_status('test-batch-id')
+        assert isinstance(status, str), 'Status must be a string'
+        valid_states = ['validating', 'in_progress', 'completed', 'failed', 'expired', 'cancelling', 'cancelled']
         assert status in valid_states, f"Status '{status}' must be valid batch state"
 
-    # ==================== Contract Test 10: INTEGRATION ====================
-
-    def test_submit_and_retrieve_workflow(
-        self,
-        provider,
-        tmp_path,
-        sample_data,
-        sample_agent_config_no_json_mode
-    ):
+    def test_submit_and_retrieve_workflow(self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode):
         """
         Integration test: Full batch workflow.
 
@@ -387,40 +305,21 @@ class BaseBatchProviderTests(ABC):
         - Results format correct
         - All BatchResult objects valid
         """
-        # Step 1: Prepare
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
-        assert len(tasks) == 3, "Prepare step must create tasks"
-
-        # Step 2: Submit
-        batch_id = provider.submit_batch(
-            tasks,
-            "integration_test_batch",
-            str(tmp_path)
-        )
-        assert batch_id is not None, "submit_batch must return batch_id"
-        assert isinstance(batch_id, str), "batch_id must be string"
-        assert len(batch_id) > 0, "batch_id must not be empty"
-
-        # Step 3: Check status
+        assert len(tasks) == 3, 'Prepare step must create tasks'
+        batch_id = provider.submit_batch(tasks, 'integration_test_batch', str(tmp_path))
+        assert batch_id is not None, 'submit_batch must return batch_id'
+        assert isinstance(batch_id, str), 'batch_id must be string'
+        assert len(batch_id) > 0, 'batch_id must not be empty'
         status = provider.check_status(batch_id)
-        assert status in ["completed", "in_progress", "validating"], \
-            f"Status must be valid: {status}"
-
-        # Step 4: Retrieve (only if completed)
-        if status == "completed":
+        assert status in ['completed', 'in_progress', 'validating'], f'Status must be valid: {status}'
+        if status == 'completed':
             results = provider.retrieve_results(batch_id, str(tmp_path))
-
-            # Step 5: Validate
-            assert isinstance(results, list), "Results must be a list"
-            assert len(results) > 0, "Should have at least some results"
-            assert all(isinstance(r, BatchResult) for r in results), \
-                "All results must be BatchResult objects"
-
-            # Verify custom_ids present
+            assert isinstance(results, list), 'Results must be a list'
+            assert len(results) > 0, 'Should have at least some results'
+            assert all((isinstance(r, BatchResult) for r in results)), 'All results must be BatchResult objects'
             result_ids = [r.custom_id for r in results]
-            assert len(result_ids) > 0, "Results must have custom_ids"
-
-    # ==================== Contract Test 11: Error Handling ====================
+            assert len(result_ids) > 0, 'Results must have custom_ids'
 
     def test_retrieve_invalid_batch_id_raises_error(self, provider, tmp_path):
         """
@@ -432,9 +331,6 @@ class BaseBatchProviderTests(ABC):
         - Error message is meaningful
         """
         with pytest.raises(Exception) as exc_info:
-            provider.retrieve_results("nonexistent-batch-id-12345", str(tmp_path))
-
-        # Verify error message contains useful info
+            provider.retrieve_results('nonexistent-batch-id-12345', str(tmp_path))
         error_str = str(exc_info.value).lower()
-        assert "batch" in error_str or "not found" in error_str or "file" in error_str, \
-            "Error message should indicate batch/file not found"
+        assert 'batch' in error_str or 'not found' in error_str or 'file' in error_str, 'Error message should indicate batch/file not found'

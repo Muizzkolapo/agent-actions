@@ -4,19 +4,14 @@ Project root detection utilities.
 Provides functionality to locate the project root by searching for
 agent_actions.yml marker file in the current directory and parent directories.
 """
-
 from pathlib import Path
 import os
 from typing import Optional
+from agent_actions.shared.exceptions import ProjectNotFoundError
+PROJECT_MARKER_FILE = 'agent_actions.yml'
+MAX_PARENT_LEVELS = 100
 
-from agent_actions.core.exceptions import ProjectNotFoundError
-
-# Constants
-PROJECT_MARKER_FILE = "agent_actions.yml"
-MAX_PARENT_LEVELS = 100  # Prevent infinite loops
-
-
-def find_project_root(start_path: Optional[str] = None) -> Optional[Path]:
+def find_project_root(start_path: Optional[str]=None) -> Optional[Path]:
     """
     Find the project root by walking up directories to locate agent_actions.yml.
 
@@ -43,24 +38,16 @@ def find_project_root(start_path: Optional[str] = None) -> Optional[Path]:
         - Handles permission errors gracefully
     """
     current = Path(start_path or os.getcwd()).resolve()
-
-    # Walk up directory tree
     for i, directory in enumerate([current, *current.parents]):
-        # Safety check: prevent infinite loops
         if i >= MAX_PARENT_LEVELS:
             break
-
         marker = directory / PROJECT_MARKER_FILE
-
         try:
             if marker.exists() and marker.is_file():
                 return directory
         except PermissionError:
-            # Skip directories we can't access
             continue
-
     return None
-
 
 def ensure_in_project() -> Path:
     """
@@ -77,15 +64,9 @@ def ensure_in_project() -> Path:
         >>> os.chdir(project_root)  # Change to project root
     """
     project_root = find_project_root()
-
     if project_root is None:
-        raise ProjectNotFoundError(
-            marker_file=PROJECT_MARKER_FILE,
-            search_path=os.getcwd()
-        )
-
+        raise ProjectNotFoundError(marker_file=PROJECT_MARKER_FILE, search_path=os.getcwd())
     return project_root
-
 
 def get_project_root_or_cwd() -> Path:
     """
@@ -101,7 +82,6 @@ def get_project_root_or_cwd() -> Path:
         >>> # Will be project root if in project, CWD otherwise
     """
     return find_project_root() or Path.cwd()
-
 
 def is_in_project() -> bool:
     """

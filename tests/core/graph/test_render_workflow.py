@@ -8,41 +8,31 @@ This module tests:
 4. Integration with template rendering
 5. Backward compatibility
 """
-
 import pytest
 import yaml
 import tempfile
 import shutil
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
-
-from agent_actions.core.graph.render_workflow import (
-    normalize_yaml_indentation,
-    render_pipeline_with_templates
-)
-from agent_actions.core.exceptions import ConfigurationError
-
+from agent_actions.prompt_generation.render_workflow import normalize_yaml_indentation, render_pipeline_with_templates
+from agent_actions.shared.exceptions import ConfigurationError
 
 class TestNormalizeYamlIndentation:
     """Test the normalize_yaml_indentation() function."""
 
     def test_normalize_removes_common_indent(self):
         """Test that common leading whitespace is removed."""
-        input_yaml = "    - name: foo\n      kind: tool"
-        expected = "- name: foo\n  kind: tool"
+        input_yaml = '    - name: foo\n      kind: tool'
+        expected = '- name: foo\n  kind: tool'
         result = normalize_yaml_indentation(input_yaml)
         assert result == expected
 
     def test_normalize_preserves_relative_indent(self):
         """Test that relative indentation within blocks is preserved."""
-        input_yaml = "  parent:\n    child:\n      nested: value"
+        input_yaml = '  parent:\n    child:\n      nested: value'
         result = normalize_yaml_indentation(input_yaml)
-
-        # Parse to ensure structure is valid
         parsed = yaml.safe_load(result)
         assert parsed['parent']['child']['nested'] == 'value'
-
-        # Verify structure is correct - relative indentation preserved
         lines = result.splitlines()
         assert lines[0] == 'parent:'
         assert lines[1] == '  child:'
@@ -50,20 +40,18 @@ class TestNormalizeYamlIndentation:
 
     def test_normalize_empty_string(self):
         """Test that empty string is handled correctly."""
-        assert normalize_yaml_indentation("") == ""
+        assert normalize_yaml_indentation('') == ''
 
     def test_normalize_already_correct(self):
         """Test that correctly indented YAML is unchanged."""
-        input_yaml = "- name: foo\n  kind: tool"
+        input_yaml = '- name: foo\n  kind: tool'
         result = normalize_yaml_indentation(input_yaml)
         assert result == input_yaml
 
     def test_normalize_excessive_indent(self):
         """Test normalization of YAML with excessive indentation."""
-        input_yaml = "      - name: foo\n        kind: tool\n      - name: bar\n        kind: action"
+        input_yaml = '      - name: foo\n        kind: tool\n      - name: bar\n        kind: action'
         result = normalize_yaml_indentation(input_yaml)
-
-        # Should parse successfully after normalization
         parsed = yaml.safe_load(result)
         assert len(parsed) == 2
         assert parsed[0]['name'] == 'foo'
@@ -71,25 +59,16 @@ class TestNormalizeYamlIndentation:
 
     def test_normalize_single_line(self):
         """Test normalization of single-line YAML."""
-        input_yaml = "    name: value"
-        expected = "name: value"
+        input_yaml = '    name: value'
+        expected = 'name: value'
         result = normalize_yaml_indentation(input_yaml)
         assert result == expected
 
     def test_normalize_mixed_content(self):
         """Test normalization with mixed YAML structures."""
-        input_yaml = """    tools:
-      - name: format_quiz
-        kind: tool
-      - name: validate_quiz
-        kind: tool
-    actions:
-      - name: save_quiz
-        kind: action"""
-
+        input_yaml = '    tools:\n      - name: format_quiz\n        kind: tool\n      - name: validate_quiz\n        kind: tool\n    actions:\n      - name: save_quiz\n        kind: action'
         result = normalize_yaml_indentation(input_yaml)
         parsed = yaml.safe_load(result)
-
         assert 'tools' in parsed
         assert 'actions' in parsed
         assert len(parsed['tools']) == 2
@@ -97,13 +76,10 @@ class TestNormalizeYamlIndentation:
 
     def test_normalize_with_blank_lines(self):
         """Test that blank lines are preserved."""
-        input_yaml = "    name: foo\n\n    other: bar"
+        input_yaml = '    name: foo\n\n    other: bar'
         result = normalize_yaml_indentation(input_yaml)
         lines = result.splitlines(keepends=True)
-
-        # Should still have blank line
         assert len([l for l in lines if l.strip() == '']) > 0
-
 
 class TestDedentFilter:
     """Test the dedent Jinja2 filter."""
@@ -121,11 +97,8 @@ class TestDedentFilter:
     def test_dedent_filter_available(self):
         """Test that dedent filter is registered in Environment."""
         env = Environment(loader=FileSystemLoader(self.templates_folder))
-
-        # Register filter as render_workflow does
         import textwrap
         env.filters['dedent'] = textwrap.dedent
-
         assert 'dedent' in env.filters
         assert env.filters['dedent'] == textwrap.dedent
 
@@ -134,11 +107,9 @@ class TestDedentFilter:
         env = Environment(loader=FileSystemLoader(self.templates_folder))
         import textwrap
         env.filters['dedent'] = textwrap.dedent
-
         template_content = "{{ '    - name: foo' | dedent }}"
         template = env.from_string(template_content)
         result = template.render()
-
         assert result == '- name: foo'
 
     def test_dedent_filter_with_multiline(self):
@@ -146,18 +117,10 @@ class TestDedentFilter:
         env = Environment(loader=FileSystemLoader(self.templates_folder))
         import textwrap
         env.filters['dedent'] = textwrap.dedent
-
-        template_content = """{{ text | dedent }}"""
+        template_content = '{{ text | dedent }}'
         template = env.from_string(template_content)
-
-        text_with_indent = """    - name: foo
-      kind: tool
-    - name: bar
-      kind: action"""
-
+        text_with_indent = '    - name: foo\n      kind: tool\n    - name: bar\n      kind: action'
         result = template.render(text=text_with_indent)
-
-        # Should remove common leading whitespace
         assert result.startswith('- name: foo')
         assert '  kind: tool' in result
 
@@ -166,17 +129,9 @@ class TestDedentFilter:
         env = Environment(loader=FileSystemLoader(self.templates_folder))
         import textwrap
         env.filters['dedent'] = textwrap.dedent
-
-        template_content = """{% macro my_tools() -%}
-    - name: foo
-      kind: tool
-{%- endmacro %}
-{{ my_tools() | dedent }}"""
-
+        template_content = '{% macro my_tools() -%}\n    - name: foo\n      kind: tool\n{%- endmacro %}\n{{ my_tools() | dedent }}'
         template = env.from_string(template_content)
         result = template.render()
-
-        # Should strip the leading spaces from macro output
         assert result.strip().startswith('- name: foo')
 
     def test_dedent_filter_preserves_relative_indent(self):
@@ -184,20 +139,13 @@ class TestDedentFilter:
         env = Environment(loader=FileSystemLoader(self.templates_folder))
         import textwrap
         env.filters['dedent'] = textwrap.dedent
-
-        template_content = """{{ text | dedent }}"""
+        template_content = '{{ text | dedent }}'
         template = env.from_string(template_content)
-
-        text_with_indent = """    parent:
-        child: value"""
-
+        text_with_indent = '    parent:\n        child: value'
         result = template.render(text=text_with_indent)
-
-        # Should remove common indent but preserve relative
         lines = result.splitlines()
         assert lines[0] == 'parent:'
-        assert lines[1].startswith('  ')  # Relative indent preserved
-
+        assert lines[1].startswith('  ')
 
 class TestFailedRenderCache:
     """Test failed render caching functionality."""
@@ -207,8 +155,6 @@ class TestFailedRenderCache:
         self.temp_dir = tempfile.mkdtemp()
         self.templates_folder = Path(self.temp_dir) / 'templates'
         self.templates_folder.mkdir()
-
-        # Change to temp directory for cache tests
         self.original_cwd = Path.cwd()
         import os
         os.chdir(self.temp_dir)
@@ -221,95 +167,47 @@ class TestFailedRenderCache:
 
     def test_failed_render_saved_to_cache(self):
         """Test that failed YAML renders are saved to cache."""
-        # Create a template that renders to invalid YAML
-        # (even after normalization)
         yaml_file = Path(self.temp_dir) / 'broken_workflow.yml'
-        yaml_file.write_text("""
-name: broken
-actions:
-  - name: test
-    : invalid_yaml_syntax_here
-""")
-
+        yaml_file.write_text('\nname: broken\nactions:\n  - name: test\n    : invalid_yaml_syntax_here\n')
         cache_dir = Path('.agent-actions/cache/rendered_workflows')
         expected_cache_file = cache_dir / 'broken_workflow_failed.yml'
-
-        # Render should fail with ConfigurationError
         with pytest.raises(ConfigurationError) as exc_info:
-            render_pipeline_with_templates(
-                yaml_path=str(yaml_file),
-                templates_folder=str(self.templates_folder)
-            )
-
-        # Verify cache file was created
+            render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         assert expected_cache_file.exists()
-
-        # Verify cache contains rendered content
         cached_content = expected_cache_file.read_text()
         assert 'invalid_yaml_syntax_here' in cached_content
 
     def test_error_message_includes_cache_path(self):
         """Test that error message shows cache file path."""
         yaml_file = Path(self.temp_dir) / 'broken_workflow.yml'
-        yaml_file.write_text("""
-name: broken
-actions:
-  - invalid: [unclosed bracket
-""")
-
+        yaml_file.write_text('\nname: broken\nactions:\n  - invalid: [unclosed bracket\n')
         with pytest.raises(ConfigurationError) as exc_info:
-            render_pipeline_with_templates(
-                yaml_path=str(yaml_file),
-                templates_folder=str(self.templates_folder)
-            )
-
+            render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         error_message = str(exc_info.value)
-
-        # Error should mention cache location
         assert '.agent-actions/cache/rendered_workflows' in error_message
         assert 'broken_workflow_failed.yml' in error_message
 
     def test_error_message_suggests_render_command(self):
         """Test that error message suggests using render command."""
         yaml_file = Path(self.temp_dir) / 'test_workflow.yml'
-        yaml_file.write_text("""
-actions:
-  - : broken
-""")
-
+        yaml_file.write_text('\nactions:\n  - : broken\n')
         with pytest.raises(ConfigurationError) as exc_info:
-            render_pipeline_with_templates(
-                yaml_path=str(yaml_file),
-                templates_folder=str(self.templates_folder)
-            )
-
+            render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         error_message = str(exc_info.value)
-
-        # Should suggest render command
         assert 'agent-actions render' in error_message
         assert 'test_workflow' in error_message
 
     def test_cache_directory_created_automatically(self):
         """Test that cache directory is created if it doesn't exist."""
         cache_dir = Path('.agent-actions/cache/rendered_workflows')
-
-        # Ensure cache doesn't exist
         if cache_dir.exists():
             shutil.rmtree(cache_dir)
-
         yaml_file = Path(self.temp_dir) / 'workflow.yml'
-        yaml_file.write_text("invalid: [yaml")
-
+        yaml_file.write_text('invalid: [yaml')
         with pytest.raises(ConfigurationError):
-            render_pipeline_with_templates(
-                yaml_path=str(yaml_file),
-                templates_folder=str(self.templates_folder)
-            )
-
-        # Cache directory should now exist
+            render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         assert cache_dir.exists()
         assert cache_dir.is_dir()
-
 
 class TestRenderPipelineIntegration:
     """Integration tests for render_pipeline_with_templates."""
@@ -326,25 +224,9 @@ class TestRenderPipelineIntegration:
 
     def test_excessive_indent_workflow_normalized(self):
         """Test that workflows with excessive indent are auto-normalized."""
-        # Create a workflow with excessive indentation (simulates macro output)
         yaml_file = Path(self.temp_dir) / 'workflow.yml'
-        yaml_file.write_text("""
-      name: test_workflow
-      version: 1.0
-      tools:
-        - name: foo
-          kind: tool
-        - name: bar
-          kind: action
-""")
-
-        # Should render successfully due to normalization
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
-        # Verify it parses as valid YAML
+        yaml_file.write_text('\n      name: test_workflow\n      version: 1.0\n      tools:\n        - name: foo\n          kind: tool\n        - name: bar\n          kind: action\n')
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'test_workflow'
         assert 'tools' in parsed
@@ -352,43 +234,18 @@ class TestRenderPipelineIntegration:
 
     def test_dedent_filter_available_in_templates(self):
         """Test that dedent filter is available for use in templates."""
-        # Use dedent filter on a string variable
         yaml_file = Path(self.temp_dir) / 'workflow.yml'
-        yaml_file.write_text("""
-name: test_workflow
-description: {{ '    filter works' | dedent }}
-version: 1.0
-""")
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
-        # Should render and parse successfully
+        yaml_file.write_text("\nname: test_workflow\ndescription: {{ '    filter works' | dedent }}\nversion: 1.0\n")
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'test_workflow'
-        # dedent removes leading spaces, so '    filter works' becomes 'filter works'
         assert parsed['description'] == 'filter works'
 
     def test_backward_compatibility_correct_templates(self):
         """Test that correctly formatted templates still work."""
         yaml_file = Path(self.temp_dir) / 'workflow.yml'
-        yaml_file.write_text("""
-name: test_workflow
-version: 1.0
-actions:
-  - name: test_action
-    kind: action
-    inputs:
-      param1: value1
-""")
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
+        yaml_file.write_text('\nname: test_workflow\nversion: 1.0\nactions:\n  - name: test_action\n    kind: action\n    inputs:\n      param1: value1\n')
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'test_workflow'
         assert parsed['version'] == 1.0
@@ -398,25 +255,12 @@ actions:
     def test_jinja2_variable_substitution(self):
         """Test that Jinja2 variable substitution works with normalization."""
         yaml_file = Path(self.temp_dir) / 'workflow.yml'
-        yaml_file.write_text("""
-      {% set workflow_name = 'combined_test' %}
-      name: {{ workflow_name }}
-      version: 1.0
-      actions:
-        - name: action1
-          kind: action
-""")
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
+        yaml_file.write_text("\n      {% set workflow_name = 'combined_test' %}\n      name: {{ workflow_name }}\n      version: 1.0\n      actions:\n        - name: action1\n          kind: action\n")
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'combined_test'
         assert 'actions' in parsed
         assert len(parsed['actions']) == 1
-
 
 class TestBackwardCompatibility:
     """Test backward compatibility with existing workflows."""
@@ -434,20 +278,8 @@ class TestBackwardCompatibility:
     def test_workflows_without_templates(self):
         """Test that workflows without templates still work."""
         yaml_file = Path(self.temp_dir) / 'simple_workflow.yml'
-        yaml_file.write_text("""
-name: simple
-version: 1.0
-description: A simple workflow
-actions:
-  - name: step1
-    kind: action
-""")
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
+        yaml_file.write_text('\nname: simple\nversion: 1.0\ndescription: A simple workflow\nactions:\n  - name: step1\n    kind: action\n')
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'simple'
         assert parsed['description'] == 'A simple workflow'
@@ -455,22 +287,9 @@ actions:
     def test_workflows_with_correct_indentation(self):
         """Test that workflows with correct indentation are unchanged."""
         yaml_file = Path(self.temp_dir) / 'correct_workflow.yml'
-        yaml_content = """name: correct_workflow
-version: 1.0
-actions:
-  - name: action1
-    kind: action
-    inputs:
-      param: value
-"""
+        yaml_content = 'name: correct_workflow\nversion: 1.0\nactions:\n  - name: action1\n    kind: action\n    inputs:\n      param: value\n'
         yaml_file.write_text(yaml_content)
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
-        # Should parse correctly
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'correct_workflow'
         assert parsed['actions'][0]['inputs']['param'] == 'value'
@@ -478,36 +297,8 @@ actions:
     def test_complex_existing_workflow(self):
         """Test with a complex workflow structure."""
         yaml_file = Path(self.temp_dir) / 'complex_workflow.yml'
-        yaml_file.write_text("""
-name: complex_workflow
-version: 2.0
-metadata:
-  author: test
-  tags:
-    - testing
-    - integration
-tools:
-  - name: tool1
-    kind: tool
-    config:
-      endpoint: https://example.com
-      timeout: 30
-actions:
-  - name: action1
-    kind: action
-    depends_on:
-      - tool1
-    inputs:
-      data:
-        nested:
-          deeply: value
-""")
-
-        result = render_pipeline_with_templates(
-            yaml_path=str(yaml_file),
-            templates_folder=str(self.templates_folder)
-        )
-
+        yaml_file.write_text('\nname: complex_workflow\nversion: 2.0\nmetadata:\n  author: test\n  tags:\n    - testing\n    - integration\ntools:\n  - name: tool1\n    kind: tool\n    config:\n      endpoint: https://example.com\n      timeout: 30\nactions:\n  - name: action1\n    kind: action\n    depends_on:\n      - tool1\n    inputs:\n      data:\n        nested:\n          deeply: value\n')
+        result = render_pipeline_with_templates(yaml_path=str(yaml_file), templates_folder=str(self.templates_folder))
         parsed = yaml.safe_load(result)
         assert parsed['name'] == 'complex_workflow'
         assert parsed['metadata']['author'] == 'test'

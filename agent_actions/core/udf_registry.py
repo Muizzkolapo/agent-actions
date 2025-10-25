@@ -21,19 +21,10 @@ Usage:
     # In config:
     # impl: my_function  # Simple name, no module path needed
 """
-
 import inspect
 from typing import Any, Callable, Dict, List
-
-from agent_actions.core.exceptions import (
-    DuplicateFunctionError,
-    FunctionNotFoundError,
-)
-
-
-# Global registry: {lowercase_func_name: metadata_dict}
+from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError
 UDF_REGISTRY: Dict[str, Dict[str, Any]] = {}
-
 
 def udf_tool(func: Callable) -> Callable:
     """
@@ -59,34 +50,13 @@ def udf_tool(func: Callable) -> Callable:
     """
     func_name = func.__name__
     func_name_lower = func_name.lower()
-
-    # Check for duplicate (case-insensitive)
     if func_name_lower in UDF_REGISTRY:
         existing = UDF_REGISTRY[func_name_lower]
         existing_location = f"{existing['module']}.{existing['name']}"
-        new_location = f"{func.__module__}.{func_name}"
-
-        raise DuplicateFunctionError(
-            function_name=func_name,
-            existing_location=existing_location,
-            existing_file=existing['file'],
-            new_location=new_location,
-            new_file=inspect.getfile(func)
-        )
-
-    # Register function with metadata
-    UDF_REGISTRY[func_name_lower] = {
-        'function': func,
-        'module': func.__module__,
-        'name': func_name,  # Preserve original case
-        'file': inspect.getfile(func),
-        'docstring': func.__doc__,
-        'signature': inspect.signature(func)
-    }
-
-    # Return original function unchanged (transparent decorator)
+        new_location = f'{func.__module__}.{func_name}'
+        raise DuplicateFunctionError(function_name=func_name, existing_location=existing_location, existing_file=existing['file'], new_location=new_location, new_file=inspect.getfile(func))
+    UDF_REGISTRY[func_name_lower] = {'function': func, 'module': func.__module__, 'name': func_name, 'file': inspect.getfile(func), 'docstring': func.__doc__, 'signature': inspect.signature(func)}
     return func
-
 
 def get_udf(func_name: str) -> Callable:
     """
@@ -106,18 +76,10 @@ def get_udf(func_name: str) -> Callable:
         result = func(data)
     """
     func_name_lower = func_name.lower()
-
     if func_name_lower not in UDF_REGISTRY:
-        # List all available functions (sorted alphabetically)
         available = sorted([meta['name'] for meta in UDF_REGISTRY.values()])
-
-        raise FunctionNotFoundError(
-            function_name=func_name,
-            available_functions=available
-        )
-
+        raise FunctionNotFoundError(function_name=func_name, available_functions=available)
     return UDF_REGISTRY[func_name_lower]['function']
-
 
 def list_udfs() -> List[Dict[str, Any]]:
     """
@@ -136,20 +98,7 @@ def list_udfs() -> List[Dict[str, Any]]:
         for udf in udfs:
             print(f"{udf['name']} - {udf['file']}")
     """
-    return [
-        {
-            'name': meta['name'],
-            'module': meta['module'],
-            'file': meta['file'],
-            'docstring': meta['docstring'],
-            'signature': str(meta['signature'])
-        }
-        for meta in sorted(
-            UDF_REGISTRY.values(),
-            key=lambda x: x['name'].lower()
-        )
-    ]
-
+    return [{'name': meta['name'], 'module': meta['module'], 'file': meta['file'], 'docstring': meta['docstring'], 'signature': str(meta['signature'])} for meta in sorted(UDF_REGISTRY.values(), key=lambda x: x['name'].lower())]
 
 def clear_registry() -> None:
     """
