@@ -14,7 +14,6 @@ import click
 
 # Import commands
 from agent_actions.tasks.test import clean_cli as clean
-from agent_actions.tasks.docs import docs
 from agent_actions.tasks.init import init
 from agent_actions.tasks.compile import render
 from agent_actions.tasks.run import run
@@ -45,7 +44,6 @@ class CLI:
         """Register all available commands with the CLI."""
         self.logger.debug("Registering CLI commands")
         self.click_group.add_command(clean)
-        self.click_group.add_command(docs)
         self.click_group.add_command(init)
         self.click_group.add_command(render)
         self.click_group.add_command(run)
@@ -68,13 +66,13 @@ class CLI:
             # This might happen in environments where signals aren't available
             self.logger.warning(f"Failed to register signal handlers: {str(e)}")
     
-    def _handle_termination(self, signum: int, frame: Any) -> None:
+    def _handle_termination(self, signum: int, frame) -> None:
         """
         Handle termination signals gracefully.
-        
+
         Args:
             signum: Signal number
-            frame: Current stack frame
+            frame: Current stack frame (unused but required by signal handler signature)
         """
         signal_name = signal.Signals(signum).name
         self.logger.info(f"Received termination signal: {signal_name}")
@@ -241,7 +239,6 @@ def cli(debug: bool, verbose: bool) -> None:
 
 # Register commands with the main cli group
 cli.add_command(clean)
-cli.add_command(docs)
 cli.add_command(init)
 cli.add_command(render)
 cli.add_command(run)
