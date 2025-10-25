@@ -3,7 +3,6 @@ import json
 import csv
 from pathlib import Path
 from agent_actions.core.exceptions import AgentActionsException
-from agent_actions.core.safe_format import safe_format_error
 from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
 
 class FileWriter(ProcessorErrorHandlerMixin):

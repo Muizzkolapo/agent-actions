@@ -11,7 +11,6 @@ from .contracts.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
-    IContentProcessor,
     ISourceDataLoader,
 )
 

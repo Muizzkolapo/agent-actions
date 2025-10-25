@@ -3,7 +3,7 @@ from typing import Dict, List, Tuple, Optional
 import asyncio
 from agent_actions.agents.transformers.data_transformer import DataTransformer
 
-from agent_actions.core.contracts.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator, ProcessingMode
+from agent_actions.core.contracts.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.graph.dependency_injection import registry
 from agent_actions.core.utils.processor_utils import ProcessorUtils
@@ -405,7 +405,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             # In workflows, we can try to infer file names from the data structure
             # This is a heuristic approach that may need refinement
-            from pathlib import Path
             
             # If we only have one source_guid, we might be dealing with a single file
             if len(source_groups) == 1:

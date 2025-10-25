@@ -9,7 +9,7 @@ import yaml
 from yaml import YAMLError
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, Union, List, cast
+from typing import Optional, Union, List, cast
 from abc import ABC, abstractmethod
 
 from agent_actions.core.graph.render_workflow import render_pipeline_with_templates
@@ -345,7 +345,6 @@ class ConfigRenderingService:
             data = yaml.safe_load(raw)
         except YAMLError as exc:
             mark = getattr(exc, "problem_mark", None)
-            where = f"(line {mark.line+1}, col {mark.column+1})" if mark else ""
             problem = getattr(exc, "problem", "syntax error")
             raise ConfigurationError(
                 "YAML syntax error",

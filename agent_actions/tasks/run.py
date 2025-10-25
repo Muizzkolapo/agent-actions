@@ -53,8 +53,9 @@ class RunCommand:
             Various exceptions depending on the stage that fails
         """
         # Import custom validators before workflow initialization
+        # Note: Import is for side effects (registers custom validators)
         try:
-            from qanalabs.tools import validators
+            from qanalabs.tools import validators  # noqa: F401
             click.echo("Loaded qanalabs custom validators")
         except ImportError:
             pass  # qanalabs validators not available

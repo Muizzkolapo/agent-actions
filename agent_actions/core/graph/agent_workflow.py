@@ -8,11 +8,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List
 from agent_actions.agents.handlers.config_handler import ConfigManager
-from agent_actions.core.runtime.agent_runner import AgentRunner
 from agent_actions.agents.generators.output_processor import OutputProcessor
 from agent_actions.tasks.services.batch_service import BatchService
 from agent_actions.core.parser.where_parser import get_global_filter, evaluate_safe_skip_condition
-from agent_actions.core.constants import PROMPT_KEY, SCHEMA_NAME_KEY
 from agent_actions.artifacts.manager import ArtifactManager
 from agent_actions.artifacts.manifest import ManifestArtifact
 from agent_actions.core.contracts.base import SecurityError as ArtifactSecurityError
@@ -34,8 +32,6 @@ class AgentWorkflow:
         # Compute execution levels
         levels = self._compute_execution_levels()
         self._log_execution_levels(levels)
-
-        total_agents = len(self.execution_order)
 
         for level_idx, level_agents in enumerate(levels):
             start_time = datetime.now()

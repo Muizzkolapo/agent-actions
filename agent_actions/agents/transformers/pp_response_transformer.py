@@ -1,6 +1,4 @@
 """Module for transforming agent responses."""
-from agent_actions.agents.transformers.data_transformer import DataTransformer
-from agent_actions.core.constants import OBSERVE_KEY
 from agent_actions.core.utils.processor_helpers import transform_with_observe
 
 

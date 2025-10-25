@@ -241,7 +241,7 @@ class SecureWhereClauseParser:
                         else:
                             raise ValueError("Unsupported array element type")
                     return result
-            except (SyntaxError, ValueError) as e:
+            except (SyntaxError, ValueError):
                 raise InvalidWhereClauseError(f"Invalid array syntax: {value_str}")
         
         # Return as string if nothing else matches

@@ -13,7 +13,6 @@ Registry tracking is handled by BatchService, not this provider.
 import json
 import time
 import uuid
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ollama import Client
@@ -192,7 +191,7 @@ class OllamaLocalBatchProvider(BatchProvider):
         batch_id = f"batch_{uuid.uuid4().hex}"
 
         # Use base class helper to write input JSONL
-        input_file_path = self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
+        self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
         # Process all tasks immediately
         results = []

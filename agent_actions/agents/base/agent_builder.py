@@ -13,15 +13,11 @@ from agent_actions.integrations.providers.groq.vendor        import GroqLlama3Ha
 from agent_actions.integrations.providers.deepseek.vendor   import DeepSeekHandler
 from agent_actions.integrations.providers.tools.vendor      import ToolHandler
 
-from agent_actions.agents.handlers.schema_handler         import SchemaLoader
 from agent_actions.agents.handlers.prompt_handler         import PromptLoader
-from agent_actions.core.parser.schema_change            import compile_unified_schema
 from agent_actions.agents.transformers.prompt_utils import PromptUtils
 from agent_actions.core.constants import (
     MODEL_VENDOR_KEY,
     PROMPT_KEY,
-    SCHEMA_NAME_KEY,
-    SCHEMA_KEY,
 )
 
 

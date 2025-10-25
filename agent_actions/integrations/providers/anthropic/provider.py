@@ -7,12 +7,10 @@ specific requirements.
 """
 
 import json
-import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 from ..base import BatchProvider, BatchTask, BatchResult
-from agent_actions.core.parser.schema_change import compile_unified_schema
 
 
 class AnthropicBatchProvider(BatchProvider):

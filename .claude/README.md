@@ -6,7 +6,7 @@ This directory contains custom commands and helpers for Claude Code.
 
 ### `/find-dead-code <file_or_directory>`
 
-Performs focused dead code analysis to find unused functions, classes, imports, variables, and methods.
+**Enhanced multi-tool dead code analysis** with false positive filtering to find unused code safely.
 
 **Usage:**
 ```bash
@@ -17,26 +17,36 @@ Performs focused dead code analysis to find unused functions, classes, imports, 
 /find-dead-code agent_actions/agents
 ```
 
+**Multi-Tool Detection:**
+- **Ruff**: Fast, accurate import/variable detection (95% confidence)
+- **Vulture**: Comprehensive dead code detection
+- **AST Analysis**: Additional validation
+- **Smart Filters**: Automatically filters dispatch tables, abstract methods, vendor handlers
+
+**Confidence Tiers:**
+- 🔴 **HIGH (90-100%)**: Very safe to remove (multiple tools agree OR Ruff confirms)
+- 🟡 **MEDIUM (70-89%)**: Review before removing (may be used indirectly)
+- ⚪ **LOW (<70%)**: Likely false positives (skip these - polymorphism/dispatch)
+
 **What it detects:**
 - Unused functions and methods
 - Unused classes
 - Unused variables
-- Unused imports (high-confidence removals)
+- Unused imports (Ruff-validated, very accurate)
 - Unused properties and attributes
-- Confidence levels (🔴 80%+ high, 🟡 60-79% medium)
 
 **Report includes:**
-- Summary statistics by type
-- Distribution visualization
-- Detailed findings by file with line numbers
-- Estimated lines that can be removed
-- Prioritized cleanup recommendations
+- Tool-specific attribution (`[ruff,vulture,ast]`)
+- Confidence breakdown by tier
+- False positive risk warnings
+- High-confidence items shown first
+- Low-confidence items hidden by default
 
 **Perfect for:**
-- Spring cleaning dead code
-- Reducing codebase size
-- Improving import times
-- Removing legacy/unused features
+- Spring cleaning dead code safely
+- Removing unused imports (Ruff-validated)
+- Avoiding false positives (dispatch tables, vendors, etc.)
+- Reducing codebase size confidently
 
 ### `/review-clean-code <module>`
 
@@ -98,7 +108,7 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 
 ### `dead_code_analyzer.py`
 
-Focused dead code analyzer for **finding unused code** in files or directories.
+**Enhanced multi-tool dead code analyzer** with smart false positive filtering.
 
 **Usage:**
 ```bash
@@ -110,34 +120,53 @@ python .claude/helpers/dead_code_analyzer.py agent_actions/agents
 
 # Brief summary only (no detailed findings)
 python .claude/helpers/dead_code_analyzer.py agent_actions/agents --brief
+
+# Show all items including low-confidence (false positives)
+python .claude/helpers/dead_code_analyzer.py agent_actions/agents --show-all
 ```
 
-**Detection Methods:**
-- **Vulture**: Industry-standard dead code detector (60%+ confidence threshold)
+**Multi-Tool Detection:**
+- **Ruff** (F401, F841): Fast, accurate import/variable detection (95% confidence)
+- **Vulture**: Comprehensive dead code detection (60%+ confidence)
 - **AST Analysis**: Custom unused import detection
-- **Line Span Calculation**: Determines actual size of dead code
+- **Cross-Validation**: Merges results and adjusts confidence scores
+- **Smart Filtering**: Automatically downgrades known false positive patterns
+
+**False Positive Filters:**
+Automatically detects and lowers confidence for:
+- Dispatch tables: `*Handler`, `*Provider`, `*Processor`, `*Factory`, `*Plugin`
+- Abstract methods in base classes
+- Magic methods: `__init__`, `__str__`, etc.
+- Test fixtures: `setUp`, `tearDown`, `pytest_*`
+- Code in vendor/provider/handler directories
+
+**Confidence Scoring:**
+- **HIGH (90-100%)**: Ruff confirms OR multiple tools agree - very safe to remove
+- **MEDIUM (70-89%)**: Vulture detects, filtered for patterns - review carefully
+- **LOW (<70%)**: High false positive risk - skip these
 
 **What it finds:**
 - Unused functions (never called)
 - Unused classes (never instantiated)
 - Unused methods (never invoked)
 - Unused variables (assigned but never read)
-- Unused imports (imported but never used)
+- Unused imports (Ruff-validated for accuracy)
 - Unused properties and attributes
 
-**Output:**
-- Summary statistics with breakdown by type
-- ASCII bar chart of dead code distribution
-- Detailed findings grouped by file
-- Confidence indicators (🔴 high, 🟡 medium, ⚪ low)
-- Line numbers and size for each dead item
-- Estimated total removable lines
+**Enhanced Output:**
+- Confidence tier breakdown (HIGH/MEDIUM/LOW)
+- Tool attribution for each finding (`[ruff,vulture,ast]`)
+- False positive risk warnings (`⚠️ Located in vendor directory`)
+- High-confidence items shown first
+- Low-confidence items hidden by default
+- Summary statistics with tool availability
+- Estimated safe removal vs. total potential
 
 **Perfect for:**
-- Finding safe-to-remove code
-- Cleaning up unused imports
-- Reducing codebase bloat
-- Pre-refactoring cleanup
+- Finding truly unused code (not false positives)
+- Cleaning up unused imports with confidence
+- Avoiding mistakes from dispatch tables/polymorphism
+- Safe codebase reduction
 
 ### `code_analyzer.py`
 
@@ -220,7 +249,7 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 
 ### For Dead Code Cleanup
 ```bash
-# Option 1: Quick dead code check
+# Option 1: Quick dead code check (multi-tool analysis)
 /find-dead-code agent_actions/core/parser.py
 
 # Option 2: Full directory scan
@@ -228,6 +257,12 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 
 # Option 3: Manual run for saving to file
 python .claude/helpers/dead_code_analyzer.py agent_actions/agents > dead_code_report.txt
+
+# Focus on high-confidence items only (safest)
+# The tool automatically separates HIGH/MEDIUM/LOW confidence
+# - HIGH (90-100%): Safe to remove immediately
+# - MEDIUM (70-89%): Review before removing
+# - LOW (<70%): Skip - likely false positives
 ```
 
 ### For Single Module Review
@@ -261,9 +296,12 @@ python .claude/helpers/batch_analyzer.py agent_actions/agents > batch_report.txt
 
 ### Complete Codebase Health Check
 ```bash
-# Step 1: Find and remove dead code first
+# Step 1: Find and remove dead code first (focus on HIGH confidence)
 /find-dead-code agent_actions
-# Review and remove high-confidence dead code
+# The tool will separate findings into:
+# - HIGH confidence (90-100%): Remove these first ✅
+# - MEDIUM confidence (70-89%): Review carefully ⚠️
+# - LOW confidence (<70%): Skip - likely false positives ⛔
 
 # Step 2: Run batch analysis after cleanup
 python .claude/helpers/batch_analyzer.py agent_actions > batch_report.txt
@@ -320,8 +358,29 @@ TOUCHES: Uses ValidationService (to check data)
    💡 Refactoring: Split into 3 functions...
 ```
 
+## Tool Installation
+
+For best results with dead code analysis, install the recommended tools:
+
+```bash
+# Required for basic dead code detection
+pip install vulture
+
+# Highly recommended for accurate import detection (95% confidence)
+pip install ruff
+
+# Note: AST analysis is built-in (no installation needed)
+```
+
+**Without Ruff:** The analyzer still works but will have lower confidence scores for imports.
+
+**With Ruff:** Import detection is highly accurate (95% confidence), dramatically reducing false positives.
+
 ## Tips
 
+- **Dead Code**: Start with HIGH confidence items (90-100%) - very safe to remove
+- **Dead Code**: Review MEDIUM items carefully (70-89%) - may be used indirectly
+- **Dead Code**: Skip LOW confidence items (<70%) - likely false positives from dispatch tables
 - Start with modules that have low complexity for practice
 - Review related modules together to see coupling issues
 - Use the lineage graphs to identify tight coupling

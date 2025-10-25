@@ -5,7 +5,7 @@ This module converts action-based workflow configurations into agent configurati
 handling loop expansion, template variables, and dependency mapping.
 """
 
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, Optional
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_field_definitions import inherit_simple_fields
 import logging

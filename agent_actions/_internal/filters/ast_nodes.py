@@ -6,7 +6,7 @@ Each node can be evaluated against data using the visitor pattern.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -328,7 +328,7 @@ class WhereClauseEvaluator(ASTVisitor):
                 return not (right_value[0] <= left_value <= right_value[1])
             else:
                 raise ValueError(f"Unknown comparison operator: {node.operator}")
-        except (TypeError, ValueError) as e:
+        except (TypeError, ValueError):
             # Handle type errors gracefully (e.g., comparing string to number)
             return False
     

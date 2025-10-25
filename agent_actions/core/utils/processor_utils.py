@@ -11,9 +11,7 @@ import uuid
 import json
 import threading
 import hashlib
-import time
-import os
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional
 
 from agent_actions.agents.transformers.data_transformer import DataTransformer
 from agent_actions.core.constants import OBSERVE_KEY

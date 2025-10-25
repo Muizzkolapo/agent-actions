@@ -217,7 +217,7 @@ class SourceDataLoader(ISourceDataLoader):
             
             return None
             
-        except Exception as e:
+        except Exception:
             # Return None if content cannot be found/loaded
             return None
 

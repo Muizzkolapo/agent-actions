@@ -22,7 +22,6 @@ except ImportError:
 
 from ..base import BatchProvider, BatchTask, BatchResult
 from agent_actions.core.utils.path_utils import ensure_directory_exists
-from agent_actions.core.parser.schema_change import compile_unified_schema
 
 
 class GeminiBatchProvider(BatchProvider):
