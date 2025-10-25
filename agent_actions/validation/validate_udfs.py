@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Set
 from rich.console import Console
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
-from agent_actions.core.udf_registry import clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_registry import clear_registry, UDF_REGISTRY
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
@@ -72,7 +72,7 @@ class ValidateUDFsCommand:
                 self._handle_not_found_error(e)
                 return
         except Exception as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'validate-udfs', 'agent': self.agent_name, 'user_code': str(self.user_code)})
             raise click.ClickException(error_message)
 

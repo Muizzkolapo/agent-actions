@@ -132,7 +132,7 @@ class CLI:
             print(click.style('Error: ', fg='red', bold=True) + error_msg, file=sys.stderr)
             return 1
         except Exception as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             self.logger.error('CLI execution failed', extra={'error': str(e)}, exc_info=True)
             context = {'command': argv[0] if argv else 'agent-actions', 'operation': 'cli_execution'}
             error_message = format_user_error(e, context)
@@ -140,7 +140,7 @@ class CLI:
             if '--debug' in (argv or []):
                 print('\n--- Debug Information ---', file=sys.stderr)
                 import traceback
-                from agent_actions.core.safe_format import format_exception_chain_for_debug
+                from agent_actions.utilities.safe_format import format_exception_chain_for_debug
                 print('\nException Chain:', file=sys.stderr)
                 print(format_exception_chain_for_debug(e), file=sys.stderr)
                 print('\nFull Traceback:', file=sys.stderr)

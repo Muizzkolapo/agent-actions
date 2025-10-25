@@ -7,7 +7,7 @@ which handles creating new Agent Actions projects.
 import click
 from pathlib import Path
 from typing import Optional, List
-from agent_actions.core.init import ProjectInitializer
+from agent_actions.configuration.init import ProjectInitializer
 from agent_actions.validation.project_validator import ProjectValidator
 from agent_actions.shared.exceptions import ValidationError, FileSystemError, ConfigurationError
 from agent_actions.validation.init_validator import InitCommandArgs
@@ -85,11 +85,11 @@ class InitCommand:
             click.echo(f'  cd {self.args.project_name}')
             click.echo('  agent-actions run -a sample_agent')
         except (ValidationError, FileSystemError, ConfigurationError) as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
             raise click.ClickException(error_message)
         except Exception as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
             raise click.ClickException(error_message)
 
@@ -116,6 +116,6 @@ def init(project_name: str, output_dir: Optional[str]=None, template: str='defau
         command = InitCommand(args)
         command.execute()
     except PydanticValidationError as e:
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         error_message = format_user_error(e, {'command': 'init'})
         raise click.ClickException(error_message)

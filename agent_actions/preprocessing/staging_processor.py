@@ -1,6 +1,6 @@
 """Module for orchestrating prompt processing workflow."""
 from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
-from agent_actions.core.utils.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.shared.exceptions import ProcessingError
 from agent_actions.utilities.utils_processor_utils import ProcessorUtils
 from agent_actions.preprocessing.pp_sample_enricher import SampleEnricher

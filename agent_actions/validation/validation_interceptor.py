@@ -2,7 +2,7 @@ from __future__ import annotations
 'Interceptor that validates responses using user-defined functions.\n\nUser-defined validators must:\n1. Accept (response: Any, **kwargs) where response is the raw API response\n2. Extract content from the response structure as needed\n3. Return Tuple[bool, str | None] - (success, error_message)\n'
 from typing import Any, Dict
 from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
-from agent_actions.core.tooling import load_user_defined_function, _split_udf_name
+from agent_actions.utilities.tooling import load_user_defined_function, _split_udf_name
 from agent_actions.state_management.context import context as artifact_context
 from agent_actions.configuration.base import SecurityError
 from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError

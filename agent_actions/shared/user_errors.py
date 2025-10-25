@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
-from agent_actions.core.safe_format import (
+from agent_actions.utilities.safe_format import (
     safe_format_error,
     extract_root_cause,
     safe_get_exception_message,

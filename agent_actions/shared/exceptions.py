@@ -198,7 +198,7 @@ class AgentActionsException(Exception):
     def __str__(self) -> str:
         """Return a string representation including context if available."""
         try:
-            from agent_actions.core.safe_format import format_exception_context
+            from agent_actions.utilities.safe_format import format_exception_context
 
             # Safely get base message
             try:

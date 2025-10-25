@@ -8,8 +8,8 @@ with existing workflows while maintaining backward compatibility.
 import logging
 from typing import Dict, Any, Optional
 from contextlib import contextmanager
-from .runtime.application_container import ApplicationContainer
-from .runtime.agent_runner import AgentRunner
+from agent_actions.orchestration.application_container import ApplicationContainer
+from agent_actions.orchestration.agent_runner import AgentRunner
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,8 @@ def create_agent_runner(config: Optional[Dict[str, Any]] = None,
 def create_target_content_processor(config: Optional[Dict[str, Any]] = None,
                                   agent_config: Dict = None,
                                   agent_name: str = None,
-                                  idx: int = None):
+                                  idx: int = None,
+                                  agent_configs: Optional[Dict[str, Dict]] = None):
     """
     Create a TargetContentProcessor with proper dependency injection.
 
@@ -73,9 +74,10 @@ def create_target_content_processor(config: Optional[Dict[str, Any]] = None,
         agent_config: Configuration for the agent
         agent_name: Name of the agent
         idx: Index of the config being processed
+        agent_configs: Optional dictionary of all agent configurations
 
     Returns:
         TargetContentProcessor instance with injected dependencies
     """
     with application_container_context(config) as container:
-        return container.create_target_content_processor(agent_config, agent_name, idx)
+        return container.create_target_content_processor(agent_config, agent_name, idx, agent_configs)

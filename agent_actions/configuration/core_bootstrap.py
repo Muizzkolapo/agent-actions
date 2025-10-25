@@ -6,8 +6,8 @@ based on configuration settings.
 """
 
 from typing import Dict, Any
-from .graph.dependency_injection import DependencyContainer, ProcessorFactory, registry
-from .contracts.interfaces import (
+from agent_actions.orchestration.dependency_injection import DependencyContainer, ProcessorFactory, registry
+from agent_actions.configuration.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
@@ -37,8 +37,8 @@ class DIConfigurator:
     @staticmethod
     def _register_core_services(container: DependencyContainer, config: Dict[str, Any]):
         """Register core application services."""
-        from ..tasks.services.batch_service import BatchService
-        from .context.path_manager import PathManager
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
+        from agent_actions.state_management.path_manager import PathManager
 
         # Core services as singletons
         container.register_singleton(PathManager, PathManager)
@@ -48,8 +48,8 @@ class DIConfigurator:
     def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
         """Register processor implementations."""
         # Data processors
-        from ..agents.transformers.data_processor import DataProcessor
-        from ..agents.generators.data_generator import DataGenerator
+        from agent_actions.preprocessing.data_processor import DataProcessor
+        from agent_actions.prompt_generation.data_generator import DataGenerator
 
         container.register_transient(IDataProcessor, DataProcessor)
         container.register_transient(IGenerator, DataGenerator)
@@ -97,8 +97,8 @@ class DIConfigurator:
         container.register_factory(IGenerator, generator_factory)
 
         # Mock core services
-        from .context.path_manager import PathManager
-        from ..tasks.services.batch_service import BatchService
+        from agent_actions.state_management.path_manager import PathManager
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
 
         container.register_instance(PathManager, Mock(spec=PathManager))
         container.register_instance(BatchService, Mock(spec=BatchService))

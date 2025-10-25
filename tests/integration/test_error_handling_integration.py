@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch, Mock
 from agent_actions.shared.exceptions import ValidationError, FileLoadError, ConfigurationError, AgentActionsException
-from agent_actions.core.user_errors import format_user_error
+from agent_actions.shared.user_errors import format_user_error
 from agent_actions.state_management.error_context import with_command_context, with_agent_context
 
 class TestEndToEndErrorHandling:

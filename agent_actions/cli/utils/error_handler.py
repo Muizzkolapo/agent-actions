@@ -26,7 +26,7 @@ class ErrorHandler:
         Returns:
             User-friendly formatted error message
         """
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         return format_user_error(error, context)
 
     @staticmethod

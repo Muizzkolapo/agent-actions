@@ -9,8 +9,8 @@ These tests verify that Phase 3 implementation correctly:
 """
 import pytest
 from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError, ValidationError, FileLoadError, TemplateRenderingError
-from agent_actions.core.safe_format import extract_root_cause, get_error_chain, format_exception_chain_for_debug, safe_format_error
-from agent_actions.core.user_errors import format_user_error
+from agent_actions.utilities.safe_format import extract_root_cause, get_error_chain, format_exception_chain_for_debug, safe_format_error
+from agent_actions.shared.user_errors import format_user_error
 
 class TestContextPreservationThroughChains:
     """Test that context is preserved through exception chains."""

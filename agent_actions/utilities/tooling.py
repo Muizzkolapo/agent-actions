@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
 from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
-from agent_actions.core.safe_format import safe_format_error
+from agent_actions.utilities.safe_format import safe_format_error
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:
     """
@@ -80,7 +80,7 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
         FunctionNotFoundError: If the function is not in the UDF registry.
         Exception: If there's an error executing the function.
     """
-    from agent_actions.core.udf_registry import get_udf
+    from agent_actions.utilities.udf_registry import get_udf
     udf = get_udf(udf_name)
     try:
         result = udf(input_data, **kwargs)

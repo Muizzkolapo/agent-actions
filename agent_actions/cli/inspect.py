@@ -255,7 +255,7 @@ def signatures(agent_name: str, output_format: str, filter_agent: Optional[str])
         command = InspectSignaturesCommand(args)
         command.execute()
     except ValidationError as e:
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         error_message = format_user_error(e, {'command': 'inspect signatures'})
         raise click.ClickException(error_message)
 
@@ -279,7 +279,7 @@ def field_flow(agent_name: str, output_format: str) -> None:
         command = InspectFieldFlowCommand(args)
         command.execute()
     except ValidationError as e:
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         error_message = format_user_error(e, {'command': 'inspect field-flow'})
         raise click.ClickException(error_message)
 
@@ -305,6 +305,6 @@ def conflicts(agent_name: str, filter_agent: Optional[str], output_format: str) 
         command = InspectConflictsCommand(args)
         command.execute()
     except ValidationError as e:
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         error_message = format_user_error(e, {'command': 'inspect conflicts'})
         raise click.ClickException(error_message)

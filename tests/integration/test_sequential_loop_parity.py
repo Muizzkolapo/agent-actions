@@ -40,7 +40,7 @@ class TestSequentialLoopParity:
         import yaml
         with open(config_file, 'w') as f:
             yaml.dump(config, f)
-        with patch('agent_actions.orchestration.agent_workflow.ConfigManager') as MockConfigManager, patch('agent_actions.configuration.bootstrap_factory.create_agent_runner') as mock_create_runner, patch('agent_actions.orchestration.agent_workflow.OutputProcessor'), patch('agent_actions.orchestration.agent_workflow.BatchService') as MockBatchService, patch('agent_actions.tasks.services.batch_service.BatchProviderFactory.create_provider') as mock_factory, patch('agent_actions.orchestration.agent_workflow.WhereClauseParser'), patch('agent_actions.orchestration.agent_workflow.ManifestArtifact'):
+        with patch('agent_actions.orchestration.agent_workflow.ConfigManager') as MockConfigManager, patch('agent_actions.configuration.bootstrap_factory.create_agent_runner') as mock_create_runner, patch('agent_actions.orchestration.agent_workflow.OutputProcessor'), patch('agent_actions.orchestration.agent_workflow.BatchService') as MockBatchService, patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory.create_provider') as mock_factory, patch('agent_actions.orchestration.agent_workflow.WhereClauseParser'), patch('agent_actions.orchestration.agent_workflow.ManifestArtifact'):
             if mock_batch_provider:
                 mock_factory.return_value = mock_batch_provider
             mock_config_manager = MagicMock()

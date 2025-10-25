@@ -4,7 +4,7 @@ Tests for user_errors module user-friendly error formatting.
 import pytest
 from unittest.mock import Mock, patch
 from pathlib import Path
-from agent_actions.core.user_errors import UserError, ErrorTranslator, format_user_error
+from agent_actions.shared.user_errors import UserError, ErrorTranslator, format_user_error
 from agent_actions.shared.exceptions import AgentActionsException, ValidationError, FileLoadError, ConfigurationError
 
 class TestUserError:

@@ -78,12 +78,12 @@ class RunCommand:
                 workflow.run()
             click.echo(f'Successfully completed agent run for: {self.args.agent}')
         except (ValidationError, FileLoadError, ConfigurationError, AgentExecutionError) as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             context = {'agent': self.args.agent, 'command': 'run', 'error_type': type(e).__name__}
             error_message = format_user_error(e, context)
             raise click.ClickException(error_message)
         except Exception as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             context = {'agent': self.args.agent, 'command': 'run'}
             error_message = format_user_error(e, context)
             raise click.ClickException(error_message)

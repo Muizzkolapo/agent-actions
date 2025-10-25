@@ -7,7 +7,7 @@ import tempfile
 import shutil
 import yaml
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
-from agent_actions.core.udf_registry import clear_registry
+from agent_actions.utilities.udf_registry import clear_registry
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():
@@ -43,8 +43,8 @@ def runner():
 class TestValidateUDFsCommand:
     """Tests for validate-udfs command."""
 
-    @patch('agent_actions.tasks.validate_udfs.ProjectPathsFactory.create_project_paths')
-    @patch('agent_actions.tasks.validate_udfs.ConfigManager')
+    @patch('agent_actions.validation.validate_udfs.ProjectPathsFactory.create_project_paths')
+    @patch('agent_actions.validation.validate_udfs.ConfigManager')
     def test_validate_udfs_success(self, mock_config_manager, mock_paths, runner, temp_user_code_dir, temp_project_dir):
         """Test validate-udfs with valid UDF references."""
         project_path, agent_configs_dir, agent_io_dir = temp_project_dir
@@ -67,8 +67,8 @@ class TestValidateUDFsCommand:
         assert '✅ All UDF references valid' in result.output
         assert '1 UDF(s) referenced' in result.output
 
-    @patch('agent_actions.tasks.validate_udfs.ProjectPathsFactory.create_project_paths')
-    @patch('agent_actions.tasks.validate_udfs.ConfigManager')
+    @patch('agent_actions.validation.validate_udfs.ProjectPathsFactory.create_project_paths')
+    @patch('agent_actions.validation.validate_udfs.ConfigManager')
     def test_validate_udfs_missing_function(self, mock_config_manager, mock_paths, runner, temp_user_code_dir, temp_project_dir):
         """Test validate-udfs detects missing function reference."""
         project_path, agent_configs_dir, agent_io_dir = temp_project_dir
@@ -88,7 +88,7 @@ class TestValidateUDFsCommand:
         assert "❌ Function 'nonexistent_function' not found" in result.output
         assert 'existing_function' in result.output
 
-    @patch('agent_actions.tasks.validate_udfs.ProjectPathsFactory.create_project_paths')
+    @patch('agent_actions.validation.validate_udfs.ProjectPathsFactory.create_project_paths')
     def test_validate_udfs_duplicate_function(self, mock_paths, runner, temp_user_code_dir, temp_project_dir):
         """Test validate-udfs detects duplicate function names."""
         project_path, agent_configs_dir, agent_io_dir = temp_project_dir
@@ -108,7 +108,7 @@ class TestValidateUDFsCommand:
         assert 'First definition' in result.output
         assert 'Duplicate definition' in result.output
 
-    @patch('agent_actions.tasks.validate_udfs.ProjectPathsFactory.create_project_paths')
+    @patch('agent_actions.validation.validate_udfs.ProjectPathsFactory.create_project_paths')
     def test_validate_udfs_import_error(self, mock_paths, runner, temp_user_code_dir, temp_project_dir):
         """Test validate-udfs handles import errors gracefully."""
         project_path, agent_configs_dir, agent_io_dir = temp_project_dir
@@ -124,8 +124,8 @@ class TestValidateUDFsCommand:
         result = runner.invoke(validate_udfs_cmd, ['-a', 'test_agent', '-u', str(temp_user_code_dir)])
         assert '❌ Error loading UDF module' in result.output or result.exit_code != 0
 
-    @patch('agent_actions.tasks.validate_udfs.ProjectPathsFactory.create_project_paths')
-    @patch('agent_actions.tasks.validate_udfs.ConfigManager')
+    @patch('agent_actions.validation.validate_udfs.ProjectPathsFactory.create_project_paths')
+    @patch('agent_actions.validation.validate_udfs.ConfigManager')
     def test_validate_udfs_output_formatting(self, mock_config_manager, mock_paths, runner, temp_user_code_dir, temp_project_dir):
         """Test validate-udfs output formatting and summary."""
         project_path, agent_configs_dir, agent_io_dir = temp_project_dir

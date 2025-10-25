@@ -10,7 +10,7 @@ from agent_actions.shared.exceptions import AgentActionsException, Configuration
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
-from agent_actions.core.safe_format import safe_format_error
+from agent_actions.utilities.safe_format import safe_format_error
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'
 
@@ -39,7 +39,7 @@ class TargetGenerator:
         self.granularity = (agent_config.get('granularity') or '').lower()
         self.side_output_enabled = agent_config.get('side_output', False)
         if processor_factory is None:
-            raise DependencyError('TargetGenerator requires processor_factory dependency', context={'component': 'TargetGenerator', 'dependency': 'processor_factory', 'agent_name': agent_name})
+            raise DependencyError('TargetGenerator', 'processor_factory', context={'component': 'TargetGenerator', 'dependency': 'processor_factory', 'agent_name': agent_name})
         from agent_actions._internal.bootstrap.bootstrap import create_target_content_processor
         self.content_processor = create_target_content_processor(agent_config=agent_config, agent_name=agent_name, idx=idx, agent_configs=agent_configs)
         self.output_handler = OutputHandler()
@@ -65,7 +65,7 @@ class TargetGenerator:
             DependencyError: If processor_factory is not provided
         """
         if processor_factory is None:
-            raise DependencyError('TargetGenerator.generate requires processor_factory dependency', context={'method': 'TargetGenerator.generate', 'dependency': 'processor_factory', 'agent_name': agent_name})
+            raise DependencyError('TargetGenerator.generate', 'processor_factory', context={'method': 'TargetGenerator.generate', 'dependency': 'processor_factory', 'agent_name': agent_name})
         if agent_config.get('run_mode') == 'batch':
             batch_service = BatchService()
             file_reader = FileReader(file_path)

@@ -1,7 +1,7 @@
 """Tests for UDF registry and @udf_tool decorator."""
 import pytest
 from pathlib import Path
-from agent_actions.core.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
 from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError
 
 @pytest.fixture(autouse=True)

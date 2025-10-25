@@ -5,10 +5,10 @@ This module provides the main application container that sets up all dependencie
 and provides factory methods for creating key application components.
 """
 from typing import Dict, Any, Optional
-from ..graph.dependency_injection import DependencyContainer, ProcessorFactory, registry
-from ..bootstrap import DIConfigurator, ConfigurationProfile
+from agent_actions.orchestration.dependency_injection import DependencyContainer, ProcessorFactory, registry
+from agent_actions.configuration.di_configurator import DIConfigurator, ConfigurationProfile
 from .agent_runner import AgentRunner
-from ..contracts.interfaces import IDataLoader, IDataProcessor, IGenerator, ISourceDataLoader
+from agent_actions.configuration.interfaces import IDataLoader, IDataProcessor, IGenerator, ISourceDataLoader
 
 class ApplicationContainer:
     """Main application container that manages all dependencies."""
@@ -161,7 +161,7 @@ class ApplicationContainer:
         """
         results = {'status': 'healthy', 'services': {}, 'timestamp': None}
         try:
-            from ..contracts.interfaces import IDataLoader, IDataProcessor, IGenerator
+            from agent_actions.configuration.interfaces import IDataLoader, IDataProcessor, IGenerator
             from agent_actions.llm_invocation.batch.batch_service import BatchService
             self.container.get(IDataLoader)
             results['services']['data_loader'] = 'healthy'

@@ -23,28 +23,30 @@ class DIConfigurator:
     @staticmethod
     def _register_core_services(container: DependencyContainer, config: Dict[str, Any]):
         """Register core application services."""
-        from ..services.batch_service import BatchService
-        from .path_manager import PathManager
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
+        from agent_actions.state_management.path_manager import PathManager
         container.register_singleton(PathManager, PathManager)
         container.register_singleton(BatchService, BatchService)
-        from ..processors.target_processor.output_handler import OutputHandler
+        from agent_actions.llm_invocation.realtime.output_handler import OutputHandler
         container.register_transient(OutputHandler, OutputHandler)
 
     @staticmethod
     def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
         """Register processor implementations."""
-        from ..processors.target_processor.data_processor import DataProcessor
-        from ..processors.target_processor.data_generator import DataGenerator
+        from agent_actions.preprocessing.data_processor import DataProcessor
+        from agent_actions.prompt_generation.data_generator import DataGenerator
+        from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
         container.register_transient(IDataProcessor, DataProcessor)
         container.register_transient(IGenerator, DataGenerator)
+        container.register_transient(ISourceDataLoader, SourceDataLoader)
 
     @staticmethod
     def _register_utilities(container: DependencyContainer, config: Dict[str, Any]):
         """Register utility services."""
-        from ..common.transformers.data_transformer import DataTransformer
-        from ..handlers.prompt_handler import PromptLoader
-        from ..processors.prompt_processor.sample_enricher import SampleEnricher
-        from ..common.monitoring.logging import LoggerFactory
+        from agent_actions.preprocessing.data_transformer import DataTransformer
+        from agent_actions.prompt_generation.prompt_handler import PromptLoader
+        from agent_actions.preprocessing.sample_enricher import SampleEnricher
+        from agent_actions.utilities.logging import LoggerFactory
         container.register_singleton(DataTransformer, DataTransformer)
         container.register_singleton(PromptLoader, PromptLoader)
         container.register_singleton(SampleEnricher, SampleEnricher)
@@ -77,8 +79,8 @@ class DIConfigurator:
             return m
         container.register_factory(IDataProcessor, processor_factory)
         container.register_factory(IGenerator, generator_factory)
-        from .path_manager import PathManager
-        from ..services.batch_service import BatchService
+        from agent_actions.state_management.path_manager import PathManager
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
         container.register_instance(PathManager, Mock(spec=PathManager))
         container.register_instance(BatchService, Mock(spec=BatchService))
         return container

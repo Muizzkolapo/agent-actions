@@ -9,9 +9,9 @@ import tempfile
 import os
 from pathlib import Path
 from agent_actions.shared.exceptions import ValidationError, FileLoadError, ConfigurationError, AgentActionsException
-from agent_actions.core.user_errors import format_user_error
+from agent_actions.shared.user_errors import format_user_error
 from agent_actions.state_management.error_context import with_error_context, with_agent_context
-from agent_actions.core.safe_format import extract_root_cause, get_error_chain, format_exception_chain_for_debug, safe_format_error
+from agent_actions.utilities.safe_format import extract_root_cause, get_error_chain, format_exception_chain_for_debug, safe_format_error
 
 class TestUserFriendlyErrorFormatting:
     """Test that errors are formatted in a user-friendly way."""

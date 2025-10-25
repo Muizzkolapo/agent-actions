@@ -11,7 +11,7 @@ from typing import List, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from agent_actions.input_loading.udf_loader import discover_udfs
-from agent_actions.core.udf_registry import list_udfs, clear_registry
+from agent_actions.utilities.udf_registry import list_udfs, clear_registry
 
 class ListUDFsCommand:
     """Implementation of the list-udfs command."""
@@ -51,7 +51,7 @@ class ListUDFsCommand:
             else:
                 self._output_table(udfs)
         except Exception as e:
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             error_message = format_user_error(e, {'command': 'list-udfs', 'user_code': str(self.user_code)})
             raise click.ClickException(error_message)
 

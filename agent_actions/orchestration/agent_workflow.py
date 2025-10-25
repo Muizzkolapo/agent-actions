@@ -180,7 +180,7 @@ class AgentWorkflow:
                     total_udfs += len(registry)
             if total_udfs > 0:
                 console.print(f'[green]✅ Discovered {total_udfs} UDF(s)[/green]')
-        from ..bootstrap_factory import create_agent_runner
+        from agent_actions.configuration.bootstrap_factory import create_agent_runner
         self.agent_runner = create_agent_runner(use_tools=self.use_tools, constructor_path=self.constructor_path, default_path=getattr(self.config_manager, 'default_path', None))
         self.agent_runner.execution_order = self.execution_order
         self.agent_runner.agent_indices = self.agent_indices

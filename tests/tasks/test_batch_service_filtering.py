@@ -52,7 +52,7 @@ class TestBatchServiceFiltering:
             yield temp_dir
 
     @patch('agent_actions.core.parser.where_parser.get_global_filter')
-    @patch('agent_actions.tasks.services.batch_service.BatchProviderFactory')
+    @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_filter_behavior_all_items_filtered(self, mock_factory, mock_get_filter, batch_service, temp_output_dir):
         """Test filter behavior when all items are filtered out (condition always false)."""
         mock_get_filter.return_value = MockFilterService()
@@ -72,7 +72,7 @@ class TestBatchServiceFiltering:
         mock_provider.submit_batch.assert_not_called()
 
     @patch('agent_actions.core.parser.where_parser.get_global_filter')
-    @patch('agent_actions.tasks.services.batch_service.BatchProviderFactory')
+    @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_filter_behavior_partial_filtering(self, mock_factory, mock_get_filter, batch_service, sample_data, temp_output_dir):
         """Test filter behavior with partial filtering (some items match, some don't)."""
         mock_get_filter.return_value = MockFilterService()
@@ -95,7 +95,7 @@ class TestBatchServiceFiltering:
         assert item3['_batch_filter_status'] == 'included'
 
     @patch('agent_actions.core.parser.where_parser.get_global_filter')
-    @patch('agent_actions.tasks.services.batch_service.BatchProviderFactory')
+    @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_skip_behavior_all_items_skipped(self, mock_factory, mock_get_filter, batch_service, temp_output_dir):
         """Test skip behavior when all items are skipped (condition always false)."""
         mock_get_filter.return_value = MockFilterService()
@@ -143,7 +143,7 @@ class TestBatchServiceFiltering:
         assert skipped_item['source_guid'] == 'item2'
         assert skipped_item['metadata']['agent_type'] == 'passthrough'
 
-    @patch('agent_actions.tasks.services.batch_service.BatchProviderFactory')
+    @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_legacy_conditional_clause_compatibility(self, mock_factory, batch_service, temp_output_dir):
         """Test that conditional_clause works with UDF registry and marks items as skipped."""
         mock_provider = Mock()

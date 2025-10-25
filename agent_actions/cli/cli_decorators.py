@@ -10,7 +10,7 @@ import functools
 from pathlib import Path
 import click
 
-from agent_actions.core.project_root import ensure_in_project
+from agent_actions.utilities.project_root import ensure_in_project
 
 
 def requires_project(func):

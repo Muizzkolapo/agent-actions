@@ -44,7 +44,7 @@ class RenderCommand:
             logger.info(f'Rendered agent template output to console', extra={'agent': self.args.agent_name})
         except (FileLoadError, ValidationError, TemplateRenderingError) as e:
             logger.error(f'{e.__class__.__name__}: {str(e)}')
-            from agent_actions.core.user_errors import format_user_error
+            from agent_actions.shared.user_errors import format_user_error
             context = {'command': 'render', 'agent': self.args.agent_name}
             error_message = format_user_error(e, context)
             raise click.ClickException(error_message)
@@ -78,6 +78,6 @@ def render(agent_name: str, template_dir: Optional[str]=None) -> None:
         command = RenderCommand(args)
         command.execute()
     except PydanticValidationError as e:
-        from agent_actions.core.user_errors import format_user_error
+        from agent_actions.shared.user_errors import format_user_error
         error_message = format_user_error(e, {'command': 'render'})
         raise click.ClickException(error_message)

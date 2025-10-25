@@ -12,7 +12,7 @@ from agent_actions.llm_invocation.realtime.file_writer import FileWriter
 from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.utilities.constants import PROMPT_KEY, OBSERVE_KEY, JSON_MODE_KEY
 from agent_actions.utilities.utils_processor_helpers import apply_drops
-from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.response_processing.where_parser import get_global_filter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory, resolve_absolute_path
 from agent_actions.utilities.utils_processor_utils import ProcessorUtils

@@ -1,7 +1,7 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
 from typing import Any, Dict, Optional
-from agent_actions.core.tooling import execute_user_defined_function
+from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
 from .utils_processor_utils import ProcessorUtils

@@ -5,7 +5,7 @@ from jinja2 import Environment, FileSystemLoader
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.shared.exceptions import TemplateRenderingError, ConfigurationError
 import jinja2
-from agent_actions.core.safe_format import safe_format_error
+from agent_actions.utilities.safe_format import safe_format_error
 
 def normalize_yaml_indentation(yaml_text: str) -> str:
     """

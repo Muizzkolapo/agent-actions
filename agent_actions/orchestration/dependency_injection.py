@@ -69,7 +69,7 @@ class DependencyContainer:
             else:
                 return self._create_instance(descriptor.implementation)
         from agent_actions.shared.exceptions import DependencyError
-        raise DependencyError(f'Service {interface.__name__} not registered', context={'interface': interface.__name__, 'operation': 'get_service'})
+        raise DependencyError('DependencyContainer', f'Service {interface.__name__}', context={'interface': interface.__name__, 'operation': 'get_service'})
 
     def has(self, interface: Type) -> bool:
         """Check if a service is registered."""
@@ -90,7 +90,7 @@ class DependencyContainer:
                 init_kwargs[param_name] = param.default
             else:
                 from agent_actions.shared.exceptions import DependencyError
-                raise DependencyError(f"Cannot resolve dependency '{param_name}' for {cls.__name__}", context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_instance'})
+                raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_instance'})
         return cls(**init_kwargs)
 
 class ProcessorRegistry:
@@ -223,13 +223,13 @@ class ProcessorFactory:
                 init_kwargs[param_name] = param.default
             else:
                 from agent_actions.shared.exceptions import DependencyError
-                raise DependencyError(f"Cannot resolve dependency '{param_name}' for {cls.__name__}", context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_with_dependencies'})
+                raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_with_dependencies'})
         return cls(**init_kwargs)
 
     def create_source_data_loader(self, agent_name: str):
         """Create a SourceDataLoader with the required agent_name parameter."""
-        from ..loaders.data_loaders.source_data_loader import SourceDataLoader
-        from ..core.path_manager import PathManager
+        from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
+        from agent_actions.state_management.path_manager import PathManager
         path_manager = self.container.get(PathManager)
         return SourceDataLoader(agent_name=agent_name, path_manager=path_manager)
 registry = ProcessorRegistry()

@@ -53,7 +53,7 @@ def conflict_test_workflow():
 class TestNewInspectCLIPattern:
     """Test inspect commands with new -a/--agent CLI pattern."""
 
-    @patch('agent_actions.tasks.inspect._create_config_manager')
+    @patch('agent_actions.cli.inspect._create_config_manager')
     def test_signatures_with_agent_flag(self, mock_create_config):
         """Test signatures command with -a/--agent flag."""
         mock_config = MagicMock()
@@ -71,7 +71,7 @@ class TestNewInspectCLIPattern:
             assert 'Agent Signatures' in result.output
             mock_create_config.assert_called_once_with('test_agent')
 
-    @patch('agent_actions.tasks.inspect._create_config_manager')
+    @patch('agent_actions.cli.inspect._create_config_manager')
     def test_field_flow_with_agent_flag(self, mock_create_config):
         """Test field-flow command with -a/--agent flag."""
         mock_config = MagicMock()
@@ -85,7 +85,7 @@ class TestNewInspectCLIPattern:
             assert 'Field Flow Validation:' in result.output
             mock_create_config.assert_called_once_with('test_agent')
 
-    @patch('agent_actions.tasks.inspect._create_config_manager')
+    @patch('agent_actions.cli.inspect._create_config_manager')
     def test_conflicts_with_agent_flag(self, mock_create_config):
         """Test conflicts command with -a/--agent flag."""
         mock_config = MagicMock()
@@ -145,7 +145,7 @@ class TestRequiresProjectIntegration:
         result = runner.invoke(conflicts, ['-a', 'test_agent'])
         assert result.exit_code != 0
 
-    @patch('agent_actions.tasks.inspect._create_config_manager')
+    @patch('agent_actions.cli.inspect._create_config_manager')
     def test_commands_show_project_root_detection(self, mock_create_config):
         """Test that commands show project root detection feedback."""
         mock_config = MagicMock()
@@ -209,7 +209,7 @@ class TestNewCLIConsistency:
         assert result.exit_code == 0
         assert 'inspect' in result.output.lower()
 
-    @patch('agent_actions.tasks.inspect._create_config_manager')
+    @patch('agent_actions.cli.inspect._create_config_manager')
     def test_filter_agent_options_work(self, mock_create_config):
         """Test that --filter-agent options work correctly."""
         mock_config = MagicMock()
