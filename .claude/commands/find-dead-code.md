@@ -273,7 +273,7 @@ Check the `[tools]` indicator:
 ### 1. Run Analysis
 
 ```bash
-/find-dead-code agent_actions/integrations
+/find-dead-code agent_actions/llm_invocation
 ```
 
 ### 2. Review HIGH Confidence Items
@@ -330,13 +330,13 @@ Don't waste time reviewing these.
 
 ```bash
 # Full analysis with details
-python .claude/helpers/dead_code_analyzer.py agent_actions/core
+python .claude/helpers/dead_code_analyzer.py agent_actions/orchestration
 
 # Summary only
-python .claude/helpers/dead_code_analyzer.py agent_actions/core --brief
+python .claude/helpers/dead_code_analyzer.py agent_actions/configuration --brief
 
 # Show all items including low-confidence
-python .claude/helpers/dead_code_analyzer.py agent_actions/core --show-all
+python .claude/helpers/dead_code_analyzer.py agent_actions/utilities --show-all
 ```
 
 ## Tool Installation

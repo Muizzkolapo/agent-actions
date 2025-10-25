@@ -194,7 +194,7 @@ def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
     """Find all Python files to process."""
     files = []
 
-    # Stage directories
+    # 13-stage architecture directories
     stage_dirs = [
         'input_loading', 'preprocessing', 'validation', 'prompt_generation',
         'llm_invocation', 'response_processing', 'postprocessing',
@@ -206,11 +206,6 @@ def find_python_files(root: Path, include_tests: bool = False) -> List[Path]:
         stage_path = root / stage
         if stage_path.exists():
             files.extend(stage_path.rglob('*.py'))
-
-    # Also process unmigrated core files
-    core_path = root / 'core'
-    if core_path.exists():
-        files.extend(core_path.rglob('*.py'))
 
     # Include tests if requested
     if include_tests:

@@ -9,15 +9,21 @@ This tool helps understand and document code organization by:
 4. Generating organization reports and recommendations
 5. Creating visual representations of code structure
 
-Based on the agent-actions codebase structure:
+Based on the agent-actions 13-stage architecture:
 - agent_actions/
-  ├── _internal/      # Internal utilities (bootstrap, common, filters, staging, utils)
-  ├── agents/         # Agent implementations (base, extractors, generators, handlers, transformers, validators)
-  ├── artifacts/      # Artifact management (lineage)
-  ├── cli/            # Command-line interface
-  ├── core/           # Core functionality (context, contracts, graph, loaders, migration, parser, runtime, staging, utils)
-  ├── integrations/   # External integrations (interceptors, loaders, providers, strategies)
-  └── tasks/          # Task processing (services)
+  ├── input_loading/       # Stage 1: Load and extract data from various sources
+  ├── preprocessing/       # Stage 2: Transform, filter, chunk, and prepare data
+  ├── validation/          # Stage 3: Validate configuration and data
+  ├── prompt_generation/   # Stage 4: Generate prompts and context for LLMs
+  ├── llm_invocation/      # Stage 5: Invoke LLM APIs (batch and realtime)
+  ├── response_processing/ # Stage 6: Parse and process LLM responses
+  ├── postprocessing/      # Stage 7: Post-process results and generate outputs
+  ├── orchestration/       # Workflow orchestration and agent execution
+  ├── state_management/    # State, artifacts, and path management
+  ├── configuration/       # Configuration management and DI
+  ├── cli/                 # Command-line interface
+  ├── utilities/           # Shared utilities and helpers
+  └── shared/              # Shared types and exceptions
 """
 
 import os
@@ -73,90 +79,96 @@ class OrganizationReport:
 class CodeOrganizer:
     """Analyze and organize code structure."""
 
-    # Known architectural patterns
+    # Known architectural patterns (13-stage architecture)
     LAYER_PATTERNS = {
-        '_internal': 'Internal Implementation',
-        'core': 'Core Infrastructure',
-        'agents': 'Agent Layer',
-        'integrations': 'External Integrations',
-        'tasks': 'Task Processing',
+        'input_loading': 'Stage 1: Input Loading',
+        'preprocessing': 'Stage 2: Pre-Processing',
+        'validation': 'Stage 3: Validation',
+        'prompt_generation': 'Stage 4: Prompt Generation',
+        'llm_invocation': 'Stage 5: LLM Invocation',
+        'response_processing': 'Stage 6: Response Processing',
+        'postprocessing': 'Stage 7: Post-Processing',
+        'orchestration': 'Workflow Orchestration',
+        'state_management': 'State Management',
+        'configuration': 'Configuration & DI',
         'cli': 'CLI Interface',
-        'artifacts': 'Artifact Management',
+        'utilities': 'Utilities',
+        'shared': 'Shared Components',
         'tests': 'Test Suite',
     }
 
-    # Processing stages in the agent pipeline
+    # Processing stages in the agent pipeline (updated for 13-stage architecture)
     PROCESSING_STAGES = {
         "1_INPUT_LOADING": {
             "name": "Input Loading & Extraction",
             "description": "Load and extract data from various sources (JSON, CSV, XML, text)",
-            "patterns": ["agents/extractors/", "file_reader", "loader"],
+            "patterns": ["input_loading/", "file_reader", "loader"],
             "keywords": ["loader", "extractor", "reader", "load", "extract", "read"]
         },
         "2_PRE_PROCESSING": {
             "name": "Pre-Processing & Data Preparation",
             "description": "Transform, filter, chunk, and prepare data before LLM processing",
-            "patterns": ["staging", "filter", "chunk"],
+            "patterns": ["preprocessing/", "staging", "filter", "chunk"],
             "keywords": ["staging", "filter", "chunk", "transform", "prepare", "preprocess"]
         },
-        "3_VALIDATION_PRE_LLM": {
-            "name": "Pre-LLM Validation",
-            "description": "Validate inputs, prompts, and configurations before LLM calls",
-            "patterns": ["validator", "validation"],
+        "3_VALIDATION": {
+            "name": "Validation",
+            "description": "Validate inputs, prompts, configurations, and outputs",
+            "patterns": ["validation/", "validator"],
             "keywords": ["validator", "validate", "validation", "check"]
         },
         "4_PROMPT_GENERATION": {
             "name": "Prompt Generation & Context Building",
             "description": "Build prompts, manage context, apply templates",
-            "patterns": ["generator", "prompt", "render"],
+            "patterns": ["prompt_generation/", "generator", "prompt", "render"],
             "keywords": ["generator", "prompt", "template", "render", "context"]
         },
         "5_LLM_INVOCATION": {
             "name": "LLM Invocation & Provider Integration",
-            "description": "Call LLM providers (OpenAI, Anthropic, Gemini, etc.) for real-time processing",
-            "patterns": ["provider", "vendor", "handler"],
+            "description": "Call LLM providers (OpenAI, Anthropic, Gemini, etc.) for real-time and batch processing",
+            "patterns": ["llm_invocation/", "provider", "vendor", "handler"],
             "keywords": ["provider", "vendor", "handler", "llm", "model"]
         },
         "5B_BATCH_PROCESSING": {
             "name": "Batch Processing & Queue Management",
             "description": "Manage batch operations, queue submissions, async result polling, and bulk LLM processing",
-            "patterns": ["batch", "batch_service", "queue"],
+            "patterns": ["llm_invocation/batch/", "batch_service", "queue"],
             "keywords": ["batch", "batch_service", "queue", "async", "poll", "submit", "result", "bulk"]
         },
         "6_RESPONSE_PROCESSING": {
             "name": "Response Processing & Transformation",
             "description": "Process LLM responses, parse JSON, transform outputs",
-            "patterns": ["response_transformer", "interceptor"],
+            "patterns": ["response_processing/", "response_transformer", "interceptor"],
             "keywords": ["transformer", "response", "interceptor", "strategy", "parse"]
         },
         "7_POST_PROCESSING": {
             "name": "Post-Processing & Output Generation",
             "description": "Generate final outputs, apply post-processing",
-            "patterns": ["target", "output", "writer"],
+            "patterns": ["postprocessing/", "target", "output", "writer"],
             "keywords": ["target", "output", "writer", "write", "generate"]
         },
         "8_ORCHESTRATION": {
             "name": "Workflow Orchestration & Execution",
             "description": "Manage workflow execution, dependencies, and task orchestration",
-            "patterns": ["workflow", "runtime", "runner", "graph"],
+            "patterns": ["orchestration/", "workflow", "runner", "graph"],
             "keywords": ["workflow", "runtime", "runner", "orchestrat", "execut", "graph"]
         },
         "9_STATE_MANAGEMENT": {
             "name": "State Management & Context",
             "description": "Manage application state, context, and artifacts",
-            "patterns": ["artifact", "lineage", "context"],
-            "keywords": ["context", "artifact", "state", "lineage", "signature"]
+            "patterns": ["state_management/", "artifact", "lineage", "manifest"],
+            "keywords": ["context", "artifact", "state", "lineage", "manifest", "path_manager"]
         },
         "10_CONFIGURATION": {
             "name": "Configuration & Schema Management",
-            "description": "Parse and manage configuration, schemas, and contracts",
-            "patterns": ["parser", "config", "schema", "contract"],
-            "keywords": ["parser", "config", "schema", "contract", "migration", "bootstrap"]
+            "description": "Parse and manage configuration, schemas, DI, and bootstrapping",
+            "patterns": ["configuration/", "config", "schema", "di_configurator"],
+            "keywords": ["config", "schema", "bootstrap", "di_configurator", "container"]
         },
         "11_CLI_INTERFACE": {
             "name": "CLI & User Interface",
             "description": "Command-line interface and user interactions",
-            "patterns": ["cli", "command", "task"],
+            "patterns": ["cli/", "command"],
             "keywords": ["cli", "command", "task", "interface"]
         },
         "12_UTILITIES": {
