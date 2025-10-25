@@ -40,7 +40,7 @@ class TargetGenerator:
         self.side_output_enabled = agent_config.get('side_output', False)
         if processor_factory is None:
             raise DependencyError('TargetGenerator', 'processor_factory', context={'component': 'TargetGenerator', 'dependency': 'processor_factory', 'agent_name': agent_name})
-        from agent_actions._internal.bootstrap.bootstrap import create_target_content_processor
+        from agent_actions.configuration.bootstrap_factory import create_target_content_processor
         self.content_processor = create_target_content_processor(agent_config=agent_config, agent_name=agent_name, idx=idx, agent_configs=agent_configs)
         self.output_handler = OutputHandler()
 
