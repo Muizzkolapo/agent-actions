@@ -4,6 +4,54 @@ This directory contains custom commands and helpers for Claude Code.
 
 ## Available Commands
 
+### `/organize-code <path>`
+
+**Analyze codebase structure and identify processing stages** in the agent pipeline.
+
+**Usage:**
+```bash
+# Analyze entire codebase
+/organize-code agent_actions/
+
+# Analyze specific module
+/organize-code agent_actions/core/
+
+# Export as JSON
+python .claude/helpers/code_organizer.py agent_actions/ --json report.json
+```
+
+**Identifies 13 Processing Stages:**
+1. Input Loading & Extraction
+2. Pre-Processing & Data Preparation
+3. Pre-LLM Validation
+4. Prompt Generation & Context Building
+5. LLM Invocation & Provider Integration (real-time)
+5B. **Batch Processing & Queue Management** (bulk operations)
+6. Response Processing & Transformation
+7. Post-Processing & Output Generation
+8. Workflow Orchestration & Execution
+9. State Management & Context
+10. Configuration & Schema Management
+11. CLI & User Interface
+12. Utilities & Common Functions
+13. Testing & Quality Assurance
+
+**Detects:**
+- Architectural layers and organization
+- Circular dependencies
+- Large modules (>500 LOC)
+- Missing `__init__.py` files
+- Misplaced utility code
+
+**Perfect for:**
+- Understanding codebase structure
+- Identifying refactoring opportunities
+- Tracking processing pipeline stages
+- Architecture documentation
+- Code organization improvements
+
+---
+
 ### `/find-dead-code <file_or_directory>`
 
 **Enhanced multi-tool dead code analysis** with false positive filtering to find unused code safely.
