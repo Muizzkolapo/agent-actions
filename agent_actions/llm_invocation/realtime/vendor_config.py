@@ -1,5 +1,5 @@
 """Vendor configuration models for LLM providers."""
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List, Literal, Union
 from enum import Enum
 
@@ -44,18 +44,6 @@ class OpenAIConfig(BaseVendorConfig):
     top_k: Optional[int] = Field(default=None, ge=1)
     response_format: ResponseFormat = Field(default=ResponseFormat.JSON_SCHEMA)
 
-    @field_validator('model_name')
-    @classmethod
-    def validate_openai_model(cls, v):
-        """Validate OpenAI model names."""
-        from agent_actions.shared.exceptions import ConfigValidationError
-        valid_models = ['gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'gpt-3.5-turbo', 'gpt-3.5-turbo-16k']
-        if v not in valid_models:
-            valid_prefixes = ['gpt-4', 'gpt-3.5', 'o1']
-            if not any((v.startswith(prefix) for prefix in valid_prefixes)):
-                raise ConfigValidationError('openai_model_name', f'Unsupported OpenAI model: {v}', context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'openai'})
-        return v
-
 class AnthropicConfig(BaseVendorConfig):
     """Configuration specific to Anthropic Claude."""
     vendor_type: Literal[VendorType.ANTHROPIC] = VendorType.ANTHROPIC
@@ -64,16 +52,6 @@ class AnthropicConfig(BaseVendorConfig):
     enable_prompt_caching: bool = Field(default=False, description='Enable prompt caching')
     tools_mode: bool = Field(default=True, description='Use tools for JSON responses')
 
-    @field_validator('model_name')
-    @classmethod
-    def validate_claude_model(cls, v):
-        """Validate Claude model names."""
-        from agent_actions.shared.exceptions import ConfigValidationError
-        valid_prefixes = ['claude-3', 'claude-2', 'claude-instant']
-        if not any((v.startswith(prefix) for prefix in valid_prefixes)):
-            raise ConfigValidationError('claude_model_name', f'Unsupported Claude model: {v}', context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'anthropic'})
-        return v
-
 class GoogleConfig(BaseVendorConfig):
     """Configuration specific to Google Gemini."""
     vendor_type: Literal[VendorType.GOOGLE] = VendorType.GOOGLE
@@ -81,31 +59,10 @@ class GoogleConfig(BaseVendorConfig):
     safety_settings: Optional[Dict[str, Any]] = Field(default=None)
     generation_config: Optional[Dict[str, Any]] = Field(default=None)
 
-    @field_validator('model_name')
-    @classmethod
-    def validate_gemini_model(cls, v):
-        """Validate Gemini model names."""
-        from agent_actions.shared.exceptions import ConfigValidationError
-        valid_prefixes = ['gemini-', 'models/gemini']
-        if not any((v.startswith(prefix) for prefix in valid_prefixes)):
-            raise ConfigValidationError('gemini_model_name', f'Unsupported Gemini model: {v}', context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'google'})
-        return v
-
 class GroqConfig(BaseVendorConfig):
     """Configuration specific to Groq."""
     vendor_type: Literal[VendorType.GROQ] = VendorType.GROQ
     api_key_env_name: str = 'GROQ_API_KEY'
-
-    @field_validator('model_name')
-    @classmethod
-    def validate_groq_model(cls, v):
-        """Validate Groq model names."""
-        from agent_actions.shared.exceptions import ConfigValidationError
-        valid_models = ['llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma-7b-it']
-        if v not in valid_models:
-            if not any((keyword in v.lower() for keyword in ['llama', 'mixtral', 'gemma'])):
-                raise ConfigValidationError('groq_model_name', f'Unsupported Groq model: {v}', context={'model_name': v, 'valid_keywords': ['llama', 'mixtral', 'gemma'], 'vendor': 'groq'})
-        return v
 
 class CohereConfig(BaseVendorConfig):
     """Configuration specific to Cohere."""
@@ -118,16 +75,6 @@ class MistralConfig(BaseVendorConfig):
     """Configuration specific to Mistral."""
     vendor_type: Literal[VendorType.MISTRAL] = VendorType.MISTRAL
     api_key_env_name: str = 'MISTRAL_API_KEY'
-
-    @field_validator('model_name')
-    @classmethod
-    def validate_mistral_model(cls, v):
-        """Validate Mistral model names."""
-        from agent_actions.shared.exceptions import ConfigValidationError
-        valid_prefixes = ['mistral-', 'codestral-']
-        if not any((v.startswith(prefix) for prefix in valid_prefixes)):
-            raise ConfigValidationError('mistral_model_name', f'Unsupported Mistral model: {v}', context={'model_name': v, 'valid_prefixes': valid_prefixes, 'vendor': 'mistral'})
-        return v
 
 class DeepSeekConfig(BaseVendorConfig):
     """Configuration specific to DeepSeek."""
