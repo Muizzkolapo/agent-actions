@@ -34,9 +34,14 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
     is_tool = model_vendor == 'tool'
     context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
-    field_context = _build_field_context_from_context_data(context_data_str, agent_config)
-    if field_context:
-        prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
+
+    # Only process field references if prompt wasn't pre-formatted
+    # When formatted_prompt is provided, it's already been processed by DataGenerator
+    if formatted_prompt is None:
+        field_context = _build_field_context_from_context_data(context_data_str, agent_config)
+        if field_context:
+            prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
+
     prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
     _debug_print_prompt(agent_config, prompt_config, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False))
     schema = _prepare_schema(agent_config, model_vendor)
@@ -173,9 +178,14 @@ def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_d
         model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
         is_tool = model_vendor == 'tool'
         context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
-        field_context = _build_field_context_from_context_data(context_data_str, agent_config)
-        if field_context:
-            prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
+
+        # Only process field references if prompt wasn't pre-formatted
+        # When formatted_prompt is provided, it's already been processed by DataGenerator
+        if formatted_prompt is None:
+            field_context = _build_field_context_from_context_data(context_data_str, agent_config)
+            if field_context:
+                prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
+
         prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
         _debug_print_prompt(agent_config, prompt_config, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False))
         schema = _prepare_schema(agent_config, model_vendor)

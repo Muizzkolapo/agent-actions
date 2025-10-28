@@ -45,10 +45,10 @@ class TargetGenerator:
         self.output_handler = OutputHandler()
 
     @staticmethod
-    def generate(agent_config, agent_name, file_path, base_directory, output_directory, idx, processor_factory=None):
+    def generate(agent_config, agent_name, file_path, base_directory, output_directory, idx, processor_factory=None, agent_configs=None):
         """
         Static method for generating target data.
-        
+
         Args:
             agent_config: Configuration dictionary for the agent
             agent_name: Name of the agent
@@ -57,10 +57,11 @@ class TargetGenerator:
             output_directory: Directory where the output file will be saved
             idx: Index of the config being processed
             processor_factory: Required ProcessorFactory for dependency injection
-        
+            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution)
+
         Returns:
             Path to the generated output file
-            
+
         Raises:
             DependencyError: If processor_factory is not provided
         """
@@ -86,7 +87,7 @@ class TargetGenerator:
                 with open(output_file_path, 'w') as f:
                     json.dump(placeholder, f)
                 return str(output_file_path)
-        generator = TargetGenerator(agent_config, agent_name, idx, processor_factory)
+        generator = TargetGenerator(agent_config, agent_name, idx, processor_factory, agent_configs)
         return generator.process(file_path, base_directory, output_directory)
 
     def process(self, file_path, base_directory, output_directory):

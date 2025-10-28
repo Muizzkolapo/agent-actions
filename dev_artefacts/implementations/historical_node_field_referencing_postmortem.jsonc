@@ -1,0 +1,295 @@
+{
+  "feature": "Historical Node Field Referencing ({action_name.field})",
+  "description": "Enables referencing outputs from ANY previous agent in workflow using {action_name.field} syntax, similar to existing {source.field}",
+  "implementation_date": "2025-01-28",
+  "status": "completed",
+
+  "bugs_discovered": {
+    "count": 4,
+    "severity": "critical",
+    "impact": "Feature completely non-functional until all bugs fixed"
+  },
+
+  "bug_1_wrong_agent_name": {
+    "title": "Workflow name passed instead of agent name",
+    "severity": "critical",
+    "files": [
+      "agent_actions/orchestration/agent_workflow.py:126",
+      "agent_actions/orchestration/agent_workflow.py:501"
+    ],
+    "root_cause": {
+      "description": "Code used self.agent_name (workflow name) instead of loop variable agent_name (actual agent name)",
+      "example": {
+        "wrong": "self.agent_name = 'qanalabs_quiz_gen' (workflow)",
+        "correct": "agent_name = 'Cluster_Validation_Agent' (agent)"
+      }
+    },
+    "symptoms": [
+      "agent_indices.get(self.agent_name) returned 999 (not found)",
+      "Historical data loading skipped",
+      "Error: Reference 'fact_extractor' not found. Available: [source]"
+    ],
+    "architectural_issue": {
+      "problem": "Ambiguous naming - self.agent_name represents workflow name, not agent name",
+      "confusion": "Variable named 'agent_name' actually holds workflow name in AgentWorkflow class",
+      "recommendation": "Rename self.agent_name to self.workflow_name for clarity"
+    },
+    "fix": {
+      "description": "Use loop variable agent_name instead of self.agent_name",
+      "before": "self.agent_runner.run_agent(agent_config, self.agent_name, ...)",
+      "after": "self.agent_runner.run_agent(agent_config, agent_name, ...)"
+    }
+  },
+
+  "bug_2_agent_folder_lookup": {
+    "title": "Agent folder lookup broken after fixing Bug #1",
+    "severity": "critical",
+    "files": [
+      "agent_actions/orchestration/agent_runner.py:46-47"
+    ],
+    "root_cause": {
+      "description": "agent_io directory structure is organized by WORKFLOW, not by individual agents",
+      "structure": {
+        "actual": "agent_workflow/qanalabs_quiz_gen/agent_io/target/node_0_fact_extractor/",
+        "not": "agent_workflow/fact_extractor/agent_io/"
+      },
+      "problem": "After fixing Bug #1, get_agent_folder(agent_name) looked for wrong folder name"
+    },
+    "symptoms": [
+      "FileSystemError: Agent folder not found for agent: fact_extractor"
+    ],
+    "architectural_issue": {
+      "problem": "get_agent_folder() assumes folder named after agent, but structure is workflow-based",
+      "confusion": "Single agent_io folder shared by all agents in workflow, but method signature suggests per-agent folders",
+      "recommendation": "Make agent_io structure explicit in method documentation or consider restructuring"
+    },
+    "fix": {
+      "description": "Added workflow_name to AgentRunner, use it for folder lookups while using agent_name for processor creation",
+      "implementation": [
+        "Added self.workflow_name to AgentRunner.__init__",
+        "AgentWorkflow sets self.agent_runner.workflow_name = self.agent_name",
+        "get_agent_folder() uses workflow_name if set, otherwise agent_name (backward compatible)"
+      ]
+    }
+  },
+
+  "bug_3_missing_idx_field": {
+    "title": "agent_configs missing 'idx' field required by NodeMappingService",
+    "severity": "critical",
+    "files": [
+      "agent_actions/orchestration/agent_workflow.py:226-228",
+      "agent_actions/orchestration/node_mapper.py:45-46"
+    ],
+    "root_cause": {
+      "description": "NodeMappingService.build_agent_index_map() expects each config dict to have 'idx' field, but it doesn't exist",
+      "chain": [
+        "1. AgentWorkflow calls get_all_agent_configs_as_dicts()",
+        "2. ConfigManager returns configs as-is from YAML/model_dump()",
+        "3. YAML configs don't have 'idx' field (not in schema)",
+        "4. NodeMappingService tries config.get('idx') → None",
+        "5. build_agent_index_map() returns empty dict {}",
+        "6. DataGenerator.__init__ receives empty agent_indices",
+        "7. Historical loading condition fails: if self.agent_indices (empty dict is Falsy)"
+      ]
+    },
+    "symptoms": [
+      "agent_indices = {} (empty)",
+      "Historical data loading never triggered",
+      "Error: Reference 'fact_extractor' not found. Available: [source]"
+    ],
+    "architectural_issue": {
+      "problem": "Implicit contract: NodeMappingService expects 'idx' in configs, but nothing enforces it",
+      "disconnect": "idx is computed from execution_order (runtime), not stored in config (design-time)",
+      "data_flow": "AgentWorkflow computes agent_indices separately from agent_configs, but they should be unified",
+      "recommendation": [
+        "Either: Add idx to config schema and populate during config loading",
+        "Or: NodeMappingService should accept execution_order directly instead of configs"
+      ]
+    },
+    "fix": {
+      "description": "Add idx field to agent_configs after loading, before passing to strategies",
+      "implementation": [
+        "After get_all_agent_configs_as_dicts()",
+        "Loop through agent_configs and add agent_config['idx'] = agent_indices[agent_name]",
+        "This bridges runtime execution order with design-time configs"
+      ],
+      "code": "for agent_name, agent_config in self.agent_configs.items():\n    if agent_name in self.agent_indices:\n        agent_config['idx'] = self.agent_indices[agent_name]"
+    }
+  },
+
+  "bug_4_double_processing": {
+    "title": "Field references processed twice with different contexts",
+    "severity": "high",
+    "files": [
+      "agent_actions/llm_invocation/realtime/agent_builder.py:40-43",
+      "agent_actions/llm_invocation/realtime/agent_builder.py:184-187"
+    ],
+    "root_cause": {
+      "description": "Prompts processed for field references in two places with different contexts",
+      "flow": [
+        "1. DataGenerator._format_prompt() processes with FULL field_context (includes historical data)",
+        "2. Passes formatted_prompt to create_dynamic_agent()",
+        "3. agent_builder.create_dynamic_agent() processes AGAIN with only {source} context",
+        "4. Historical references already replaced get processed again and fail"
+      ]
+    },
+    "symptoms": [
+      "Error appears even when agent_name and agent_indices are correct",
+      "Formatted prompt gets re-processed with incomplete context"
+    ],
+    "architectural_issue": {
+      "problem": "Unclear separation of concerns between DataGenerator and agent_builder",
+      "question": "Who is responsible for field reference resolution?",
+      "current_state": "Both try to do it, causing conflicts",
+      "recommendation": [
+        "DataGenerator should be the ONLY place field references are resolved for prompts",
+        "agent_builder should only handle field references in context_data, NOT prompts",
+        "Add explicit 'prompt_already_formatted' flag instead of None-checking"
+      ]
+    },
+    "fix": {
+      "description": "Skip field reference processing in agent_builder if formatted_prompt is provided",
+      "implementation": "if formatted_prompt is None: # only then process field references"
+    }
+  },
+
+  "architectural_issues_summary": {
+    "naming_confusion": {
+      "issue": "self.agent_name in AgentWorkflow represents workflow name, not agent name",
+      "impact": "Led to Bug #1, caused confusion throughout debugging",
+      "recommendation": "Rename to self.workflow_name for clarity"
+    },
+
+    "implicit_contracts": {
+      "issue": "NodeMappingService expects 'idx' in configs but nothing enforces it",
+      "impact": "Led to Bug #3, silent failure with empty dict",
+      "recommendation": "Make contracts explicit through types, documentation, or validation"
+    },
+
+    "data_structure_mismatch": {
+      "issue": "agent_io organized by workflow, but method signatures suggest per-agent structure",
+      "impact": "Led to Bug #2, confusion about folder structure",
+      "recommendation": "Document structure clearly or restructure for consistency"
+    },
+
+    "separation_of_concerns": {
+      "issue": "Field reference resolution happens in multiple places",
+      "impact": "Led to Bug #4, double processing with different contexts",
+      "recommendation": "Single responsibility - DataGenerator owns prompt formatting"
+    },
+
+    "runtime_vs_design_time_data": {
+      "issue": "idx computed at runtime but passed through design-time config structures",
+      "impact": "Fragile - easy to miss the injection step",
+      "recommendation": "Consider separate ExecutionContext object for runtime data"
+    }
+  },
+
+  "recommended_refactoring": {
+    "priority_high": [
+      {
+        "action": "Rename AgentWorkflow.agent_name to workflow_name",
+        "reason": "Eliminates primary source of confusion",
+        "impact": "Breaking change - requires updating all references"
+      },
+      {
+        "action": "Add idx to AgentConfig schema",
+        "reason": "Makes implicit contract explicit",
+        "impact": "Ensures idx is always present when needed"
+      },
+      {
+        "action": "Document agent_io directory structure",
+        "reason": "Makes workflow-based organization explicit",
+        "impact": "Prevents future bugs from incorrect assumptions"
+      }
+    ],
+
+    "priority_medium": [
+      {
+        "action": "Create ExecutionContext class",
+        "reason": "Separate runtime data (idx, workflow_name) from design-time config",
+        "impact": "Cleaner architecture, easier to reason about"
+      },
+      {
+        "action": "Consolidate field reference resolution",
+        "reason": "Single source of truth for prompt formatting",
+        "impact": "Prevents double processing, clearer responsibility"
+      }
+    ],
+
+    "priority_low": [
+      {
+        "action": "Type safety for agent_configs",
+        "reason": "Ensure idx field is present through types",
+        "impact": "Compile-time safety instead of runtime surprises"
+      }
+    ]
+  },
+
+  "lessons_learned": {
+    "1_naming_matters": "Variable named 'agent_name' held workflow name - caused 2+ hours of debugging",
+    "2_implicit_contracts_fail": "NodeMappingService expected 'idx' but nothing enforced it - silent failure",
+    "3_test_integration_paths": "Unit tests passed, but full integration had bugs in data flow",
+    "4_document_assumptions": "agent_io structure assumption not documented, caused folder lookup bug",
+    "5_separation_of_concerns": "Field references processed in 2 places - unclear ownership"
+  },
+
+  "testing_gaps_identified": {
+    "missing_tests": [
+      "End-to-end workflow test with actual agent_configs from YAML",
+      "Test that agent_configs contains 'idx' field after loading",
+      "Test agent_runner with both workflow_name set and unset",
+      "Integration test for field reference processing path"
+    ]
+  },
+
+  "files_modified": {
+    "agent_actions/orchestration/agent_workflow.py": {
+      "changes": [
+        "Line 126: Use agent_name instead of self.agent_name (async)",
+        "Line 188: Set workflow_name on agent_runner",
+        "Lines 226-228: Add idx to agent_configs",
+        "Line 501: Use agent_name instead of self.agent_name (sync)"
+      ]
+    },
+    "agent_actions/orchestration/agent_runner.py": {
+      "changes": [
+        "Line 27: Added workflow_name attribute",
+        "Lines 46-47: Use workflow_name for folder lookups"
+      ]
+    },
+    "agent_actions/llm_invocation/realtime/agent_builder.py": {
+      "changes": [
+        "Lines 40-43: Conditional field reference processing",
+        "Lines 184-187: Conditional field reference processing (interceptor path)"
+      ]
+    },
+    "agent_actions/prompt_generation/data_generator.py": {
+      "changes": [
+        "Lines 124-147: Auto-load ALL previous actions from lineage"
+      ]
+    },
+    "agent_actions/postprocessing/target_generator.py": {
+      "changes": [
+        "Line 48: Added agent_configs parameter",
+        "Line 90: Pass agent_configs to constructor"
+      ]
+    }
+  },
+
+  "new_files_created": [
+    "agent_actions/preprocessing/historical_node_loader.py",
+    "agent_actions/orchestration/node_mapper.py",
+    "tests/integration/test_historical_node_field_referencing.py",
+    "docs/historical_node_field_referencing.md"
+  ],
+
+  "success_criteria": {
+    "✓": [
+      "All 6 integration tests pass",
+      "Field references like {fact_extractor.candidate_facts_list} work",
+      "Historical node data loaded correctly from target files",
+      "Backward compatible - existing workflows unaffected"
+    ]
+  }
+}
