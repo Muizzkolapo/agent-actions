@@ -240,24 +240,15 @@ def inspect():
 @requires_project
 def signatures(agent_name: str, output_format: str, filter_agent: Optional[str]) -> None:
     """
-    Display input and output signatures for agents in the specified workflow.
-    
-    Shows the field dependencies and outputs for each agent in the workflow,
-    helping to understand data flow between agents.
-    
-    Examples:
-        agent inspect signatures -a my_agent
-        agent inspect signatures -a my_agent --format json
-        agent inspect signatures -a my_agent --filter-agent specific_agent
+    [REMOVED] Signature inspection has been removed from agent-actions.
+
+    This command is no longer available as signature validation was removed.
+    {source.field} references still work without validation.
     """
-    try:
-        args = SignaturesCommandArgs(agent_name=agent_name, format=output_format, filter_agent=filter_agent)
-        command = InspectSignaturesCommand(args)
-        command.execute()
-    except ValidationError as e:
-        from agent_actions.shared.user_errors import format_user_error
-        error_message = format_user_error(e, {'command': 'inspect signatures'})
-        raise click.ClickException(error_message)
+    click.echo("❌ The 'inspect signatures' command has been removed.")
+    click.echo("   Signature validation is no longer part of agent-actions.")
+    click.echo("   {source.field} references still work without pre-validation.")
+    raise click.Abort()
 
 @inspect.command(name='field-flow')
 @click.option('-a', '--agent', 'agent_name', required=True, help='Agent name to inspect')
@@ -265,23 +256,15 @@ def signatures(agent_name: str, output_format: str, filter_agent: Optional[str])
 @requires_project
 def field_flow(agent_name: str, output_format: str) -> None:
     """
-    Validate field flow through the workflow containing the specified agent.
-    
-    Analyzes field dependencies across all agents to detect missing fields,
-    validate references, and ensure proper data flow through the workflow.
-    
-    Examples:
-        agent inspect field-flow -a my_agent
-        agent inspect field-flow -a my_agent --format json
+    [REMOVED] Field flow validation has been removed from agent-actions.
+
+    This command is no longer available as signature validation was removed.
+    Field references work without validation.
     """
-    try:
-        args = FieldFlowCommandArgs(agent_name=agent_name, format=output_format)
-        command = InspectFieldFlowCommand(args)
-        command.execute()
-    except ValidationError as e:
-        from agent_actions.shared.user_errors import format_user_error
-        error_message = format_user_error(e, {'command': 'inspect field-flow'})
-        raise click.ClickException(error_message)
+    click.echo("❌ The 'inspect field-flow' command has been removed.")
+    click.echo("   Field flow validation is no longer part of agent-actions.")
+    click.echo("   Field references still work without pre-validation.")
+    raise click.Abort()
 
 @inspect.command()
 @click.option('-a', '--agent', 'agent_name', required=True, help='Agent name to inspect')
@@ -290,21 +273,12 @@ def field_flow(agent_name: str, output_format: str) -> None:
 @requires_project
 def conflicts(agent_name: str, filter_agent: Optional[str], output_format: str) -> None:
     """
-    Detect field name conflicts in the workflow containing the specified agent.
-    
-    Identifies cases where multiple dependency agents provide fields with
-    the same name, which could cause ambiguity in field references.
-    
-    Examples:
-        agent inspect conflicts -a my_agent
-        agent inspect conflicts -a my_agent --filter-agent specific_agent
-        agent inspect conflicts -a my_agent --format json
+    [REMOVED] Field conflict detection has been removed from agent-actions.
+
+    This command is no longer available as signature validation was removed.
+    Field conflicts are not detected at config time.
     """
-    try:
-        args = ConflictsCommandArgs(agent_name=agent_name, filter_agent=filter_agent, format=output_format)
-        command = InspectConflictsCommand(args)
-        command.execute()
-    except ValidationError as e:
-        from agent_actions.shared.user_errors import format_user_error
-        error_message = format_user_error(e, {'command': 'inspect conflicts'})
-        raise click.ClickException(error_message)
+    click.echo("❌ The 'inspect conflicts' command has been removed.")
+    click.echo("   Field conflict detection is no longer part of agent-actions.")
+    click.echo("   Field name conflicts will not be detected at config time.")
+    raise click.Abort()

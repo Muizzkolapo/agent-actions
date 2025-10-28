@@ -101,38 +101,6 @@ class AgentConfig(BaseModel):
     max_execution_time: Optional[int] = Field(default=300, description='Maximum execution time in seconds')
     enable_caching: bool = Field(default=True, description='Enable caching for performance')
 
-    def input_signature(self, dependency_configs: Dict[str, Union['AgentConfig', Dict[str, Any]]], schema_registry: Optional[Dict[str, Any]]=None) -> 'InputSignature':
-        """Get input signature showing what fields this agent requires.
-        
-        Args:
-            dependency_configs: Map of dependency names to their configurations
-            schema_registry: Optional registry for resolving schema references
-            
-        Returns:
-            InputSignature with field requirements from dependencies, source, etc.
-        """
-        from agent_actions.state_management.signature_computer import SignatureComputer
-        agent_dict = self.model_dump()
-        dep_dicts = {}
-        for name, config in dependency_configs.items():
-            if hasattr(config, 'model_dump'):
-                dep_dicts[name] = config.model_dump()
-            else:
-                dep_dicts[name] = config
-        return SignatureComputer.compute_input_signature(agent_dict, dep_dicts, schema_registry)
-
-    def output_signature(self, schema_registry: Optional[Dict[str, Any]]=None) -> 'OutputSignature':
-        """Get output signature showing what fields this agent provides.
-        
-        Args:
-            schema_registry: Optional registry for resolving schema references
-            
-        Returns:
-            OutputSignature with available fields from schema, observe, drops
-        """
-        from agent_actions.state_management.signature_computer import SignatureComputer
-        agent_dict = self.model_dump()
-        return SignatureComputer.compute_output_signature(agent_dict, schema_registry)
     model_config = ConfigDict(extra='allow')
 
 class EnhancedAgentConfig(AgentConfig):
