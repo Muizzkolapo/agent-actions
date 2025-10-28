@@ -17,7 +17,6 @@ from agent_actions.llm_invocation.batch.batch import batch
 from agent_actions.cli.status import status
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
-from agent_actions.cli.inspect import inspect
 from agent_actions.shared.exceptions import ProjectNotFoundError
 __version__ = '1.0.0'
 
@@ -42,7 +41,6 @@ class CLI:
         self.click_group.add_command(status)
         self.click_group.add_command(list_udfs_cmd)
         self.click_group.add_command(validate_udfs_cmd)
-        self.click_group.add_command(inspect)
 
     def _register_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown."""
