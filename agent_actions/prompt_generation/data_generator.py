@@ -61,7 +61,8 @@ class DataGenerator(IGenerator):
             formatted_prompt, contents, llm_context, passthrough_fields = self._format_prompt(contents, source_content, loop_context, workflow_metadata, current_item, file_path)
             formatted_prompt = SampleEnricher.append_few_shot_samples(formatted_prompt, self.agent_config, self.agent_name)
             tool_args = self.agent_config.get('tool_args', {})
-            response, executed = run_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'), tool_args=tool_args, source_content=source_content, llm_additional_context=llm_context, passthrough_fields=passthrough_fields)
+            # Note: passthrough_fields not passed here - handled later in transform_with_observe()
+            response, executed = run_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'), tool_args=tool_args, source_content=source_content, llm_additional_context=llm_context)
             return (response, executed)
         except Exception as e:
             from agent_actions.shared.exceptions import GenerationError

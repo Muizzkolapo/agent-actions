@@ -10,7 +10,7 @@ def apply_drops(contents: Any, agent_config: Dict) -> Any:
     """Apply ``drops`` transformations consistently."""
     return ProcessorUtils.apply_drops(contents, agent_config)
 
-def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_additional_context: Optional[Dict]=None, passthrough_fields: Optional[Dict]=None) -> tuple[Any, bool]:
+def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_additional_context: Optional[Dict]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
@@ -27,8 +27,8 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     Context Scope Support:
         Supports context_scope feature for granular field flow control:
-        - llm_additional_context: Fields from context_scope.include sent to LLM as additional context
-        - passthrough_fields: Fields from context_scope.passthrough merged into output (LLM never sees)
+        - llm_additional_context: Fields from context_scope.include merged into LLM context JSON
+        - context_scope.passthrough: Handled later in transform_with_observe() (same pathway as observe)
 
     Args:
         agent_config: Agent configuration including guard conditions, drops, and observe
@@ -40,7 +40,6 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         tool_args: Optional tool arguments
         source_content: Optional source content
         llm_additional_context: Optional additional context for LLM (from context_scope.include)
-        passthrough_fields: Optional fields to merge into output (from context_scope.passthrough)
 
     Returns:
         Tuple of (response/context, was_executed) where was_executed indicates
@@ -87,10 +86,8 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     response = agent_builder.create_dynamic_agent(agent_config, agent_name, processed_context, formatted_prompt, tools_path=tools_path, tool_args=tool_args, source_content=source_content, additional_context=None)
 
-    # Merge passthrough fields into response (context_scope.passthrough)
-    if passthrough_fields and response:
-        from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-        response = ContextScopeProcessor.merge_passthrough_fields(response, passthrough_fields)
+    # Note: passthrough fields are NOT merged here - they're merged later in transform_with_observe()
+    # using the same pathway as observe directive (via DataTransformer.update_schema_objects)
 
     return (response, True)
 
