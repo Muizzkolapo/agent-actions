@@ -166,6 +166,12 @@ class ActionExpander:
             drops = template_replacer(combined_drops)
             agent['observe'] = observe
             agent['drops'] = drops
+
+        # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
+        context_scope = action.get('context_scope')
+        if context_scope:
+            agent['context_scope'] = context_scope
+
         agent['dependencies'] = []
         agent['parent'] = []
         chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))

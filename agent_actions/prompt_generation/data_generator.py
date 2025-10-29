@@ -58,10 +58,10 @@ class DataGenerator(IGenerator):
             RuntimeError: If agent creation or data generation fails
         """
         try:
-            formatted_prompt, contents = self._format_prompt(contents, source_content, loop_context, workflow_metadata, current_item, file_path)
+            formatted_prompt, contents, llm_context, passthrough_fields = self._format_prompt(contents, source_content, loop_context, workflow_metadata, current_item, file_path)
             formatted_prompt = SampleEnricher.append_few_shot_samples(formatted_prompt, self.agent_config, self.agent_name)
             tool_args = self.agent_config.get('tool_args', {})
-            response, executed = run_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'), tool_args=tool_args, source_content=source_content)
+            response, executed = run_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'), tool_args=tool_args, source_content=source_content, llm_additional_context=llm_context, passthrough_fields=passthrough_fields)
             return (response, executed)
         except Exception as e:
             from agent_actions.shared.exceptions import GenerationError
@@ -176,7 +176,7 @@ class DataGenerator(IGenerator):
 
         return field_context
 
-    def _format_prompt(self, contents: Dict, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[str, Dict]:
+    def _format_prompt(self, contents: Dict, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[str, Dict, Dict, Dict]:
         """
         Format the prompt using {reference.field} pattern.
 
@@ -189,7 +189,11 @@ class DataGenerator(IGenerator):
             file_path: Optional file path for constructing historical node paths
 
         Returns:
-            Tuple of the formatted prompt and contents (unchanged)
+            Tuple of:
+            - formatted_prompt: Rendered prompt string
+            - contents: Original contents (unchanged)
+            - llm_context: Fields for LLM additional context (from context_scope.include)
+            - passthrough_fields: Fields to merge into output (from context_scope.passthrough)
         """
         raw_prompt = self.agent_config.get(PROMPT_KEY, '')
         if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
@@ -204,8 +208,31 @@ class DataGenerator(IGenerator):
             current_item,
             file_path
         )
-        if field_context:
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
+
+        # Apply context_scope if configured
+        context_scope = self.agent_config.get('context_scope', {})
+        if context_scope:
+            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            print(f"\n[DEBUG _format_prompt] Applying context_scope for {self.agent_name}")
+            print(f"  context_scope config: {context_scope}")
+            print(f"  field_context keys: {list(field_context.keys())}")
+
+            prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+                field_context, context_scope
+            )
+
+            print(f"  AFTER apply_context_scope:")
+            print(f"    llm_context keys: {list(llm_context.keys())}")
+            print(f"    llm_context has data: {bool(llm_context)}")
+        else:
+            # No context_scope: use field_context as-is for backward compatibility
+            prompt_context = field_context
+            llm_context = {}
+            passthrough_fields = {}
+
+        # Render prompt with prompt_context (may have fields removed by include/exclude/passthrough)
+        if prompt_context:
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
         else:
             formatted_prompt = raw_prompt
-        return (formatted_prompt, contents)
+        return (formatted_prompt, contents, llm_context, passthrough_fields)

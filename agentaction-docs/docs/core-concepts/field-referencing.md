@@ -593,6 +593,264 @@ def my_function(context_data):
 4. **Keep functions focused** - Each function should do one thing well
 5. **Use field references** - Let the system resolve references before dispatch
 
+## Context Scope Control
+
+The `context_scope` configuration provides granular control over how upstream fields flow through your agents. It allows you to specify which fields go to the LLM as context, which are blocked entirely, and which bypass the LLM to go directly to the output.
+
+### Why Context Scope?
+
+Without `context_scope`, all referenced fields must be included in the prompt. This creates challenges:
+
+- **Large Reference Data**: Cannot send 50KB reference tables to LLM without bloating the prompt
+- **Security**: No way to block sensitive data (API keys, credentials) from reaching the LLM
+- **Lineage Tracking**: Must manually use `observe` to carry IDs through multi-stage pipelines
+
+Context scope solves these problems with three directives: `include`, `exclude`, and `passthrough`.
+
+### The Three Directives
+
+#### 1. Include - LLM Context Only
+
+Send fields to the LLM as additional context without including them in the prompt or output.
+
+```yaml
+agents:
+  - name: "researcher"
+    prompt: "Research this topic: {source.topic}"
+    schema:
+      summary: string
+      key_findings: array
+      reference_tables: object  # 50KB of lookup data
+
+  - name: "analyzer"
+    prompt: |
+      Analyze these findings:
+      {researcher.summary}
+
+    context_scope:
+      include:
+        - researcher.reference_tables  # Sent to LLM, not in prompt or output
+
+    schema:
+      analysis: string
+      confidence: number
+```
+
+**What happens:**
+- `reference_tables` formatted and appended to the prompt before sending to LLM
+- LLM sees the reference data for accurate analysis
+- Output contains only `analysis` and `confidence` (not reference_tables)
+- Prompt stays clean and focused
+
+**Use cases:**
+- Large reference tables or lookup dictionaries
+- Historical context for LLM decision-making
+- Metadata that influences analysis but isn't needed in output
+
+#### 2. Exclude - Block from LLM
+
+Block sensitive fields from reaching the LLM entirely (security/privacy).
+
+```yaml
+agents:
+  - name: "data_collector"
+    prompt: "Collect data from API"
+    schema:
+      collected_data: array
+      api_credentials: object
+      internal_system_id: string
+
+  - name: "public_analyzer"
+    prompt: "Analyze: {data_collector.collected_data}"
+
+    context_scope:
+      exclude:
+        - data_collector.api_credentials
+        - data_collector.internal_system_id
+        - source.api_key
+
+    schema:
+      analysis: string
+```
+
+**What happens:**
+- Excluded fields removed from field context
+- Cannot reference them in prompt (e.g., `{data_collector.api_credentials}` would error)
+- LLM never sees the data
+- Not in final output
+
+**Use cases:**
+- API keys, credentials, tokens
+- PII (personally identifiable information)
+- Internal metadata
+- Compliance requirements
+
+#### 3. Passthrough - Output Only
+
+Merge fields into the current action's output without sending them to the LLM.
+
+```yaml
+agents:
+  - name: "fact_extractor"
+    prompt: "Extract facts from: {source.content}"
+    schema:
+      facts: array
+      document_id: string
+      original_filename: string
+
+  - name: "classifier"
+    prompt: "Classify these facts: {fact_extractor.facts}"
+
+    context_scope:
+      passthrough:
+        - fact_extractor.document_id
+        - fact_extractor.original_filename
+
+    schema:
+      classification: string
+      confidence: number
+```
+
+**What happens:**
+- Passthrough fields removed from field context
+- Cannot reference them in prompt
+- LLM never sees them
+- After LLM generates response, fields merged into output
+- Next agent can reference them: `{classifier.document_id}`
+
+**Final output:**
+```json
+{
+  "classification": "positive",
+  "confidence": 0.92,
+  "document_id": "doc-123",
+  "original_filename": "report.pdf"
+}
+```
+
+**Use cases:**
+- Lineage tracking (document_id, source_id)
+- Metadata that flows through pipeline
+- IDs for downstream correlation
+- Timestamps, filenames, tags
+
+### Using All Three Together
+
+Combine directives for complete control over field flow:
+
+```yaml
+agents:
+  - name: "advanced_analyzer"
+    prompt: "Analyze: {extractor.summary}"
+
+    context_scope:
+      include:
+        - enricher.reference_database    # To LLM context
+        - enricher.historical_statistics  # To LLM context
+
+      exclude:
+        - source.api_credentials  # Block from LLM
+        - extractor.internal_metadata  # Block from LLM
+
+      passthrough:
+        - extractor.document_id      # To output only
+        - source.original_filename    # To output only
+
+    schema:
+      analysis: string
+      confidence: number
+```
+
+**Result:**
+- **Prompt:** Clean and focused (`{extractor.summary}`)
+- **LLM Context:** Reference database + historical statistics (for accurate analysis)
+- **LLM Never Sees:** API credentials, internal metadata (security)
+- **Output:** `analysis`, `confidence`, `document_id`, `original_filename`
+
+### Comparison with Observe and Drops
+
+| Feature | Syntax | Purpose | LLM Sees It? |
+|---------|--------|---------|--------------|
+| **observe** | `observe: [field]` | Copy flat field to output | Yes, if in context |
+| **drops** | `drops: [field]` | Remove from output | Yes, can be in prompt/context |
+| **context_scope.include** | `include: [action.field]` | Send to LLM context only | Yes (context), not in prompt/output |
+| **context_scope.exclude** | `exclude: [action.field]` | Block entirely | No (security) |
+| **context_scope.passthrough** | `passthrough: [action.field]` | Merge to output only | No |
+
+**Key differences:**
+- `observe` works with flat fields from immediate predecessor
+- `context_scope` uses `{action.field}` syntax for explicit references
+- `context_scope.passthrough` can reference ANY upstream action (via historical nodes)
+- `context_scope.exclude` provides security guarantee (LLM never sees data)
+
+### Output Formula
+
+Without context_scope:
+```
+Final Output = (schema_fields + observe) - drops
+```
+
+With context_scope:
+```
+Final Output = (schema_fields + observe + passthrough) - drops
+```
+
+### Best Practices
+
+#### 1. Security First
+
+Always exclude sensitive data:
+```yaml
+context_scope:
+  exclude:
+    - source.api_key
+    - collector.credentials
+    - processor.internal_ids
+```
+
+#### 2. Large Reference Data
+
+Use `include` for large lookup data:
+```yaml
+context_scope:
+  include:
+    - researcher.reference_tables  # 50KB lookup data
+```
+
+#### 3. Lineage Tracking
+
+Use `passthrough` instead of manual `observe`:
+```yaml
+# Good - Explicit source
+context_scope:
+  passthrough:
+    - extractor.document_id
+
+# Less clear - Which action's document_id?
+observe: [document_id]
+```
+
+#### 4. Combine with Field References
+
+`context_scope` works seamlessly with existing field referencing:
+```yaml
+prompt: |
+  Analyze {extractor.summary} considering:
+  - Metrics: {analyzer.metrics}
+  - Patterns: {classifier.patterns}
+
+context_scope:
+  include: [analyzer.raw_data]
+  passthrough: [extractor.doc_id]
+```
+
+### Backward Compatibility
+
+Workflows without `context_scope` work unchanged:
+- No `context_scope` → empty dicts passed internally
+- Existing field references work normally
+- No breaking changes
+
 ## See Also
 
 - [Agents](/core-concepts/agents) - Agent configuration and dependencies
