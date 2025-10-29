@@ -166,7 +166,7 @@ class WorkflowMigrator:
             impl=agent.get('model_name', action_name),
             granularity=self._map_granularity(agent.get('granularity')),
             guard=self._convert_where_clause(agent.get('where_clause')),
-            reads=self._parse_collection_list(agent.get('observe', [])),
+            reads=[],  # Deprecated: observe field removed
             writes=self._infer_writes_from_tool(action_name)
         )
 
@@ -205,20 +205,15 @@ class WorkflowMigrator:
 
     def _extract_data_flow(self, agent: Dict[str, Any]) -> tuple[List[str], List[str], List[str], List[str]]:
         """Extract data flow configuration from agent."""
-        observe = self._parse_collection_list(agent.get('observe', []))
-        drops = self._parse_collection_list(agent.get('drops', []))
-
-        # Infer reads from observe
-        reads = observe.copy()
+        # Deprecated: observe and drops fields removed
+        reads = []
 
         # Infer writes from schema or agent type
         writes = self._infer_writes_from_agent(agent)
 
-        # drops are items to remove
-        drops = drops
-
-        # observe includes observe items that aren't consumed
-        observe = observe.copy()
+        # Deprecated: drops and observe removed, returning empty lists
+        drops = []
+        observe = []
 
         return reads, writes, drops, observe
 

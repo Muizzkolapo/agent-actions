@@ -17,29 +17,6 @@ class TestBuildNamespacedFieldContext:
         assert field_context['agent_A'] == {'field1': 'value1', 'field2': 'value2'}
         assert 'field3' not in field_context['agent_A']
 
-    def test_handles_observe_fields_correctly(self):
-        """Test that observe fields are included in agent's namespace."""
-        agent_config = {'dependencies': ['agent_A']}
-        agent_name = 'test_agent'
-        dependency_configs = {'agent_A': {'output_schema': {'properties': {'result': {}}}, 'observe': ['id', 'metadata']}}
-        generator = DataGenerator(agent_config, agent_name, dependency_configs)
-        contents = {'result': 'success', 'id': '123', 'metadata': {'key': 'value'}}
-        field_context = generator._build_namespaced_field_context(contents)
-        assert 'agent_A' in field_context
-        assert field_context['agent_A'] == {'result': 'success', 'id': '123', 'metadata': {'key': 'value'}}
-
-    def test_handles_drops_correctly(self):
-        """Test that dropped fields are excluded from agent's namespace."""
-        agent_config = {'dependencies': ['agent_A']}
-        agent_name = 'test_agent'
-        dependency_configs = {'agent_A': {'output_schema': {'properties': {'field1': {}, 'field2': {}}}, 'drops': ['field2']}}
-        generator = DataGenerator(agent_config, agent_name, dependency_configs)
-        contents = {'field1': 'v1', 'field2': 'v2'}
-        field_context = generator._build_namespaced_field_context(contents)
-        assert 'agent_A' in field_context
-        assert field_context['agent_A'] == {'field1': 'v1'}
-        assert 'field2' not in field_context['agent_A']
-
     def test_backward_compatible_without_dependency_configs(self):
         """Test that no namespacing happens when dependency_configs not provided."""
         agent_config = {'dependencies': ['agent_A']}

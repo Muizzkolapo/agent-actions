@@ -116,7 +116,12 @@ class ApplicationContainer:
         except Exception:
             data_processor = DataProcessor(agent_config)
 
-        batch_service = self.container.get(BatchService)
+        # Create BatchService with agent_indices and dependency_configs for historical node loading
+        dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
+        batch_service = BatchService(
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs or agent_configs
+        )
         return self.processor_factory.create_processor('target_content', agent_config=agent_config, agent_name=agent_name, idx=idx, source_loader=source_loader, data_generator=data_generator, data_processor=data_processor, batch_service=batch_service)
 
     @classmethod
@@ -177,7 +182,8 @@ class ApplicationContainer:
             results['services']['data_processor'] = 'healthy'
             self.container.get(IGenerator)
             results['services']['generator'] = 'healthy'
-            self.container.get(BatchService)
+            # BatchService is no longer registered in container, create instance for health check
+            BatchService()
             results['services']['batch_service'] = 'healthy'
         except Exception as e:
             results['status'] = 'unhealthy'

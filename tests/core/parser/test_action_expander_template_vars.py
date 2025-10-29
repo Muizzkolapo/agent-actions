@@ -35,6 +35,7 @@ class TestTemplateVariableReplacement:
         assert agents[1]['prompt'] == 'Compare stage 2 with stage 1'
         assert agents[2]['prompt'] == 'Compare stage 3 with stage 2'
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_template_vars_in_lists(self):
         """Test template variables in list fields (observe/drops)."""
         config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'aggregate', 'intent': 'Aggregate with observe/drops', 'api_key': 'OPENAI_API_KEY', 'observe': ['input_data', 'output_${stage-1}'], 'drops': ['temp_${stage}'], 'loop': {'param': 'stage', 'range': [1, 3]}}], 'plan': ['aggregate']}
@@ -50,6 +51,7 @@ class TestTemplateVariableReplacement:
         assert 'output_2' in agents[2]['observe']
         assert 'temp_3' in agents[2]['drops']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_template_vars_in_observe_drops(self):
         """Test template variables in observe and drops fields."""
         config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'process', 'intent': 'Process with observe/drops', 'api_key': 'OPENAI_API_KEY', 'observe': ['iteration_${i}', 'previous_${i-1}'], 'drops': ['temp_${i}'], 'loop': {'param': 'i', 'range': [1, 2]}}], 'plan': ['process']}
@@ -102,6 +104,7 @@ class TestTemplateVariableReplacement:
         assert agents[0]['prompt'] == 'Compare  with  again'
         assert agents[1]['prompt'] == 'Compare 1 with 1 again'
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_template_vars_sequential_mode_integration(self):
         """Test template variables work correctly with sequential mode."""
         config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'input', 'intent': 'Input data', 'api_key': 'OPENAI_API_KEY'}, {'name': 'refine', 'intent': 'Refine sequentially', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Refine stage ${s} using output from stage ${s-1}', 'observe': ['refined_${s}'], 'loop': {'param': 's', 'range': [1, 3], 'mode': 'sequential'}}], 'plan': ['input', 'refine <- input']}

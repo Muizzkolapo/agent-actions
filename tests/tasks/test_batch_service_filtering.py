@@ -124,7 +124,7 @@ class TestBatchServiceFiltering:
         """Test that _convert_batch_results_to_workflow_format excludes filtered items."""
         batch_service.context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'filtered'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
         batch_results = [BatchResult(custom_id='item1', success=True, content={'result': 'processed item1'}, usage={'tokens': 10}, metadata={}, error=None), BatchResult(custom_id='item3', success=True, content={'result': 'processed item3'}, usage={'tokens': 10}, metadata={}, error=None)]
-        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, observe=[], context_map=batch_service.context_map, output_directory=temp_output_dir)
+        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=batch_service.context_map, output_directory=temp_output_dir)
         assert len(processed_data) == 2
         source_guids = [item.get('source_guid') for item in processed_data]
         assert 'item1' in source_guids
@@ -135,7 +135,7 @@ class TestBatchServiceFiltering:
         """Test that _convert_batch_results_to_workflow_format includes skipped items as passthrough."""
         batch_service.context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'skipped'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
         batch_results = [BatchResult(custom_id='item1', success=True, content={'result': 'processed item1'}, usage={'tokens': 10}, metadata={}, error=None), BatchResult(custom_id='item3', success=True, content={'result': 'processed item3'}, usage={'tokens': 10}, metadata={}, error=None)]
-        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, observe=[], context_map=batch_service.context_map, output_directory=temp_output_dir)
+        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=batch_service.context_map, output_directory=temp_output_dir)
         assert len(processed_data) == 3
         skipped_items = [item for item in processed_data if item.get('metadata', {}).get('skipped_by_conditional') is True]
         assert len(skipped_items) == 1

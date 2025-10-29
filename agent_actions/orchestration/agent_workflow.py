@@ -187,7 +187,10 @@ class AgentWorkflow:
         self.agent_runner.agent_configs = self.agent_configs
         self.agent_runner.workflow_name = self.agent_name  # Set workflow name for agent_io folder lookups
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
-        self.batch_service = BatchService()
+        self.batch_service = BatchService(
+            agent_indices=self.agent_indices,
+            dependency_configs=self.agent_configs
+        )
         self.where_parser = WhereClauseParser()
         agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
         self.loop_correlator = LoopOutputCorrelator(agent_folder)

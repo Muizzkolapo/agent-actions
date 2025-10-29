@@ -68,7 +68,15 @@ class TargetGenerator:
         if processor_factory is None:
             raise DependencyError('TargetGenerator.generate', 'processor_factory', context={'method': 'TargetGenerator.generate', 'dependency': 'processor_factory', 'agent_name': agent_name})
         if agent_config.get('run_mode') == 'batch':
-            batch_service = BatchService()
+            # Build agent_indices from agent_configs if available
+            agent_indices = None
+            if agent_configs:
+                agent_indices = {name: config.get('idx', 999) for name, config in agent_configs.items() if 'idx' in config}
+
+            batch_service = BatchService(
+                agent_indices=agent_indices,
+                dependency_configs=agent_configs
+            )
             file_reader = FileReader(file_path)
             data = file_reader.read()
             file_name = Path(file_path).name
@@ -120,7 +128,15 @@ class TargetGenerator:
     def _process_by_strategy(self, data, file_path, base_directory, output_directory):
         """Select and apply the appropriate processing strategy based on configuration. Async for record granularity."""
         if self.agent_config.get('run_mode') == 'batch':
-            batch_service = BatchService()
+            # Build agent_indices from agent_configs if available
+            agent_indices = None
+            if self.agent_configs:
+                agent_indices = {name: config.get('idx', 999) for name, config in self.agent_configs.items() if 'idx' in config}
+
+            batch_service = BatchService(
+                agent_indices=agent_indices,
+                dependency_configs=self.agent_configs
+            )
             file_name = Path(file_path).name
             result = batch_service.submit_batch_job_from_data(self.agent_config, file_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)

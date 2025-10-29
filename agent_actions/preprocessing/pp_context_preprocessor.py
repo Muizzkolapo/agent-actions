@@ -1,22 +1,7 @@
 """Module for preprocessing context data."""
-from agent_actions.utilities.utils_processor_helpers import apply_drops
 
 class ContextPreprocessor:
     """Handles context data preprocessing (Single Responsibility)."""
-
-    @staticmethod
-    def prepare_context(context_data, agent_config):
-        """
-        Remove schema objects from context data if configured.
-        
-        Parameters:
-            context_data: Data to process
-            agent_config: Configuration containing transformation settings
-            
-        Returns:
-            Processed context data
-        """
-        return apply_drops(context_data, agent_config)
 
     @staticmethod
     def extract_guid_and_content(context_data):

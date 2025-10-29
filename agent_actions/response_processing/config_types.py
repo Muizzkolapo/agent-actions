@@ -13,8 +13,6 @@ class AgentEntryDict(TypedDict, total=False):
     prompt: Optional[str]
     schema_name: Optional[str]
     chunk_config: Dict[str, Any]
-    observe: List[str]
-    drops: List[str]
     is_operational: bool
     few_shot: int
     conditional_clause: Optional[str]

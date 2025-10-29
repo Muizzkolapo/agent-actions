@@ -6,10 +6,6 @@ from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
 from .utils_processor_utils import ProcessorUtils
 
-def apply_drops(contents: Any, agent_config: Dict) -> Any:
-    """Apply ``drops`` transformations consistently."""
-    return ProcessorUtils.apply_drops(contents, agent_config)
-
 def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_additional_context: Optional[Dict]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
@@ -19,19 +15,19 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     Data Structure Handling:
         When context has nested structure (e.g., {source_guid, content{}, target_id}),
-        this function extracts the 'content' dict before applying drops and sending
-        to the LLM. This ensures:
+        this function extracts the 'content' dict before sending to the LLM. This ensures:
         - Metadata fields (source_guid, target_id, node_id, lineage) never reach LLM
         - Only actual data fields from 'content' are sent to LLM
-        - drops/observe configurations only affect fields inside 'content'
+        - context_scope configurations only affect fields inside 'content'
 
     Context Scope Support:
         Supports context_scope feature for granular field flow control:
         - llm_additional_context: Fields from context_scope.include merged into LLM context JSON
-        - context_scope.passthrough: Handled later in transform_with_observe() (same pathway as observe)
+        - context_scope.exclude: Fields removed from LLM context
+        - context_scope.passthrough: Handled later in transform_with_passthrough()
 
     Args:
-        agent_config: Agent configuration including guard conditions, drops, and observe
+        agent_config: Agent configuration including guard conditions and context_scope
         agent_name: Name of the agent being executed
         context: Data context for agent execution. May be flat dict or nested structure
                  with 'content' key containing the actual data
@@ -51,14 +47,14 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         return (context, False)
     if _should_filter_where_clause(agent_config, context):
         return (None, False)
-    # Apply drops first
-    if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):
-        content_dict = context['content']
-        processed_context = apply_drops(content_dict, agent_config)
-    else:
-        processed_context = apply_drops(context, agent_config)
 
-    # Then apply context_scope.exclude using same mechanism as drops
+    # Extract content from nested structure if needed
+    if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):
+        processed_context = context['content']
+    else:
+        processed_context = context
+
+    # Apply context_scope.exclude field filtering
     context_scope = agent_config.get('context_scope', {})
     if context_scope and context_scope.get('exclude') and isinstance(processed_context, dict):
         from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
@@ -73,7 +69,7 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
             except ValueError:
                 continue
 
-        # Apply drops mechanism directly (same as apply_drops does)
+        # Remove excluded fields from context
         if exclude_fields:
             processed_context = DataTransformer.remove_schema_objects(processed_context, exclude_fields)
 
@@ -130,6 +126,6 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
         passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
         return not passthrough_on_error
 
-def transform_with_observe(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0) -> list:
-    """Apply ``observe`` logic to generated data consistently."""
-    return ProcessorUtils.transform_with_observe(data, context_data, source_guid, agent_config, idx)
+def transform_with_passthrough(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0) -> list:
+    """Apply ``context_scope.passthrough`` logic to generated data consistently."""
+    return ProcessorUtils.transform_with_passthrough(data, context_data, source_guid, agent_config, idx)

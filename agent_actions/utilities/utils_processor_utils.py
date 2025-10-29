@@ -12,7 +12,6 @@ import threading
 import hashlib
 from typing import Dict, List, Any, Optional
 from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.utilities.constants import OBSERVE_KEY
 
 class ProcessorUtils:
     """Utility class containing common operations shared across processors."""
@@ -169,60 +168,33 @@ class ProcessorUtils:
         return {'source_guid': source_guid, 'content': content, 'target_id': target_id or ProcessorUtils.generate_target_id(), 'node_id': node_id or ProcessorUtils.generate_node_id(0), 'lineage': lineage or []}
 
     @staticmethod
-    def apply_drops(contents: Any, agent_config: Dict) -> Any:
+    def transform_with_passthrough(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0) -> List:
         """
-        Apply drops transformations consistently.
+        Apply context_scope.passthrough logic to generated data.
 
-        drops (from config 'drops') specifies fields that should be:
-        - Excluded from the LLM prompt
-        - Removed from the final output
-
-        Args:
-            contents: Content to transform
-            agent_config: Agent configuration containing drops
-
-        Returns:
-            Transformed content with removed fields
-        """
-        drops = agent_config.get('drops', [])
-        if drops and isinstance(contents, dict):
-            return DataTransformer.remove_schema_objects(contents, drops)
-        return contents
-
-    @staticmethod
-    def transform_with_observe(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0) -> List:
-        """
-        Apply observe logic to generated data consistently.
-
-        observe (from config 'observe') specifies fields that should be:
-        - Excluded from the LLM prompt
-        - Included in the final output (passthrough from context)
-
-        context_scope.passthrough (from config 'context_scope') specifies fields that should be:
+        context_scope.passthrough specifies fields from upstream actions that should be:
         - Excluded from the LLM prompt and context
-        - Included in the final output (passthrough from upstream actions)
-        - Uses {action.field} syntax, follows same merge pathway as observe
+        - Included in the final output (passthrough to next agent)
+        - Uses {action.field} syntax (e.g., 'extractor.document_id')
 
         Args:
             data: Generated data list
-            context_data: Context data dictionary containing observe/passthrough fields
+            context_data: Context data dictionary containing passthrough fields
             source_guid: Source GUID
-            agent_config: Agent configuration containing observe and context_scope
+            agent_config: Agent configuration containing context_scope
             idx: Index for node generation
 
         Returns:
-            Transformed data list with observe and passthrough fields merged
+            Transformed data list with passthrough fields merged
         """
         if not isinstance(data, list):
             data = [data] if data is not None else []
         already_structured = len(data) > 0 and all((isinstance(item, dict) and 'source_guid' in item and ('content' in item) for item in data))
 
-        # Collect fields to pass through: observe + context_scope.passthrough
-        observe = agent_config.get(OBSERVE_KEY, [])
-        fields_to_merge = list(observe) if observe else []
-
-        # Add context_scope.passthrough fields (extract field names from action.field references)
+        # Extract context_scope.passthrough fields
         context_scope = agent_config.get('context_scope', {})
+        fields_to_merge = []
+
         if context_scope and context_scope.get('passthrough'):
             passthrough_refs = context_scope.get('passthrough', [])
             for field_ref in passthrough_refs:
@@ -234,30 +206,30 @@ class ProcessorUtils:
                         if field_name not in fields_to_merge:
                             fields_to_merge.append(field_name)
 
-        # Use the combined fields_to_merge list (observe + passthrough)
+        # If no passthrough fields, just structure the data and return
         if already_structured and (not fields_to_merge):
             output = data
         elif fields_to_merge:
-            context_for_observe = context_data
+            context_for_passthrough = context_data
             if isinstance(context_data, dict) and 'content' in context_data and isinstance(context_data['content'], dict):
-                context_for_observe = context_data['content']
+                context_for_passthrough = context_data['content']
             if already_structured:
                 contents = [item['content'] for item in data]
                 updated = []
                 for content in contents:
                     if isinstance(content, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content, fields_to_merge))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content, fields_to_merge))
                     else:
                         content_dict = {'content': content}
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content_dict, fields_to_merge))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content_dict, fields_to_merge))
             else:
                 updated = []
                 for item in data:
                     if isinstance(item, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item, fields_to_merge))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item, fields_to_merge))
                     else:
                         item_dict = {'content': item}
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item_dict, fields_to_merge))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item_dict, fields_to_merge))
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
             output = DataTransformer.transform_structure([{source_guid: data}])

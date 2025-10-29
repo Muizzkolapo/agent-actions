@@ -353,3 +353,119 @@ class ContextScopeProcessor:
 
         # Other types (shouldn't happen, but be defensive)
         return llm_response
+
+    @staticmethod
+    def build_field_context_with_history(
+        contents: Dict,
+        agent_name: str,
+        agent_config: Dict,
+        agent_indices: Optional[Dict[str, int]] = None,
+        dependency_configs: Optional[Dict[str, Dict]] = None,
+        source_content: Optional[Any] = None,
+        loop_context: Optional[Dict] = None,
+        workflow_metadata: Optional[Dict] = None,
+        current_item: Optional[Dict] = None,
+        file_path: Optional[str] = None
+    ) -> Dict:
+        """
+        Build field context with agent namespaces from flat contents.
+
+        Automatically loads ALL previous actions from lineage, making them available
+        for field references. No manual dependencies declaration needed.
+
+        Used by BOTH online and batch modes for consistent field context building.
+
+        Args:
+            contents: Flat dict containing all fields from dependencies
+            agent_name: Name of the current agent
+            agent_config: Configuration for the current agent
+            agent_indices: Dict mapping agent names to their node indices
+            dependency_configs: Dict mapping dependency names to their configs
+            source_content: Optional source content for {source.field} references
+            loop_context: Optional loop context for {loop.*} references
+            workflow_metadata: Optional workflow metadata for {workflow.*} references
+            current_item: Optional current item dict containing lineage and source_guid
+            file_path: Optional file path for constructing historical node paths
+
+        Returns:
+            Namespaced field_context dict for replace_field_references()
+
+        Example:
+            Input contents (flat):
+                {'bloom_details': '...', 'cluster_id': '...', 'page_content': '...'}
+
+            Output field_context (namespaced):
+                {
+                    'source': {...},
+                    'fact_extractor': {...},        # Auto-loaded from lineage
+                    'flatten_facts': {...},         # Auto-loaded from lineage
+                    'cluster_list': {...},          # Auto-loaded from lineage
+                    'combine_by_cluster': {...},    # Auto-loaded from lineage
+                    'loop': {...},
+                    'workflow': {...}
+                }
+        """
+        from agent_actions.validation.llm_context_utils import LLMContextUtils
+        from agent_actions.preprocessing.historical_node_loader import HistoricalNodeDataLoader
+
+        field_context = {}
+
+        # Add source content
+        if source_content:
+            field_context['source'] = source_content
+
+        # Auto-load ALL previous actions from lineage
+        if current_item and file_path and agent_indices:
+            lineage = current_item.get('lineage', [])
+            source_guid = current_item.get('source_guid')
+            current_idx = agent_indices.get(agent_name, 999)
+
+            if lineage and source_guid:
+                # Iterate through ALL agents in agent_indices
+                for action_name, action_idx in agent_indices.items():
+                    # Only load actions that come BEFORE the current agent
+                    if action_idx >= current_idx:
+                        continue
+
+                    # Load historical data for this action
+                    historical_data = HistoricalNodeDataLoader.load_historical_node_data(
+                        action_name=action_name,
+                        lineage=lineage,
+                        source_guid=source_guid,
+                        file_path=file_path,
+                        agent_indices=agent_indices
+                    )
+
+                    if historical_data:
+                        field_context[action_name] = historical_data
+
+        # Fallback: Also check declared dependencies for flat contents
+        # (Backward compatibility for immediate predecessor data in contents)
+        if dependency_configs:
+            dependencies = agent_config.get('dependencies', [])
+            for dep_name in dependencies:
+                # Skip if already loaded from historical data
+                if dep_name in field_context:
+                    continue
+
+                dep_config = dependency_configs.get(dep_name)
+                if not dep_config:
+                    continue
+
+                # Load from flat contents (immediate predecessor)
+                dep_output_fields = LLMContextUtils.compute_llm_context(dep_config)
+                dep_fields = {}
+                for field in dep_output_fields:
+                    if field in contents:
+                        dep_fields[field] = contents[field]
+
+                if dep_fields:
+                    field_context[dep_name] = dep_fields
+
+        # Add loop and workflow contexts
+        if loop_context:
+            field_context['loop'] = loop_context
+        if workflow_metadata:
+            field_context['workflow'] = workflow_metadata
+
+        return field_context

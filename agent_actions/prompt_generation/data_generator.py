@@ -5,7 +5,7 @@ from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
 from agent_actions.utilities.constants import PROMPT_KEY
 from agent_actions.preprocessing.sample_enricher import SampleEnricher
-from agent_actions.utilities.utils_processor_helpers import apply_drops, run_dynamic_agent
+from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
 from agent_actions.configuration.interfaces import IGenerator, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry
 
@@ -68,24 +68,15 @@ class DataGenerator(IGenerator):
             from agent_actions.shared.exceptions import GenerationError
             raise GenerationError(f'Failed to create agent with data: {str(e)}', cause=e)
 
-    def _apply_drops(self, contents: Dict) -> Dict:
-        """
-        Apply drops transformation to contents.
-
-        Args:
-            contents: Content to transform
-
-        Returns:
-            Transformed content
-        """
-        return apply_drops(contents, self.agent_config)
-
     def _build_namespaced_field_context(self, contents: Dict, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Dict:
         """
         Build field context with agent namespaces from flat contents.
 
         Automatically loads ALL previous actions from lineage, making them available
         for field references. No manual dependencies declaration needed.
+
+        This is a thin wrapper around ContextScopeProcessor.build_field_context_with_history()
+        for backward compatibility.
 
         Args:
             contents: Flat dict containing all fields from dependencies
@@ -97,85 +88,21 @@ class DataGenerator(IGenerator):
 
         Returns:
             Namespaced field_context dict for replace_field_references()
-
-        Example:
-            Input contents (flat):
-                {'bloom_details': '...', 'cluster_id': '...', 'page_content': '...'}
-
-            Output field_context (namespaced):
-                {
-                    'source': {...},
-                    'fact_extractor': {...},        # Auto-loaded from lineage
-                    'flatten_facts': {...},         # Auto-loaded from lineage
-                    'cluster_list': {...},          # Auto-loaded from lineage
-                    'combine_by_cluster': {...},    # Auto-loaded from lineage
-                    'loop': {...},
-                    'workflow': {...}
-                }
         """
-        from agent_actions.validation.llm_context_utils import LLMContextUtils
-        from agent_actions.preprocessing.historical_node_loader import HistoricalNodeDataLoader
+        from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
 
-        field_context = {}
-
-        # Add source content
-        if source_content:
-            field_context['source'] = source_content
-
-        # Auto-load ALL previous actions from lineage
-        if current_item and file_path and self.agent_indices:
-            lineage = current_item.get('lineage', [])
-            source_guid = current_item.get('source_guid')
-            current_idx = self.agent_indices.get(self.agent_name, 999)
-
-            if lineage and source_guid:
-                # Iterate through ALL agents in agent_indices
-                for action_name, action_idx in self.agent_indices.items():
-                    # Only load actions that come BEFORE the current agent
-                    if action_idx >= current_idx:
-                        continue
-
-                    # Load historical data for this action
-                    historical_data = HistoricalNodeDataLoader.load_historical_node_data(
-                        action_name=action_name,
-                        lineage=lineage,
-                        source_guid=source_guid,
-                        file_path=file_path,
-                        agent_indices=self.agent_indices
-                    )
-
-                    if historical_data:
-                        field_context[action_name] = historical_data
-
-        # Fallback: Also check declared dependencies for flat contents
-        # (Backward compatibility for immediate predecessor data in contents)
-        dependencies = self.agent_config.get('dependencies', [])
-        for dep_name in dependencies:
-            # Skip if already loaded from historical data
-            if dep_name in field_context:
-                continue
-
-            dep_config = self.dependency_configs.get(dep_name)
-            if not dep_config:
-                continue
-
-            # Load from flat contents (immediate predecessor)
-            dep_output_fields = LLMContextUtils.compute_llm_context(dep_config)
-            dep_fields = {}
-            for field in dep_output_fields:
-                if field in contents:
-                    dep_fields[field] = contents[field]
-
-            if dep_fields:
-                field_context[dep_name] = dep_fields
-
-        # Add loop and workflow contexts
-        if loop_context:
-            field_context['loop'] = loop_context
-        if workflow_metadata:
-            field_context['workflow'] = workflow_metadata
-
-        return field_context
+        return ContextScopeProcessor.build_field_context_with_history(
+            contents=contents,
+            agent_name=self.agent_name,
+            agent_config=self.agent_config,
+            agent_indices=self.agent_indices,
+            dependency_configs=self.dependency_configs,
+            source_content=source_content,
+            loop_context=loop_context,
+            workflow_metadata=workflow_metadata,
+            current_item=current_item,
+            file_path=file_path
+        )
 
     def _format_prompt(self, contents: Dict, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[str, Dict, Dict, Dict]:
         """

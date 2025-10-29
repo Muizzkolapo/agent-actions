@@ -200,7 +200,7 @@ Source: {source.page_content}"""
         file_path = str(Path(temp_target_dir) / "target" / "node_2_cluster_list" / "test_file.json")
 
         # Execute
-        formatted_prompt, _ = generator._format_prompt(
+        formatted_prompt, contents, llm_context, passthrough_fields = generator._format_prompt(
             contents=current_item["content"],
             source_content=source_content,
             current_item=current_item,

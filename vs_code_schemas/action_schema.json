@@ -158,21 +158,37 @@
       "description": "Output schema",
       "title": "Schema"
     },
-    "drops": {
-      "description": "Fields to exclude from LLM prompt and final output",
-      "items": {
-        "type": "string"
+    "context_scope": {
+      "additionalProperties": false,
+      "description": "Control which fields from upstream actions are available in different contexts",
+      "properties": {
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Include",
+          "type": "array",
+          "description": "Fields to include in LLM additional context (merged as JSON, not in prompt text)"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude",
+          "type": "array",
+          "description": "Fields to exclude from LLM context (not sent to LLM at all)"
+        },
+        "passthrough": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Passthrough",
+          "type": "array",
+          "description": "Fields from upstream actions to merge into this action's output (e.g., 'upstream_action.field_name')"
+        }
       },
-      "title": "Drops",
-      "type": "array"
-    },
-    "observe": {
-      "description": "Fields to exclude from LLM prompt but include in output (passthrough)",
-      "items": {
-        "type": "string"
-      },
-      "title": "Observe",
-      "type": "array"
+      "title": "Context Scope",
+      "type": "object"
     },
     "granularity": {
       "anyOf": [

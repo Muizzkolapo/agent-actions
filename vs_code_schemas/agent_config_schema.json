@@ -434,6 +434,38 @@
       "description": "Enable caching for performance",
       "title": "Enable Caching",
       "type": "boolean"
+    },
+    "context_scope": {
+      "additionalProperties": false,
+      "description": "Control which fields from upstream actions are available in different contexts",
+      "properties": {
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Include",
+          "type": "array",
+          "description": "Fields to include in LLM additional context (merged as JSON, not in prompt text)"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude",
+          "type": "array",
+          "description": "Fields to exclude from LLM context (not sent to LLM at all)"
+        },
+        "passthrough": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Passthrough",
+          "type": "array",
+          "description": "Fields from upstream actions to merge into this action's output (e.g., 'upstream_action.field_name')"
+        }
+      },
+      "title": "Context Scope",
+      "type": "object"
     }
   },
   "required": [
