@@ -31,7 +31,7 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
         tools_path: Path to tool functions (optional)
         tool_args: Tool arguments (optional)
         source_content: Source content for tool handler (optional)
-        additional_context: Additional context from context_scope.include (optional).
+        additional_context: Additional context from context_scope.observe (optional).
                            Formatted and appended to prompt before LLM invocation.
 
     Returns:
@@ -58,7 +58,7 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
 
     prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
 
-    # Append additional_context to prompt if provided (context_scope.include fields)
+    # Append additional_context to prompt if provided (context_scope.observe fields)
     if additional_context:
         from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
         print(f"\n[DEBUG agent_builder] Received additional_context: {list(additional_context.keys())}")
@@ -217,7 +217,7 @@ def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_d
 
         prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
 
-        # Append additional_context to prompt if provided (context_scope.include fields)
+        # Append additional_context to prompt if provided (context_scope.observe fields)
         if additional_context:
             from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
             context_msg = ContextScopeProcessor.format_llm_context(additional_context)

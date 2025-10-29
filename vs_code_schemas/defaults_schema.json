@@ -81,21 +81,21 @@
         {
           "additionalProperties": false,
           "properties": {
-            "include": {
+            "observe": {
               "items": {
                 "type": "string"
               },
-              "title": "Include",
+              "title": "Observe",
               "type": "array",
-              "description": "Fields to include in LLM additional context"
+              "description": "Fields to observe in LLM additional context"
             },
-            "exclude": {
+            "drop": {
               "items": {
                 "type": "string"
               },
-              "title": "Exclude",
+              "title": "Drop",
               "type": "array",
-              "description": "Fields to exclude from LLM context"
+              "description": "Fields to drop from LLM context"
             },
             "passthrough": {
               "items": {

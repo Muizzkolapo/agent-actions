@@ -43,18 +43,18 @@ I've created a modified version of your config at `test_context_scope_qanalabs.y
        - source.bloom_details
    ```
 
-2. **Used `context_scope.include`** for large reference data:
+2. **Used `context_scope.observe`** for large reference data:
    ```yaml
    # For page_content (large text)
    context_scope:
-     include:
+     observe:
        - source.page_content  # Sent to LLM context, not in prompt
    ```
 
-3. **Can add `context_scope.exclude`** for sensitive data (if needed):
+3. **Can add `context_scope.drop`** for sensitive data (if needed):
    ```yaml
    context_scope:
-     exclude:
+     drop:
        - source.api_key  # Block from LLM entirely
    ```
 
@@ -112,13 +112,13 @@ context_scope:
 - Works with ANY upstream agent (not just immediate predecessor)
 - Leverages historical node infrastructure
 
-### 2. `context_scope.include` (New Capability)
+### 2. `context_scope.observe` (New Capability)
 
 **Use for:** Large reference data, lookup tables, metadata for LLM
 
 ```yaml
 context_scope:
-  include:
+  observe:
     - researcher.reference_tables  # 50KB lookup data
     - enricher.grouped_facts       # Reference for validation
 ```
@@ -134,13 +134,13 @@ context_scope:
 - Grouped facts for validation
 - Historical statistics
 
-### 3. `context_scope.exclude` (Security)
+### 3. `context_scope.drop` (Security)
 
 **Use for:** Blocking sensitive data from LLM
 
 ```yaml
 context_scope:
-  exclude:
+  drop:
     - source.api_key
     - collector.credentials
     - processor.internal_ids
@@ -178,13 +178,13 @@ context_scope:
       - source.exam_name
       - source.bloom_details
 
-    include:
+    observe:
       - source.page_content  # Large text as LLM context
 ```
 
 **Why:**
 - `page_content` can be large (bloats prompt)
-- Using `include` sends it as context instead
+- Using `observe` sends it as context instead
 - Passthrough carries lineage through pipeline
 
 ### Phase 2: Validation
@@ -194,7 +194,7 @@ context_scope:
   schema: cluster_validation
 
   context_scope:
-    include:
+    observe:
       - group_by_similarity.grouped_facts  # Reference for validation
       - group_by_similarity.page_content   # Original content as context
 
@@ -281,7 +281,7 @@ context_scope:
 
 ### Issue: Cannot reference field in prompt
 
-**Check:** Did you put it in `include`, `exclude`, or `passthrough`?
+**Check:** Did you put it in `observe`, `drop`, or `passthrough`?
 
 These directives REMOVE fields from prompt context.
 
@@ -291,16 +291,16 @@ These directives REMOVE fields from prompt context.
 
 # Only put fields you DON'T want in prompt
 context_scope:
-  include: [fact_extractor.metadata]  # Not in prompt
+  observe: [fact_extractor.metadata]  # Not in prompt
 ```
 
 ### Issue: LLM needs the data but it's not working
 
-**Solution:** Use `include` directive
+**Solution:** Use `observe` directive
 
 ```yaml
 context_scope:
-  include:
+  observe:
     - researcher.reference_tables  # LLM gets it as context
 ```
 

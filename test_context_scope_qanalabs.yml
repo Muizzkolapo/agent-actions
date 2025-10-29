@@ -75,9 +75,9 @@ actions:
     api_key: OPENAI_API_KEY
     schema: cluster_validation
     context_scope:
-      include:
+      observe:
         - fact_extractor.candidate_facts_list  # Reference data for validation
-      exclude:
+      drop:
         - group_by_similarity.grouped_facts  # Reference data for validation
         - group_by_similarity.num_similar_facts
         - group_by_similarity.page_content

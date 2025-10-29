@@ -120,7 +120,7 @@ class DataGenerator(IGenerator):
             Tuple of:
             - formatted_prompt: Rendered prompt string
             - contents: Original contents (unchanged)
-            - llm_context: Fields for LLM additional context (from context_scope.include)
+            - llm_context: Fields for LLM additional context (from context_scope.observe)
             - passthrough_fields: Fields to merge into output (from context_scope.passthrough)
         """
         raw_prompt = self.agent_config.get(PROMPT_KEY, '')

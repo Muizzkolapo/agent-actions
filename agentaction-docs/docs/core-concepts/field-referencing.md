@@ -605,11 +605,11 @@ Without `context_scope`, all referenced fields must be included in the prompt. T
 - **Security**: No way to block sensitive data (API keys, credentials) from reaching the LLM
 - **Lineage Tracking**: Must manually use `observe` to carry IDs through multi-stage pipelines
 
-Context scope solves these problems with three directives: `include`, `exclude`, and `passthrough`.
+Context scope solves these problems with three directives: `observe`, `drop`, and `passthrough`.
 
 ### The Three Directives
 
-#### 1. Include - LLM Context Only
+#### 1. Observe - LLM Context Only
 
 Send fields to the LLM as additional context without including them in the prompt or output.
 
@@ -628,7 +628,7 @@ agents:
       {researcher.summary}
 
     context_scope:
-      include:
+      observe:
         - researcher.reference_tables  # Sent to LLM, not in prompt or output
 
     schema:
@@ -647,7 +647,7 @@ agents:
 - Historical context for LLM decision-making
 - Metadata that influences analysis but isn't needed in output
 
-#### 2. Exclude - Block from LLM
+#### 2. Drop - Block from LLM
 
 Block sensitive fields from reaching the LLM entirely (security/privacy).
 
@@ -664,7 +664,7 @@ agents:
     prompt: "Analyze: {data_collector.collected_data}"
 
     context_scope:
-      exclude:
+      drop:
         - data_collector.api_credentials
         - data_collector.internal_system_id
         - source.api_key
@@ -674,7 +674,7 @@ agents:
 ```
 
 **What happens:**
-- Excluded fields removed from field context
+- Dropped fields removed from field context
 - Cannot reference them in prompt (e.g., `{data_collector.api_credentials}` would error)
 - LLM never sees the data
 - Not in final output
@@ -744,11 +744,11 @@ agents:
     prompt: "Analyze: {extractor.summary}"
 
     context_scope:
-      include:
+      observe:
         - enricher.reference_database    # To LLM context
         - enricher.historical_statistics  # To LLM context
 
-      exclude:
+      drop:
         - source.api_credentials  # Block from LLM
         - extractor.internal_metadata  # Block from LLM
 
@@ -773,15 +773,15 @@ agents:
 |---------|--------|---------|--------------|
 | **observe** | `observe: [field]` | Copy flat field to output | Yes, if in context |
 | **drops** | `drops: [field]` | Remove from output | Yes, can be in prompt/context |
-| **context_scope.include** | `include: [action.field]` | Send to LLM context only | Yes (context), not in prompt/output |
-| **context_scope.exclude** | `exclude: [action.field]` | Block entirely | No (security) |
+| **context_scope.observe** | `observe: [action.field]` | Send to LLM context only | Yes (context), not in prompt/output |
+| **context_scope.drop** | `drop: [action.field]` | Block entirely | No (security) |
 | **context_scope.passthrough** | `passthrough: [action.field]` | Merge to output only | No |
 
 **Key differences:**
 - `observe` works with flat fields from immediate predecessor
 - `context_scope` uses `{action.field}` syntax for explicit references
 - `context_scope.passthrough` can reference ANY upstream action (via historical nodes)
-- `context_scope.exclude` provides security guarantee (LLM never sees data)
+- `context_scope.drop` provides security guarantee (LLM never sees data)
 
 ### Output Formula
 
@@ -799,10 +799,10 @@ Final Output = (schema_fields + observe + passthrough) - drops
 
 #### 1. Security First
 
-Always exclude sensitive data:
+Always drop sensitive data:
 ```yaml
 context_scope:
-  exclude:
+  drop:
     - source.api_key
     - collector.credentials
     - processor.internal_ids
@@ -810,10 +810,10 @@ context_scope:
 
 #### 2. Large Reference Data
 
-Use `include` for large lookup data:
+Use `observe` for large lookup data:
 ```yaml
 context_scope:
-  include:
+  observe:
     - researcher.reference_tables  # 50KB lookup data
 ```
 
@@ -840,7 +840,7 @@ prompt: |
   - Patterns: {classifier.patterns}
 
 context_scope:
-  include: [analyzer.raw_data]
+  observe: [analyzer.raw_data]
   passthrough: [extractor.doc_id]
 ```
 

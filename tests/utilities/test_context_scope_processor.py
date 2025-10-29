@@ -24,8 +24,8 @@ class TestContextScopeProcessor:
 
         # Setup context_scope with all three directives
         context_scope = {
-            'include': ['fact_extractor.extracted_entities', 'fact_extractor.metadata'],
-            'exclude': ['source.api_key'],
+            'observe': ['fact_extractor.extracted_entities', 'fact_extractor.metadata'],
+            'drop': ['source.api_key'],
             'passthrough': ['fact_extractor.document_id']
         }
 
@@ -34,7 +34,7 @@ class TestContextScopeProcessor:
             field_context, context_scope
         )
 
-        # Validate INCLUDE directive
+        # Validate OBSERVE directive
         assert 'extracted_entities' in llm_context
         assert llm_context['extracted_entities'] == ['entity1', 'entity2']
         assert 'metadata' in llm_context
@@ -42,7 +42,7 @@ class TestContextScopeProcessor:
         assert 'extracted_entities' not in prompt_context.get('fact_extractor', {})
         assert 'metadata' not in prompt_context.get('fact_extractor', {})
 
-        # Validate EXCLUDE directive
+        # Validate DROP directive
         assert 'api_key' not in prompt_context.get('source', {})
         assert 'api_key' not in llm_context
         assert 'api_key' not in passthrough_fields

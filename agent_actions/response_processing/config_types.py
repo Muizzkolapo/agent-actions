@@ -23,7 +23,7 @@ class AgentEntryDict(TypedDict, total=False):
     # Anthropic-specific configuration options
     anthropic_version: Optional[str]  # API version header for Anthropic requests (e.g., "2023-06-01")
     enable_prompt_caching: Optional[bool]  # Enable Anthropic's prompt caching feature for improved performance
-    context_scope: Optional[Dict[str, List[str]]]  # Control field flow: include (LLM context), exclude (block), passthrough (output)
+    context_scope: Optional[Dict[str, List[str]]]  # Control field flow: observe (LLM context), drop (block), passthrough (output)
 
 # Alias for the list of agent entries under a pipeline name
 AgentConfigList = List[AgentEntryDict]

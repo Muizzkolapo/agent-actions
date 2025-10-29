@@ -162,21 +162,21 @@
       "additionalProperties": false,
       "description": "Control which fields from upstream actions are available in different contexts",
       "properties": {
-        "include": {
+        "observe": {
           "items": {
             "type": "string"
           },
-          "title": "Include",
+          "title": "Observe",
           "type": "array",
-          "description": "Fields to include in LLM additional context (merged as JSON, not in prompt text)"
+          "description": "Fields to observe in LLM additional context (merged as JSON, not in prompt text)"
         },
-        "exclude": {
+        "drop": {
           "items": {
             "type": "string"
           },
-          "title": "Exclude",
+          "title": "Drop",
           "type": "array",
-          "description": "Fields to exclude from LLM context (not sent to LLM at all)"
+          "description": "Fields to drop from LLM context (not sent to LLM at all)"
         },
         "passthrough": {
           "items": {

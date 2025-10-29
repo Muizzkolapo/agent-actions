@@ -22,8 +22,8 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     Context Scope Support:
         Supports context_scope feature for granular field flow control:
-        - llm_additional_context: Fields from context_scope.include merged into LLM context JSON
-        - context_scope.exclude: Fields removed from LLM context
+        - llm_additional_context: Fields from context_scope.observe merged into LLM context JSON
+        - context_scope.drop: Fields removed from LLM context
         - context_scope.passthrough: Handled later in transform_with_passthrough()
 
     Args:
@@ -35,7 +35,7 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         tools_path: Optional path to tool functions
         tool_args: Optional tool arguments
         source_content: Optional source content
-        llm_additional_context: Optional additional context for LLM (from context_scope.include)
+        llm_additional_context: Optional additional context for LLM (from context_scope.observe)
 
     Returns:
         Tuple of (response/context, was_executed) where was_executed indicates
@@ -54,29 +54,29 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
     else:
         processed_context = context
 
-    # Apply context_scope.exclude field filtering
+    # Apply context_scope.drop field filtering
     context_scope = agent_config.get('context_scope', {})
-    if context_scope and context_scope.get('exclude') and isinstance(processed_context, dict):
+    if context_scope and context_scope.get('drop') and isinstance(processed_context, dict):
         from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
         from agent_actions.preprocessing.data_transformer import DataTransformer
 
-        # Extract field names from context_scope.exclude
-        exclude_fields = []
-        for field_ref in context_scope.get('exclude', []):
+        # Extract field names from context_scope.drop
+        drop_fields = []
+        for field_ref in context_scope.get('drop', []):
             try:
                 _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                exclude_fields.append(field_name)
+                drop_fields.append(field_name)
             except ValueError:
                 continue
 
-        # Remove excluded fields from context
-        if exclude_fields:
-            processed_context = DataTransformer.remove_schema_objects(processed_context, exclude_fields)
+        # Remove dropped fields from context
+        if drop_fields:
+            processed_context = DataTransformer.remove_schema_objects(processed_context, drop_fields)
 
-    # Merge context_scope.include fields into context JSON (not as text to prompt)
+    # Merge context_scope.observe fields into context JSON (not as text to prompt)
     if llm_additional_context and isinstance(processed_context, dict):
         print(f"\n[DEBUG] Merging llm_additional_context into processed_context:")
-        print(f"  Include fields: {list(llm_additional_context.keys())}")
+        print(f"  Observe fields: {list(llm_additional_context.keys())}")
         processed_context = {**processed_context, **llm_additional_context}
         print(f"  Context keys after merge: {list(processed_context.keys())}")
 

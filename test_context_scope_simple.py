@@ -3,7 +3,7 @@
 Simple test script to verify context_scope feature works.
 
 This script tests the context_scope implementation with a minimal workflow
-to ensure all three directives (include, exclude, passthrough) work correctly.
+to ensure all three directives (observe, drop, passthrough) work correctly.
 """
 
 import json
@@ -34,8 +34,8 @@ def test_context_scope_basic():
     }
 
     context_scope = {
-        'include': ['fact_extractor.reference_tables'],
-        'exclude': ['source.api_key'],
+        'observe': ['fact_extractor.reference_tables'],
+        'drop': ['source.api_key'],
         'passthrough': ['fact_extractor.document_id', 'source.platform_name', 'source.exam_name']
     }
 
@@ -44,14 +44,14 @@ def test_context_scope_basic():
         field_context, context_scope
     )
 
-    # Validate INCLUDE
-    print("\n1. Testing INCLUDE directive:")
+    # Validate OBSERVE
+    print("\n1. Testing OBSERVE directive:")
     print(f"   ✓ reference_tables in llm_context: {
 'reference_tables' in llm_context}")
     print(f"   ✓ reference_tables NOT in prompt_context: {'reference_tables' not in prompt_context.get('fact_extractor', {})}")
 
-    # Validate EXCLUDE
-    print("\n2. Testing EXCLUDE directive:")
+    # Validate DROP
+    print("\n2. Testing DROP directive:")
     print(f"   ✓ api_key NOT in prompt_context: {'api_key' not in prompt_context.get('source', {})}")
     print(f"   ✓ api_key NOT in llm_context: {'api_key' not in llm_context}")
     print(f"   ✓ api_key NOT in passthrough: {'api_key' not in passthrough_fields}")
@@ -169,8 +169,8 @@ def test_with_data_generator():
             'confidence': 'number'
         },
         'context_scope': {
-            'include': ['source.metadata'],
-            'exclude': ['source.api_key'],
+            'observe': ['source.metadata'],
+            'drop': ['source.api_key'],
             'passthrough': ['source.document_id', 'source.platform_name']
         }
     }
@@ -224,8 +224,8 @@ def main():
     print("CONTEXT_SCOPE FEATURE TEST SUITE")
     print("=" * 80)
     print("\nTesting the three directives:")
-    print("  - include: Send fields to LLM context only")
-    print("  - exclude: Block fields from LLM entirely")
+    print("  - observe: Send fields to LLM context only")
+    print("  - drop: Block fields from LLM entirely")
     print("  - passthrough: Merge fields to output only")
     print("\n" + "=" * 80)
 

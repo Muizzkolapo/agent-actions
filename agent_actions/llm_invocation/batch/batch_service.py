@@ -448,13 +448,6 @@ class BatchService:
                 from pathlib import Path
                 file_path_for_history = str(Path(output_directory) / batch_name)
 
-            print(f"\n[DEBUG prepare_batch_tasks] Building field context for {agent_name}")
-            print(f"  output_directory: {output_directory}")
-            print(f"  batch_name: {batch_name}")
-            print(f"  file_path_for_history: {file_path_for_history}")
-            print(f"  current_item keys: {list(self.context_map.get(custom_id, {}).keys())}")
-            print(f"  agent_indices: {self.agent_indices}")
-
             field_context = ContextScopeProcessor.build_field_context_with_history(
                 contents=row_content if isinstance(row_content, dict) else {},
                 agent_name=agent_name,
@@ -465,8 +458,6 @@ class BatchService:
                 current_item=self.context_map.get(custom_id),
                 file_path=file_path_for_history
             )
-
-            print(f"  field_context keys: {list(field_context.keys())}")
 
             # Apply context_scope to split field_context into prompt/llm/passthrough contexts
             context_scope = agent_config.get('context_scope', {})
@@ -486,22 +477,22 @@ class BatchService:
             # Start with current row content (source in batch mode)
             llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
 
-            # Remove excluded fields (they were removed from prompt_context['source'])
-            if context_scope and context_scope.get('exclude'):
-                for field_ref in context_scope.get('exclude', []):
+            # Remove dropped fields (they were removed from prompt_context['source'])
+            if context_scope and context_scope.get('drop'):
+                for field_ref in context_scope.get('drop', []):
                     try:
                         _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                         llm_full_context.pop(field_name, None)
                     except ValueError:
                         continue
 
-            # Add included fields from llm_context (fields from previous actions)
+            # Add observed fields from llm_context (fields from previous actions)
             if llm_context:
                 llm_full_context.update(llm_context)
 
-            # Render prompt with prompt_context (fields not excluded)
+            # Render prompt with prompt_context (fields not dropped)
             formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
-            # Use llm_full_context for LLM (includes fields from context_scope.include)
+            # Use llm_full_context for LLM (includes fields from context_scope.observe)
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
             )
@@ -1184,22 +1175,22 @@ class BatchService:
             # Start with current row content (source in batch mode)
             llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
 
-            # Remove excluded fields
-            if context_scope and context_scope.get('exclude'):
-                for field_ref in context_scope.get('exclude', []):
+            # Remove dropped fields
+            if context_scope and context_scope.get('drop'):
+                for field_ref in context_scope.get('drop', []):
                     try:
                         _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                         llm_full_context.pop(field_name, None)
                     except ValueError:
                         continue
 
-            # Add included fields from llm_context (fields from previous actions)
+            # Add observed fields from llm_context (fields from previous actions)
             if llm_context:
                 llm_full_context.update(llm_context)
 
-            # Render prompt with prompt_context (fields not excluded)
+            # Render prompt with prompt_context (fields not dropped)
             formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
-            # Use llm_full_context for LLM (includes fields from context_scope.include)
+            # Use llm_full_context for LLM (includes fields from context_scope.observe)
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
             )

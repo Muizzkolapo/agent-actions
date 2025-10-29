@@ -8,9 +8,9 @@ from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
 class TestContextScopeEndToEnd:
     """End-to-end integration tests for context_scope directives."""
 
-    def test_include_directive_e2e(self):
-        """Test that include directive sends fields to LLM context but not in output."""
-        # Setup agent config with context_scope.include
+    def test_observe_directive_e2e(self):
+        """Test that observe directive sends fields to LLM context but not in output."""
+        # Setup agent config with context_scope.observe
         agent_config = {
             'prompt': 'Analyze these facts: {source.candidate_facts}',
             'schema': {
@@ -18,7 +18,7 @@ class TestContextScopeEndToEnd:
                 'confidence': 'number'
             },
             'context_scope': {
-                'include': ['source.metadata', 'source.extracted_entities']
+                'observe': ['source.metadata', 'source.extracted_entities']
             },
             'model_vendor': 'tool'  # Use tool vendor for testing
         }
@@ -55,16 +55,16 @@ class TestContextScopeEndToEnd:
         # Validate: passthrough_fields empty (no passthrough directive)
         assert passthrough_fields == {}
 
-    def test_exclude_directive_e2e(self):
-        """Test that exclude directive blocks fields from LLM entirely."""
-        # Setup agent config with context_scope.exclude
+    def test_drop_directive_e2e(self):
+        """Test that drop directive blocks fields from LLM entirely."""
+        # Setup agent config with context_scope.drop
         agent_config = {
             'prompt': 'Process data: {source.page_content}',
             'schema': {
                 'result': 'string'
             },
             'context_scope': {
-                'exclude': ['source.api_key', 'source.credentials']
+                'drop': ['source.api_key', 'source.credentials']
             },
             'model_vendor': 'tool'
         }
@@ -97,13 +97,13 @@ class TestContextScopeEndToEnd:
         assert 'credentials' not in passthrough_fields
 
         # Validate: api_key and credentials NOT in filtered_contents (sent to LLM)
-        assert 'api_key' not in filtered_contents, "Excluded field 'api_key' should be removed from contents"
-        assert 'credentials' not in filtered_contents, "Excluded field 'credentials' should be removed from contents"
+        assert 'api_key' not in filtered_contents, "Dropped field 'api_key' should be removed from contents"
+        assert 'credentials' not in filtered_contents, "Dropped field 'credentials' should be removed from contents"
 
         # Validate: page_content still in prompt
         assert 'Process data:' in formatted_prompt
 
-        # Validate: Cannot reference excluded fields in prompt
+        # Validate: Cannot reference dropped fields in prompt
         # (They've been removed from prompt_context)
         assert '{source.api_key}' not in formatted_prompt
 
@@ -188,8 +188,8 @@ class TestContextScopeEndToEnd:
                 'analysis': 'string'
             },
             'context_scope': {
-                'include': ['source.reference_tables', 'source.metadata'],
-                'exclude': ['source.api_key'],
+                'observe': ['source.reference_tables', 'source.metadata'],
+                'drop': ['source.api_key'],
                 'passthrough': ['source.document_id']
             },
             'model_vendor': 'tool'
@@ -215,11 +215,11 @@ class TestContextScopeEndToEnd:
             {}, source_content=source_content
         )
 
-        # Validate INCLUDE: reference_tables and metadata in llm_context
+        # Validate OBSERVE: reference_tables and metadata in llm_context
         assert 'reference_tables' in llm_context
         assert 'metadata' in llm_context
 
-        # Validate EXCLUDE: api_key nowhere
+        # Validate DROP: api_key nowhere
         assert 'api_key' not in llm_context
         assert 'api_key' not in passthrough_fields
 

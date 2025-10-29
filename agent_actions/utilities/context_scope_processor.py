@@ -4,8 +4,8 @@ This module provides utilities for processing context_scope configuration direct
 that control how upstream action fields flow through the current action.
 
 Supports three directives:
-- include: Fields sent to LLM context only (not in prompt, not in output)
-- exclude: Fields blocked from LLM entirely (security/privacy)
+- observe: Fields sent to LLM context only (not in prompt, not in output)
+- drop: Fields blocked from LLM entirely (security/privacy)
 - passthrough: Fields merged to output only (LLM never sees them)
 """
 
@@ -27,8 +27,8 @@ class ContextScopeProcessor:
 
     Example usage:
         context_scope = {
-            'include': ['action.reference_data'],
-            'exclude': ['source.api_key'],
+            'observe': ['action.reference_data'],
+            'drop': ['source.api_key'],
             'passthrough': ['action.document_id']
         }
 
@@ -137,8 +137,8 @@ class ContextScopeProcessor:
         Apply context_scope rules to split field_context into 3 streams.
 
         This is the core method that implements the context_scope feature by:
-        1. Processing exclude: Removes fields from prompt_context
-        2. Processing include: Extracts to llm_context, removes from prompt_context
+        1. Processing drop: Removes fields from prompt_context
+        2. Processing observe: Extracts to llm_context, removes from prompt_context
         3. Processing passthrough: Extracts to passthrough_fields, removes from prompt_context
 
         Args:
@@ -146,14 +146,14 @@ class ContextScopeProcessor:
                           Structure: {action_name: {field: value, ...}, ...}
             context_scope: Context scope configuration with directives
                           Structure: {
-                              'include': ['action.field', ...],
-                              'exclude': ['action.field', ...],
+                              'observe': ['action.field', ...],
+                              'drop': ['action.field', ...],
                               'passthrough': ['action.field', ...]
                           }
 
         Returns:
             Tuple of (prompt_context, llm_context, passthrough_fields):
-            - prompt_context: Field context for {action.field} rendering (excluded fields removed)
+            - prompt_context: Field context for {action.field} rendering (dropped fields removed)
             - llm_context: Fields for LLM additional context (flat dict)
             - passthrough_fields: Fields to merge into output (flat dict)
 
@@ -163,8 +163,8 @@ class ContextScopeProcessor:
             ...     'extractor': {'facts': [...], 'id': '123', 'meta': {...}}
             ... }
             >>> context_scope = {
-            ...     'include': ['extractor.meta'],
-            ...     'exclude': ['source.api_key'],
+            ...     'observe': ['extractor.meta'],
+            ...     'drop': ['source.api_key'],
             ...     'passthrough': ['extractor.id']
             ... }
             >>> prompt_ctx, llm_ctx, passthrough = apply_context_scope(
@@ -179,8 +179,8 @@ class ContextScopeProcessor:
         llm_context = {}
         passthrough_fields = {}
 
-        # Process EXCLUDE: Remove from prompt_context (security)
-        for field_ref in context_scope.get('exclude', []):
+        # Process DROP: Remove from prompt_context (security)
+        for field_ref in context_scope.get('drop', []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
@@ -192,12 +192,12 @@ class ContextScopeProcessor:
                 # Invalid reference, skip silently
                 continue
 
-        # Process INCLUDE: Extract to llm_context, remove from prompt_context
-        for field_ref in context_scope.get('include', []):
+        # Process OBSERVE: Extract to llm_context, remove from prompt_context
+        for field_ref in context_scope.get('observe', []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
-                # Extract value from original field_context (before exclude removed it)
+                # Extract value from original field_context (before drop removed it)
                 value = ContextScopeProcessor.extract_field_value(
                     field_context, action_name, field_name
                 )
