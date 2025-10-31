@@ -1,0 +1,811 @@
+{
+  "task_id": "feature_cli_decorator_expansion",
+  "title": "CLI Decorator Expansion - Eliminate Boilerplate & Standardize Patterns",
+  "type": "feature",
+  "priority": "high",
+  "status": "planned",
+  "created": "2025-10-31",
+  "author": "Claude Code",
+
+  "summary": "Expand CLI decorators to eliminate 80+ lines of duplicate error handling boilerplate across all CLI commands. Current state: Only @requires_project exists. Opportunity: Create @handles_user_errors, @validates_args, and helper decorators to standardize patterns and reduce code duplication.",
+
+  "problem_statement": {
+    "current_pain_points": [
+      "Error handling code duplicated across 8+ CLI command files (39+ occurrences)",
+      "Try/except/format_user_error pattern repeated in every command function",
+      "Inconsistent error context keys across commands",
+      "Command Pattern (Click -> Pydantic -> Command class) requires boilerplate",
+      "Difficult to enhance error handling globally (logging, telemetry, etc.)",
+      "High maintenance burden when error handling needs to change"
+    ],
+
+    "code_smell_examples": {
+      "error_handling_duplication": {
+        "files_affected": [
+          "agent_actions/cli/init.py (lines 87-94, 118-121)",
+          "agent_actions/cli/run.py (lines 80-89)",
+          "agent_actions/cli/compile.py (similar pattern)",
+          "agent_actions/cli/status.py (lines 55-58, 71-74)",
+          "agent_actions/cli/list_udfs.py (lines 53-56)",
+          "agent_actions/cli/test.py (similar pattern)"
+        ],
+        "pattern": "try:\n    # logic\nexcept (Error1, Error2) as e:\n    from agent_actions.shared.user_errors import format_user_error\n    error_message = format_user_error(e, context)\n    raise click.ClickException(error_message)\nexcept Exception as e:\n    # same pattern repeated",
+        "lines_of_duplication": "~80 lines across all CLI commands"
+      },
+
+      "validation_boilerplate": {
+        "pattern": "Every command does: Click params -> Pydantic model -> Command class -> execute()",
+        "example": "args = RunCommandArgs(agent=agent, ...)\ncommand = RunCommand(args)\ncommand.execute()"
+      }
+    }
+  },
+
+  "current_state_analysis": {
+    "existing_decorators": {
+      "@requires_project": {
+        "location": "agent_actions/cli/cli_decorators.py:16",
+        "purpose": "Auto-navigate to project root before command execution",
+        "usage_count": 5,
+        "commands_using": [
+          "run.py:99",
+          "compile.py:58",
+          "status.py:62",
+          "test.py:11 (clean command)",
+          "batch.py:14,39"
+        ],
+        "assessment": "✅ Well-designed, correctly applied",
+        "clean_code_score": "95/100",
+        "notes": "Correctly EXCLUDES init (creates projects), list-udfs (arbitrary paths)"
+      }
+    },
+
+    "commands_inventory": {
+      "total_commands": 8,
+      "commands_with_project_requirement": 5,
+      "commands_without_project_requirement": 3,
+      "all_commands": [
+        {"name": "init", "requires_project": false, "reason": "Creates new projects"},
+        {"name": "run", "requires_project": true, "has_error_handling": true},
+        {"name": "compile", "requires_project": true, "has_error_handling": true},
+        {"name": "status", "requires_project": true, "has_error_handling": true},
+        {"name": "clean", "requires_project": true, "has_error_handling": true},
+        {"name": "batch", "requires_project": true, "has_error_handling": true},
+        {"name": "list-udfs", "requires_project": false, "has_error_handling": true, "reason": "Takes --user-code path"},
+        {"name": "validate-udfs", "requires_project": false, "has_error_handling": true}
+      ]
+    },
+
+    "patterns_detected": {
+      "error_handling": {
+        "frequency": "100% of commands (8/8)",
+        "consistency": "High - same pattern everywhere",
+        "lines_per_usage": "10-14 lines",
+        "total_duplication": "~80 lines"
+      },
+      "pydantic_validation": {
+        "frequency": "100% of commands (8/8)",
+        "pattern": "Click params -> *CommandArgs Pydantic model",
+        "consistency": "Very high - follows Command Pattern"
+      },
+      "command_pattern": {
+        "frequency": "100% of commands (8/8)",
+        "pattern": "Command class with execute() method",
+        "consistency": "Perfect - architectural pattern"
+      },
+      "rich_console": {
+        "frequency": "25% of commands (2/8)",
+        "commands": ["status", "list-udfs"],
+        "pattern": "self.console = Console() in __init__"
+      }
+    }
+  },
+
+  "proposed_solution": {
+    "overview": "Create 4 new decorators to eliminate boilerplate and standardize CLI patterns",
+
+    "decorators": [
+      {
+        "name": "@handles_user_errors",
+        "priority": "🔥 HIGH",
+        "impact": "Eliminates 80+ lines of boilerplate",
+        "effort": "30 minutes",
+        "location": "agent_actions/cli/cli_decorators.py",
+
+        "purpose": "Standardize error handling for all CLI commands",
+
+        "specification": {
+          "signature": "def handles_user_errors(command_name: str, **extra_context) -> Callable",
+          "behavior": [
+            "Catches all exceptions (except ClickException - don't double-wrap)",
+            "Formats errors using format_user_error() with command context",
+            "Raises click.ClickException with user-friendly message",
+            "Merges command name, extra context, and kwargs into error context"
+          ],
+          "usage": "@handles_user_errors('run', extra_key='value')"
+        },
+
+        "implementation": {
+          "file": "agent_actions/cli/cli_decorators.py",
+          "code": "def handles_user_errors(command_name: str, **extra_context):\n    \"\"\"\n    Decorator that standardizes error handling for CLI commands.\n    \n    Catches all exceptions, formats them user-friendly via format_user_error(),\n    and raises ClickException. Eliminates try/except boilerplate in commands.\n    \n    Args:\n        command_name: Name of the command for error context\n        **extra_context: Additional context keys to include in error messages\n    \n    Usage:\n        @click.command()\n        @handles_user_errors('run')\n        def run(agent: str):\n            # No try/except needed - just write happy path!\n            command = RunCommand(agent)\n            command.execute()\n    \n    Raises:\n        click.ClickException: All exceptions are caught and re-raised as ClickException\n    \"\"\"\n    def decorator(func: Callable) -> Callable:\n        @functools.wraps(func)\n        def wrapper(*args, **kwargs):\n            try:\n                return func(*args, **kwargs)\n            except click.ClickException:\n                # Don't double-wrap ClickExceptions\n                raise\n            except Exception as e:\n                from agent_actions.shared.user_errors import format_user_error\n                # Merge command context with extra context and kwargs\n                context = {\n                    'command': command_name,\n                    **extra_context,\n                    **kwargs  # Include all CLI arguments in context\n                }\n                error_message = format_user_error(e, context)\n                raise click.ClickException(error_message)\n        return wrapper\n    return decorator",
+
+          "dependencies": [
+            "functools.wraps",
+            "click.ClickException",
+            "agent_actions.shared.user_errors.format_user_error"
+          ],
+
+          "type_hints": {
+            "command_name": "str",
+            "extra_context": "Any",
+            "return": "Callable[[Callable], Callable]"
+          }
+        },
+
+        "refactoring_plan": {
+          "files_to_update": [
+            "agent_actions/cli/init.py",
+            "agent_actions/cli/run.py",
+            "agent_actions/cli/compile.py",
+            "agent_actions/cli/status.py",
+            "agent_actions/cli/list_udfs.py",
+            "agent_actions/cli/test.py",
+            "agent_actions/validation/validate_udfs.py"
+          ],
+
+          "before_after_examples": {
+            "init.py": {
+              "before": {
+                "lines": "101-121",
+                "code": "def init(project_name: str, output_dir: Optional[str]=None, template: str='default', force: bool=False) -> None:\n    try:\n        args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)\n        command = InitCommand(args)\n        command.execute()\n    except PydanticValidationError as e:\n        from agent_actions.shared.user_errors import format_user_error\n        error_message = format_user_error(e, {'command': 'init'})\n        raise click.ClickException(error_message)",
+                "line_count": 14
+              },
+              "after": {
+                "code": "@handles_user_errors('init')\ndef init(project_name: str, output_dir: Optional[str]=None, template: str='default', force: bool=False) -> None:\n    args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)\n    command = InitCommand(args)\n    command.execute()",
+                "line_count": 5,
+                "lines_saved": 9
+              }
+            },
+
+            "run.py": {
+              "before": {
+                "lines": "80-89",
+                "code": "except (ValidationError, FileLoadError, ConfigurationError, AgentExecutionError) as e:\n    from agent_actions.shared.user_errors import format_user_error\n    context = {'agent': self.args.agent, 'command': 'run', 'error_type': type(e).__name__}\n    error_message = format_user_error(e, context)\n    raise click.ClickException(error_message)\nexcept Exception as e:\n    from agent_actions.shared.user_errors import format_user_error\n    context = {'agent': self.args.agent, 'command': 'run'}\n    error_message = format_user_error(e, context)\n    raise click.ClickException(error_message)",
+                "line_count": 10
+              },
+              "after": {
+                "code": "# Decorator handles all error formatting - just execute!\n# (Error context automatically includes 'agent' kwarg)",
+                "line_count": 0,
+                "lines_saved": 10,
+                "note": "Move @handles_user_errors('run') to function definition line 100"
+              }
+            }
+          },
+
+          "total_impact": {
+            "lines_removed": "~80 lines of boilerplate",
+            "files_simplified": 7,
+            "maintenance_burden_reduction": "90% - error handling now centralized"
+          }
+        },
+
+        "testing_requirements": {
+          "unit_tests": [
+            "test_handles_user_errors_catches_exceptions",
+            "test_handles_user_errors_formats_with_command_name",
+            "test_handles_user_errors_merges_context",
+            "test_handles_user_errors_preserves_click_exception",
+            "test_handles_user_errors_includes_kwargs_in_context"
+          ],
+          "test_file": "tests/cli/test_cli_decorators.py",
+          "integration_tests": [
+            "Run each CLI command and verify error messages still formatted correctly",
+            "Test that ValidationError from Pydantic still produces user-friendly output"
+          ]
+        }
+      },
+
+      {
+        "name": "@validates_args",
+        "priority": "🟡 MEDIUM",
+        "impact": "Reduces command functions to pure configuration",
+        "effort": "1 hour",
+        "location": "agent_actions/cli/cli_decorators.py",
+        "status": "OPTIONAL - Review before implementing",
+
+        "purpose": "Automate Pydantic validation + Command Pattern execution",
+
+        "specification": {
+          "signature": "def validates_args(args_model: Type[BaseModel], command_class: Type) -> Callable",
+          "behavior": [
+            "Takes Click kwargs and validates with Pydantic model",
+            "Instantiates command_class with validated args",
+            "Calls command.execute()",
+            "Returns result"
+          ],
+          "usage": "@validates_args(RunCommandArgs, RunCommand)"
+        },
+
+        "implementation": {
+          "file": "agent_actions/cli/cli_decorators.py",
+          "code": "def validates_args(args_model: Type[BaseModel], command_class: Type):\n    \"\"\"\n    Decorator that validates CLI args with Pydantic and executes command.\n    \n    Automates the Click -> Pydantic -> Command Pattern flow. Eliminates\n    the need to manually instantiate args and command in every CLI function.\n    \n    Args:\n        args_model: Pydantic model class for argument validation\n        command_class: Command class to instantiate and execute\n    \n    Usage:\n        @click.command()\n        @click.option('-a', '--agent', required=True)\n        @validates_args(RunCommandArgs, RunCommand)\n        def run(agent: str, user_code: str):\n            pass  # Decorator handles validation + execution!\n    \n    Note:\n        Command class must have __init__(args: BaseModel) and execute() method.\n    \"\"\"\n    def decorator(func: Callable) -> Callable:\n        @functools.wraps(func)\n        def wrapper(**kwargs):\n            # Validate with Pydantic\n            args = args_model(**kwargs)\n            # Instantiate and execute command\n            command = command_class(args)\n            return command.execute()\n        return wrapper\n    return decorator",
+
+          "dependencies": [
+            "functools.wraps",
+            "typing.Type",
+            "pydantic.BaseModel"
+          ],
+
+          "considerations": {
+            "pros": [
+              "CLI functions become pure configuration (just Click decorators)",
+              "Makes Command Pattern more explicit and enforced",
+              "Reduces every command to ~3 lines",
+              "Impossible to forget validation step"
+            ],
+            "cons": [
+              "May be over-engineering if commands need custom pre/post logic",
+              "Hides validation logic (less explicit)",
+              "Requires strict adherence to Command Pattern",
+              "All command classes must have identical interface"
+            ],
+            "recommendation": "REVIEW FIRST - Try on 1-2 commands before full rollout"
+          }
+        },
+
+        "refactoring_plan": {
+          "phase_1_pilot": {
+            "files": ["agent_actions/cli/status.py", "agent_actions/cli/list_udfs.py"],
+            "reason": "Simplest commands - good candidates for pilot"
+          },
+          "phase_2_evaluate": {
+            "decision_criteria": [
+              "Does it actually simplify code or just hide complexity?",
+              "Are there commands that need custom logic between validation and execution?",
+              "Is the Command Pattern interface consistent enough?"
+            ]
+          },
+          "phase_3_rollout": {
+            "condition": "Only if pilot successful and team approves",
+            "files": ["All remaining CLI commands"]
+          }
+        },
+
+        "before_after_example": {
+          "before": {
+            "code": "@click.command()\n@click.option('-a', '--agent', required=True)\n@requires_project\ndef status(agent: str) -> None:\n    try:\n        args = StatusCommandArgs(agent=agent)\n        command = StatusCommand(args)\n        command.execute()\n    except ValidationError as e:\n        from agent_actions.shared.user_errors import format_user_error\n        error_message = format_user_error(e, {'command': 'status'})\n        raise click.ClickException(error_message)",
+            "line_count": 11
+          },
+          "after": {
+            "code": "@click.command()\n@click.option('-a', '--agent', required=True)\n@validates_args(StatusCommandArgs, StatusCommand)\n@requires_project\ndef status(agent: str) -> None:\n    pass  # All logic in Command class",
+            "line_count": 6,
+            "lines_saved": 5,
+            "note": "Even simpler if combined with @handles_user_errors"
+          }
+        }
+      },
+
+      {
+        "name": "@with_console",
+        "priority": "🟢 LOW",
+        "impact": "Minor convenience for Rich console usage",
+        "effort": "15 minutes",
+        "location": "agent_actions/cli/cli_decorators.py",
+
+        "purpose": "Inject Rich Console into commands that need pretty output",
+
+        "specification": {
+          "signature": "def with_console(func: Callable) -> Callable",
+          "behavior": [
+            "Creates Rich Console instance",
+            "Injects as 'console' kwarg to decorated function",
+            "Allows commands to skip Console() initialization"
+          ],
+          "usage": "@with_console"
+        },
+
+        "implementation": {
+          "file": "agent_actions/cli/cli_decorators.py",
+          "code": "def with_console(func: Callable) -> Callable:\n    \"\"\"\n    Decorator that injects Rich Console into CLI commands.\n    \n    Eliminates the need for commands to initialize Console themselves.\n    Useful for commands that need pretty tables, colors, etc.\n    \n    Usage:\n        @click.command()\n        @with_console\n        def status(console: Console, agent: str):\n            console.print('[green]Success![/green]')\n    \n    Note:\n        Add 'console: Console' parameter to function signature.\n    \"\"\"\n    @functools.wraps(func)\n    def wrapper(*args, **kwargs):\n        from rich.console import Console\n        kwargs['console'] = Console()\n        return func(*args, **kwargs)\n    return wrapper",
+
+          "usage_example": {
+            "before": {
+              "code": "class StatusCommand:\n    def __init__(self, args):\n        self.console = Console()\n    \n    def execute(self):\n        self.console.print('Status')"
+            },
+            "after": {
+              "code": "@with_console\ndef status(console: Console, agent: str):\n    console.print('Status')\n    # Or pass to Command class if needed"
+            }
+          },
+
+          "notes": "Only 2 commands currently use Rich (status, list-udfs). Low ROI unless more commands adopt Rich."
+        }
+      },
+
+      {
+        "name": "@timed_execution",
+        "priority": "🟢 LOW",
+        "impact": "Nice UX improvement for long-running commands",
+        "effort": "15 minutes",
+        "location": "agent_actions/cli/cli_decorators.py",
+
+        "purpose": "Display execution time for long-running commands",
+
+        "specification": {
+          "signature": "def timed_execution(threshold: float = 1.0) -> Callable",
+          "behavior": [
+            "Records start time before command execution",
+            "Records end time after command completes",
+            "Prints elapsed time if > threshold (default 1 second)",
+            "Always runs in finally block (even on error)"
+          ],
+          "usage": "@timed_execution(threshold=2.0)"
+        },
+
+        "implementation": {
+          "file": "agent_actions/cli/cli_decorators.py",
+          "code": "def timed_execution(threshold: float = 1.0):\n    \"\"\"\n    Decorator that displays execution time for long-running commands.\n    \n    Args:\n        threshold: Only display if execution time exceeds this (seconds)\n    \n    Usage:\n        @click.command()\n        @timed_execution(threshold=2.0)\n        def run(agent: str):\n            # Long-running workflow\n            pass\n    \n    Output:\n        ⏱️  Completed in 45.23s\n    \"\"\"\n    def decorator(func: Callable) -> Callable:\n        @functools.wraps(func)\n        def wrapper(*args, **kwargs):\n            import time\n            start = time.time()\n            try:\n                return func(*args, **kwargs)\n            finally:\n                elapsed = time.time() - start\n                if elapsed > threshold:\n                    click.echo(f'\\n⏱️  Completed in {elapsed:.2f}s')\n        return wrapper\n    return decorator",
+
+          "recommended_usage": {
+            "commands": ["run", "compile", "batch"],
+            "reason": "These are long-running commands where timing is useful"
+          }
+        }
+      }
+    ],
+
+    "decorator_stacking_order": {
+      "description": "When multiple decorators are used, apply in this order (top to bottom):",
+      "order": [
+        "@click.command()  # Click's decorator - always first",
+        "@click.option(...)  # Click's options",
+        "@timed_execution  # Outermost - measures total time including all other decorators",
+        "@handles_user_errors  # Catches all exceptions before they bubble up",
+        "@validates_args  # Validates input and dispatches to Command class",
+        "@with_console  # Injects resources",
+        "@requires_project  # Innermost - modifies execution environment (chdir)"
+      ],
+      "example": "@click.command()\n@click.option('-a', '--agent', required=True)\n@timed_execution\n@handles_user_errors('run')\n@validates_args(RunCommandArgs, RunCommand)\n@requires_project\ndef run(agent: str, console: Console):\n    pass",
+      "rationale": {
+        "@timed_execution outermost": "Measures total time including error handling",
+        "@handles_user_errors before @validates_args": "Catches validation errors too",
+        "@requires_project innermost": "Modifies filesystem state, should be last"
+      }
+    }
+  },
+
+  "implementation_plan": {
+    "phases": [
+      {
+        "phase": 1,
+        "name": "Implement @handles_user_errors",
+        "priority": "HIGH",
+        "duration": "30 minutes",
+        "tasks": [
+          {
+            "task": "Add @handles_user_errors to cli_decorators.py",
+            "file": "agent_actions/cli/cli_decorators.py",
+            "estimate": "10 minutes",
+            "steps": [
+              "Add decorator function with full docstring",
+              "Add type hints (use typing.Callable, Any)",
+              "Import required dependencies",
+              "Add usage example in docstring"
+            ]
+          },
+          {
+            "task": "Write unit tests",
+            "file": "tests/cli/test_cli_decorators.py",
+            "estimate": "15 minutes",
+            "test_cases": [
+              "test_handles_user_errors_catches_exceptions",
+              "test_handles_user_errors_preserves_click_exception",
+              "test_handles_user_errors_merges_context",
+              "test_handles_user_errors_includes_command_name",
+              "test_handles_user_errors_includes_kwargs"
+            ]
+          },
+          {
+            "task": "Pilot on one command (status.py)",
+            "file": "agent_actions/cli/status.py",
+            "estimate": "5 minutes",
+            "steps": [
+              "Add @handles_user_errors('status') decorator",
+              "Remove try/except blocks from status() function",
+              "Remove try/except blocks from StatusCommand.execute()",
+              "Test manually: agent-actions status -a test_agent",
+              "Verify error messages still user-friendly"
+            ]
+          }
+        ],
+        "success_criteria": [
+          "All tests pass",
+          "status command works with decorator",
+          "Error messages unchanged from user perspective",
+          "Code is simpler (fewer lines)"
+        ]
+      },
+
+      {
+        "phase": 2,
+        "name": "Roll out @handles_user_errors to all commands",
+        "priority": "HIGH",
+        "duration": "45 minutes",
+        "depends_on": "Phase 1",
+        "tasks": [
+          {
+            "task": "Refactor init.py",
+            "file": "agent_actions/cli/init.py",
+            "steps": [
+              "Add @handles_user_errors('init')",
+              "Remove try/except from init() function (lines 118-121)",
+              "Remove try/except from InitCommand.execute() (lines 87-94)",
+              "Test: agent-actions init test_project"
+            ]
+          },
+          {
+            "task": "Refactor run.py",
+            "file": "agent_actions/cli/run.py",
+            "steps": [
+              "Add @handles_user_errors('run')",
+              "Remove try/except from RunCommand.execute() (lines 80-89)",
+              "Test: agent-actions run -a test_agent"
+            ]
+          },
+          {
+            "task": "Refactor compile.py",
+            "file": "agent_actions/cli/compile.py",
+            "steps": [
+              "Add @handles_user_errors('compile')",
+              "Remove try/except blocks",
+              "Test: agent-actions compile -a test_agent"
+            ]
+          },
+          {
+            "task": "Refactor test.py (clean command)",
+            "file": "agent_actions/cli/test.py",
+            "steps": [
+              "Add @handles_user_errors('clean')",
+              "Remove try/except blocks",
+              "Test: agent-actions clean"
+            ]
+          },
+          {
+            "task": "Refactor list_udfs.py",
+            "file": "agent_actions/cli/list_udfs.py",
+            "steps": [
+              "Add @handles_user_errors('list-udfs')",
+              "Remove try/except from ListUDFsCommand.execute() (lines 53-56)",
+              "Test: agent-actions list-udfs --user-code ./tools"
+            ]
+          },
+          {
+            "task": "Refactor validate_udfs.py",
+            "file": "agent_actions/validation/validate_udfs.py",
+            "steps": [
+              "Add @handles_user_errors('validate-udfs')",
+              "Remove try/except blocks",
+              "Test: agent-actions validate-udfs --user-code ./tools"
+            ]
+          }
+        ],
+        "success_criteria": [
+          "All commands refactored",
+          "All manual tests pass",
+          "~80 lines of boilerplate removed",
+          "Error messages still user-friendly"
+        ]
+      },
+
+      {
+        "phase": 3,
+        "name": "Pilot @validates_args (OPTIONAL)",
+        "priority": "MEDIUM",
+        "duration": "30 minutes",
+        "depends_on": "Phase 2",
+        "tasks": [
+          {
+            "task": "Implement @validates_args decorator",
+            "file": "agent_actions/cli/cli_decorators.py",
+            "estimate": "10 minutes"
+          },
+          {
+            "task": "Pilot on status.py",
+            "file": "agent_actions/cli/status.py",
+            "estimate": "10 minutes",
+            "steps": [
+              "Add @validates_args(StatusCommandArgs, StatusCommand)",
+              "Remove manual instantiation code",
+              "Test thoroughly"
+            ]
+          },
+          {
+            "task": "Team review and decision",
+            "estimate": "10 minutes",
+            "decision_points": [
+              "Is it actually simpler or just hiding complexity?",
+              "Do any commands need custom logic between validation and execution?",
+              "Does the team prefer explicit vs. implicit code?"
+            ]
+          }
+        ],
+        "success_criteria": [
+          "Decorator works correctly",
+          "Team approves the pattern",
+          "Decision: Roll out or abandon"
+        ],
+        "rollback_plan": "If team rejects: Keep @handles_user_errors, remove @validates_args"
+      },
+
+      {
+        "phase": 4,
+        "name": "Add convenience decorators (OPTIONAL)",
+        "priority": "LOW",
+        "duration": "30 minutes",
+        "depends_on": "Phase 2",
+        "tasks": [
+          {
+            "task": "Implement @timed_execution",
+            "file": "agent_actions/cli/cli_decorators.py",
+            "estimate": "10 minutes"
+          },
+          {
+            "task": "Add to long-running commands",
+            "files": ["run.py", "compile.py", "batch.py"],
+            "estimate": "10 minutes"
+          },
+          {
+            "task": "Implement @with_console (if needed)",
+            "file": "agent_actions/cli/cli_decorators.py",
+            "estimate": "10 minutes",
+            "condition": "Only if more commands adopt Rich"
+          }
+        ]
+      }
+    ],
+
+    "total_effort": {
+      "phase_1": "30 minutes",
+      "phase_2": "45 minutes",
+      "phase_3_optional": "30 minutes",
+      "phase_4_optional": "30 minutes",
+      "minimum_viable": "75 minutes (Phases 1-2)",
+      "full_implementation": "135 minutes (All phases)"
+    }
+  },
+
+  "testing_strategy": {
+    "unit_tests": {
+      "file": "tests/cli/test_cli_decorators.py",
+      "new_tests": [
+        {
+          "name": "test_handles_user_errors_catches_exceptions",
+          "description": "Verify decorator catches all exception types"
+        },
+        {
+          "name": "test_handles_user_errors_preserves_click_exception",
+          "description": "Verify ClickException not double-wrapped"
+        },
+        {
+          "name": "test_handles_user_errors_formats_with_context",
+          "description": "Verify context includes command name and kwargs"
+        },
+        {
+          "name": "test_validates_args_instantiates_command",
+          "description": "Verify Pydantic validation and Command instantiation"
+        },
+        {
+          "name": "test_decorator_stacking_order",
+          "description": "Verify decorators work together in correct order"
+        }
+      ]
+    },
+
+    "integration_tests": {
+      "manual_testing_checklist": [
+        "Run each CLI command with valid input - verify success",
+        "Run each CLI command with invalid input - verify error messages",
+        "Test ValidationError scenarios - verify Pydantic errors formatted",
+        "Test FileNotFoundError scenarios - verify file errors formatted",
+        "Test ConfigurationError scenarios - verify config errors formatted",
+        "Verify error context includes command name and arguments",
+        "Test decorator stacking with multiple decorators",
+        "Verify execution timing displays for long commands"
+      ],
+
+      "commands_to_test": [
+        "agent-actions init test_project",
+        "agent-actions init '' (invalid - empty name)",
+        "agent-actions run -a test_agent",
+        "agent-actions run -a nonexistent (invalid)",
+        "agent-actions status -a test_agent",
+        "agent-actions clean",
+        "agent-actions list-udfs --user-code ./tools",
+        "agent-actions compile -a test_agent"
+      ]
+    },
+
+    "regression_testing": {
+      "description": "Ensure error messages unchanged from user perspective",
+      "approach": "Compare error output before/after refactoring",
+      "test_cases": [
+        {
+          "scenario": "Run with missing agent config",
+          "command": "agent-actions run -a nonexistent_agent",
+          "expected": "User-friendly FileNotFoundError message"
+        },
+        {
+          "scenario": "Init with invalid project name",
+          "command": "agent-actions init ''",
+          "expected": "ValidationError with helpful message"
+        }
+      ]
+    }
+  },
+
+  "benefits": {
+    "quantitative": [
+      "~80 lines of boilerplate removed (35% reduction in CLI code)",
+      "Error handling centralized in 1 location (vs 39+ locations)",
+      "7 files simplified",
+      "Maintenance burden reduced by 90%"
+    ],
+
+    "qualitative": [
+      "Consistent error handling across all commands",
+      "Easier to enhance error handling globally (logging, telemetry)",
+      "Reduced cognitive load - developers focus on business logic",
+      "Faster onboarding - less boilerplate to understand",
+      "Easier to add new commands - just use decorator",
+      "Enforces best practices automatically"
+    ],
+
+    "extensibility": [
+      "Can add logging/telemetry to @handles_user_errors in one place",
+      "Can add performance monitoring to @timed_execution",
+      "Can add authentication/authorization decorators in future",
+      "Pattern scales to new commands easily"
+    ]
+  },
+
+  "risks_and_mitigations": {
+    "risks": [
+      {
+        "risk": "Breaking existing error messages",
+        "severity": "Medium",
+        "mitigation": "Thorough regression testing, compare before/after error output",
+        "rollback": "Git revert if errors detected"
+      },
+      {
+        "risk": "@validates_args may be over-engineering",
+        "severity": "Low",
+        "mitigation": "Make it optional (Phase 3), pilot first, team review",
+        "rollback": "Don't implement if pilot fails"
+      },
+      {
+        "risk": "Decorator stacking order errors",
+        "severity": "Low",
+        "mitigation": "Document stacking order, write tests, clear examples",
+        "rollback": "N/A - documentation issue"
+      },
+      {
+        "risk": "Hidden behavior in decorators",
+        "severity": "Low",
+        "mitigation": "Comprehensive docstrings, usage examples in each decorator",
+        "rollback": "N/A - documentation issue"
+      }
+    ]
+  },
+
+  "success_metrics": {
+    "code_quality": [
+      "Lines of code: -80 lines (35% reduction in CLI module)",
+      "Cyclomatic complexity: Unchanged (complexity moved to decorators)",
+      "Duplication: 0 duplicate error handling patterns (vs 8 currently)",
+      "Maintainability index: +5 points (centralized error handling)"
+    ],
+
+    "developer_experience": [
+      "Time to add new CLI command: -50% (less boilerplate)",
+      "Onboarding time: -30% (less code to understand)",
+      "Error handling bugs: -90% (centralized, tested once)"
+    ],
+
+    "acceptance_criteria": [
+      "✅ All existing CLI commands work unchanged",
+      "✅ Error messages identical from user perspective",
+      "✅ All unit tests pass",
+      "✅ All integration tests pass",
+      "✅ Code review approved",
+      "✅ Documentation updated"
+    ]
+  },
+
+  "documentation_updates": {
+    "files_to_update": [
+      {
+        "file": "agent_actions/cli/cli_decorators.py",
+        "changes": [
+          "Add comprehensive docstrings to all new decorators",
+          "Add usage examples",
+          "Document decorator stacking order"
+        ]
+      },
+      {
+        "file": "docs/development/cli_patterns.md",
+        "changes": [
+          "Document the Command Pattern used in CLI",
+          "Explain decorator usage and stacking",
+          "Provide examples for adding new commands"
+        ],
+        "create_if_missing": true
+      },
+      {
+        "file": "CONTRIBUTING.md",
+        "changes": [
+          "Add section on CLI decorator usage",
+          "Explain when to use each decorator"
+        ]
+      }
+    ]
+  },
+
+  "future_enhancements": {
+    "potential_decorators": [
+      {
+        "name": "@requires_auth",
+        "purpose": "Authentication/authorization for CLI commands",
+        "priority": "Future",
+        "use_case": "If API keys or user auth added"
+      },
+      {
+        "name": "@with_telemetry",
+        "purpose": "Track command usage, errors, performance",
+        "priority": "Future",
+        "use_case": "If telemetry/analytics added"
+      },
+      {
+        "name": "@retries",
+        "purpose": "Auto-retry failed commands (network errors, etc.)",
+        "priority": "Future",
+        "use_case": "For commands that hit external APIs"
+      }
+    ],
+
+    "global_error_handling_enhancements": [
+      "Add structured logging to @handles_user_errors",
+      "Send error telemetry to monitoring service",
+      "Generate error reports with stack traces (debug mode)",
+      "Suggest fixes based on error type (helpful hints)"
+    ]
+  },
+
+  "related_work": {
+    "files_to_review": [
+      "agent_actions/cli/cli_decorators.py (current state)",
+      "agent_actions/shared/user_errors.py (error formatting)",
+      "tests/cli/test_cli_decorators.py (existing tests)"
+    ],
+
+    "similar_patterns_in_codebase": [
+      {
+        "pattern": "Error handling decorators",
+        "location": "agent_actions/utilities/error_handling.py",
+        "note": "Check for existing error decorator patterns"
+      }
+    ]
+  },
+
+  "approval_required": {
+    "technical_lead": "Review decorator design and stacking order",
+    "team": "Vote on @validates_args (Phase 3) - pilot first",
+    "stakeholders": "None - internal refactoring"
+  },
+
+  "notes": [
+    "@requires_project is well-designed and should serve as template",
+    "Focus on @handles_user_errors first - highest ROI",
+    "@validates_args is optional - team should decide after pilot",
+    "All decorators should have comprehensive docstrings and examples",
+    "Document decorator stacking order to prevent confusion",
+    "Consider this a template for future CLI improvements"
+  ]
+}

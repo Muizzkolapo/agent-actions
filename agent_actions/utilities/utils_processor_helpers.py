@@ -126,6 +126,6 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
         passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
         return not passthrough_on_error
 
-def transform_with_passthrough(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0) -> list:
+def transform_with_passthrough(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0, passthrough_fields: Optional[Dict]=None) -> list:
     """Apply ``context_scope.passthrough`` logic to generated data consistently."""
-    return ProcessorUtils.transform_with_passthrough(data, context_data, source_guid, agent_config, idx)
+    return ProcessorUtils.transform_with_passthrough(data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields)
