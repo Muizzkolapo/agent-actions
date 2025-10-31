@@ -9,7 +9,7 @@ from typing import Optional
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 from agent_actions.shared.exceptions import ValidationError, FileLoadError, TemplateRenderingError
 from agent_actions.validation.render_validator import RenderCommandArgs
-from agent_actions.cli.cli_decorators import requires_project
+from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from pydantic import ValidationError as PydanticValidationError
 logger = logging.getLogger(__name__)
 
@@ -34,27 +34,18 @@ class RenderCommand:
 
     def execute(self) -> None:
         """Execute the render command."""
-        try:
-            logger.info(f'Starting template rendering for agent: {self.args.agent_name}')
-            from agent_actions.cli.project_paths_factory import ProjectPathsFactory
-            paths = ProjectPathsFactory.create_project_paths(self.args.agent_name, self.args.agent_name)
-            agent_config_file = paths.agent_config_dir / f'{self.args.agent_name}.yml'
-            rendered_template = self._render_template(agent_config_file)
-            click.echo(rendered_template)
-            logger.info(f'Rendered agent template output to console', extra={'agent': self.args.agent_name})
-        except (FileLoadError, ValidationError, TemplateRenderingError) as e:
-            logger.error(f'{e.__class__.__name__}: {str(e)}')
-            from agent_actions.shared.user_errors import format_user_error
-            context = {'command': 'render', 'agent': self.args.agent_name}
-            error_message = format_user_error(e, context)
-            raise click.ClickException(error_message)
-        except Exception as e:
-            logger.error(f'Failed to render template for {self.args.agent_name}: {str(e)}', exc_info=True)
-            raise click.ClickException(f'Failed to render template for {self.args.agent_name}: {str(e)}')
+        logger.info(f'Starting template rendering for agent: {self.args.agent_name}')
+        from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+        paths = ProjectPathsFactory.create_project_paths(self.args.agent_name, self.args.agent_name)
+        agent_config_file = paths.agent_config_dir / f'{self.args.agent_name}.yml'
+        rendered_template = self._render_template(agent_config_file)
+        click.echo(rendered_template)
+        logger.info(f'Rendered agent template output to console', extra={'agent': self.args.agent_name})
 
 @click.command()
 @click.option('-a', '--agent', 'agent_name', required=True, help='Name of the agent to render template for')
 @click.option('-t', '--template-dir', help='Directory containing templates (default: ./templates)')
+@handles_user_errors('render')
 @requires_project
 def render(agent_name: str, template_dir: Optional[str]=None) -> None:
     """
@@ -73,11 +64,6 @@ def render(agent_name: str, template_dir: Optional[str]=None) -> None:
         # Render with custom templates directory
         agent-actions render -a my_agent -t custom_templates
     """
-    try:
-        args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
-        command = RenderCommand(args)
-        command.execute()
-    except PydanticValidationError as e:
-        from agent_actions.shared.user_errors import format_user_error
-        error_message = format_user_error(e, {'command': 'render'})
-        raise click.ClickException(error_message)
+    args = RenderCommandArgs(agent_name=agent_name, template_dir=template_dir)
+    command = RenderCommand(args)
+    command.execute()
