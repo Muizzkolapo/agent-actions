@@ -2,83 +2,15 @@
 CLI decorators for agent-actions commands.
 
 This module provides decorators that enhance CLI commands with additional
-functionality such as automatic project root detection and standardized
-error handling.
+functionality such as automatic project root detection.
 """
 
 import os
 import functools
 from pathlib import Path
-from typing import Callable, Any
 import click
 
 from agent_actions.utilities.project_root import ensure_in_project
-
-
-def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
-    """
-    Decorator that standardizes error handling for CLI commands.
-
-    Catches all exceptions, formats them user-friendly via format_user_error(),
-    and raises ClickException. This eliminates try/except boilerplate in every
-    command function.
-
-    Args:
-        command_name: Name of the command for error context (e.g., 'run', 'init')
-        **extra_context: Additional context keys to include in error messages
-
-    Usage:
-        @click.command()
-        @handles_user_errors('run')
-        def run(agent: str, user_code: str):
-            # No try/except needed - just write happy path!
-            command = RunCommand(agent, user_code)
-            command.execute()
-
-        @click.command()
-        @handles_user_errors('init', template='default')
-        def init(project_name: str):
-            # Extra context included automatically
-            command = InitCommand(project_name)
-            command.execute()
-
-    Raises:
-        click.ClickException: All exceptions are caught, formatted, and re-raised
-                             as ClickException with user-friendly messages
-
-    Example:
-        >>> @handles_user_errors('status')
-        >>> def status(agent: str):
-        >>>     # If this raises ValidationError, it's automatically formatted
-        >>>     raise ValidationError("Agent not found")
-        >>> # User sees: "❌ Validation failed: Agent not found"
-        >>> # Instead of raw Python traceback
-
-    Note:
-        - ClickExceptions are NOT double-wrapped (passed through unchanged)
-        - All CLI kwargs are automatically included in error context
-        - Works seamlessly with other decorators (e.g., @requires_project)
-    """
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            try:
-                return func(*args, **kwargs)
-            except click.ClickException:
-                # Don't double-wrap ClickExceptions - pass through unchanged
-                raise
-            except Exception as e:
-                from agent_actions.shared.user_errors import format_user_error
-                # Merge command context with extra context and all kwargs
-                context = {
-                    'command': command_name,
-                    **extra_context,
-                    **kwargs  # Include all CLI arguments in error context
-                }
-                error_message = format_user_error(e, context)
-                raise click.ClickException(error_message)
-        return wrapper
-    return decorator
 
 
 def requires_project(func):

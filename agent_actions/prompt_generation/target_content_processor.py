@@ -177,7 +177,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             source_guid = data[0]['source_guid'] if data else None
             source_data = self.source_loader.load_source_data(file_path) if file_path else []
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid) if source_guid else None
-            generated_data, _, passthrough_fields = self.data_generator.create_agent_with_data(data, source_content)
+            generated_data, _ = self.data_generator.create_agent_with_data(data, source_content)
             model_vendor = (self._get_config_value('model_vendor') or '').lower()
             granularity = (self._get_config_value('granularity') or 'record').lower()
             if model_vendor == 'tool' and granularity == 'file':
@@ -186,7 +186,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 else:
                     return [generated_data]
             contents = data[0]['content'] if data else {}
-            return self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
+            return self.data_processor.process_item(contents, generated_data, source_guid)
         except Exception as e:
             from agent_actions.shared.exceptions import ProcessingError
             raise ProcessingError(f'Failed to process at file level: {str(e)}', cause=e)
@@ -226,14 +226,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             contents, source_guid = (item['content'], item['source_guid'])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
             if hasattr(self.data_generator, 'create_agent_with_data_async'):
-                generated_data, executed, passthrough_fields = await self.data_generator.create_agent_with_data_async(
+                generated_data, executed = await self.data_generator.create_agent_with_data_async(
                     contents,
                     source_content,
                     current_item=item,
                     file_path=file_path
                 )
             else:
-                generated_data, executed, passthrough_fields = await asyncio.to_thread(
+                generated_data, executed = await asyncio.to_thread(
                     self.data_generator.create_agent_with_data,
                     contents,
                     source_content,
@@ -242,9 +242,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 )
             if executed:
                 if hasattr(self.data_processor, 'process_item_async'):
-                    processed = await self.data_processor.process_item_async(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
+                    processed = await self.data_processor.process_item_async(contents, generated_data, source_guid)
                 else:
-                    processed = await asyncio.to_thread(self.data_processor.process_item, contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
+                    processed = await asyncio.to_thread(self.data_processor.process_item, contents, generated_data, source_guid)
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
@@ -352,14 +352,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item['content'], item['source_guid'])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            generated_data, executed, passthrough_fields = self.data_generator.create_agent_with_data(
+            generated_data, executed = self.data_generator.create_agent_with_data(
                 contents,
                 source_content,
                 current_item=item,
                 file_path=file_path
             )
             if executed:
-                processed = self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
+                processed = self.data_processor.process_item(contents, generated_data, source_guid)
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)

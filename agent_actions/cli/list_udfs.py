@@ -12,7 +12,6 @@ from rich.console import Console
 from rich.table import Table
 from agent_actions.input_loading.udf_loader import discover_udfs
 from agent_actions.utilities.udf_registry import list_udfs, clear_registry
-from agent_actions.cli.cli_decorators import handles_user_errors
 
 class ListUDFsCommand:
     """Implementation of the list-udfs command."""
@@ -33,23 +32,28 @@ class ListUDFsCommand:
 
     def execute(self) -> None:
         """Execute the list-udfs command."""
-        clear_registry()
-        if not self.json_output:
-            self.console.print('[cyan]🔍 Discovering UDFs...[/cyan]')
-        registry = discover_udfs(self.user_code)
-        if not self.json_output:
-            self.console.print(f'[green]✅ Discovered {len(registry)} UDF(s)[/green]\n')
-        udfs = list_udfs()
-        if not udfs:
+        try:
+            clear_registry()
+            if not self.json_output:
+                self.console.print('[cyan]🔍 Discovering UDFs...[/cyan]')
+            registry = discover_udfs(self.user_code)
+            if not self.json_output:
+                self.console.print(f'[green]✅ Discovered {len(registry)} UDF(s)[/green]\n')
+            udfs = list_udfs()
+            if not udfs:
+                if self.json_output:
+                    click.echo(json_lib.dumps([]))
+                else:
+                    self.console.print('[yellow]No UDFs found in the specified directory.[/yellow]')
+                return
             if self.json_output:
-                click.echo(json_lib.dumps([]))
+                self._output_json(udfs)
             else:
-                self.console.print('[yellow]No UDFs found in the specified directory.[/yellow]')
-            return
-        if self.json_output:
-            self._output_json(udfs)
-        else:
-            self._output_table(udfs)
+                self._output_table(udfs)
+        except Exception as e:
+            from agent_actions.shared.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'list-udfs', 'user_code': str(self.user_code)})
+            raise click.ClickException(error_message)
 
     def _output_json(self, udfs: List[Dict[str, Any]]) -> None:
         """
@@ -97,7 +101,6 @@ class ListUDFsCommand:
 @click.option('-u', '--user-code', required=True, type=click.Path(exists=True, file_okay=False, dir_okay=True), help='Path to user code directory containing UDFs')
 @click.option('--json', 'json_output', is_flag=True, help='Output as JSON for programmatic use')
 @click.option('--verbose', is_flag=True, help='Show full signatures and docstrings')
-@handles_user_errors('list-udfs')
 def list_udfs_cmd(user_code: str, json_output: bool, verbose: bool) -> None:
     """
     List all discovered User-Defined Functions (UDFs).
