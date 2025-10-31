@@ -61,9 +61,16 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
     # Append additional_context to prompt if provided (context_scope.observe fields)
     if additional_context:
         from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+        print(f"\n[DEBUG agent_builder] Received additional_context: {list(additional_context.keys())}")
         context_msg = ContextScopeProcessor.format_llm_context(additional_context)
+        print(f"[DEBUG agent_builder] Formatted message length: {len(context_msg) if context_msg else 0}")
         if context_msg:
             prompt_config = f"{prompt_config}\n\n{context_msg}"
+            print(f"[DEBUG agent_builder] ✅ Additional context appended to prompt")
+        else:
+            print(f"[DEBUG agent_builder] ❌ context_msg is empty!")
+    else:
+        print(f"\n[DEBUG agent_builder] No additional_context received")
 
     _debug_print_prompt(agent_config, prompt_config, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False))
     schema = _prepare_schema(agent_config, model_vendor)

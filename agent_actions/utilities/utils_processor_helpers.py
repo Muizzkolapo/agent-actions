@@ -75,7 +75,10 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     # Merge context_scope.observe fields into context JSON (not as text to prompt)
     if llm_additional_context and isinstance(processed_context, dict):
+        print(f"\n[DEBUG] Merging llm_additional_context into processed_context:")
+        print(f"  Observe fields: {list(llm_additional_context.keys())}")
         processed_context = {**processed_context, **llm_additional_context}
+        print(f"  Context keys after merge: {list(processed_context.keys())}")
 
     response = agent_builder.create_dynamic_agent(agent_config, agent_name, processed_context, formatted_prompt, tools_path=tools_path, tool_args=tool_args, source_content=source_content, additional_context=None)
 

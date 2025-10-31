@@ -141,10 +141,17 @@ class DataGenerator(IGenerator):
         context_scope = self.agent_config.get('context_scope', {})
         if context_scope:
             from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            print(f"\n[DEBUG _format_prompt] Applying context_scope for {self.agent_name}")
+            print(f"  context_scope config: {context_scope}")
+            print(f"  field_context keys: {list(field_context.keys())}")
 
             prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
                 field_context, context_scope
             )
+
+            print(f"  AFTER apply_context_scope:")
+            print(f"    llm_context keys: {list(llm_context.keys())}")
+            print(f"    llm_context has data: {bool(llm_context)}")
         else:
             # No context_scope: use field_context as-is for backward compatibility
             prompt_context = field_context
