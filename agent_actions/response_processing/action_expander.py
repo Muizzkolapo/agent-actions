@@ -149,23 +149,11 @@ class ActionExpander:
         if granularity:
             agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
         current_granularity = agent.get('granularity', 'Record')
-        is_file_level = current_granularity == 'File'
-        is_tool_action = action_kind == 'tool'
-        if not (is_file_level and is_tool_action):
-            defaults_observe = defaults.get('observe', [])
-            defaults_drops = defaults.get('drops', [])
-            action_observe = action.get('observe', [])
-            action_drops = action.get('drops', [])
-            defaults_observe = defaults_observe if isinstance(defaults_observe, list) else [defaults_observe]
-            defaults_drops = defaults_drops if isinstance(defaults_drops, list) else [defaults_drops]
-            action_observe = action_observe if isinstance(action_observe, list) else [action_observe]
-            action_drops = action_drops if isinstance(action_drops, list) else [action_drops]
-            combined_observe = list(dict.fromkeys(defaults_observe + action_observe))
-            combined_drops = list(dict.fromkeys(defaults_drops + action_drops))
-            observe = template_replacer(combined_observe)
-            drops = template_replacer(combined_drops)
-            agent['observe'] = observe
-            agent['drops'] = drops
+        # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
+        context_scope = action.get('context_scope')
+        if context_scope:
+            agent['context_scope'] = context_scope
+
         agent['dependencies'] = []
         agent['parent'] = []
         chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))

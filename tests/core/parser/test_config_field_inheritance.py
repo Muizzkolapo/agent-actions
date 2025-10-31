@@ -110,7 +110,7 @@ class TestActionExpanderIntegration:
 
     def test_complex_fields_still_work(self):
         """Test that complex fields (schema, prompt, etc.) are still handled correctly."""
-        action = {'name': 'test_action', 'model_vendor': 'openai', 'model_name': 'gpt-4', 'api_key': 'test_key', 'schema': {'output': 'string'}, 'prompt': 'Test prompt with {variable}', 'observe': ['field1', 'field2'], 'drops': ['field3']}
+        action = {'name': 'test_action', 'model_vendor': 'openai', 'model_name': 'gpt-4', 'api_key': 'test_key', 'schema': {'output': 'string'}, 'prompt': 'Test prompt with {variable}'}
         defaults = {}
         agent = {'agent_type': 'test_action', 'name': 'test_action'}
         template_replacer = lambda x: x

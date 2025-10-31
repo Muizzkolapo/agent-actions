@@ -85,7 +85,7 @@ class TestBatchServiceIntegration:
         """
         batch_service.context_map = {'included_item': {'target_id': 'included_item', 'source_guid': 'included_item', 'content': 'should be included', '_batch_filter_status': 'included'}, 'filtered_item': {'target_id': 'filtered_item', 'source_guid': 'filtered_item', 'content': 'should be filtered out', '_batch_filter_status': 'filtered'}, 'skipped_item': {'target_id': 'skipped_item', 'source_guid': 'skipped_item', 'content': 'should be passed through', '_batch_filter_status': 'skipped'}}
         batch_results = [BatchResult(custom_id='included_item', success=True, content={'result': 'processed'}, usage={'tokens': 10}, metadata={}, error=None)]
-        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, observe=[], context_map=batch_service.context_map, output_directory='/tmp/test')
+        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=batch_service.context_map, output_directory='/tmp/test')
         assert len(processed_data) == 2
         source_guids = [item.get('source_guid') for item in processed_data]
         assert 'included_item' in source_guids
@@ -163,7 +163,7 @@ class TestBatchValidationAndRetry:
         batch_results = self.create_test_batch_results(['rec_0', 'rec_1'])
         from agent_actions.shared.exceptions import ProcessingError
         with pytest.raises(ProcessingError) as exc_info:
-            batch_service._convert_batch_results_to_workflow_format(batch_results, observe=[], context_map=context_map, output_directory='/tmp/test')
+            batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory='/tmp/test')
         error = exc_info.value
         assert hasattr(error, 'context')
         assert error.context.get('validation_stage') == 'post_processing'

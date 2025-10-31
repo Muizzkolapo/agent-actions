@@ -68,7 +68,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return []
         try:
             source_data = await self._load_source_data_async(file_path)
-            results = await self.process_items_parallel(data, self._process_single_item_async, source_data)
+            results = await self.process_items_parallel(data, self._process_single_item_async, source_data, file_path=file_path)
             processed_data = []
             for result in results:
                 processed_data.extend(result)
@@ -104,7 +104,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             processed_data = []
             for idx, item in enumerate(filtered_data):
                 try:
-                    processed_item = self._process_single_item(item, source_data, record_index=idx)
+                    processed_item = self._process_single_item(item, source_data, file_path=file_path, record_index=idx)
                     processed_data.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
@@ -141,7 +141,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             all_processed_items = []
             for item in data:
                 try:
-                    processed_item = self._process_single_item(item, source_data)
+                    processed_item = self._process_single_item(item, source_data, file_path=file_path)
                     all_processed_items.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
@@ -206,17 +206,19 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         else:
             return await asyncio.to_thread(self.source_loader.load_source_data, file_path)
 
-    async def _process_single_item_async(self, item: Dict, source_data: List[Dict]) -> List[Dict]:
+    async def _process_single_item_async(self, item: Dict, source_data: List[Dict], file_path: Optional[str]=None, record_index: Optional[int]=None) -> List[Dict]:
         """
         Process a single data item asynchronously using proper async patterns.
-        
+
         Args:
             item: Data item to process
             source_data: Source data for reference
-            
+            file_path: Optional file path for historical node data loading
+            record_index: Optional record index for loop correlation
+
         Returns:
             Processed data item
-            
+
         Raises:
             ValueError: If item processing fails
         """
@@ -224,9 +226,20 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             contents, source_guid = (item['content'], item['source_guid'])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
             if hasattr(self.data_generator, 'create_agent_with_data_async'):
-                generated_data, executed = await self.data_generator.create_agent_with_data_async(contents, source_content)
+                generated_data, executed = await self.data_generator.create_agent_with_data_async(
+                    contents,
+                    source_content,
+                    current_item=item,
+                    file_path=file_path
+                )
             else:
-                generated_data, executed = await asyncio.to_thread(self.data_generator.create_agent_with_data, contents, source_content)
+                generated_data, executed = await asyncio.to_thread(
+                    self.data_generator.create_agent_with_data,
+                    contents,
+                    source_content,
+                    current_item=item,
+                    file_path=file_path
+                )
             if executed:
                 if hasattr(self.data_processor, 'process_item_async'):
                     processed = await self.data_processor.process_item_async(contents, generated_data, source_guid)
@@ -320,24 +333,31 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 from agent_actions.shared.exceptions import ValidationError
                 raise ValidationError(f'WHERE clause filtering failed: {str(e)}', cause=e)
 
-    def _process_single_item(self, item: Dict, source_data: List[Dict], record_index: Optional[int]=None) -> List[Dict]:
+    def _process_single_item(self, item: Dict, source_data: List[Dict], file_path: Optional[str]=None, record_index: Optional[int]=None) -> List[Dict]:
         """
         Process a single data item synchronously (kept for backward compatibility).
-        
+
         Args:
             item: Data item to process
             source_data: Source data for reference
-            
+            file_path: Optional file path for historical node data loading
+            record_index: Optional record index for loop correlation
+
         Returns:
             Processed data item
-            
+
         Raises:
             ValueError: If item processing fails
         """
         try:
             contents, source_guid = (item['content'], item['source_guid'])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            generated_data, executed = self.data_generator.create_agent_with_data(contents, source_content)
+            generated_data, executed = self.data_generator.create_agent_with_data(
+                contents,
+                source_content,
+                current_item=item,
+                file_path=file_path
+            )
             if executed:
                 processed = self.data_processor.process_item(contents, generated_data, source_guid)
                 node_id = ProcessorUtils.generate_node_id(self.idx)

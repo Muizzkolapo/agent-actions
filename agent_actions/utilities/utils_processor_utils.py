@@ -12,7 +12,6 @@ import threading
 import hashlib
 from typing import Dict, List, Any, Optional
 from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.utilities.constants import OBSERVE_KEY
 
 class ProcessorUtils:
     """Utility class containing common operations shared across processors."""
@@ -169,72 +168,68 @@ class ProcessorUtils:
         return {'source_guid': source_guid, 'content': content, 'target_id': target_id or ProcessorUtils.generate_target_id(), 'node_id': node_id or ProcessorUtils.generate_node_id(0), 'lineage': lineage or []}
 
     @staticmethod
-    def apply_drops(contents: Any, agent_config: Dict) -> Any:
+    def transform_with_passthrough(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0) -> List:
         """
-        Apply drops transformations consistently.
+        Apply context_scope.passthrough logic to generated data.
 
-        drops (from config 'drops') specifies fields that should be:
-        - Excluded from the LLM prompt
-        - Removed from the final output
-
-        Args:
-            contents: Content to transform
-            agent_config: Agent configuration containing drops
-
-        Returns:
-            Transformed content with removed fields
-        """
-        drops = agent_config.get('drops', [])
-        if drops and isinstance(contents, dict):
-            return DataTransformer.remove_schema_objects(contents, drops)
-        return contents
-
-    @staticmethod
-    def transform_with_observe(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0) -> List:
-        """
-        Apply observe logic to generated data consistently.
-
-        observe (from config 'observe') specifies fields that should be:
-        - Excluded from the LLM prompt
-        - Included in the final output (passthrough from context)
+        context_scope.passthrough specifies fields from upstream actions that should be:
+        - Excluded from the LLM prompt and context
+        - Included in the final output (passthrough to next agent)
+        - Uses {action.field} syntax (e.g., 'extractor.document_id')
 
         Args:
             data: Generated data list
-            context_data: Context data dictionary containing observe fields
+            context_data: Context data dictionary containing passthrough fields
             source_guid: Source GUID
-            agent_config: Agent configuration containing observe
+            agent_config: Agent configuration containing context_scope
             idx: Index for node generation
 
         Returns:
-            Transformed data list with observe fields merged
+            Transformed data list with passthrough fields merged
         """
         if not isinstance(data, list):
             data = [data] if data is not None else []
         already_structured = len(data) > 0 and all((isinstance(item, dict) and 'source_guid' in item and ('content' in item) for item in data))
-        observe = agent_config.get(OBSERVE_KEY, [])
-        if already_structured and (not observe):
+
+        # Extract context_scope.passthrough fields
+        context_scope = agent_config.get('context_scope', {})
+        fields_to_merge = []
+
+        if context_scope and context_scope.get('passthrough'):
+            passthrough_refs = context_scope.get('passthrough', [])
+            for field_ref in passthrough_refs:
+                # Parse field reference like 'group_by_similarity.semantic_unique_id' -> 'semantic_unique_id'
+                if isinstance(field_ref, str) and '.' in field_ref:
+                    parts = field_ref.split('.', 1)
+                    if len(parts) == 2:
+                        field_name = parts[1]
+                        if field_name not in fields_to_merge:
+                            fields_to_merge.append(field_name)
+
+        # If no passthrough fields, just structure the data and return
+        if already_structured and (not fields_to_merge):
             output = data
-        elif observe:
-            context_for_observe = context_data
+        elif fields_to_merge:
+            context_for_passthrough = context_data
             if isinstance(context_data, dict) and 'content' in context_data and isinstance(context_data['content'], dict):
-                context_for_observe = context_data['content']
+                context_for_passthrough = context_data['content']
             if already_structured:
                 contents = [item['content'] for item in data]
                 updated = []
                 for content in contents:
                     if isinstance(content, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content, fields_to_merge))
                     else:
                         content_dict = {'content': content}
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, content_dict, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content_dict, fields_to_merge))
             else:
                 updated = []
                 for item in data:
                     if isinstance(item, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item, fields_to_merge))
                     else:
                         item_dict = {'content': item}
-                        updated.append(DataTransformer.update_schema_objects(context_for_observe, item_dict, observe))
+                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item_dict, fields_to_merge))
             output = DataTransformer.transform_structure([{source_guid: updated}])
         else:
             output = DataTransformer.transform_structure([{source_guid: data}])

@@ -92,6 +92,8 @@ class ApplicationContainer:
         from agent_actions.prompt_generation.data_generator import DataGenerator
         from agent_actions.preprocessing.data_processor import DataProcessor
         from agent_actions.llm_invocation.batch.batch_service import BatchService
+        from agent_actions.orchestration.node_mapper import NodeMappingService
+
         try:
             source_loader = self.container.get(ISourceDataLoader)
         except Exception:
@@ -99,16 +101,27 @@ class ApplicationContainer:
                 source_loader = self.container.get(IDataLoader)
             except Exception:
                 source_loader = self.processor_factory.create_source_data_loader(agent_name)
+
+        # Build agent indices mapping for historical node data loading
+        agent_indices = NodeMappingService.build_agent_index_map(agent_configs) if agent_configs else {}
+
         try:
             data_generator = self.container.get(IGenerator)
         except Exception:
             dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
-            data_generator = DataGenerator(agent_config, agent_name, dependency_configs)
+            data_generator = DataGenerator(agent_config, agent_name, dependency_configs, agent_indices)
+
         try:
             data_processor = self.container.get(IDataProcessor)
         except Exception:
             data_processor = DataProcessor(agent_config)
-        batch_service = self.container.get(BatchService)
+
+        # Create BatchService with agent_indices and dependency_configs for historical node loading
+        dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
+        batch_service = BatchService(
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs or agent_configs
+        )
         return self.processor_factory.create_processor('target_content', agent_config=agent_config, agent_name=agent_name, idx=idx, source_loader=source_loader, data_generator=data_generator, data_processor=data_processor, batch_service=batch_service)
 
     @classmethod
@@ -169,7 +182,8 @@ class ApplicationContainer:
             results['services']['data_processor'] = 'healthy'
             self.container.get(IGenerator)
             results['services']['generator'] = 'healthy'
-            self.container.get(BatchService)
+            # BatchService is no longer registered in container, create instance for health check
+            BatchService()
             results['services']['batch_service'] = 'healthy'
         except Exception as e:
             results['status'] = 'unhealthy'

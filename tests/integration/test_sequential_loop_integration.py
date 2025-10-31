@@ -14,7 +14,7 @@ class TestSequentialLoopIntegration:
 
     def test_sequential_refinement_workflow_structure(self):
         """Test complete sequential refinement workflow configuration."""
-        workflow_config = {'name': 'iterative_refiner', 'description': 'Sequential refinement workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'extract', 'intent': 'Extract initial data', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Extract data from input'}, {'name': 'refine', 'intent': 'Iteratively refine the extracted data', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Refine stage ${stage}: improve based on stage ${stage-1}', 'observe': ['refined_output_${stage}'], 'loop': {'param': 'stage', 'range': [1, 3], 'mode': 'sequential'}}, {'name': 'validate', 'intent': 'Validate final output', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Validate the final refined output'}], 'plan': ['extract', 'refine <- extract', 'validate <- refine']}
+        workflow_config = {'name': 'iterative_refiner', 'description': 'Sequential refinement workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'extract', 'intent': 'Extract initial data', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Extract data from input'}, {'name': 'refine', 'intent': 'Iteratively refine the extracted data', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Refine stage ${stage}: improve based on stage ${stage-1}', 'loop': {'param': 'stage', 'range': [1, 3], 'mode': 'sequential'}}, {'name': 'validate', 'intent': 'Validate final output', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Validate the final refined output'}], 'plan': ['extract', 'refine <- extract', 'validate <- refine']}
         result = ActionExpander.expand_actions_to_agents(workflow_config)
         agents = result['iterative_refiner']
         assert len(agents) == 5
@@ -90,7 +90,7 @@ class TestSequentialLoopIntegration:
 
     def test_complex_sequential_workflow_with_schema_and_drops(self):
         """Test sequential workflow with schema, drops, observe fields."""
-        workflow_config = {'name': 'complex_sequential', 'description': 'Complex sequential workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'drops': ['temp_metadata']}, 'actions': [{'name': 'enhance', 'intent': 'Enhance data sequentially', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Enhancement pass ${pass}', 'schema': {'pass_number': 'integer', 'enhanced_field_${pass}': 'string', 'previous_pass_${pass-1}': 'string'}, 'observe': ['pass_${pass}_output'], 'drops': ['debug_${pass}'], 'loop': {'param': 'pass', 'range': [1, 2], 'mode': 'sequential'}}], 'plan': ['enhance']}
+        workflow_config = {'name': 'complex_sequential', 'description': 'Complex sequential workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'enhance', 'intent': 'Enhance data sequentially', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Enhancement pass ${pass}', 'schema': {'pass_number': 'integer', 'enhanced_field_${pass}': 'string', 'previous_pass_${pass-1}': 'string'}, 'loop': {'param': 'pass', 'range': [1, 2], 'mode': 'sequential'}}], 'plan': ['enhance']}
         result = ActionExpander.expand_actions_to_agents(workflow_config)
         agents = result['complex_sequential']
         assert len(agents) == 2

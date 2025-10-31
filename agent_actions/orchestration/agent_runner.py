@@ -24,26 +24,29 @@ class AgentRunner:
         self.use_tools: bool = use_tools
         self.processor_factory = processor_factory
         self.agent_configs: Optional[Dict[str, Dict]] = None
+        self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
         self.strategies: Dict[str, AgentStrategy] = {'initial': InitialStrategy(self.processor_factory), 'terminal': TerminalStrategy(self.processor_factory), 'intermediate': IntermediateStrategy(self.processor_factory)}
 
     def get_agent_folder(self, agent_name: str) -> str:
         """
         Retrieves the agent folder using FileHandler.
-        
+
         Args:
-            agent_name (str): Name of the agent.
-        
+            agent_name (str): Name of the agent (or workflow name if workflow_name is not set).
+
         Returns:
             str: Path to the agent folder.
-        
+
         Raises:
             ValueError: If the agent folder is not found.
         """
         from agent_actions.shared.exceptions import FileSystemError
         current_dir: Path = Path.cwd()
-        agent_folder: Optional[str] = FileHandler.find_specific_folder(str(current_dir), agent_name, 'agent_io')
+        # Use workflow_name if set (for multi-agent workflows), otherwise use agent_name (for single-agent or legacy)
+        folder_name = self.workflow_name if self.workflow_name else agent_name
+        agent_folder: Optional[str] = FileHandler.find_specific_folder(str(current_dir), folder_name, 'agent_io')
         if agent_folder is None:
-            raise FileSystemError(f'Agent folder not found for agent: {agent_name}', context={'agent_name': agent_name, 'current_dir': str(current_dir), 'operation': 'get_agent_folder'})
+            raise FileSystemError(f'Agent folder not found for agent: {agent_name}', context={'agent_name': agent_name, 'workflow_name': folder_name, 'current_dir': str(current_dir), 'operation': 'get_agent_folder'})
         return agent_folder
 
     def setup_directories(self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int) -> Tuple[str, str]:

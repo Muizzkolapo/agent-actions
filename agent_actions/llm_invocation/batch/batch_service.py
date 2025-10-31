@@ -10,8 +10,7 @@ from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
 from agent_actions.llm_invocation.realtime.file_writer import FileWriter
 from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.utilities.constants import PROMPT_KEY, OBSERVE_KEY, JSON_MODE_KEY
-from agent_actions.utilities.utils_processor_helpers import apply_drops
+from agent_actions.utilities.constants import PROMPT_KEY, JSON_MODE_KEY
 from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.response_processing.where_parser import get_global_filter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory, resolve_absolute_path
@@ -154,13 +153,22 @@ class BatchService:
     force_batch = False
     _MAX_RETRY_DEPTH = 2
 
-    def __init__(self, provider: Optional[BatchProvider]=None):
+    def __init__(self, provider: Optional[BatchProvider]=None, agent_indices: Optional[Dict[str, int]]=None, dependency_configs: Optional[Dict[str, Dict]]=None):
+        """
+        Initialize batch service.
+
+        Args:
+            provider: Optional batch provider instance
+            agent_indices: Dict mapping agent names to node indices (for historical data loading)
+            dependency_configs: Dict mapping dependency names to their configs (for field context)
+        """
         self.data_loader = BatchDataLoader()
         self.provider = provider
         self.context_map = {}
-        self.observe = []
         self._provider_cache = {}
         self.where_parser = WhereClauseParser()
+        self.agent_indices = agent_indices or {}
+        self.dependency_configs = dependency_configs or {}
 
     def _get_provider_for_config(self, agent_config: Dict[str, Any]) -> BatchProvider:
         """
@@ -302,7 +310,7 @@ class BatchService:
             vendor = type(provider).__name__.replace('BatchProvider', '').lower()
         return prepare_schema_unified(agent_config, vendor)
 
-    def prepare_batch_tasks_from_data(self, agent_config, data):
+    def prepare_batch_tasks_from_data(self, agent_config, data, output_directory=None, batch_name=None):
         provider = self._get_provider_for_config(agent_config)
         schema = self._prepare_schema(agent_config, provider)
         json_mode = agent_config.get(JSON_MODE_KEY, True)
@@ -318,7 +326,6 @@ class BatchService:
         if tools_path and tools_path not in sys.path:
             sys.path.insert(0, tools_path)
         self.context_map = {}
-        self.observe = agent_config.get(OBSERVE_KEY, [])
         conditional_clause = agent_config.get('conditional_clause', '')
         where_clause_config = agent_config.get('where_clause')
         if where_clause_config:
@@ -426,11 +433,70 @@ class BatchService:
                     self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
             if should_skip:
                 continue
-            processed_row = apply_drops(row_content, agent_config)
-            field_context = {'source': processed_row}
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(formatted_prompt, tools_path, json.dumps(processed_row, ensure_ascii=False), agent_config=agent_config)
-            cleaned_row = processed_row
+
+            # Build field context with historical data (same as online mode)
+            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            agent_name = agent_config.get('agent_type', agent_config.get('name', 'unknown'))
+
+            # Build namespaced field context with historical node loading
+            # In batch mode, construct a file path from output_directory + batch_name
+            # output_directory is like: .../target/node_4_Cluster_Validation_Agent
+            # batch_name is like: Designing_and_Implementing_a_Data_Science_Solution_on_Azure.json
+            # We need: .../target/node_4_Cluster_Validation_Agent/Designing_and_Implementing_a_Data_Science_Solution_on_Azure.json
+            file_path_for_history = None
+            if output_directory and batch_name:
+                from pathlib import Path
+                file_path_for_history = str(Path(output_directory) / batch_name)
+
+            field_context = ContextScopeProcessor.build_field_context_with_history(
+                contents=row_content if isinstance(row_content, dict) else {},
+                agent_name=agent_name,
+                agent_config=agent_config,
+                agent_indices=self.agent_indices,
+                dependency_configs=self.dependency_configs,
+                source_content=row_content,  # Source is the current row in batch mode
+                current_item=self.context_map.get(custom_id),
+                file_path=file_path_for_history
+            )
+
+            # Apply context_scope to split field_context into prompt/llm/passthrough contexts
+            context_scope = agent_config.get('context_scope', {})
+            if context_scope:
+                prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+                    field_context, context_scope
+                )
+
+                # Store passthrough_fields for later merging into results
+                if passthrough_fields and custom_id in self.context_map:
+                    self.context_map[custom_id]['_passthrough_fields'] = passthrough_fields
+            else:
+                prompt_context = field_context
+                llm_context = {}
+
+            # Build LLM context: start with current row, then add included fields
+            # Start with current row content (source in batch mode)
+            llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
+
+            # Remove dropped fields (they were removed from prompt_context['source'])
+            if context_scope and context_scope.get('drop'):
+                for field_ref in context_scope.get('drop', []):
+                    try:
+                        _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                        llm_full_context.pop(field_name, None)
+                    except ValueError:
+                        continue
+
+            # Add observed fields from llm_context (fields from previous actions)
+            if llm_context:
+                llm_full_context.update(llm_context)
+
+            # Render prompt with prompt_context (fields not dropped)
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
+            # Use llm_full_context for LLM (includes fields from context_scope.observe)
+            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
+                formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
+            )
+            cleaned_row = llm_full_context
             prepared_item = {'target_id': custom_id, 'content': cleaned_row, 'prompt': formatted_prompt}
             prepared_data.append(prepared_item)
         provider_config = agent_config.copy()
@@ -446,7 +512,7 @@ class BatchService:
                 print(f'Found existing in-flight batch job for {batch_name}: {existing_batch_id}')
                 print('Skipping new batch submission. Use --batch_continue to process completed batches.')
                 return existing_batch_id
-        tasks = self.prepare_batch_tasks_from_data(agent_config, data)
+        tasks = self.prepare_batch_tasks_from_data(agent_config, data, output_directory, batch_name)
         if not tasks:
             print('No batch tasks to submit. All items filtered out by WHERE clause or conditional clause.')
             where_clause_config = agent_config.get('where_clause')
@@ -513,14 +579,14 @@ class BatchService:
                 json.dump(registry, f, indent=2)
 
     def _save_context_map(self, context_map: dict, agent_config: dict, output_directory: str, batch_name: str):
-        """Persist original context data for observe processing."""
+        """Persist original context data for batch processing."""
         if output_directory:
             batch_dir = Path(output_directory) / 'batch'
         else:
             batch_dir = Path.cwd() / 'batch'
         ensure_directory_exists(batch_dir)
         path = batch_dir / f'{Path(batch_name).stem}_context_map.json'
-        payload = {'observe': agent_config.get(OBSERVE_KEY, []), 'data': context_map}
+        payload = {'data': context_map}
         with open(path, 'w', encoding='utf-8') as f:
             json.dump(payload, f, ensure_ascii=False)
         return path
@@ -528,14 +594,14 @@ class BatchService:
     def _load_context_map(self, batch_dir: Path):
         context_files = list(batch_dir.glob('*_context_map.json'))
         if not context_files:
-            return ({}, [])
+            return {}
         try:
             with open(context_files[0], 'r', encoding='utf-8') as f:
                 payload = json.load(f)
             raw_map = payload.get('data', {})
-            return (raw_map, payload.get('observe', []))
+            return raw_map
         except Exception:
-            return ({}, [])
+            return {}
 
     def _get_batch_job_id_for_file(self, output_directory: str=None, file_name: str=None):
         """Get the batch job ID for a specific file from the registry."""
@@ -709,7 +775,7 @@ class BatchService:
         try:
             provider = self._get_provider_for_batch_id(batch_id, output_dir)
             batch_dir = Path(output_dir) / 'batch'
-            context_map, _ = self._load_context_map(batch_dir)
+            context_map = self._load_context_map(batch_dir)
             registry_entry = None
             file_name = None
             registry_file = batch_dir / '.batch_registry.json'
@@ -759,7 +825,7 @@ class BatchService:
                 from agent_actions.shared.exceptions import ProcessingError
                 raise ProcessingError('Batch job is not completed', context={'batch_id': batch_id, 'status': status})
             batch_dir = Path(output_directory) / 'batch'
-            context_map, observe = self._load_context_map(batch_dir)
+            context_map = self._load_context_map(batch_dir)
             registry_entry = None
             file_name = None
             registry_file = batch_dir / '.batch_registry.json'
@@ -772,7 +838,7 @@ class BatchService:
                         file_name = key
                         break
             batch_results = self._retrieve_results_with_validation_and_retry(provider, batch_id, output_directory, context_map=context_map, agent_config=agent_config, record_count=registry_entry.get('record_count') if registry_entry else None, file_name=file_name)
-            processed_data = self._convert_batch_results_to_workflow_format(batch_results, observe=observe, context_map=context_map, output_directory=output_directory)
+            processed_data = self._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
             main_output, side_output_data = self._separate_side_output(processed_data)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
@@ -788,14 +854,13 @@ class BatchService:
             from agent_actions.shared.exceptions import ProcessingError
             raise ProcessingError(f'Failed to process batch results to workflow output: {e}', cause=e)
 
-    def _convert_batch_results_to_workflow_format(self, batch_results, *, observe=None, context_map=None, output_directory=None, agent_config=None):
+    def _convert_batch_results_to_workflow_format(self, batch_results, *, context_map=None, output_directory=None, agent_config=None):
         """
         Convert batch provider results to the workflow's expected format.
         Works with standardized BatchResult objects from any provider.
 
         Args:
             batch_results: List of BatchResult objects from provider
-            observe: List of side collection fields
             context_map: Map of custom_id to original row data
             output_directory: Output directory path to extract node information
             agent_config: Agent configuration (needed for loop correlation ID)
@@ -805,7 +870,6 @@ class BatchService:
         """
         processed_data = []
         context_map = context_map or {}
-        observe = observe or []
         node_idx = None
         if output_directory:
             import re
@@ -825,9 +889,34 @@ class BatchService:
                     generated_list = DataTransformer.ensure_list(generated_obj)
                     original_row = context_map.get(custom_id, {})
                     original_source_guid = original_row.get('source_guid', custom_id)
-                    if observe and custom_id in context_map:
-                        original_content = original_row.get('content', original_row)
-                        generated_list = [DataTransformer.update_schema_objects(original_content, item, observe) if isinstance(item, dict) else item for item in generated_list]
+
+                    # Apply context_scope.passthrough like old observe logic
+                    if agent_config and custom_id in context_map:
+                        context_scope = agent_config.get('context_scope', {})
+                        passthrough_refs = context_scope.get('passthrough', [])
+
+                        if passthrough_refs:
+                            # Extract field names from passthrough references
+                            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+                            passthrough_fields = []
+                            for field_ref in passthrough_refs:
+                                try:
+                                    _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                                    passthrough_fields.append(field_name)
+                                except ValueError:
+                                    # If parsing fails, use the whole string as field name
+                                    passthrough_fields.append(field_ref)
+
+                            # Get original content (same as observe logic)
+                            original_content = original_row.get('content', original_row)
+
+                            # Merge passthrough fields from original into generated items
+                            generated_list = [
+                                DataTransformer.update_schema_objects(original_content, item, passthrough_fields)
+                                if isinstance(item, dict) else item
+                                for item in generated_list
+                            ]
+
                     structured_items = DataTransformer.transform_structure([{original_source_guid: generated_list}])
                     for idx, itm in enumerate(structured_items):
                         itm['metadata'] = batch_result.metadata or {}
@@ -903,7 +992,7 @@ class BatchService:
                 raise ProcessingError('No batch registry found', context={'registry_file': str(registry_file), 'output_directory': output_directory})
             with open(registry_file, 'r') as f:
                 registry = json.load(f)
-            context_map, observe = self._load_context_map(batch_dir)
+            context_map = self._load_context_map(batch_dir)
             processed_files = []
             for file_name, entry in registry.items():
                 batch_id = entry.get('batch_id')
@@ -924,7 +1013,7 @@ class BatchService:
                         print(f'No results found for batch {batch_id} ({file_name})')
                         continue
                     print(f'Processing {len(batch_results)} batch results for {file_name}')
-                    processed_data = self._convert_batch_results_to_workflow_format(batch_results, observe=observe, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
+                    processed_data = self._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
                     main_output, side_output_data = self._separate_side_output(processed_data)
                     if file_name and file_name != 'default':
                         output_file_path = Path(output_directory) / f'{Path(file_name).stem}.json'
@@ -1018,7 +1107,7 @@ class BatchService:
         label = file_name or batch_id
         print(f'{prefix} Batch reconciliation for {label}: expected {expected_count} result(s), received {received_count}')
 
-    def _reconstruct_tasks_for_retry(self, *, missing_custom_ids: Set[str], context_map: Dict[str, Any], agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _reconstruct_tasks_for_retry(self, *, missing_custom_ids: Set[str], context_map: Dict[str, Any], agent_config: Dict[str, Any], output_directory: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Reconstruct batch tasks for missing records from context map.
 
@@ -1029,6 +1118,7 @@ class BatchService:
             missing_custom_ids: Set of custom_ids that need to be retried
             context_map: Original context map with full row data
             agent_config: Agent configuration (for prompt, schema, etc.)
+            output_directory: Optional output directory for historical node loading
 
         Returns:
             List of reconstructed tasks ready for resubmission
@@ -1052,11 +1142,59 @@ class BatchService:
                 row_content = original_row['content']
             else:
                 row_content = original_row
-            processed_row = apply_drops(row_content, agent_config)
-            field_context = {'source': processed_row}
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, field_context)
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(formatted_prompt, tools_path, json.dumps(processed_row, ensure_ascii=False), agent_config=agent_config)
-            cleaned_row = processed_row
+
+            # Build field context with historical data (same as online mode)
+            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            agent_name = agent_config.get('agent_type', agent_config.get('name', 'unknown'))
+
+            # Build namespaced field context with historical node loading
+            field_context = ContextScopeProcessor.build_field_context_with_history(
+                contents=row_content if isinstance(row_content, dict) else {},
+                agent_name=agent_name,
+                agent_config=agent_config,
+                agent_indices=self.agent_indices,
+                dependency_configs=self.dependency_configs,
+                source_content=row_content,  # Source is the current row in batch mode
+                current_item=context_map.get(custom_id),
+                file_path=output_directory  # Use output_directory as base for historical node loading
+            )
+
+            # Apply context_scope to split field_context into prompt/llm/passthrough contexts
+            context_scope = agent_config.get('context_scope', {})
+            if context_scope:
+                prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+                    field_context, context_scope
+                )
+
+                # Note: passthrough_fields not stored here since retry uses existing context_map
+            else:
+                prompt_context = field_context
+                llm_context = {}
+
+            # Build LLM context: start with current row, then add included fields
+            # Start with current row content (source in batch mode)
+            llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
+
+            # Remove dropped fields
+            if context_scope and context_scope.get('drop'):
+                for field_ref in context_scope.get('drop', []):
+                    try:
+                        _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                        llm_full_context.pop(field_name, None)
+                    except ValueError:
+                        continue
+
+            # Add observed fields from llm_context (fields from previous actions)
+            if llm_context:
+                llm_full_context.update(llm_context)
+
+            # Render prompt with prompt_context (fields not dropped)
+            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
+            # Use llm_full_context for LLM (includes fields from context_scope.observe)
+            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
+                formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
+            )
+            cleaned_row = llm_full_context
             prepared_item = {'target_id': custom_id, 'content': cleaned_row, 'prompt': formatted_prompt}
             prepared_data.append(prepared_item)
         provider_config = agent_config.copy()
@@ -1121,7 +1259,7 @@ class BatchService:
             self._append_to_dlq(missing_custom_ids=missing_custom_ids, context_map=context_map, output_directory=output_directory, parent_batch_id=parent_batch_id, retry_attempt=current_retry_attempt)
             return None
         print(f'🔄 Retrying {len(missing_custom_ids)} missing record(s) from {file_name} (attempt {next_retry_attempt}/{max_retry_depth + 1})')
-        retry_tasks = self._reconstruct_tasks_for_retry(missing_custom_ids=missing_custom_ids, context_map=context_map, agent_config=agent_config)
+        retry_tasks = self._reconstruct_tasks_for_retry(missing_custom_ids=missing_custom_ids, context_map=context_map, agent_config=agent_config, output_directory=output_directory)
         if not retry_tasks:
             print('⚠️ Failed to reconstruct tasks for retry')
             return None

@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional, Set
 from agent_actions.response_processing.config_types import AgentConfigMap
 from agent_actions.llm_invocation.realtime.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
-from agent_actions.utilities.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY, API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, CHUNK_CONFIG_KEY, OBSERVE_KEY
+from agent_actions.utilities.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY, API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, CHUNK_CONFIG_KEY
 
 class ConfigValidator(BaseValidator):
     """Validate agent‑configuration files with **case‑insensitive** key handling.
@@ -12,7 +12,7 @@ class ConfigValidator(BaseValidator):
     Business rules are unchanged; only comparisons are agnostic to key‑case or value‑case.
     """
     _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', MODEL_NAME_KEY}
-    _OPTIONAL_AGENT_KEYS: Set[str] = {'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent', 'granularity', OBSERVE_KEY, 'drops', MODEL_VENDOR_KEY, JSON_MODE_KEY, 'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot', 'conditional_clause', 'is_operational', 'ephemeral', 'add_dispatch', 'output_field'}
+    _OPTIONAL_AGENT_KEYS: Set[str] = {'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent', 'granularity', MODEL_VENDOR_KEY, JSON_MODE_KEY, 'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot', 'conditional_clause', 'is_operational', 'ephemeral', 'add_dispatch', 'output_field', 'context_scope'}
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {'llm': {MODEL_NAME_KEY}, 'function': {'code_path'}, 'tool': {MODEL_NAME_KEY}}
 
     @staticmethod
@@ -90,11 +90,6 @@ class ConfigValidator(BaseValidator):
                         self.add_error(f"{desc} 'code_path' ({abs_cp}) does not exist.")
                     elif not self._is_file(abs_cp):
                         self.add_error(f"{desc} 'code_path' ({abs_cp}) is not a file.")
-        if model_vendor == 'tool' and granularity == 'file':
-            if OBSERVE_KEY in entry_ci:
-                self.add_error(f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'observe' defined. This key should be removed for this agent configuration as file‑level tools process content wholesale, and observe is for record‑level context enrichment.")
-            if 'drops' in entry_ci:
-                self.add_error(f"{desc} (model_vendor: 'tool', granularity: 'file') cannot have 'drops' defined. This key should be removed for this agent configuration as file‑level tools process content wholesale, and drops is for modifying record‑level context.")
         run_mode = str(entry_ci.get('run_mode', '')).lower()
         if run_mode == 'batch':
             valid_batch_vendors = {'openai', 'gemini', 'anthropic'}

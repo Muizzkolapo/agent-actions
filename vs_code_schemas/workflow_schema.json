@@ -74,21 +74,37 @@
           "description": "Output schema",
           "title": "Schema"
         },
-        "drops": {
-          "description": "Fields to exclude from LLM prompt and final output",
-          "items": {
-            "type": "string"
+        "context_scope": {
+          "additionalProperties": false,
+          "description": "Control which fields from upstream actions are available in different contexts",
+          "properties": {
+            "observe": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Observe",
+              "type": "array",
+              "description": "Fields to observe in LLM additional context"
+            },
+            "drop": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Drop",
+              "type": "array",
+              "description": "Fields to drop from LLM context"
+            },
+            "passthrough": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Passthrough",
+              "type": "array",
+              "description": "Fields from upstream actions to merge into output"
+            }
           },
-          "title": "Drops",
-          "type": "array"
-        },
-        "observe": {
-          "description": "Fields to exclude from LLM prompt but include in output (passthrough)",
-          "items": {
-            "type": "string"
-          },
-          "title": "Observe",
-          "type": "array"
+          "title": "Context Scope",
+          "type": "object"
         },
         "granularity": {
           "anyOf": [
@@ -279,37 +295,45 @@
           "description": "Default run mode",
           "title": "Run Mode"
         },
-        "drops": {
+        "context_scope": {
           "anyOf": [
             {
-              "items": {
-                "type": "string"
+              "additionalProperties": false,
+              "properties": {
+                "include": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Include",
+                  "type": "array",
+                  "description": "Fields to include in LLM additional context"
+                },
+                "exclude": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Exclude",
+                  "type": "array",
+                  "description": "Fields to exclude from LLM context"
+                },
+                "passthrough": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Passthrough",
+                  "type": "array",
+                  "description": "Fields from upstream actions to merge into output"
+                }
               },
-              "type": "array"
+              "type": "object"
             },
             {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "Default fields to exclude from LLM prompt and output",
-          "title": "Drops"
-        },
-        "observe": {
-          "anyOf": [
-            {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "Default fields to exclude from LLM prompt but include in output",
-          "title": "Observe"
+          "description": "Default context scope configuration",
+          "title": "Context Scope"
         }
       },
       "title": "DefaultsConfig",

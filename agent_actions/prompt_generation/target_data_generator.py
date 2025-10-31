@@ -5,7 +5,7 @@ from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
 from agent_actions.utilities.constants import PROMPT_KEY
 from agent_actions.preprocessing.pp_sample_enricher import SampleEnricher
-from agent_actions.utilities.utils_processor_helpers import apply_drops, run_dynamic_agent
+from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
 from agent_actions.configuration.interfaces import IGenerator, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry
 
@@ -58,18 +58,6 @@ class DataGenerator(IGenerator):
         except Exception as e:
             from agent_actions.shared.exceptions import GenerationError
             raise GenerationError(f'Failed to create agent with data: {str(e)}', cause=e)
-
-    def _apply_drops(self, contents: Dict) -> Dict:
-        """
-        Apply drops transformation to contents.
-        
-        Args:
-            contents: Content to transform
-            
-        Returns:
-            Transformed content
-        """
-        return apply_drops(contents, self.agent_config)
 
     def _format_prompt(self, contents: Dict, source_content: Optional[Any]=None) -> Tuple[str, Dict]:
         """

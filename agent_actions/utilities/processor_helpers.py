@@ -6,9 +6,8 @@ This module provides backward compatibility for imports that expect
 """
 
 from .utils_processor_helpers import (
-    apply_drops,
     run_dynamic_agent,
-    transform_with_observe,
+    transform_with_passthrough,
 )
 
-__all__ = ['apply_drops', 'run_dynamic_agent', 'transform_with_observe']
+__all__ = ['run_dynamic_agent', 'transform_with_passthrough']

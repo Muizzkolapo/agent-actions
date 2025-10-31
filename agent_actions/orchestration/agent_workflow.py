@@ -123,7 +123,7 @@ class AgentWorkflow:
             return
         self._setup_correlation_if_needed(agent_idx)
         try:
-            output_folder = await asyncio.to_thread(self.agent_runner.run_agent, agent_config, self.agent_name, self.previous_agent_type, agent_idx, agent_idx == len(self.execution_order) - 1)
+            output_folder = await asyncio.to_thread(self.agent_runner.run_agent, agent_config, agent_name, self.previous_agent_type, agent_idx, agent_idx == len(self.execution_order) - 1)
             if agent_config.get('run_mode') == 'batch':
                 agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_name))
                 node_output_dir = agent_io_path / 'target' / f'node_{agent_idx}_{agent_name}'
@@ -185,8 +185,12 @@ class AgentWorkflow:
         self.agent_runner.execution_order = self.execution_order
         self.agent_runner.agent_indices = self.agent_indices
         self.agent_runner.agent_configs = self.agent_configs
+        self.agent_runner.workflow_name = self.agent_name  # Set workflow name for agent_io folder lookups
         self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
-        self.batch_service = BatchService()
+        self.batch_service = BatchService(
+            agent_indices=self.agent_indices,
+            dependency_configs=self.agent_configs
+        )
         self.where_parser = WhereClauseParser()
         agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
         self.loop_correlator = LoopOutputCorrelator(agent_folder)
@@ -221,6 +225,10 @@ class AgentWorkflow:
         self.execution_order = self.config_manager.execution_order
         self.agent_indices = {agent: i for i, agent in enumerate(self.execution_order)}
         self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
+        # Add idx field to each agent config for historical node data loading
+        for agent_name, agent_config in self.agent_configs.items():
+            if agent_name in self.agent_indices:
+                agent_config['idx'] = self.agent_indices[agent_name]
         self.child_pipeline = self.config_manager.child_pipeline
 
     def _generate_workflow_session_id(self) -> str:
@@ -498,7 +506,7 @@ class AgentWorkflow:
                 agent_error_occurred = False
                 try:
                     self._setup_correlation_if_needed(idx)
-                    output_folder = self.agent_runner.run_agent(agent_config, self.agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1)
+                    output_folder = self.agent_runner.run_agent(agent_config, agent_name, self.previous_agent_type, idx, idx == len(self.execution_order) - 1)
                 except Exception as agent_error:
                     agent_error_occurred = True
                     if self.artifact_manager and agent_result:

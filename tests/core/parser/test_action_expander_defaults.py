@@ -5,6 +5,7 @@ from agent_actions.response_processing.action_expander import ActionExpander
 class TestActionExpanderDefaults:
     """Test defaults inheritance in ActionExpander."""
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_drops_observe_inherit_from_defaults(self):
         """Test that drops and observe fields inherit from defaults."""
         action = {'name': 'test_action', 'intent': 'Test action with no drops/observe', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt'}
@@ -15,6 +16,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['internal_id', 'temp_metadata']
         assert result['observe'] == ['user_id', 'request_id', 'timestamp']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_action_level_drops_observe_extend_defaults(self):
         """Test that action-level drops/observe extend defaults additively."""
         action = {'name': 'test_action', 'intent': 'Test action with own drops/observe', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt', 'drops': ['action_field'], 'observe': ['action_metadata']}
@@ -25,6 +27,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['default_field', 'action_field']
         assert result['observe'] == ['default_metadata', 'action_metadata']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_empty_action_level_drops_observe_with_defaults(self):
         """Test that empty action-level drops/observe combined with defaults results in just defaults."""
         action = {'name': 'test_action', 'intent': 'Test action with empty drops/observe', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt', 'drops': [], 'observe': []}
@@ -35,6 +38,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['default_field']
         assert result['observe'] == ['default_metadata']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_no_defaults_drops_observe_uses_empty_lists(self):
         """Test that when no defaults are provided, empty lists are used."""
         action = {'name': 'test_action', 'intent': 'Test action with no defaults', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt'}
@@ -45,6 +49,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == []
         assert result['observe'] == []
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_partial_defaults_inheritance(self):
         """Test inheritance when only one of drops/observe is in defaults."""
         action = {'name': 'test_action', 'intent': 'Test partial defaults', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt'}
@@ -55,6 +60,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['default_drop']
         assert result['observe'] == []
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_tool_action_processes_drops_observe(self):
         """Test that tool actions (record level) still process drops/observe."""
         action = {'name': 'test_tool', 'kind': 'tool', 'impl': 'module.function', 'intent': 'Test tool action'}
@@ -76,6 +82,7 @@ class TestActionExpanderDefaults:
         assert 'drops' not in result
         assert result['granularity'] == 'File'
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_other_defaults_still_work(self):
         """Test that other defaults (vendor, model, etc.) still work with drops/observe."""
         action = {'name': 'test_action', 'intent': 'Test other defaults', 'schema': {'output': 'string'}, 'prompt': 'Test prompt'}
@@ -89,6 +96,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['default_drop']
         assert result['observe'] == ['default_observe']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_template_replacement_in_drops_observe_from_defaults(self):
         """Test that template replacement works for drops/observe inherited from defaults."""
         action = {'name': 'test_action', 'intent': 'Test template replacement', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt'}
@@ -105,6 +113,7 @@ class TestActionExpanderDefaults:
         assert result['drops'] == ['test_field']
         assert result['observe'] == ['test_metadata']
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_additive_behavior_with_deduplication(self):
         """Test that additive behavior removes duplicates while preserving order."""
         action = {'name': 'test_action', 'intent': 'Test deduplication', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'output': 'string'}, 'prompt': 'Test prompt', 'drops': ['shared_field', 'action_field'], 'observe': ['shared_metadata', 'action_metadata']}
@@ -118,6 +127,7 @@ class TestActionExpanderDefaults:
 class TestActionExpanderFullWorkflow:
     """Test full workflow expansion with defaults."""
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_expand_actions_to_agents_with_drops_observe_defaults(self):
         """Test full workflow expansion with drops/observe in defaults."""
         workflow_config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '2.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'drops': ['internal_id', 'temp_data'], 'observe': ['user_id', 'session_id']}, 'actions': [{'name': 'action1', 'intent': 'First action', 'schema': {'output': 'string'}, 'prompt': 'Process data'}, {'name': 'action2', 'intent': 'Second action', 'schema': {'output': 'string'}, 'drops': ['other_field'], 'observe': ['correlation_id'], 'prompt': 'Process more data'}], 'plan': ['action1', 'action2 <- action1']}
@@ -165,6 +175,7 @@ class TestActionExpanderInterceptors:
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
         assert 'interceptors' not in result
 
+    @pytest.mark.skip(reason="observe/drops functionality removed")
     def test_interceptors_with_defaults_and_other_fields(self):
         """Test that interceptors work alongside other field mappings."""
         action = {'name': 'test_action', 'intent': 'Test comprehensive action', 'schema': {'output': 'string'}, 'prompt': 'Test prompt', 'drops': ['temp_field'], 'observe': ['tracking_id'], 'interceptors': [{'type': 'validation', 'validator_function': 'test.validator'}]}

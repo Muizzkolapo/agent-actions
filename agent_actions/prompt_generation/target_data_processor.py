@@ -1,6 +1,6 @@
 """Module for processing generated data."""
 from typing import Dict, List
-from agent_actions.utilities.utils_processor_helpers import transform_with_observe
+from agent_actions.utilities.utils_processor_helpers import transform_with_passthrough
 from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.shared.exceptions import TransformationError
 from agent_actions.configuration.interfaces import IDataProcessor, ProcessingMode
@@ -45,7 +45,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            return transform_with_observe(generated_data, contents, source_guid, self.agent_config, idx)
+            return transform_with_passthrough(generated_data, contents, source_guid, self.agent_config, idx)
         except Exception as e:
             self.handle_processing_error(e, 'Processing generated data item', TransformationError, source_guid=source_guid, item_index=idx, item_count=len(generated_data) if isinstance(generated_data, list) else 1)
 
