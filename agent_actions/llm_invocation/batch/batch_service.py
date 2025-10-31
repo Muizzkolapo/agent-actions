@@ -133,9 +133,6 @@ class BatchService:
         source_path = base_path / 'source'
         output_src_path = source_path / relative_path.with_suffix('.json')
         ensure_directory_exists(output_src_path, is_file=True)
-        print(f'[DEBUG] Saving source for file_path: {file_path}')
-        print(f'[DEBUG] Output source path: {output_src_path}')
-        print(f'[DEBUG] Custom ID: {list(src_text.keys())[0]}')
         if output_src_path.exists():
             with open(output_src_path, 'r') as existing_file:
                 try:
@@ -1034,11 +1031,6 @@ class BatchService:
                 except Exception as e:
                     error_msg = f'Could not process batch results for {file_name} (batch {batch_id}): {e}'
                     print(f'[ERROR] {error_msg}')
-                    print(f'[DEBUG] Batch ID: {batch_id}')
-                    print(f'[DEBUG] File name: {file_name}')
-                    print(f'[DEBUG] Output directory: {output_directory}')
-                    if 'json.JSONDecodeError' in str(type(e)):
-                        print(f'[DEBUG] This appears to be a JSON parsing error. Check the batch results file for malformed JSON.')
                     continue
             if not processed_files:
                 from agent_actions.shared.exceptions import ProcessingError
