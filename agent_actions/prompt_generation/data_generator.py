@@ -38,7 +38,7 @@ class DataGenerator(IGenerator):
         """Return AUTO processing mode to let system choose."""
         return ProcessingMode.AUTO
 
-    def create_agent_with_data(self, contents: Any, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[List[Dict], bool]:
+    def create_agent_with_data(self, contents: Any, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[List[Dict], bool, Dict]:
         """
         Create an agent with the provided data and generate results.
 
@@ -51,8 +51,10 @@ class DataGenerator(IGenerator):
             file_path: Optional file path for constructing historical node paths
 
         Returns:
-            Tuple containing the generated data and a flag indicating if the
-            agent was executed
+            Tuple containing:
+            - generated data (List[Dict])
+            - flag indicating if agent was executed (bool)
+            - passthrough_fields extracted from field_context (Dict)
 
         Raises:
             RuntimeError: If agent creation or data generation fails
@@ -61,9 +63,9 @@ class DataGenerator(IGenerator):
             formatted_prompt, contents, llm_context, passthrough_fields = self._format_prompt(contents, source_content, loop_context, workflow_metadata, current_item, file_path)
             formatted_prompt = SampleEnricher.append_few_shot_samples(formatted_prompt, self.agent_config, self.agent_name)
             tool_args = self.agent_config.get('tool_args', {})
-            # Note: passthrough_fields not passed here - handled later in transform_with_observe()
+            # passthrough_fields are returned to be merged in transform_with_passthrough()
             response, executed = run_dynamic_agent(self.agent_config, self.agent_name, contents, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'), tool_args=tool_args, source_content=source_content, llm_additional_context=llm_context)
-            return (response, executed)
+            return (response, executed, passthrough_fields)
         except Exception as e:
             from agent_actions.shared.exceptions import GenerationError
             raise GenerationError(f'Failed to create agent with data: {str(e)}', cause=e)

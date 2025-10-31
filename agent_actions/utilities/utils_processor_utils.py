@@ -168,7 +168,7 @@ class ProcessorUtils:
         return {'source_guid': source_guid, 'content': content, 'target_id': target_id or ProcessorUtils.generate_target_id(), 'node_id': node_id or ProcessorUtils.generate_node_id(0), 'lineage': lineage or []}
 
     @staticmethod
-    def transform_with_passthrough(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0) -> List:
+    def transform_with_passthrough(data: List, context_data: Dict, source_guid: str, agent_config: Dict, idx: int=0, passthrough_fields: Optional[Dict]=None) -> List:
         """
         Apply context_scope.passthrough logic to generated data.
 
@@ -183,6 +183,9 @@ class ProcessorUtils:
             source_guid: Source GUID
             agent_config: Agent configuration containing context_scope
             idx: Index for node generation
+            passthrough_fields: Optional pre-computed passthrough fields from field_context.
+                              If provided, these values will be used instead of extracting from context_data.
+                              This enables passthrough from ANY previous action (not just immediate predecessor).
 
         Returns:
             Transformed data list with passthrough fields merged
@@ -191,48 +194,71 @@ class ProcessorUtils:
             data = [data] if data is not None else []
         already_structured = len(data) > 0 and all((isinstance(item, dict) and 'source_guid' in item and ('content' in item) for item in data))
 
-        # Extract context_scope.passthrough fields
-        context_scope = agent_config.get('context_scope', {})
-        fields_to_merge = []
+        # Use pre-computed passthrough_fields if provided (supports historical references)
+        if passthrough_fields and isinstance(passthrough_fields, dict) and len(passthrough_fields) > 0:
+            # Use ContextScopeProcessor.merge_passthrough_fields for consistent merging
+            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
 
-        if context_scope and context_scope.get('passthrough'):
-            passthrough_refs = context_scope.get('passthrough', [])
-            for field_ref in passthrough_refs:
-                # Parse field reference like 'group_by_similarity.semantic_unique_id' -> 'semantic_unique_id'
-                if isinstance(field_ref, str) and '.' in field_ref:
-                    parts = field_ref.split('.', 1)
-                    if len(parts) == 2:
-                        field_name = parts[1]
-                        if field_name not in fields_to_merge:
-                            fields_to_merge.append(field_name)
-
-        # If no passthrough fields, just structure the data and return
-        if already_structured and (not fields_to_merge):
-            output = data
-        elif fields_to_merge:
-            context_for_passthrough = context_data
-            if isinstance(context_data, dict) and 'content' in context_data and isinstance(context_data['content'], dict):
-                context_for_passthrough = context_data['content']
             if already_structured:
-                contents = [item['content'] for item in data]
-                updated = []
-                for content in contents:
-                    if isinstance(content, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content, fields_to_merge))
-                    else:
-                        content_dict = {'content': content}
-                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content_dict, fields_to_merge))
+                # Merge passthrough fields into each item's content
+                for item in data:
+                    if isinstance(item, dict) and 'content' in item and isinstance(item['content'], dict):
+                        item['content'].update(passthrough_fields)
+                output = data
             else:
-                updated = []
+                # Merge passthrough fields directly into each item
+                merged = []
                 for item in data:
                     if isinstance(item, dict):
-                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item, fields_to_merge))
+                        merged_item = {**item, **passthrough_fields}
+                        merged.append(merged_item)
                     else:
-                        item_dict = {'content': item}
-                        updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item_dict, fields_to_merge))
-            output = DataTransformer.transform_structure([{source_guid: updated}])
+                        merged.append(item)
+                output = DataTransformer.transform_structure([{source_guid: merged}])
         else:
-            output = DataTransformer.transform_structure([{source_guid: data}])
+            # Fallback to old behavior: extract from context_data (backward compatibility)
+            context_scope = agent_config.get('context_scope', {})
+            fields_to_merge = []
+
+            if context_scope and context_scope.get('passthrough'):
+                passthrough_refs = context_scope.get('passthrough', [])
+                for field_ref in passthrough_refs:
+                    # Parse field reference like 'group_by_similarity.semantic_unique_id' -> 'semantic_unique_id'
+                    if isinstance(field_ref, str) and '.' in field_ref:
+                        parts = field_ref.split('.', 1)
+                        if len(parts) == 2:
+                            field_name = parts[1]
+                            if field_name not in fields_to_merge:
+                                fields_to_merge.append(field_name)
+
+            # If no passthrough fields, just structure the data and return
+            if already_structured and (not fields_to_merge):
+                output = data
+            elif fields_to_merge:
+                context_for_passthrough = context_data
+                if isinstance(context_data, dict) and 'content' in context_data and isinstance(context_data['content'], dict):
+                    context_for_passthrough = context_data['content']
+                if already_structured:
+                    contents = [item['content'] for item in data]
+                    updated = []
+                    for content in contents:
+                        if isinstance(content, dict):
+                            updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content, fields_to_merge))
+                        else:
+                            content_dict = {'content': content}
+                            updated.append(DataTransformer.update_schema_objects(context_for_passthrough, content_dict, fields_to_merge))
+                else:
+                    updated = []
+                    for item in data:
+                        if isinstance(item, dict):
+                            updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item, fields_to_merge))
+                        else:
+                            item_dict = {'content': item}
+                            updated.append(DataTransformer.update_schema_objects(context_for_passthrough, item_dict, fields_to_merge))
+                output = DataTransformer.transform_structure([{source_guid: updated}])
+            else:
+                output = DataTransformer.transform_structure([{source_guid: data}])
+
         for i, obj in enumerate(output):
             output[i] = ProcessorUtils.ensure_required_fields(obj, source_guid, idx)
         return output
