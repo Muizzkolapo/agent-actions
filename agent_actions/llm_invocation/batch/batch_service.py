@@ -887,32 +887,24 @@ class BatchService:
                     original_row = context_map.get(custom_id, {})
                     original_source_guid = original_row.get('source_guid', custom_id)
 
-                    # Apply context_scope.passthrough using pre-computed values
+                    # Apply context_scope.passthrough like old observe logic
                     if agent_config and custom_id in context_map:
-                        # Use the pre-computed passthrough_fields stored during task creation
-                        stored_passthrough = context_map[custom_id].get('_passthrough_fields', {})
+                        context_scope = agent_config.get('context_scope', {})
+                        passthrough_refs = context_scope.get('passthrough', [])
 
-                        if stored_passthrough:
-                            # Merge passthrough fields into generated items using ContextScopeProcessor
+                        if passthrough_refs:
+                            # Extract field names from passthrough references
                             from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-                            generated_list = ContextScopeProcessor.merge_passthrough_fields(
-                                generated_list, stored_passthrough
-                            )
-                        elif agent_config.get('context_scope', {}).get('passthrough'):
-                            # Fallback: old behavior for backward compatibility
-                            # (when _passthrough_fields not available)
-                            passthrough_refs = agent_config.get('context_scope', {}).get('passthrough', [])
                             passthrough_fields = []
                             for field_ref in passthrough_refs:
                                 try:
-                                    from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
                                     _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                                     passthrough_fields.append(field_name)
                                 except ValueError:
                                     # If parsing fails, use the whole string as field name
                                     passthrough_fields.append(field_ref)
 
-                            # Get original content (same as old observe logic)
+                            # Get original content (same as observe logic)
                             original_content = original_row.get('content', original_row)
 
                             # Merge passthrough fields from original into generated items

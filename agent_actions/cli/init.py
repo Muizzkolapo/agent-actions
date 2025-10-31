@@ -11,7 +11,6 @@ from agent_actions.configuration.init import ProjectInitializer
 from agent_actions.validation.project_validator import ProjectValidator
 from agent_actions.shared.exceptions import ValidationError, FileSystemError, ConfigurationError
 from agent_actions.validation.init_validator import InitCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors
 from pydantic import ValidationError as PydanticValidationError
 
 class InitCommand:
@@ -70,27 +69,35 @@ class InitCommand:
     def execute(self) -> None:
         """
         Execute the init command.
-
+        
         Raises:
             Various exceptions depending on what fails.
         """
-        ProjectValidator.validate_project_name(self.args.project_name)
-        ProjectValidator.validate_project_directory(self.output_dir, self.project_dir, self.args.force)
-        ProjectValidator.validate_template(self.args.template, self._get_available_templates())
-        self._create_project_directory()
-        self._initialize_project()
-        click.echo(f'Successfully initialized project: {self.args.project_name}')
-        click.echo(f'Project created at: {self.project_dir}')
-        click.echo('\nNext steps:')
-        click.echo(f'  cd {self.args.project_name}')
-        click.echo('  agent-actions run -a sample_agent')
+        try:
+            ProjectValidator.validate_project_name(self.args.project_name)
+            ProjectValidator.validate_project_directory(self.output_dir, self.project_dir, self.args.force)
+            ProjectValidator.validate_template(self.args.template, self._get_available_templates())
+            self._create_project_directory()
+            self._initialize_project()
+            click.echo(f'Successfully initialized project: {self.args.project_name}')
+            click.echo(f'Project created at: {self.project_dir}')
+            click.echo('\nNext steps:')
+            click.echo(f'  cd {self.args.project_name}')
+            click.echo('  agent-actions run -a sample_agent')
+        except (ValidationError, FileSystemError, ConfigurationError) as e:
+            from agent_actions.shared.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
+            raise click.ClickException(error_message)
+        except Exception as e:
+            from agent_actions.shared.user_errors import format_user_error
+            error_message = format_user_error(e, {'command': 'init', 'project': self.args.project_name})
+            raise click.ClickException(error_message)
 
 @click.command()
 @click.argument('project_name')
 @click.option('-o', '--output-dir', help='Directory to create the project in (default: current directory)')
 @click.option('-t', '--template', default='default', help='Template to use for project initialization')
 @click.option('-f', '--force', is_flag=True, default=False, help='Force project creation even if directory exists')
-@handles_user_errors('init')
 def init(project_name: str, output_dir: Optional[str]=None, template: str='default', force: bool=False) -> None:
     """
     Initialize a new Agent Actions project.
@@ -104,6 +111,11 @@ def init(project_name: str, output_dir: Optional[str]=None, template: str='defau
         agent-actions init my_project --template minimal
         agent-actions init my_project --output-dir /path/to/dir
     """
-    args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)
-    command = InitCommand(args)
-    command.execute()
+    try:
+        args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)
+        command = InitCommand(args)
+        command.execute()
+    except PydanticValidationError as e:
+        from agent_actions.shared.user_errors import format_user_error
+        error_message = format_user_error(e, {'command': 'init'})
+        raise click.ClickException(error_message)
