@@ -13,7 +13,7 @@ from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.orchestration.agent_workflow import AgentWorkflow
 from agent_actions.shared.exceptions import ConfigurationError, ValidationError, FileLoadError, AgentExecutionError
 from agent_actions.validation.run_validator import RunCommandArgs
-from agent_actions.cli.cli_decorators import requires_project
+from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 
 class RunCommand:
     """Implementation of the run command."""
@@ -77,16 +77,6 @@ class RunCommand:
             else:
                 workflow.run()
             click.echo(f'Successfully completed agent run for: {self.args.agent}')
-        except (ValidationError, FileLoadError, ConfigurationError, AgentExecutionError) as e:
-            from agent_actions.shared.user_errors import format_user_error
-            context = {'agent': self.args.agent, 'command': 'run', 'error_type': type(e).__name__}
-            error_message = format_user_error(e, context)
-            raise click.ClickException(error_message)
-        except Exception as e:
-            from agent_actions.shared.user_errors import format_user_error
-            context = {'agent': self.args.agent, 'command': 'run'}
-            error_message = format_user_error(e, context)
-            raise click.ClickException(error_message)
 
 @click.command()
 @click.option('-a', '--agent', required=True, help='Agent configuration file name without path or extension')
@@ -96,6 +86,7 @@ class RunCommand:
 @click.option('--parallel', is_flag=True, help='Force parallel execution (overrides auto-detection)')
 @click.option('--no-parallel', is_flag=True, help='Force sequential execution (overrides auto-detection)')
 @click.option('--concurrency-limit', type=int, default=5, help='Maximum number of agents to run concurrently (default: 5, range: 1-50)')
+@handles_user_errors('run')
 @requires_project
 def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False, parallel: bool=False, no_parallel: bool=False, concurrency_limit: int=5) -> None:
     """
