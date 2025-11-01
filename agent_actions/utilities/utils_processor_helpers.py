@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
+from agent_actions.utilities.llm_context_builder import LLMContextBuilder
 from .utils_processor_utils import ProcessorUtils
 
 def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_additional_context: Optional[Dict]=None) -> tuple[Any, bool]:
@@ -54,28 +55,13 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
     else:
         processed_context = context
 
-    # Apply context_scope.drop field filtering
+    # Build LLM context using unified builder (Phase 2: Issue #492)
     context_scope = agent_config.get('context_scope', {})
-    if context_scope and context_scope.get('drop') and isinstance(processed_context, dict):
-        from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-        from agent_actions.preprocessing.data_transformer import DataTransformer
-
-        # Extract field names from context_scope.drop
-        drop_fields = []
-        for field_ref in context_scope.get('drop', []):
-            try:
-                _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                drop_fields.append(field_name)
-            except ValueError:
-                continue
-
-        # Remove dropped fields from context
-        if drop_fields:
-            processed_context = DataTransformer.remove_schema_objects(processed_context, drop_fields)
-
-    # Merge context_scope.observe fields into context JSON (not as text to prompt)
-    if llm_additional_context and isinstance(processed_context, dict):
-        processed_context = {**processed_context, **llm_additional_context}
+    processed_context = LLMContextBuilder.build_llm_context_for_realtime(
+        processed_context=processed_context,
+        llm_additional_context=llm_additional_context,
+        context_scope=context_scope
+    )
 
     response = agent_builder.create_dynamic_agent(agent_config, agent_name, processed_context, formatted_prompt, tools_path=tools_path, tool_args=tool_args, source_content=source_content, additional_context=None)
 

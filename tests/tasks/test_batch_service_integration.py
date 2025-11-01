@@ -31,7 +31,7 @@ class TestBatchServiceIntegration:
         """
         mock_filter_service = Mock()
         mock_filter_service.filter_item.return_value = Mock(success=True, matched=False, data={}, error=None)
-        with patch('agent_actions.core.parser.where_parser.get_global_filter', return_value=mock_filter_service):
+        with patch('agent_actions.response_processing.where_parser.get_global_filter', return_value=mock_filter_service):
             agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
             data = [{'target_id': 'test1', 'content': 'should be filtered'}, {'target_id': 'test2', 'content': 'should also be filtered'}]
             result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
@@ -47,7 +47,7 @@ class TestBatchServiceIntegration:
         """
         mock_filter_service = Mock()
         mock_filter_service.filter_item.return_value = Mock(success=True, matched=False, data={}, error=None)
-        with patch('agent_actions.core.parser.where_parser.get_global_filter', return_value=mock_filter_service):
+        with patch('agent_actions.response_processing.where_parser.get_global_filter', return_value=mock_filter_service):
             agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'skip'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
             data = [{'target_id': 'test1', 'content': 'should be skipped'}, {'target_id': 'test2', 'content': 'should also be skipped'}]
             result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
@@ -66,7 +66,7 @@ class TestBatchServiceIntegration:
         """
         mock_filter_service = Mock()
         mock_filter_service.filter_item.return_value = Mock(success=True, matched=False, data={}, error=None)
-        with patch('agent_actions.core.parser.where_parser.get_global_filter', return_value=mock_filter_service):
+        with patch('agent_actions.response_processing.where_parser.get_global_filter', return_value=mock_filter_service):
             data = [{'target_id': 'test1', 'content': 'test'}]
             filter_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
             filter_result = batch_service.submit_batch_job_from_data(filter_config, 'test_batch', data, temp_output_dir)

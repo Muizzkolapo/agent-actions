@@ -51,7 +51,7 @@ class TestBatchServiceFiltering:
         with tempfile.TemporaryDirectory() as temp_dir:
             yield temp_dir
 
-    @patch('agent_actions.core.parser.where_parser.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_filter_behavior_all_items_filtered(self, mock_factory, mock_get_filter, batch_service, temp_output_dir):
         """Test filter behavior when all items are filtered out (condition always false)."""
@@ -71,7 +71,7 @@ class TestBatchServiceFiltering:
         mock_factory.create_provider.assert_not_called()
         mock_provider.submit_batch.assert_not_called()
 
-    @patch('agent_actions.core.parser.where_parser.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_filter_behavior_partial_filtering(self, mock_factory, mock_get_filter, batch_service, sample_data, temp_output_dir):
         """Test filter behavior with partial filtering (some items match, some don't)."""
@@ -94,7 +94,7 @@ class TestBatchServiceFiltering:
         assert item2['_batch_filter_status'] == 'filtered'
         assert item3['_batch_filter_status'] == 'included'
 
-    @patch('agent_actions.core.parser.where_parser.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     @patch('agent_actions.llm_invocation.batch.batch_service.BatchProviderFactory')
     def test_skip_behavior_all_items_skipped(self, mock_factory, mock_get_filter, batch_service, temp_output_dir):
         """Test skip behavior when all items are skipped (condition always false)."""
@@ -153,9 +153,9 @@ class TestBatchServiceFiltering:
         mock_factory.create_provider.return_value = mock_provider
         agent_config = {'conditional_clause': 'test_function', 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
         data = [{'target_id': 'item1', 'process': True, 'content': 'should process'}, {'target_id': 'item2', 'process': False, 'content': 'should skip'}]
-        with patch('agent_actions.core.udf_registry.get_udf') as mock_get_udf:
-            mock_test_func = Mock(side_effect=lambda data, **kwargs: data.get('process', True))
-            mock_get_udf.return_value = mock_test_func
+        with patch('agent_actions.utilities.tooling.execute_user_defined_function') as mock_execute_udf:
+            # Mock execute_user_defined_function to return True for item1, False for item2
+            mock_execute_udf.side_effect = lambda func_name, data, **kwargs: data.get('process', True)
             tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
             assert tasks is not None
             assert batch_service.context_map['item1']['_batch_filter_status'] == 'included'
