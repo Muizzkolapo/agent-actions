@@ -8,6 +8,7 @@ from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.utilities.utils_processor_utils import ProcessorUtils
 from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
 from agent_actions.shared.exceptions import DependencyError
+from agent_actions.preprocessing.filter_service import get_filter_service
 
 @registry.register_processor('target_content')
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
@@ -290,48 +291,33 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
     def _apply_where_clause_filtering(self, data: List[Dict]) -> List[Dict]:
         """
         Apply WHERE clause filtering at item level if configured.
-        
+
         Args:
             data: List of data items to filter
-            
+
         Returns:
             Filtered list of data items
         """
         where_clause_config = self._get_config_value('where_clause')
         if not where_clause_config:
             return data
+
         scope = where_clause_config.scope if hasattr(where_clause_config, 'scope') else where_clause_config.get('scope')
         if scope != 'item':
             return data
-        try:
-            from agent_actions.response_processing.where_parser import get_global_filter
-            filter_service = get_global_filter()
-            filtered_data = []
-            for item in data:
-                content = item.get('content', item)
-                clause = where_clause_config.clause if hasattr(where_clause_config, 'clause') else where_clause_config['clause']
-                filter_result = filter_service.filter_item(content, clause, timeout=self._get_config_value('max_execution_time', 5))
-                behavior = where_clause_config.behavior if hasattr(where_clause_config, 'behavior') else where_clause_config.get('behavior', 'filter')
-                if filter_result.success:
-                    if behavior == 'filter':
-                        if filter_result.matched:
-                            filtered_data.append(item)
-                    elif behavior == 'skip':
-                        filtered_data.append(item)
-                    elif filter_result.matched:
-                        filtered_data.append(item)
-                else:
-                    passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                    if passthrough_on_error:
-                        filtered_data.append(item)
-            return filtered_data
-        except Exception as e:
-            passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-            if passthrough_on_error:
-                return data
-            else:
-                from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError(f'WHERE clause filtering failed: {str(e)}', cause=e)
+
+        # Use centralized filter service
+        filter_service = get_filter_service()
+
+        # Convert where_clause_config to dict if it's a model object
+        where_config_dict = where_clause_config if hasattr(where_clause_config, '__dict__') else where_clause_config
+
+        filtered_data, _ = filter_service.apply_where_clause_filtering(
+            data,
+            where_config_dict
+        )
+
+        return filtered_data
 
     def _process_single_item(self, item: Dict, source_data: List[Dict], file_path: Optional[str]=None, record_index: Optional[int]=None) -> List[Dict]:
         """

@@ -12,6 +12,7 @@ from agent_actions.llm_invocation.realtime.providers.deepseek.vendor import Deep
 from agent_actions.llm_invocation.realtime.providers.tools.vendor import ToolHandler
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
+from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY, PROMPT_KEY
 VENDOR_HANDLERS: dict[str, Any] = {'openai': OpenAIHandler, 'ollama': OllamaHandler, 'gemini': GeminiHandler, 'cohere': CohereHandler, 'mistral': MistralHandler, 'anthropic': ClaudeHandler, 'groq': GroqLlama3Handler, 'deepseek': DeepSeekHandler, 'tool': ToolHandler}
 SINGLE_RESPONSE_VENDORS: set[str] = {'cohere', 'mistral', 'anthropic', 'groq', 'deepseek'}
@@ -80,10 +81,8 @@ def _prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str
     prompt loaded from disk."""
     if formatted_prompt is not None:
         return formatted_prompt
-    prompt_cfg = agent_config.get(PROMPT_KEY, '')
-    if isinstance(prompt_cfg, str) and prompt_cfg.startswith('$'):
-        return PromptLoader.load_prompt(prompt_cfg[1:])
-    return prompt_cfg
+    # Load and validate prompt using unified formatter (Phase 3: Issue #492)
+    return PromptFormatter.get_raw_prompt(agent_config)
 
 def _build_field_context_from_context_data(context_data: Union[str, Dict], agent_config: Dict) -> Optional[Dict]:
     """

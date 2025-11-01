@@ -6,7 +6,7 @@ from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent, _
 class TestShouldSkipLegacyConditional:
     """Test the _should_skip_legacy_conditional helper function."""
 
-    @patch('agent_actions.core.utils.processor_helpers.execute_user_defined_function')
+    @patch('agent_actions.utilities.tooling.execute_user_defined_function')
     def test_skip_when_conditional_clause_returns_false(self, mock_execute_udf):
         """Test skipping when conditional clause evaluates to False."""
         mock_execute_udf.return_value = False
@@ -16,7 +16,7 @@ class TestShouldSkipLegacyConditional:
         assert result is True
         mock_execute_udf.assert_called_once_with('validators.should_process', context)
 
-    @patch('agent_actions.core.utils.processor_helpers.execute_user_defined_function')
+    @patch('agent_actions.utilities.tooling.execute_user_defined_function')
     def test_no_skip_when_conditional_clause_returns_true(self, mock_execute_udf):
         """Test not skipping when conditional clause evaluates to True."""
         mock_execute_udf.return_value = True
@@ -40,7 +40,7 @@ class TestShouldSkipLegacyConditional:
         result = _should_skip_legacy_conditional(agent_config, context)
         assert result is False
 
-    @patch('agent_actions.core.utils.processor_helpers.execute_user_defined_function')
+    @patch('agent_actions.utilities.tooling.execute_user_defined_function')
     def test_case_insensitive_conditional_clause(self, mock_execute_udf):
         """Test that conditional clause is converted to lowercase."""
         mock_execute_udf.return_value = False
@@ -53,7 +53,7 @@ class TestShouldSkipLegacyConditional:
 class TestShouldSkipWhereClause:
     """Test the _should_skip_where_clause helper function."""
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_skip_when_filter_returns_false(self, mock_get_filter):
         """Test skipping when filter condition evaluates to False."""
         mock_filter_service = MagicMock()
@@ -65,7 +65,7 @@ class TestShouldSkipWhereClause:
         assert result is True
         mock_filter_service.filter_item.assert_called_once_with(context, 'should_keep_cluster == false')
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_no_skip_when_filter_returns_true(self, mock_get_filter):
         """Test not skipping when filter condition evaluates to True."""
         mock_filter_service = MagicMock()
@@ -91,7 +91,7 @@ class TestShouldSkipWhereClause:
         result = _should_skip_where_clause(agent_config, context)
         assert result is False
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_error_handling_with_passthrough_on_error_true(self, mock_get_filter):
         """Test error handling when passthrough_on_error is True (default)."""
         mock_get_filter.side_effect = Exception('Filter service error')
@@ -100,7 +100,7 @@ class TestShouldSkipWhereClause:
         result = _should_skip_where_clause(agent_config, context)
         assert result is True
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_error_handling_with_passthrough_on_error_false(self, mock_get_filter):
         """Test error handling when passthrough_on_error is False."""
         mock_get_filter.side_effect = Exception('Filter service error')
@@ -109,7 +109,7 @@ class TestShouldSkipWhereClause:
         result = _should_skip_where_clause(agent_config, context)
         assert result is False
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_error_handling_default_passthrough_on_error(self, mock_get_filter):
         """Test error handling with default passthrough_on_error setting."""
         mock_get_filter.side_effect = Exception('Filter service error')
@@ -121,7 +121,7 @@ class TestShouldSkipWhereClause:
 class TestRunDynamicAgent:
     """Test the run_dynamic_agent function integration."""
 
-    @patch('agent_actions.core.utils.processor_helpers.agent_builder')
+    @patch('agent_actions.llm_invocation.realtime.agent_builder')
     @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_executes_agent_when_no_guards(self, mock_apply_remove, mock_agent_builder):
         """Test normal agent execution when no guard conditions are present."""
@@ -158,7 +158,7 @@ class TestRunDynamicAgent:
         assert result == context
         mock_where_skip.assert_called_once_with(agent_config, context)
 
-    @patch('agent_actions.core.utils.processor_helpers.agent_builder')
+    @patch('agent_actions.llm_invocation.realtime.agent_builder')
     @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     @patch('agent_actions.core.utils.processor_helpers._should_skip_where_clause')
     @patch('agent_actions.core.utils.processor_helpers._should_skip_legacy_conditional')
@@ -177,7 +177,7 @@ class TestRunDynamicAgent:
         mock_where_skip.assert_called_once_with(agent_config, context)
         mock_agent_builder.create_dynamic_agent.assert_called_once()
 
-    @patch('agent_actions.core.utils.processor_helpers.agent_builder')
+    @patch('agent_actions.llm_invocation.realtime.agent_builder')
     @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_passes_all_parameters_to_agent_builder(self, mock_apply_remove, mock_agent_builder):
         """Test that all parameters are correctly passed to agent builder."""
@@ -196,8 +196,8 @@ class TestRunDynamicAgent:
 class TestToolAgentGuardIntegration:
     """Integration tests for tool agent guard behavior - the original issue scenario."""
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
-    @patch('agent_actions.core.utils.processor_helpers.agent_builder')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
+    @patch('agent_actions.llm_invocation.realtime.agent_builder')
     @patch('agent_actions.core.utils.processor_helpers.apply_drops')
     def test_tool_agent_with_skip_guard_condition_false(self, mock_apply_remove, mock_agent_builder, mock_get_filter):
         """Test tool agent execution when skip guard condition is False (should execute)."""
@@ -214,7 +214,7 @@ class TestToolAgentGuardIntegration:
         mock_filter_service.filter_item.assert_called_once_with(context, 'should_keep_cluster == false')
         mock_agent_builder.create_dynamic_agent.assert_called_once()
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_tool_agent_with_skip_guard_condition_true(self, mock_get_filter):
         """Test tool agent skip when skip guard condition is True (should skip)."""
         mock_filter_service = MagicMock()
@@ -227,7 +227,7 @@ class TestToolAgentGuardIntegration:
         assert result == context
         mock_filter_service.filter_item.assert_called_once_with(context, 'should_keep_cluster == false')
 
-    @patch('agent_actions.core.utils.processor_helpers.get_global_filter')
+    @patch('agent_actions.response_processing.where_parser.get_global_filter')
     def test_tool_agent_guard_error_handling(self, mock_get_filter):
         """Test tool agent error handling in guard evaluation."""
         mock_get_filter.side_effect = Exception('Filter service error')

@@ -3,6 +3,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
+from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.utilities.constants import PROMPT_KEY
 from agent_actions.preprocessing.sample_enricher import SampleEnricher
 from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
@@ -125,11 +126,8 @@ class DataGenerator(IGenerator):
             - llm_context: Fields for LLM additional context (from context_scope.observe)
             - passthrough_fields: Fields to merge into output (from context_scope.passthrough)
         """
-        raw_prompt = self.agent_config.get(PROMPT_KEY, '')
-        if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
-            raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
-        if not raw_prompt:
-            raw_prompt = 'Process the following content: {content}'
+        # Load and validate prompt using unified formatter (Phase 3: Issue #492)
+        raw_prompt = PromptFormatter.get_raw_prompt(self.agent_config)
         field_context = self._build_namespaced_field_context(
             contents if isinstance(contents, dict) else {},
             source_content,

@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Improved Maintainability**: Refactored batch and realtime modes to eliminate code duplication ([#492](https://github.com/Muizzkolapo/agent-actions/issues/492))
+  - **Phase 1**: Extracted WHERE clause and conditional filtering logic into `FilterService`
+    - Eliminated ~100 lines of duplicated filtering code
+    - Single source of truth for filter/skip behaviors
+    - Consistent WHERE clause evaluation across modes
+  - **Phase 2**: Extracted LLM context building logic into `LLMContextBuilder`
+    - Eliminated ~40 lines of duplicated context building code
+    - Unified interface with mode-specific implementations
+    - Handles context_scope.drop and context_scope.observe directives
+  - **Phase 3**: Unified prompt loading using existing `PromptFormatter`
+    - Eliminated ~20 lines of duplicated prompt loading code
+    - Fixed error handling typo (prompt_config → agent_config)
+    - Added default fallback to agent_builder.py (previously missing)
+  - **Phase 4**: Added comprehensive documentation
+    - New architecture document: `dev_artefacts/BATCH_REALTIME_ARCHITECTURE.md`
+    - Enhanced inline documentation with usage examples
+    - Data flow diagrams for both modes
+  - **Impact**: ~160 lines of duplication eliminated, zero breaking changes, all tests passing
+  - New shared services:
+    - `FilterService` (`agent_actions/preprocessing/filter_service.py`) - 21 unit tests
+    - `LLMContextBuilder` (`agent_actions/utilities/llm_context_builder.py`) - 20 unit tests
+    - `PromptFormatter` (refactored existing) - Used by 5 files
+
 ### Added
 
 - **UDF Auto-Discovery**: User-Defined Functions now use `@udf_tool` decorator for automatic registration. Reference functions by simple names (no module paths required), similar to dbt macros. ([#423](https://github.com/Muizzkolapo/agent-actions/issues/423))

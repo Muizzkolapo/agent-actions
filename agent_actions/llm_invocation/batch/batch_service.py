@@ -8,6 +8,7 @@ from agent_actions.llm_invocation.realtime.agent_handlers import AgentManager
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.preprocessing.prompt_utils import PromptUtils
+from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.llm_invocation.realtime.file_writer import FileWriter
 from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.utilities.constants import PROMPT_KEY, JSON_MODE_KEY
@@ -19,6 +20,8 @@ from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.realtime.providers.base import BatchProvider, BatchResult
 from agent_actions.llm_invocation.realtime.providers.factory import BatchProviderFactory
+from agent_actions.preprocessing.filter_service import get_filter_service
+from agent_actions.utilities.llm_context_builder import LLMContextBuilder
 logger = logging.getLogger(__name__)
 
 @registry.register_service('batch_service')
@@ -264,121 +267,49 @@ class BatchService:
         if not schema and json_mode:
             from agent_actions.shared.exceptions import ConfigurationError
             raise ConfigurationError('Schema is required for batch processing when json_mode is enabled', context={'agent_config': agent_config.get('agent_type', 'unknown'), 'json_mode': json_mode, 'hint': 'Either provide a schema or set json_mode: false'})
-        raw_prompt = agent_config.get(PROMPT_KEY, '')
-        if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
-            raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
-        if not raw_prompt:
-            raw_prompt = 'Process the following content: {content}'
+        # Load and validate prompt using unified formatter (Phase 3: Issue #492)
+        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
         tools_path = self._resolve_tools_path(agent_config)
         if tools_path and tools_path not in sys.path:
             sys.path.insert(0, tools_path)
         self.context_map = {}
+
+        # Initialize filter service for WHERE clause and conditional evaluation
+        filter_service = get_filter_service()
         conditional_clause = agent_config.get('conditional_clause', '')
         where_clause_config = agent_config.get('where_clause')
-        if where_clause_config:
-            scope = where_clause_config.get('scope', 'item')
-            if scope != 'item':
-                where_clause_config = None
+
         prepared_data = []
         for row in data:
             custom_id = row.get('target_id')
             if not custom_id:
                 custom_id = ProcessorUtils.generate_target_id()
                 row['target_id'] = custom_id
+
+            # Store row in context map with initial status
             row_with_meta = row.copy()
             row_with_meta['_batch_filter_status'] = 'included'
             self.context_map[custom_id] = row_with_meta
+
+            # Extract row content for filtering
             if 'source_guid' in row and 'content' in row:
                 row_content = row['content']
             else:
                 row_content = row
-            where_clause_config = agent_config.get('where_clause')
-            should_skip = False
-            if where_clause_config and where_clause_config.get('scope') == 'item':
-                behavior = where_clause_config.get('behavior', 'filter')
-                if behavior == 'filter':
-                    try:
-                        filter_service = get_global_filter()
-                        logger.info(f"WHERE clause filtering: '{where_clause_config['clause']}'")
-                        logger.info(f"Row content keys: {(list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict')}")
-                        if isinstance(row_content, dict) and 'questionable' in row_content:
-                            logger.info(f"Row questionable value: {row_content['questionable']}")
-                        filter_result = filter_service.filter_item(row_content, where_clause_config['clause'])
-                        if hasattr(filter_result, 'success'):
-                            logger.info(f'Filter result - success: {filter_result.success}, matched: {filter_result.matched}')
-                            if filter_result.error:
-                                logger.warning(f'Filter error: {filter_result.error}')
-                            if not filter_result.success:
-                                passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                                if not passthrough_on_error:
-                                    should_skip = True
-                                    if custom_id in self.context_map:
-                                        self.context_map[custom_id]['_batch_filter_status'] = 'filtered'
-                                    logger.info('Filtering item due to filter error and passthrough_on_error=False')
-                            elif not filter_result.matched:
-                                should_skip = True
-                                if custom_id in self.context_map:
-                                    self.context_map[custom_id]['_batch_filter_status'] = 'filtered'
-                                logger.info(f'Filtering item - WHERE clause not matched')
-                        else:
-                            matched = bool(filter_result)
-                            logger.info(f'Filter result (boolean): {matched}')
-                            if not matched:
-                                should_skip = True
-                                if custom_id in self.context_map:
-                                    self.context_map[custom_id]['_batch_filter_status'] = 'filtered'
-                                logger.info(f'Filtering item - WHERE clause not matched (boolean result)')
-                    except Exception as e:
-                        logger.warning(f'Error in WHERE clause evaluation: {e}')
-                        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                        if not passthrough_on_error:
-                            should_skip = True
-                            if custom_id in self.context_map:
-                                self.context_map[custom_id]['_batch_filter_status'] = 'filtered'
-                elif behavior == 'skip':
-                    try:
-                        filter_service = get_global_filter()
-                        logger.info(f"WHERE clause skipping: '{where_clause_config['clause']}'")
-                        logger.info(f"Row content keys: {(list(row_content.keys()) if isinstance(row_content, dict) else 'Not a dict')}")
-                        if isinstance(row_content, dict) and 'questionable' in row_content:
-                            logger.info(f"Row questionable value: {row_content['questionable']}")
-                        filter_result = filter_service.filter_item(row_content, where_clause_config['clause'])
-                        if hasattr(filter_result, 'success'):
-                            logger.info(f'Skip filter result - success: {filter_result.success}, matched: {filter_result.matched}')
-                            if filter_result.error:
-                                logger.warning(f'Skip filter error: {filter_result.error}')
-                            if not filter_result.success:
-                                passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                                if not passthrough_on_error:
-                                    should_skip = True
-                                    if custom_id in self.context_map:
-                                        self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
-                                    logger.info('Skipping item due to filter error and passthrough_on_error=False')
-                            elif not filter_result.matched:
-                                should_skip = True
-                                if custom_id in self.context_map:
-                                    self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
-                                logger.info(f'Skipping item - WHERE clause not matched')
-                        else:
-                            matched = bool(filter_result)
-                            logger.info(f'Skip filter result (boolean): {matched}')
-                            if not matched:
-                                should_skip = True
-                                if custom_id in self.context_map:
-                                    self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
-                                logger.info(f'Skipping item - WHERE clause not matched (boolean result)')
-                    except Exception as e:
-                        logger.warning(f'Error in WHERE clause evaluation: {e}')
-                        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                        if not passthrough_on_error:
-                            should_skip = True
-                            if custom_id in self.context_map:
-                                self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
-            elif conditional_clause and (not execute_user_defined_function(conditional_clause, row_content)):
-                should_skip = True
-                if custom_id in self.context_map:
-                    self.context_map[custom_id]['_batch_filter_status'] = 'skipped'
-            if should_skip:
+
+            # Apply WHERE clause and conditional filtering using centralized FilterService
+            filter_status = filter_service.filter_single_item(
+                row_content,
+                where_clause_config if where_clause_config and where_clause_config.get('scope') == 'item' else None,
+                conditional_clause if conditional_clause else None
+            )
+
+            # Update context map with filter status
+            if custom_id in self.context_map:
+                self.context_map[custom_id]['_batch_filter_status'] = filter_status.status
+
+            # Skip items that shouldn't be included
+            if not filter_status.should_include:
                 continue
 
             # Build field context with historical data (same as online mode)
@@ -420,22 +351,12 @@ class BatchService:
                 prompt_context = field_context
                 llm_context = {}
 
-            # Build LLM context: start with current row, then add included fields
-            # Start with current row content (source in batch mode)
-            llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
-
-            # Remove dropped fields (they were removed from prompt_context['source'])
-            if context_scope and context_scope.get('drop'):
-                for field_ref in context_scope.get('drop', []):
-                    try:
-                        _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                        llm_full_context.pop(field_name, None)
-                    except ValueError:
-                        continue
-
-            # Add observed fields from llm_context (fields from previous actions)
-            if llm_context:
-                llm_full_context.update(llm_context)
+            # Build LLM context using unified builder (Phase 2: Issue #492)
+            llm_full_context = LLMContextBuilder.build_llm_context_for_batch(
+                row_content=row_content,
+                llm_context=llm_context,
+                context_scope=context_scope
+            )
 
             # Render prompt with prompt_context (fields not dropped)
             formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
