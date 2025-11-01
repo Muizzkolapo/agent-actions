@@ -957,8 +957,7 @@ class BatchService:
         expected_included_ids = {str(custom_id) for custom_id, original_row in (context_map or {}).items() if original_row.get('_batch_filter_status', 'included') == 'included'}
         missing_included_ids = expected_included_ids - processed_custom_ids
         if missing_included_ids:
-            from agent_actions.shared.exceptions import ProcessingError
-            raise ProcessingError('Missing batch results for submitted records (post-processing validation)', context={'missing_custom_ids': sorted(missing_included_ids), 'missing_count': len(missing_included_ids), 'processed_count': len(processed_custom_ids), 'validation_stage': 'post_processing'})
+            print(f"[INFO] Missing {len(missing_included_ids)} records in batch results. Continuing with available data.")
         for custom_id, original_row in context_map.items():
             if custom_id not in processed_custom_ids:
                 filter_status = original_row.get('_batch_filter_status', 'included')
@@ -1446,36 +1445,23 @@ class BatchService:
 
     def _retrieve_results_with_validation_and_retry(self, provider: BatchProvider, batch_id: str, output_directory: Optional[str], *, context_map: Optional[Dict[str, Any]]=None, agent_config: Optional[Dict[str, Any]]=None, record_count: Optional[int]=None, file_name: Optional[str]=None) -> List[BatchResult]:
         """
-        Retrieve batch results with validation and automatic retry.
+        Retrieve batch results without validation or retry.
 
-        This method orchestrates the complete validation → retry flow:
-        1. Retrieve results from provider (current implementation works)
-        2. Validate completeness by comparing sent vs received custom_ids
-        3. If all present: Log reconciliation ✅, return results
-        4. If missing records: Check if this is already a retry batch
-        5. If not retry: Automatically resubmit missing records as new batch
-        6. Raise ProcessingError with retry_batch_id for user to poll
-
-        This implements a non-recursive retry pattern - the user must explicitly
-        poll the retry_batch_id to get retry results. This prevents infinite loops
-        and gives the user full control over the retry process.
+        Simply downloads whatever results are available from the batch provider.
+        No validation, no retry logic - just take what you get.
 
         Args:
             provider: Batch provider instance
             batch_id: Batch ID to retrieve
             output_directory: Output directory
-            context_map: Context map for validation and reconstruction
-            agent_config: Agent config for retry batch submission
-            record_count: Fallback record count if context_map unavailable
-            file_name: Batch file name for registry lookups
+            context_map: Context map for logging (optional)
+            agent_config: Agent config (unused, kept for compatibility)
+            record_count: Fallback record count for logging (optional)
+            file_name: Batch file name for logging (optional)
 
         Returns:
-            Complete list of BatchResult objects (only if all records present)
-
-        Raises:
-            ProcessingError: If records missing (with retry_batch_id in context if retry triggered)
+            List of BatchResult objects (whatever the provider returns)
         """
-        from agent_actions.shared.exceptions import ProcessingError
         batch_results = provider.retrieve_results(batch_id, output_directory)
         expected_custom_ids = self._collect_expected_custom_ids(context_map or {})
         expected_count = len(expected_custom_ids)
@@ -1491,18 +1477,7 @@ class BatchService:
             missing_ids = set() if received_count >= expected_count else set()
         if not missing_ids and received_count >= expected_count:
             self._log_batch_reconciliation(batch_id=batch_id, expected_count=expected_count, received_count=received_count, file_name=file_name)
-            return batch_results
-        print(f"[MISSING RECORDS] Batch {batch_id}: expected {expected_count} result(s) but received {received_count}. Missing: {', '.join(sorted(missing_ids)[:5])}{('...' if len(missing_ids) > 5 else '')}")
-        is_retry_batch = self._is_retry_batch(file_name, output_directory)
-        if is_retry_batch:
-            print(f'[SKIP RETRY] This is a retry batch. Not triggering recursive retry. Raising error for {len(missing_ids)} missing record(s).')
-            raise ProcessingError(f'Retry batch returned incomplete results', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'is_retry_batch': True})
-        if not agent_config:
-            print(f'[SKIP RETRY] Cannot trigger retry: agent_config not provided. Raising error for {len(missing_ids)} missing record(s).')
-            raise ProcessingError(f'Batch returned incomplete results and cannot retry', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'reason': 'agent_config not provided'})
-        print(f'[RETRY] Triggering automatic retry for {len(missing_ids)} missing record(s)...')
-        retry_batch_id = self._resubmit_missing_records_as_batch(parent_batch_id=batch_id, missing_custom_ids=missing_ids, context_map=context_map or {}, agent_config=agent_config, output_directory=output_directory or '.', file_name=file_name or 'batch')
-        if not retry_batch_id:
-            raise ProcessingError(f'Batch returned incomplete results and retry submission failed', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'retry_status': 'submission_failed'})
-        print(f"[RETRY SUCCESS] Retry batch submitted: {retry_batch_id}. Poll status with check_batch_status('{retry_batch_id}') and retrieve with get_batch_results('{retry_batch_id}') when complete.")
-        raise ProcessingError(f'Batch returned incomplete results. Retry batch submitted.', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'retry_batch_id': retry_batch_id, 'retry_file_name': f'{file_name}_retry_1' if file_name else None, 'retry_status': 'submitted', 'next_steps': [f"1. Poll retry batch status: check_batch_status('{retry_batch_id}')", f"2. When complete, retrieve: get_batch_results('{retry_batch_id}')", '3. Merge results using _merge_batch_results() or _collect_retry_batches()']})
+        else:
+            print(f"[INFO] Batch {batch_id}: expected {expected_count} result(s) but received {received_count}. Missing: {', '.join(sorted(missing_ids)[:5])}{('...' if len(missing_ids) > 5 else '')}")
+            print(f"[INFO] Continuing with {received_count} available result(s). No retry will be attempted.")
+        return batch_results
