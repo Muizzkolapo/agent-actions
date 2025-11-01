@@ -24,36 +24,16 @@ logger = logging.getLogger(__name__)
 @registry.register_service('batch_service')
 class BatchService:
     """
-    Service for managing batch processing operations with validation and retry.
+    Service for managing batch processing operations.
 
-    Configuration:
-    -------------
-    Users can configure batch retry behavior via action config:
-
-    ```yaml
-    actions:
-      - name: process_data
-        model: gpt-4o-mini
-        vendor: openai
-        run_mode: batch
-        batch_retry:
-          max_retry_depth: 2  # Optional, default 2 (total 3 attempts per record)
-    ```
-
-    **max_retry_depth**: Maximum number of retry attempts for failed records
-    - Default: 2 (total 3 attempts: initial + 2 retries)
-    - Range: 0-10 (0 disables automatic retry)
-    - Records exceeding max depth are written to Dead Letter Queue (DLQ)
+    This service downloads whatever batch results are available from the provider.
+    No automatic retry logic - incomplete results are accepted and processed as-is.
 
     Example workflow:
     1. Submit batch with 100 records
-    2. 95 succeed, 5 fail → Automatic retry batch created (attempt 1/3)
-    3. 4 succeed on retry, 1 fails → Second retry batch created (attempt 2/3)
-    4. If max_retry_depth exceeded → Record written to DLQ file
-
-    Audit files:
-    - `{batch_name}_retry_manifest.json`: Complete audit trail
-    - `dead_letter_queue.jsonl`: Permanently failed records
+    2. Batch completes with 95 results
+    3. Process the 95 available results (5 missing records are logged but not retried)
+    4. Continue workflow with available data
     """
 
     def _create_passthrough_data(self, data, agent_config, output_directory):
@@ -148,7 +128,6 @@ class BatchService:
             with open(output_src_path, 'w') as f:
                 json.dump([src_text], f, indent=2)
     force_batch = False
-    _MAX_RETRY_DEPTH = 2
 
     def __init__(self, provider: Optional[BatchProvider]=None, agent_indices: Optional[Dict[str, int]]=None, dependency_configs: Optional[Dict[str, Dict]]=None):
         """
@@ -208,35 +187,6 @@ class BatchService:
         except Exception as e:
             from agent_actions.shared.exceptions import ConfigurationError
             raise ConfigurationError(f'Failed to create provider for batch_provider_{provider_type}: {e}', context={'provider_type': provider_type}, cause=e)
-
-    def _load_retry_config(self, agent_config: Optional[Dict[str, Any]]) -> int:
-        """
-        Load retry configuration from agent config.
-
-        Allows users to configure max retry depth via agent_config:
-        {
-            "batch_retry": {
-                "max_retry_depth": 2  # Default: 2 (total 3 attempts)
-            }
-        }
-
-        Args:
-            agent_config: Agent configuration dict
-
-        Returns:
-            max_retry_depth (int): Maximum retry attempts (0-10)
-        """
-        max_retry_depth = self._MAX_RETRY_DEPTH
-        if not agent_config:
-            return max_retry_depth
-        batch_retry_config = agent_config.get('batch_retry', {})
-        if 'max_retry_depth' in batch_retry_config:
-            depth = batch_retry_config['max_retry_depth']
-            if isinstance(depth, int) and 0 <= depth <= 10:
-                max_retry_depth = depth
-            else:
-                print(f'[WARN] Invalid max_retry_depth: {depth}. Must be integer 0-10. Using default {self._MAX_RETRY_DEPTH}')
-        return max_retry_depth
 
     @staticmethod
     def _separate_side_output(items):
@@ -813,7 +763,7 @@ class BatchService:
             output_directory: The target output directory (e.g., node_X_agenttype)
             base_directory: The base directory for relative path calculation
             file_path: The original file path being processed
-            agent_config: Agent configuration (optional, enables automatic retry on missing records)
+            agent_config: Agent configuration (optional, for metadata)
         """
         try:
             provider = self._get_provider_for_batch_id(batch_id, output_directory)
@@ -957,8 +907,7 @@ class BatchService:
         expected_included_ids = {str(custom_id) for custom_id, original_row in (context_map or {}).items() if original_row.get('_batch_filter_status', 'included') == 'included'}
         missing_included_ids = expected_included_ids - processed_custom_ids
         if missing_included_ids:
-            from agent_actions.shared.exceptions import ProcessingError
-            raise ProcessingError('Missing batch results for submitted records (post-processing validation)', context={'missing_custom_ids': sorted(missing_included_ids), 'missing_count': len(missing_included_ids), 'processed_count': len(processed_custom_ids), 'validation_stage': 'post_processing'})
+            print(f"[INFO] Missing {len(missing_included_ids)} records in batch results. Continuing with available data.")
         for custom_id, original_row in context_map.items():
             if custom_id not in processed_custom_ids:
                 filter_status = original_row.get('_batch_filter_status', 'included')
@@ -1107,375 +1056,25 @@ class BatchService:
         label = file_name or batch_id
         print(f'{prefix} Batch reconciliation for {label}: expected {expected_count} result(s), received {received_count}')
 
-    def _reconstruct_tasks_for_retry(self, *, missing_custom_ids: Set[str], context_map: Dict[str, Any], agent_config: Dict[str, Any], output_directory: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Reconstruct batch tasks for missing records from context map.
-
-        Rebuilds the full task structure (prompt + content + schema) for records
-        that were submitted to the batch API but never received a result.
-
-        Args:
-            missing_custom_ids: Set of custom_ids that need to be retried
-            context_map: Original context map with full row data
-            agent_config: Agent configuration (for prompt, schema, etc.)
-            output_directory: Optional output directory for historical node loading
-
-        Returns:
-            List of reconstructed tasks ready for resubmission
-        """
-        provider = self._get_provider_for_config(agent_config)
-        schema = self._prepare_schema(agent_config, provider)
-        raw_prompt = agent_config.get(PROMPT_KEY, '')
-        if isinstance(raw_prompt, str) and raw_prompt.startswith('$'):
-            raw_prompt = PromptLoader.load_prompt(raw_prompt[1:])
-        if not raw_prompt:
-            raw_prompt = 'Process the following content: {content}'
-        tools_path = self._resolve_tools_path(agent_config)
-        if tools_path and tools_path not in sys.path:
-            sys.path.insert(0, tools_path)
-        prepared_data = []
-        for custom_id in missing_custom_ids:
-            if custom_id not in context_map:
-                continue
-            original_row = context_map[custom_id]
-            if 'source_guid' in original_row and 'content' in original_row:
-                row_content = original_row['content']
-            else:
-                row_content = original_row
-
-            # Build field context with historical data (same as online mode)
-            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-            agent_name = agent_config.get('agent_type', agent_config.get('name', 'unknown'))
-
-            # Build namespaced field context with historical node loading
-            field_context = ContextScopeProcessor.build_field_context_with_history(
-                contents=row_content if isinstance(row_content, dict) else {},
-                agent_name=agent_name,
-                agent_config=agent_config,
-                agent_indices=self.agent_indices,
-                dependency_configs=self.dependency_configs,
-                source_content=row_content,  # Source is the current row in batch mode
-                current_item=context_map.get(custom_id),
-                file_path=output_directory  # Use output_directory as base for historical node loading
-            )
-
-            # Apply context_scope to split field_context into prompt/llm/passthrough contexts
-            context_scope = agent_config.get('context_scope', {})
-            if context_scope:
-                prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
-                    field_context, context_scope
-                )
-
-                # Note: passthrough_fields not stored here since retry uses existing context_map
-            else:
-                prompt_context = field_context
-                llm_context = {}
-
-            # Build LLM context: start with current row, then add included fields
-            # Start with current row content (source in batch mode)
-            llm_full_context = row_content.copy() if isinstance(row_content, dict) else {}
-
-            # Remove dropped fields
-            if context_scope and context_scope.get('drop'):
-                for field_ref in context_scope.get('drop', []):
-                    try:
-                        _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                        llm_full_context.pop(field_name, None)
-                    except ValueError:
-                        continue
-
-            # Add observed fields from llm_context (fields from previous actions)
-            if llm_context:
-                llm_full_context.update(llm_context)
-
-            # Render prompt with prompt_context (fields not dropped)
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
-            # Use llm_full_context for LLM (includes fields from context_scope.observe)
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
-                formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
-            )
-            cleaned_row = llm_full_context
-            prepared_item = {'target_id': custom_id, 'content': cleaned_row, 'prompt': formatted_prompt}
-            prepared_data.append(prepared_item)
-        provider_config = agent_config.copy()
-        provider_config['compiled_schema'] = schema
-        tasks = provider.prepare_tasks(prepared_data, provider_config)
-        return tasks
-
-    def _resubmit_missing_records_as_batch(self, *, parent_batch_id: str, missing_custom_ids: Set[str], context_map: Dict[str, Any], agent_config: Dict[str, Any], output_directory: str, file_name: str) -> Optional[str]:
-        """
-        Resubmit missing records as a new batch job (main orchestration method).
-
-        Implements the Dead Letter Queue (DLQ) pattern for handling batch failures.
-        Creates audit files and tracks retry attempts to prevent infinite loops.
-
-        Flow:
-        1. Check if retry is allowed (depth limit + duplicate prevention)
-        2. Read parent batch retry attempt from registry
-        3. Check retry depth against _MAX_RETRY_DEPTH
-        4. Reconstruct tasks for missing records
-        5. Submit retry batch with incremented attempt number
-        6. Mark parent batch as having retry
-        7. Create/update retry manifest for audit trail
-        8. Archive permanently failed records to DLQ if max retries exceeded
-
-        Args:
-            parent_batch_id: ID of the original/parent batch
-            missing_custom_ids: Set of custom_ids that need retry
-            context_map: Original context map
-            agent_config: Agent configuration
-            output_directory: Output directory for batch files
-            file_name: Name of the original file
-
-        Returns:
-            Retry batch ID if resubmitted, None if retry not allowed or no records to retry
-        """
-        if not missing_custom_ids:
-            return None
-        max_retry_depth = self._load_retry_config(agent_config)
-        batch_dir = Path(output_directory) / 'batch'
-        registry_file = batch_dir / '.batch_registry.json'
-        if not registry_file.exists():
-            logger.warning(f'Registry not found, cannot retry: {registry_file}')
-            return None
-        with open(registry_file, 'r') as f:
-            registry = json.load(f)
-        parent_entry = None
-        for entry_file_name, entry in registry.items():
-            if entry.get('batch_id') == parent_batch_id:
-                parent_entry = entry
-                break
-        if not parent_entry:
-            logger.warning(f'Parent batch {parent_batch_id} not found in registry')
-            return None
-        if parent_entry.get('has_retry_batch', False):
-            print(f'⚠️ Parent batch {parent_batch_id} already has a retry batch, skipping duplicate retry')
-            return None
-        current_retry_attempt = parent_entry.get('retry_attempt', 0)
-        next_retry_attempt = current_retry_attempt + 1
-        if next_retry_attempt > max_retry_depth:
-            print(f'⚠️ Max retry depth ({max_retry_depth}) exceeded for {file_name}')
-            print(f'   Archiving {len(missing_custom_ids)} permanently failed record(s) to DLQ')
-            self._append_to_dlq(missing_custom_ids=missing_custom_ids, context_map=context_map, output_directory=output_directory, parent_batch_id=parent_batch_id, retry_attempt=current_retry_attempt)
-            return None
-        print(f'🔄 Retrying {len(missing_custom_ids)} missing record(s) from {file_name} (attempt {next_retry_attempt}/{max_retry_depth + 1})')
-        retry_tasks = self._reconstruct_tasks_for_retry(missing_custom_ids=missing_custom_ids, context_map=context_map, agent_config=agent_config, output_directory=output_directory)
-        if not retry_tasks:
-            print('⚠️ Failed to reconstruct tasks for retry')
-            return None
-        try:
-            provider = self._get_provider_for_config(agent_config)
-            provider_type = agent_config.get('model_vendor')
-            if not provider_type:
-                from agent_actions.shared.exceptions import ConfigValidationError
-                raise ConfigValidationError('model_vendor', "Missing required field 'model_vendor' for batch retry processing.")
-            provider_type = provider_type.lower()
-            retry_batch_name = f'{Path(file_name).stem}_retry_{next_retry_attempt}'
-            retry_batch_id = provider.submit_batch(retry_tasks, retry_batch_name, output_directory)
-            self._save_batch_job_id(batch_id=retry_batch_id, output_directory=output_directory, file_name=f'{retry_batch_name}.json', provider_type=provider_type, parent_batch_id=parent_batch_id, retry_attempt=next_retry_attempt, record_count=len(retry_tasks), retry_for_records=sorted(list(missing_custom_ids)))
-            self._mark_parent_batch_has_retry(parent_batch_id=parent_batch_id, output_directory=output_directory)
-            self._update_retry_manifest(parent_batch_id=parent_batch_id, retry_batch_id=retry_batch_id, missing_custom_ids=missing_custom_ids, retry_attempt=next_retry_attempt, output_directory=output_directory)
-            print(f'✅ Retry batch submitted: {retry_batch_id}')
-            return retry_batch_id
-        except Exception as e:
-            from agent_actions.shared.exceptions import ExternalServiceError
-            logger.error(f'Failed to submit retry batch: {e}')
-            raise ExternalServiceError(provider_type, f'Failed to submit retry batch: {e}', cause=e)
-
-    def _mark_parent_batch_has_retry(self, *, parent_batch_id: str, output_directory: str) -> None:
-        """
-        Mark parent batch as having a retry batch to prevent duplicate retries.
-
-        Updates the registry to set has_retry_batch=True for the parent batch.
-
-        Args:
-            parent_batch_id: ID of the parent batch
-            output_directory: Output directory for registry
-        """
-        batch_dir = Path(output_directory) / 'batch'
-        registry_file = batch_dir / '.batch_registry.json'
-        if not registry_file.exists():
-            return
-        try:
-            with open(registry_file, 'r') as f:
-                registry = json.load(f)
-            for entry_file_name, entry in registry.items():
-                if entry.get('batch_id') == parent_batch_id:
-                    entry['has_retry_batch'] = True
-                    break
-            with open(registry_file, 'w') as f:
-                json.dump(registry, f, indent=2)
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.warning(f'Failed to mark parent batch as having retry: {e}')
-
-    def _create_retry_manifest(self, *, parent_batch_id: str, retry_batch_id: str, missing_custom_ids: Set[str], retry_attempt: int, output_directory: str) -> None:
-        """
-        Create comprehensive retry manifest file for audit trail.
-
-        Creates a JSON file documenting all retry attempts for compliance and debugging.
-        Includes timestamps, custom_ids, batch IDs, and attempt numbers.
-
-        Args:
-            parent_batch_id: ID of the original batch
-            retry_batch_id: ID of the retry batch
-            missing_custom_ids: Set of custom_ids being retried
-            retry_attempt: Current retry attempt number
-            output_directory: Output directory for manifest file
-        """
-        from datetime import datetime
-        batch_dir = Path(output_directory) / 'batch'
-        ensure_directory_exists(batch_dir)
-        manifest_file = batch_dir / f'{parent_batch_id}_retry_manifest.json'
-        manifest = {'parent_batch_id': parent_batch_id, 'created_at': datetime.now().isoformat(), 'total_retries': 1, 'retry_attempts': [{'attempt_number': retry_attempt, 'retry_batch_id': retry_batch_id, 'timestamp': datetime.now().isoformat(), 'missing_custom_ids': list(missing_custom_ids), 'record_count': len(missing_custom_ids)}]}
-        with open(manifest_file, 'w') as f:
-            json.dump(manifest, f, indent=2)
-
-    def _update_retry_manifest(self, *, parent_batch_id: str, retry_batch_id: str, missing_custom_ids: Set[str], retry_attempt: int, output_directory: str) -> None:
-        """
-        Update existing retry manifest or create new one.
-
-        Appends new retry attempt to manifest file, tracking all retry history.
-
-        Args:
-            parent_batch_id: ID of the original batch
-            retry_batch_id: ID of the retry batch
-            missing_custom_ids: Set of custom_ids being retried
-            retry_attempt: Current retry attempt number
-            output_directory: Output directory for manifest file
-        """
-        from datetime import datetime
-        batch_dir = Path(output_directory) / 'batch'
-        ensure_directory_exists(batch_dir)
-        manifest_file = batch_dir / f'{parent_batch_id}_retry_manifest.json'
-        if manifest_file.exists():
-            try:
-                with open(manifest_file, 'r') as f:
-                    manifest = json.load(f)
-                manifest['total_retries'] += 1
-                manifest['retry_attempts'].append({'attempt_number': retry_attempt, 'retry_batch_id': retry_batch_id, 'timestamp': datetime.now().isoformat(), 'missing_custom_ids': list(missing_custom_ids), 'record_count': len(missing_custom_ids)})
-                with open(manifest_file, 'w') as f:
-                    json.dump(manifest, f, indent=2)
-            except (json.JSONDecodeError, KeyError):
-                self._create_retry_manifest(parent_batch_id=parent_batch_id, retry_batch_id=retry_batch_id, missing_custom_ids=missing_custom_ids, retry_attempt=retry_attempt, output_directory=output_directory)
-        else:
-            self._create_retry_manifest(parent_batch_id=parent_batch_id, retry_batch_id=retry_batch_id, missing_custom_ids=missing_custom_ids, retry_attempt=retry_attempt, output_directory=output_directory)
-
-    def _append_to_dlq(self, *, missing_custom_ids: Set[str], context_map: Dict[str, Any], output_directory: str, parent_batch_id: str, retry_attempt: int) -> None:
-        """
-        Append permanently failed records to Dead Letter Queue (DLQ) file.
-
-        Archives records that exceeded max retry attempts to JSONL file for manual review.
-        Uses JSONL format (one JSON object per line) for easy parsing and streaming.
-
-        Args:
-            missing_custom_ids: Set of custom_ids that permanently failed
-            context_map: Original context map with full record data
-            output_directory: Output directory for DLQ file
-            parent_batch_id: ID of the original batch
-            retry_attempt: Final retry attempt number
-        """
-        from datetime import datetime
-        batch_dir = Path(output_directory) / 'batch'
-        ensure_directory_exists(batch_dir)
-        dlq_file = batch_dir / 'dead_letter_queue.jsonl'
-        with open(dlq_file, 'a') as f:
-            for custom_id in missing_custom_ids:
-                if custom_id not in context_map:
-                    continue
-                original_row = context_map[custom_id]
-                dlq_entry = {'custom_id': custom_id, 'parent_batch_id': parent_batch_id, 'retry_attempt': retry_attempt, 'archived_at': datetime.now().isoformat(), 'reason': 'max_retry_exceeded', 'original_data': original_row}
-                f.write(json.dumps(dlq_entry) + '\n')
-        print(f'📝 Archived {len(missing_custom_ids)} record(s) to DLQ: {dlq_file}')
-
-    def _is_retry_batch(self, file_name: Optional[str], output_directory: str) -> bool:
-        """
-        Check if a batch is a retry batch.
-
-        Retry batches have a parent_batch_id field in the registry, linking them
-        to their original parent batch. This check prevents recursive retries
-        (retry batches don't trigger more retries).
-
-        Args:
-            file_name: Batch file name to check
-            output_directory: Output directory
-
-        Returns:
-            True if this is a retry batch, False otherwise
-        """
-        if not file_name:
-            return False
-        batch_dir = Path(output_directory) / 'batch'
-        registry_file = batch_dir / '.batch_registry.json'
-        if not registry_file.exists():
-            return False
-        try:
-            with open(registry_file, 'r') as f:
-                registry = json.load(f)
-            entry = registry.get(file_name, {})
-            return entry.get('parent_batch_id') is not None
-        except Exception:
-            return False
-
-    def _get_retry_attempt_from_registry(self, file_name: Optional[str], output_directory: str) -> int:
-        """
-        Get the current retry_attempt number for a batch.
-
-        Reads the batch registry to determine which retry attempt this batch
-        represents (0 = original, 1 = first retry, 2 = second retry, etc.).
-
-        Args:
-            file_name: Batch file name
-            output_directory: Output directory
-
-        Returns:
-            Current retry_attempt number (0 for parent batches, 1+ for retry batches)
-        """
-        if not file_name:
-            return 0
-        batch_dir = Path(output_directory) / 'batch'
-        registry_file = batch_dir / '.batch_registry.json'
-        if not registry_file.exists():
-            return 0
-        try:
-            with open(registry_file, 'r') as f:
-                registry = json.load(f)
-            entry = registry.get(file_name, {})
-            return entry.get('retry_attempt', 0)
-        except Exception:
-            return 0
-
     def _retrieve_results_with_validation_and_retry(self, provider: BatchProvider, batch_id: str, output_directory: Optional[str], *, context_map: Optional[Dict[str, Any]]=None, agent_config: Optional[Dict[str, Any]]=None, record_count: Optional[int]=None, file_name: Optional[str]=None) -> List[BatchResult]:
         """
-        Retrieve batch results with validation and automatic retry.
+        Retrieve batch results without validation or retry.
 
-        This method orchestrates the complete validation → retry flow:
-        1. Retrieve results from provider (current implementation works)
-        2. Validate completeness by comparing sent vs received custom_ids
-        3. If all present: Log reconciliation ✅, return results
-        4. If missing records: Check if this is already a retry batch
-        5. If not retry: Automatically resubmit missing records as new batch
-        6. Raise ProcessingError with retry_batch_id for user to poll
-
-        This implements a non-recursive retry pattern - the user must explicitly
-        poll the retry_batch_id to get retry results. This prevents infinite loops
-        and gives the user full control over the retry process.
+        Simply downloads whatever results are available from the batch provider.
+        No validation, no retry logic - just take what you get.
 
         Args:
             provider: Batch provider instance
             batch_id: Batch ID to retrieve
             output_directory: Output directory
-            context_map: Context map for validation and reconstruction
-            agent_config: Agent config for retry batch submission
-            record_count: Fallback record count if context_map unavailable
-            file_name: Batch file name for registry lookups
+            context_map: Context map for logging (optional)
+            agent_config: Agent config (unused, kept for compatibility)
+            record_count: Fallback record count for logging (optional)
+            file_name: Batch file name for logging (optional)
 
         Returns:
-            Complete list of BatchResult objects (only if all records present)
-
-        Raises:
-            ProcessingError: If records missing (with retry_batch_id in context if retry triggered)
+            List of BatchResult objects (whatever the provider returns)
         """
-        from agent_actions.shared.exceptions import ProcessingError
         batch_results = provider.retrieve_results(batch_id, output_directory)
         expected_custom_ids = self._collect_expected_custom_ids(context_map or {})
         expected_count = len(expected_custom_ids)
@@ -1491,18 +1090,7 @@ class BatchService:
             missing_ids = set() if received_count >= expected_count else set()
         if not missing_ids and received_count >= expected_count:
             self._log_batch_reconciliation(batch_id=batch_id, expected_count=expected_count, received_count=received_count, file_name=file_name)
-            return batch_results
-        print(f"[MISSING RECORDS] Batch {batch_id}: expected {expected_count} result(s) but received {received_count}. Missing: {', '.join(sorted(missing_ids)[:5])}{('...' if len(missing_ids) > 5 else '')}")
-        is_retry_batch = self._is_retry_batch(file_name, output_directory)
-        if is_retry_batch:
-            print(f'[SKIP RETRY] This is a retry batch. Not triggering recursive retry. Raising error for {len(missing_ids)} missing record(s).')
-            raise ProcessingError(f'Retry batch returned incomplete results', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'is_retry_batch': True})
-        if not agent_config:
-            print(f'[SKIP RETRY] Cannot trigger retry: agent_config not provided. Raising error for {len(missing_ids)} missing record(s).')
-            raise ProcessingError(f'Batch returned incomplete results and cannot retry', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'reason': 'agent_config not provided'})
-        print(f'[RETRY] Triggering automatic retry for {len(missing_ids)} missing record(s)...')
-        retry_batch_id = self._resubmit_missing_records_as_batch(parent_batch_id=batch_id, missing_custom_ids=missing_ids, context_map=context_map or {}, agent_config=agent_config, output_directory=output_directory or '.', file_name=file_name or 'batch')
-        if not retry_batch_id:
-            raise ProcessingError(f'Batch returned incomplete results and retry submission failed', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'retry_status': 'submission_failed'})
-        print(f"[RETRY SUCCESS] Retry batch submitted: {retry_batch_id}. Poll status with check_batch_status('{retry_batch_id}') and retrieve with get_batch_results('{retry_batch_id}') when complete.")
-        raise ProcessingError(f'Batch returned incomplete results. Retry batch submitted.', context={'batch_id': batch_id, 'file_name': file_name, 'missing_custom_ids': sorted(missing_ids), 'missing_count': len(missing_ids), 'retry_batch_id': retry_batch_id, 'retry_file_name': f'{file_name}_retry_1' if file_name else None, 'retry_status': 'submitted', 'next_steps': [f"1. Poll retry batch status: check_batch_status('{retry_batch_id}')", f"2. When complete, retrieve: get_batch_results('{retry_batch_id}')", '3. Merge results using _merge_batch_results() or _collect_retry_batches()']})
+        else:
+            print(f"[INFO] Batch {batch_id}: expected {expected_count} result(s) but received {received_count}. Missing: {', '.join(sorted(missing_ids)[:5])}{('...' if len(missing_ids) > 5 else '')}")
+            print(f"[INFO] Continuing with {received_count} available result(s). No retry will be attempted.")
+        return batch_results
