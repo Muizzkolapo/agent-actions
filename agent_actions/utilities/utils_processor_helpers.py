@@ -6,7 +6,7 @@ from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
 from .utils_processor_utils import ProcessorUtils
 
-def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None) -> tuple[Any, bool]:
+def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_context: Optional[Any]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
@@ -15,27 +15,30 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
 
     Data Structure Handling:
         When context has nested structure (e.g., {source_guid, content{}, target_id}),
-        this function extracts the 'content' dict before sending to the LLM. This ensures:
-        - Metadata fields (source_guid, target_id, node_id, lineage) never reach LLM
-        - Only actual data fields from 'content' are sent to LLM
+        this function extracts the 'content' dict before sending to tools/guards. This ensures:
+        - Metadata fields (source_guid, target_id, node_id, lineage) are available for guards
+        - Only actual data fields from 'content' are used for evaluation
 
-    Context Preparation (Phase 2: Issue #487):
-        Context is now prepared by PromptPreparationService before being passed here.
-        This function receives already-transformed context (with context_scope applied).
-        - context_scope.observe: Already merged into context
-        - context_scope.drop: Already removed from context
-        - context_scope.passthrough: Handled later in transform_with_passthrough()
+    Context Separation (Phase 2: Issue #487 - Critical Fix):
+        This function now receives TWO contexts:
+        - context: Original, untransformed data for guard evaluation and tools/UDFs
+        - llm_context: Transformed data (with context_scope.drop applied) for the LLM
+
+        This separation is CRITICAL because:
+        - Guards/tools need access to ALL fields (even those in context_scope.drop)
+        - LLM should only see transformed context (with context_scope.drop applied)
 
     Args:
         agent_config: Agent configuration including guard conditions
         agent_name: Name of the agent being executed
-        context: Prepared data context for agent execution (already transformed by
-                 PromptPreparationService). May be flat dict or nested structure
-                 with 'content' key containing the actual data.
+        context: Original data context for guard evaluation and tools/UDFs.
+                 May be flat dict or nested structure with 'content' key.
         formatted_prompt: Formatted prompt for the agent (already has few-shot samples)
         tools_path: Optional path to tool functions
         tool_args: Optional tool arguments
         source_content: Optional source content
+        llm_context: Optional transformed context for LLM (with context_scope applied).
+                     If not provided, uses context for both guards and LLM.
 
     Returns:
         Tuple of (response/context, was_executed) where was_executed indicates
@@ -48,18 +51,20 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
     if _should_filter_where_clause(agent_config, context):
         return (None, False)
 
-    # Extract content from nested structure if needed
+    # Extract content from nested structure if needed (for tools/guards)
     if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):
         processed_context = context['content']
     else:
         processed_context = context
 
-    # Context is already prepared by PromptPreparationService (Phase 2: Issue #487)
-    # No additional transformations needed
+    # Use llm_context if provided (transformed for LLM), otherwise use processed_context
+    # This allows context_scope.drop to work correctly while keeping original data for tools
+    llm_data = llm_context if llm_context is not None else processed_context
+
     response = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
-        processed_context,
+        llm_data,  # Send transformed context to LLM
         formatted_prompt,
         tools_path=tools_path,
         tool_args=tool_args,

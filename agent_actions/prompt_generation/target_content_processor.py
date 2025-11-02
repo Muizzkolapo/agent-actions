@@ -253,11 +253,21 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
+                # Agent was not executed (skipped by guard or filtered out)
                 if generated_data is None:
+                    # Filtered out entirely (behavior: 'filter')
                     return []
+                # Skipped but passed through (behavior: 'skip')
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 lineage = ProcessorUtils.build_lineage(item, node_id)
-                processed = [ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)]
+                processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                # Add metadata indicating this item was skipped (parity with batch mode)
+                if 'metadata' not in processed_item:
+                    processed_item['metadata'] = {}
+                processed_item['metadata']['skipped_by_where_clause'] = True
+                processed_item['metadata']['agent_type'] = 'passthrough'
+                processed_item['metadata']['reason'] = 'where_clause_not_matched'
+                processed = [processed_item]
             return processed
         except Exception as e:
             from agent_actions.shared.exceptions import ProcessingError
@@ -292,6 +302,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         Apply WHERE clause filtering at item level if configured.
 
+        IMPORTANT: This method only applies 'filter' behavior (items that don't match
+        are removed entirely). For 'skip' behavior, items are handled in _process_single_item
+        where they pass through with skip metadata.
+
         Args:
             data: List of data items to filter
 
@@ -304,6 +318,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
         scope = where_clause_config.scope if hasattr(where_clause_config, 'scope') else where_clause_config.get('scope')
         if scope != 'item':
+            return data
+
+        # Get behavior - default to 'filter' for backward compatibility
+        behavior = where_clause_config.behavior if hasattr(where_clause_config, 'behavior') else where_clause_config.get('behavior', 'filter')
+
+        # Skip behavior is handled in _process_single_item via run_dynamic_agent
+        # Only apply filtering here for 'filter' behavior
+        if behavior == 'skip':
             return data
 
         # Use centralized filter service
@@ -353,11 +375,20 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
+                # Agent was not executed (skipped by guard or filtered out)
                 if generated_data is None:
+                    # Filtered out entirely (behavior: 'filter')
                     return []
+                # Skipped but passed through (behavior: 'skip')
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 lineage = ProcessorUtils.build_lineage(item, node_id)
                 processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                # Add metadata indicating this item was skipped (parity with batch mode)
+                if 'metadata' not in processed_item:
+                    processed_item['metadata'] = {}
+                processed_item['metadata']['skipped_by_where_clause'] = True
+                processed_item['metadata']['agent_type'] = 'passthrough'
+                processed_item['metadata']['reason'] = 'where_clause_not_matched'
                 processed_item = ProcessorUtils.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
                 processed = [processed_item]
             return processed

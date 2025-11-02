@@ -75,15 +75,19 @@ class DataGenerator(IGenerator):
 
             # Execute agent with prepared prompt and context
             # Note: prep_result.formatted_prompt already includes few-shot samples
+            # CRITICAL: Pass BOTH contexts to run_dynamic_agent:
+            # - contents: Original data for guard evaluation and tools/UDFs (can access all fields)
+            # - llm_context: Transformed data for LLM (has context_scope.drop applied)
             tool_args = self.agent_config.get('tool_args', {})
             response, executed = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
-                prep_result.llm_context,  # Already built and ready
+                contents,  # Original contents for guards/tools/UDFs
                 prep_result.formatted_prompt,  # Already has few-shot samples
                 tools_path=self.agent_config.get('tools', {}).get('path'),
                 tool_args=tool_args,
-                source_content=source_content
+                source_content=source_content,
+                llm_context=prep_result.llm_context  # Transformed context for LLM
             )
 
             return (response, executed, prep_result.passthrough_fields)
