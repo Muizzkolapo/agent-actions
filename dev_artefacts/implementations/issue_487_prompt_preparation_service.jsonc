@@ -1,0 +1,506 @@
+{
+  "issue": "487",
+  "title": "Extract Shared Prompt Preparation Service",
+  "status": "planned",
+  "priority": "high",
+  "estimated_effort": "2-3 days",
+  "context": {
+    "problem": "Online and batch modes have duplicated prompt preparation logic in separate code paths, leading to divergent behavior and maintenance burden",
+    "discovery": "While implementing context_scope feature, it worked in online mode but completely failed in batch mode because the implementations diverged",
+    "related_work": {
+      "pr_499": {
+        "issue": "492",
+        "scope": "Extracted FilterService, LLMContextBuilder, and PromptFormatter",
+        "impact": "Eliminated ~160 lines of duplication for filtering and context building",
+        "limitation": "Did NOT extract the full prompt preparation orchestration - still have duplicated workflow"
+      }
+    },
+    "current_state_after_pr_499": {
+      "shared_components": [
+        "PromptFormatter.get_raw_prompt() - unified prompt loading",
+        "LLMContextBuilder - unified LLM context building (mode-specific implementations)",
+        "FilterService - unified WHERE clause filtering"
+      ],
+      "still_duplicated": [
+        "Calling ContextScopeProcessor.build_field_context_with_history() in both modes",
+        "Calling ContextScopeProcessor.apply_context_scope() in both modes",
+        "Calling PromptUtils.replace_field_references() in both modes",
+        "Few-shot sample enrichment (SampleEnricher.append_few_shot_samples())",
+        "Different orchestration logic for when/how to apply transformations",
+        "BUG: Batch mode appears to skip few-shot sample enrichment entirely!"
+      ]
+    }
+  },
+
+  "current_implementations": {
+    "online_mode": {
+      "file": "agent_actions/prompt_generation/data_generator.py",
+      "method": "_format_prompt",
+      "lines": "110-159",
+      "flow": [
+        "1. PromptFormatter.get_raw_prompt() - load prompt",
+        "2. _build_namespaced_field_context() - wrapper around ContextScopeProcessor.build_field_context_with_history()",
+        "3. ContextScopeProcessor.apply_context_scope() - split into prompt/llm/passthrough contexts",
+        "4. PromptUtils.replace_field_references() - {action.field} substitution",
+        "5. SampleEnricher.append_few_shot_samples() - add examples (in create_agent_with_data)",
+        "6. run_dynamic_agent() receives llm_context separately"
+      ]
+    },
+    "batch_mode": {
+      "file": "agent_actions/llm_invocation/batch/batch_service.py",
+      "method": "prepare_batch_tasks_from_data",
+      "lines": "263-373",
+      "flow": [
+        "1. PromptFormatter.get_raw_prompt() - load prompt",
+        "2. ContextScopeProcessor.build_field_context_with_history() - build field context with history",
+        "3. ContextScopeProcessor.apply_context_scope() - split into prompt/llm/passthrough contexts",
+        "4. LLMContextBuilder.build_llm_context_for_batch() - merge row_content + llm_context + apply drops",
+        "5. PromptUtils.replace_field_references() - {action.field} substitution",
+        "6. PromptUtils.inject_function_outputs_into_prompt() - inject llm_full_context",
+        "7. Few-shot samples NOT applied (BUG!)"
+      ],
+      "bugs_found": [
+        "Few-shot sample enrichment missing in batch mode",
+        "Different context injection approach (inject_function_outputs vs passing to agent builder)"
+      ]
+    }
+  },
+
+  "proposed_solution": {
+    "overview": "Create a unified PromptPreparationService that both modes use for ALL prompt preparation steps",
+    "new_file": "agent_actions/prompt_generation/prompt_preparation_service.py",
+    "key_principle": "Single point of truth for prompt preparation orchestration - both modes MUST use this service"
+  },
+
+  "architecture": {
+    "service_class": "PromptPreparationService",
+    "main_method": "prepare_prompt_with_context",
+    "result_object": "PromptPreparationResult",
+
+    "result_structure": {
+      "formatted_prompt": "str - Fully rendered prompt ready for LLM",
+      "llm_context": "Dict - Full context for LLM (JSON serialized)",
+      "passthrough_fields": "Dict - Fields to merge into output later",
+      "metadata": "Dict - Debug info (field_context_keys, include_fields, passthrough_fields)"
+    },
+
+    "preparation_steps": [
+      "1. Load raw prompt using PromptFormatter",
+      "2. Build field context with historical node loading via ContextScopeProcessor.build_field_context_with_history()",
+      "3. Apply context_scope transformations via ContextScopeProcessor.apply_context_scope()",
+      "4. Build LLM context using mode-specific approach (batch vs realtime)",
+      "5. Render prompt with {action.field} substitutions via PromptUtils.replace_field_references()",
+      "6. Apply few-shot samples via SampleEnricher.append_few_shot_samples()",
+      "7. Return comprehensive result object"
+    ],
+
+    "mode_specific_handling": {
+      "approach": "Strategy pattern - service accepts mode parameter",
+      "modes": ["batch", "realtime"],
+      "differences": {
+        "llm_context_building": {
+          "batch": "Use LLMContextBuilder.build_llm_context_for_batch(row_content, llm_context, context_scope)",
+          "realtime": "Use LLMContextBuilder.build_llm_context_for_realtime(processed_context, llm_additional_context, context_scope)"
+        },
+        "context_injection": {
+          "batch": "Inject into prompt via PromptUtils.inject_function_outputs_into_prompt()",
+          "realtime": "Pass llm_context separately to agent_builder.create_dynamic_agent()"
+        }
+      }
+    }
+  },
+
+  "implementation_plan": {
+    "phase_1": {
+      "title": "Create PromptPreparationService (No Breaking Changes)",
+      "tasks": [
+        {
+          "task": "Create agent_actions/prompt_generation/prompt_preparation_service.py",
+          "subtasks": [
+            "Define PromptPreparationResult dataclass",
+            "Define PromptPreparationService class",
+            "Implement prepare_prompt_with_context() method with mode parameter",
+            "Implement _build_llm_context() with mode-specific logic",
+            "Add comprehensive docstrings with usage examples",
+            "Add type hints for all parameters and returns"
+          ]
+        },
+        {
+          "task": "Keep existing implementations as wrappers",
+          "subtasks": [
+            "DataGenerator._format_prompt() becomes thin wrapper calling service",
+            "BatchService.prepare_batch_tasks_from_data() calls service but keeps loop structure",
+            "All existing tests continue passing"
+          ]
+        },
+        {
+          "task": "Fix few-shot sample bug in batch mode",
+          "subtasks": [
+            "Add SampleEnricher.append_few_shot_samples() to service",
+            "Ensure batch mode gets few-shot samples applied",
+            "Add test to verify few-shot samples appear in batch output"
+          ]
+        }
+      ],
+      "validation": [
+        "All existing tests pass (60+ tests)",
+        "No behavior changes in online or batch mode",
+        "New service has >90% code coverage",
+        "Both modes produce identical prompts for same inputs"
+      ]
+    },
+
+    "phase_2": {
+      "title": "Migrate Callers to Use Service Directly",
+      "tasks": [
+        {
+          "task": "Update DataGenerator to call service directly",
+          "subtasks": [
+            "Remove _format_prompt() wrapper method",
+            "Call PromptPreparationService.prepare_prompt_with_context() in create_agent_with_data()",
+            "Pass mode='realtime' parameter",
+            "Update tests to verify new flow"
+          ]
+        },
+        {
+          "task": "Update BatchService to call service directly",
+          "subtasks": [
+            "Extract prompt preparation from prepare_batch_tasks_from_data() loop",
+            "Call PromptPreparationService.prepare_prompt_with_context() for each row",
+            "Pass mode='batch' parameter",
+            "Update tests to verify new flow"
+          ]
+        },
+        {
+          "task": "Simplify run_dynamic_agent()",
+          "subtasks": [
+            "Remove context_scope logic from utils_processor_helpers.py",
+            "Service already applies context_scope, so run_dynamic_agent() just receives ready context",
+            "Update tests"
+          ]
+        }
+      ],
+      "validation": [
+        "All tests still passing",
+        "Code is simpler and more readable",
+        "DataGenerator._format_prompt() removed",
+        "Batch mode prepare logic is cleaner"
+      ]
+    },
+
+    "phase_3": {
+      "title": "Add Integration Tests and Documentation",
+      "tasks": [
+        {
+          "task": "Create comprehensive unit tests",
+          "file": "tests/prompt_generation/test_prompt_preparation_service.py",
+          "test_cases": [
+            "test_prepare_prompt_basic_no_context_scope",
+            "test_prepare_prompt_with_context_scope_include",
+            "test_prepare_prompt_with_context_scope_exclude",
+            "test_prepare_prompt_with_context_scope_passthrough",
+            "test_prepare_prompt_with_historical_node_loading",
+            "test_prepare_prompt_with_few_shot_samples",
+            "test_prepare_prompt_batch_mode",
+            "test_prepare_prompt_realtime_mode",
+            "test_llm_context_building_batch_vs_realtime",
+            "test_field_reference_substitution",
+            "test_metadata_tracking"
+          ]
+        },
+        {
+          "task": "Create integration tests for parity",
+          "file": "tests/integration/test_online_batch_prompt_parity.py",
+          "test_cases": [
+            "test_online_batch_produce_identical_prompts",
+            "test_online_batch_produce_identical_llm_context",
+            "test_online_batch_handle_context_scope_identically",
+            "test_online_batch_apply_few_shot_samples_identically"
+          ]
+        },
+        {
+          "task": "Update architecture documentation",
+          "subtasks": [
+            "Add section to dev_artefacts/BATCH_REALTIME_ARCHITECTURE.md",
+            "Document new PromptPreparationService usage",
+            "Add data flow diagrams showing unified path",
+            "Update CHANGELOG.md"
+          ]
+        }
+      ]
+    }
+  },
+
+  "api_design": {
+    "service_signature": `
+@dataclass
+class PromptPreparationResult:
+    """Result of prompt preparation."""
+    formatted_prompt: str           # Fully rendered prompt ready for LLM
+    llm_context: Dict[str, Any]     # Full context for LLM (JSON serialized)
+    passthrough_fields: Dict        # Fields to merge into output
+    metadata: Dict                  # Debug info
+
+class PromptPreparationService:
+    """Unified prompt preparation for batch and realtime modes."""
+
+    @staticmethod
+    def prepare_prompt_with_context(
+        agent_config: Dict[str, Any],
+        agent_name: str,
+        contents: Dict[str, Any],
+        *,
+        mode: Literal['batch', 'realtime'] = 'realtime',
+        agent_indices: Optional[Dict[str, int]] = None,
+        dependency_configs: Optional[Dict[str, Dict]] = None,
+        source_content: Optional[Any] = None,
+        loop_context: Optional[Dict] = None,
+        workflow_metadata: Optional[Dict] = None,
+        current_item: Optional[Dict] = None,
+        file_path: Optional[str] = None,
+        tools_path: Optional[str] = None
+    ) -> PromptPreparationResult:
+        """
+        Prepare prompt with all transformations applied.
+
+        This is the SINGLE POINT OF TRUTH for prompt preparation.
+        Both batch and realtime modes MUST use this service.
+        """
+        # Implementation steps 1-7 from architecture.preparation_steps
+        ...
+`,
+
+    "usage_online_mode": `
+# agent_actions/prompt_generation/data_generator.py
+
+from agent_actions.prompt_generation.prompt_preparation_service import (
+    PromptPreparationService
+)
+
+def create_agent_with_data(self, contents, source_content=None, ...):
+    # Prepare prompt using unified service
+    prep_result = PromptPreparationService.prepare_prompt_with_context(
+        agent_config=self.agent_config,
+        agent_name=self.agent_name,
+        contents=contents,
+        mode='realtime',  # Specify mode
+        agent_indices=self.agent_indices,
+        dependency_configs=self.dependency_configs,
+        source_content=source_content,
+        loop_context=loop_context,
+        workflow_metadata=workflow_metadata,
+        current_item=current_item,
+        file_path=file_path
+    )
+
+    # Pass to agent builder (simplified - context already prepared)
+    response, executed = run_dynamic_agent(
+        self.agent_config,
+        self.agent_name,
+        contents,
+        prep_result.formatted_prompt,
+        tools_path=self.agent_config.get('tools', {}).get('path'),
+        tool_args=self.agent_config.get('tool_args', {}),
+        source_content=source_content,
+        llm_additional_context=prep_result.llm_context  # Already built!
+    )
+
+    return (response, executed, prep_result.passthrough_fields)
+`,
+
+    "usage_batch_mode": `
+# agent_actions/llm_invocation/batch/batch_service.py
+
+from agent_actions.prompt_generation.prompt_preparation_service import (
+    PromptPreparationService
+)
+
+def prepare_batch_tasks_from_data(self, agent_config, data, ...):
+    prepared_data = []
+
+    for row in data:
+        # ... filtering logic ...
+
+        # Prepare prompt using unified service
+        prep_result = PromptPreparationService.prepare_prompt_with_context(
+            agent_config=agent_config,
+            agent_name=agent_config.get('agent_type'),
+            contents=row_content,
+            mode='batch',  # Specify mode
+            agent_indices=self.agent_indices,
+            dependency_configs=self.dependency_configs,
+            source_content=row_content,
+            current_item=self.context_map.get(custom_id),
+            file_path=file_path_for_history,
+            tools_path=tools_path
+        )
+
+        # Store passthrough for later
+        if prep_result.passthrough_fields and custom_id in self.context_map:
+            self.context_map[custom_id]['_passthrough_fields'] = prep_result.passthrough_fields
+
+        # Create batch task (context and prompt already prepared!)
+        prepared_item = {
+            'target_id': custom_id,
+            'content': prep_result.llm_context,      # Already fully built!
+            'prompt': prep_result.formatted_prompt   # Already has few-shot samples!
+        }
+        prepared_data.append(prepared_item)
+
+    return provider.prepare_tasks(prepared_data, provider_config)
+`
+  },
+
+  "files_to_create": [
+    {
+      "path": "agent_actions/prompt_generation/prompt_preparation_service.py",
+      "description": "New unified service for prompt preparation",
+      "estimated_lines": 300
+    },
+    {
+      "path": "tests/prompt_generation/test_prompt_preparation_service.py",
+      "description": "Comprehensive unit tests for service",
+      "estimated_lines": 500
+    },
+    {
+      "path": "tests/integration/test_online_batch_prompt_parity.py",
+      "description": "Integration tests proving online/batch parity",
+      "estimated_lines": 200
+    }
+  ],
+
+  "files_to_modify": [
+    {
+      "path": "agent_actions/prompt_generation/data_generator.py",
+      "changes": [
+        "Remove _format_prompt() method (~50 lines)",
+        "Remove _build_namespaced_field_context() method (~20 lines)",
+        "Update create_agent_with_data() to call service (~10 lines changed)",
+        "Net reduction: ~40 lines"
+      ]
+    },
+    {
+      "path": "agent_actions/llm_invocation/batch/batch_service.py",
+      "changes": [
+        "Replace inline prompt preparation with service call (~60 lines simplified to ~15)",
+        "Net reduction: ~45 lines"
+      ]
+    },
+    {
+      "path": "agent_actions/utilities/utils_processor_helpers.py",
+      "changes": [
+        "Remove context_scope handling from run_dynamic_agent() (~20 lines)",
+        "Service already applies context_scope transformations",
+        "Net reduction: ~20 lines"
+      ]
+    },
+    {
+      "path": "dev_artefacts/BATCH_REALTIME_ARCHITECTURE.md",
+      "changes": [
+        "Add section on PromptPreparationService",
+        "Update data flow diagrams",
+        "Document unified prompt preparation flow"
+      ]
+    },
+    {
+      "path": "CHANGELOG.md",
+      "changes": [
+        "Add entry for issue #487 refactor"
+      ]
+    }
+  ],
+
+  "benefits": {
+    "single_point_of_change": "Bug fixes or features in prompt preparation happen in ONE place",
+    "guaranteed_parity": "Online and batch modes cannot diverge - they use identical code",
+    "easier_testing": "Test service in isolation, mock for testing online/batch modes",
+    "better_debugging": "PromptPreparationResult.metadata provides visibility",
+    "reduced_complexity": {
+      "data_generator": "_format_prompt() goes from 50 lines to 10 lines (80% reduction)",
+      "batch_service": "prepare logic goes from 110 lines to 65 lines (40% reduction)",
+      "utils_processor_helpers": "run_dynamic_agent() simplified by ~20 lines"
+    },
+    "bug_fixes": [
+      "Few-shot samples now applied in batch mode (was missing)",
+      "Context injection consistent between modes"
+    ]
+  },
+
+  "risks_and_mitigations": {
+    "risk_behavioral_changes": {
+      "risk": "Unified implementation might introduce subtle behavioral differences",
+      "mitigation": [
+        "Phase 1 keeps existing code as wrappers - zero behavior change",
+        "Integration tests prove parity before/after refactor",
+        "Gradual rollout across 3 phases",
+        "Metadata tracking helps debug any differences"
+      ]
+    },
+    "risk_mode_specific_logic": {
+      "risk": "Batch and realtime modes have legitimately different requirements",
+      "mitigation": [
+        "Service accepts 'mode' parameter for mode-specific behavior",
+        "Uses existing LLMContextBuilder which already handles mode differences",
+        "Strategy pattern allows extending with new modes in future"
+      ]
+    },
+    "risk_test_coverage": {
+      "risk": "New service might miss edge cases",
+      "mitigation": [
+        "Comprehensive unit tests (11+ test cases)",
+        "Integration tests prove parity",
+        "All existing tests must pass",
+        "Target >90% code coverage for service"
+      ]
+    }
+  },
+
+  "success_criteria": [
+    "All existing tests pass (60+ tests)",
+    "New service has >90% code coverage",
+    "Online mode uses service (no duplicate logic)",
+    "Batch mode uses service (no duplicate logic)",
+    "Integration test proves online/batch produce identical results",
+    "Few-shot samples applied in both modes",
+    "Code reduction: ~105 lines net reduction",
+    "Documentation updated with new architecture",
+    "Zero breaking changes for end users"
+  ],
+
+  "metrics": {
+    "code_duplication_eliminated": "~85 lines of prompt preparation orchestration",
+    "net_code_reduction": "~105 lines (eliminated duplication - new service code)",
+    "new_code_added": "~300 lines (service) + ~700 lines (tests)",
+    "documentation_added": "~400 lines",
+    "files_requiring_changes_before": "6+ files for prompt preparation changes",
+    "files_requiring_changes_after": "1 file (PromptPreparationService)",
+    "complexity_reduction": "70% fewer files to modify for prompt changes"
+  },
+
+  "related_issues": [
+    {
+      "issue": "492",
+      "pr": "499",
+      "relationship": "Issue #487 is the logical next step after #492. PR #499 extracted low-level utilities (filter, context builder, formatter), but issue #487 extracts the high-level orchestration"
+    },
+    {
+      "issue": "context_scope implementation",
+      "relationship": "This was the original bug that exposed the duplication - context_scope worked in online mode but failed in batch mode"
+    }
+  ],
+
+  "timeline": {
+    "phase_1": "1 day - Create service, keep wrappers, fix few-shot bug",
+    "phase_2": "1 day - Migrate callers, remove wrappers",
+    "phase_3": "0.5 days - Tests and documentation",
+    "total": "2.5 days"
+  },
+
+  "notes": [
+    "This issue is HIGHER LEVEL than issue #492 - it's about orchestrating the utilities that #492 created",
+    "The few-shot sample bug in batch mode is a concrete example of divergence that this refactor would prevent",
+    "After this refactor, the architecture will have: FilterService (filtering) + LLMContextBuilder (context building) + PromptPreparationService (orchestration) - clean separation of concerns",
+    "Future features that affect prompt preparation will only need to modify PromptPreparationService",
+    "This completes the batch/realtime unification started in #492"
+  ]
+}
