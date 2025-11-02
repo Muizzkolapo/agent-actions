@@ -261,6 +261,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 lineage = ProcessorUtils.build_lineage(item, node_id)
                 processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+
+                # CRITICAL: Merge passthrough fields into skipped item
+                # This ensures fields from context_scope.passthrough are carried forward
+                if passthrough_fields:
+                    if 'content' in processed_item and isinstance(processed_item['content'], dict):
+                        processed_item['content'].update(passthrough_fields)
+                    else:
+                        processed_item.update(passthrough_fields)
+
                 # Add metadata indicating this item was skipped (parity with batch mode)
                 if 'metadata' not in processed_item:
                     processed_item['metadata'] = {}
@@ -383,6 +392,16 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 node_id = ProcessorUtils.generate_node_id(self.idx)
                 lineage = ProcessorUtils.build_lineage(item, node_id)
                 processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+
+                # CRITICAL: Merge passthrough fields into skipped item
+                # This ensures fields from context_scope.passthrough are carried forward
+                if passthrough_fields:
+                    from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+                    if 'content' in processed_item and isinstance(processed_item['content'], dict):
+                        processed_item['content'].update(passthrough_fields)
+                    else:
+                        processed_item.update(passthrough_fields)
+
                 # Add metadata indicating this item was skipped (parity with batch mode)
                 if 'metadata' not in processed_item:
                     processed_item['metadata'] = {}
