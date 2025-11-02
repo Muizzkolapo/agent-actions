@@ -4,10 +4,9 @@ from typing import Any, Dict, Optional
 from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
-from agent_actions.utilities.llm_context_builder import LLMContextBuilder
 from .utils_processor_utils import ProcessorUtils
 
-def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_additional_context: Optional[Dict]=None) -> tuple[Any, bool]:
+def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
@@ -19,24 +18,24 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         this function extracts the 'content' dict before sending to the LLM. This ensures:
         - Metadata fields (source_guid, target_id, node_id, lineage) never reach LLM
         - Only actual data fields from 'content' are sent to LLM
-        - context_scope configurations only affect fields inside 'content'
 
-    Context Scope Support:
-        Supports context_scope feature for granular field flow control:
-        - llm_additional_context: Fields from context_scope.observe merged into LLM context JSON
-        - context_scope.drop: Fields removed from LLM context
+    Context Preparation (Phase 2: Issue #487):
+        Context is now prepared by PromptPreparationService before being passed here.
+        This function receives already-transformed context (with context_scope applied).
+        - context_scope.observe: Already merged into context
+        - context_scope.drop: Already removed from context
         - context_scope.passthrough: Handled later in transform_with_passthrough()
 
     Args:
-        agent_config: Agent configuration including guard conditions and context_scope
+        agent_config: Agent configuration including guard conditions
         agent_name: Name of the agent being executed
-        context: Data context for agent execution. May be flat dict or nested structure
-                 with 'content' key containing the actual data
-        formatted_prompt: Formatted prompt for the agent
+        context: Prepared data context for agent execution (already transformed by
+                 PromptPreparationService). May be flat dict or nested structure
+                 with 'content' key containing the actual data.
+        formatted_prompt: Formatted prompt for the agent (already has few-shot samples)
         tools_path: Optional path to tool functions
         tool_args: Optional tool arguments
         source_content: Optional source content
-        llm_additional_context: Optional additional context for LLM (from context_scope.observe)
 
     Returns:
         Tuple of (response/context, was_executed) where was_executed indicates
@@ -55,15 +54,18 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
     else:
         processed_context = context
 
-    # Build LLM context using unified builder (Phase 2: Issue #492)
-    context_scope = agent_config.get('context_scope', {})
-    processed_context = LLMContextBuilder.build_llm_context_for_realtime(
-        processed_context=processed_context,
-        llm_additional_context=llm_additional_context,
-        context_scope=context_scope
+    # Context is already prepared by PromptPreparationService (Phase 2: Issue #487)
+    # No additional transformations needed
+    response = agent_builder.create_dynamic_agent(
+        agent_config,
+        agent_name,
+        processed_context,
+        formatted_prompt,
+        tools_path=tools_path,
+        tool_args=tool_args,
+        source_content=source_content,
+        additional_context=None
     )
-
-    response = agent_builder.create_dynamic_agent(agent_config, agent_name, processed_context, formatted_prompt, tools_path=tools_path, tool_args=tool_args, source_content=source_content, additional_context=None)
 
     # Note: passthrough fields are NOT merged here - they're merged later in transform_with_observe()
     # using the same pathway as observe directive (via DataTransformer.update_schema_objects)

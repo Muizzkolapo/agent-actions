@@ -32,6 +32,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `LLMContextBuilder` (`agent_actions/utilities/llm_context_builder.py`) - 20 unit tests
     - `PromptFormatter` (refactored existing) - Used by 5 files
 
+- **Completed Prompt Preparation Unification** ([#487](https://github.com/Muizzkolapo/agent-actions/issues/487))
+  - **Phase 1**: Extracted `PromptPreparationService` with 7-step orchestration pipeline
+    - Eliminated ~85 lines of duplicated prompt preparation logic
+    - Unified service for loading prompts, building context, applying context_scope, replacing field references, injecting functions, and adding few-shot samples
+    - Fixed bug: Few-shot samples now applied in batch mode (was completely missing before)
+  - **Phase 2**: Removed wrapper methods, direct service calls from generators
+    - Eliminated ~115 lines of wrapper/indirection code
+    - `DataGenerator` and `TargetDataGenerator` now call service directly
+    - Simplified `run_dynamic_agent()` - removed `llm_additional_context` parameter
+    - Fixed bug: Duplicate few-shot sample application (was appending samples twice)
+  - **Phase 3**: Added integration tests and updated documentation
+    - New parity tests proving batch/realtime produce identical outputs
+    - Updated `BATCH_REALTIME_ARCHITECTURE.md` with PromptPreparationService documentation
+    - Comprehensive usage examples for both modes
+  - **Impact**: ~220 lines eliminated (duplicated logic + wrappers), guaranteed batch/realtime parity, zero breaking changes, all tests passing
+  - New service:
+    - `PromptPreparationService` (`agent_actions/prompt_generation/prompt_preparation_service.py`)
+      - 22 unit tests in `test_prompt_preparation_service.py`
+      - 6 parity integration tests in `test_prompt_preparation_parity.py`
+  - **Benefits:**
+    - Single point of truth for prompt preparation
+    - Batch and realtime modes cannot diverge (use identical code)
+    - Future features only need to modify one service
+    - Comprehensive test coverage (>90%)
+    - Better debugging with metadata tracking
+
 ### Added
 
 - **UDF Auto-Discovery**: User-Defined Functions now use `@udf_tool` decorator for automatic registration. Reference functions by simple names (no module paths required), similar to dbt macros. ([#423](https://github.com/Muizzkolapo/agent-actions/issues/423))

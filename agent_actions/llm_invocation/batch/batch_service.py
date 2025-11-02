@@ -312,11 +312,11 @@ class BatchService:
             if not filter_status.should_include:
                 continue
 
-            # Build field context with historical data (same as online mode)
-            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            # Prepare prompt using unified PromptPreparationService (Phase 1: Issue #487)
+            from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+
             agent_name = agent_config.get('agent_type', agent_config.get('name', 'unknown'))
 
-            # Build namespaced field context with historical node loading
             # In batch mode, construct a file path from output_directory + batch_name
             # output_directory is like: .../target/node_4_Cluster_Validation_Agent
             # batch_name is like: Designing_and_Implementing_a_Data_Science_Solution_on_Azure.json
@@ -326,46 +326,29 @@ class BatchService:
                 from pathlib import Path
                 file_path_for_history = str(Path(output_directory) / batch_name)
 
-            field_context = ContextScopeProcessor.build_field_context_with_history(
-                contents=row_content if isinstance(row_content, dict) else {},
-                agent_name=agent_name,
+            # Call unified service to prepare prompt (handles all steps: field context,
+            # context_scope, LLM context building, field reference replacement,
+            # function injection, and few-shot samples)
+            prep_result = PromptPreparationService.prepare_prompt_with_context(
                 agent_config=agent_config,
+                agent_name=agent_name,
+                contents=row_content if isinstance(row_content, dict) else {},
+                mode='batch',
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
                 source_content=row_content,  # Source is the current row in batch mode
                 current_item=self.context_map.get(custom_id),
-                file_path=file_path_for_history
+                file_path=file_path_for_history,
+                tools_path=tools_path
             )
 
-            # Apply context_scope to split field_context into prompt/llm/passthrough contexts
-            context_scope = agent_config.get('context_scope', {})
-            if context_scope:
-                prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
-                    field_context, context_scope
-                )
+            # Store passthrough_fields for later merging into results
+            if prep_result.passthrough_fields and custom_id in self.context_map:
+                self.context_map[custom_id]['_passthrough_fields'] = prep_result.passthrough_fields
 
-                # Store passthrough_fields for later merging into results
-                if passthrough_fields and custom_id in self.context_map:
-                    self.context_map[custom_id]['_passthrough_fields'] = passthrough_fields
-            else:
-                prompt_context = field_context
-                llm_context = {}
-
-            # Build LLM context using unified builder (Phase 2: Issue #492)
-            llm_full_context = LLMContextBuilder.build_llm_context_for_batch(
-                row_content=row_content,
-                llm_context=llm_context,
-                context_scope=context_scope
-            )
-
-            # Render prompt with prompt_context (fields not dropped)
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
-            # Use llm_full_context for LLM (includes fields from context_scope.observe)
-            formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
-                formatted_prompt, tools_path, json.dumps(llm_full_context, ensure_ascii=False), agent_config=agent_config
-            )
-            cleaned_row = llm_full_context
-            prepared_item = {'target_id': custom_id, 'content': cleaned_row, 'prompt': formatted_prompt}
+            # Create batch task with prepared prompt and context
+            cleaned_row = prep_result.llm_context
+            prepared_item = {'target_id': custom_id, 'content': cleaned_row, 'prompt': prep_result.formatted_prompt}
             prepared_data.append(prepared_item)
         provider_config = agent_config.copy()
         provider_config['compiled_schema'] = schema

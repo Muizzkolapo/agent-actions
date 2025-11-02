@@ -199,7 +199,100 @@ formatted_prompt = PromptFormatter.format_prompt(raw_prompt, field_context)
 
 **Status:** Already shared before issue #492
 
-### 5. Other Shared Components
+### 5. PromptPreparationService
+
+**Location:** `agent_actions/prompt_generation/prompt_preparation_service.py`
+
+**Purpose:** Unified prompt preparation orchestration for batch and realtime modes
+
+**Key Methods:**
+- `prepare_prompt_with_context(agent_config, agent_name, contents, mode, ...)` → PromptPreparationResult
+- Returns: `PromptPreparationResult(formatted_prompt, llm_context, passthrough_fields, metadata)`
+
+**Features:**
+- **7-Step Orchestration Pipeline:**
+  1. Load raw prompt template (via PromptFormatter)
+  2. Build field context with historical node loading (via ContextScopeProcessor)
+  3. Apply context_scope transformations (observe/drop/passthrough)
+  4. Build LLM context (mode-specific: batch vs realtime)
+  5. Replace field references ({action.field})
+  6. Inject function outputs (batch mode only, via dispatch_task)
+  7. Append few-shot samples (via SampleEnricher)
+- **Mode-Specific Handling:** Accepts `mode='batch'` or `mode='realtime'` parameter
+- **Comprehensive Metadata:** Returns debug info for troubleshooting
+- **Guaranteed Parity:** Both modes use identical orchestration logic
+
+**Usage Example (Realtime Mode):**
+```python
+from agent_actions.prompt_generation.prompt_preparation_service import (
+    PromptPreparationService
+)
+
+# Prepare prompt with all transformations
+prep_result = PromptPreparationService.prepare_prompt_with_context(
+    agent_config=agent_config,
+    agent_name='validator',
+    contents=contents,
+    mode='realtime',
+    agent_indices=agent_indices,
+    dependency_configs=dependency_configs,
+    source_content=source_content,
+    loop_context=loop_context,
+    workflow_metadata=workflow_metadata,
+    current_item=current_item,
+    file_path=file_path
+)
+
+# Use prepared results
+formatted_prompt = prep_result.formatted_prompt  # Has few-shot samples
+llm_context = prep_result.llm_context  # Ready for LLM
+passthrough_fields = prep_result.passthrough_fields  # For output merging
+```
+
+**Usage Example (Batch Mode):**
+```python
+# Batch mode includes function injection for dispatch_task()
+prep_result = PromptPreparationService.prepare_prompt_with_context(
+    agent_config=agent_config,
+    agent_name='processor',
+    contents=row_content,
+    mode='batch',
+    agent_indices=self.agent_indices,
+    dependency_configs=self.dependency_configs,
+    source_content=row_content,
+    current_item=context_map[custom_id],
+    file_path=file_path_for_history,
+    tools_path=tools_path  # For function injection
+)
+
+# Create batch task with prepared data
+task = {
+    'target_id': custom_id,
+    'content': prep_result.llm_context,
+    'prompt': prep_result.formatted_prompt
+}
+```
+
+**Benefits:**
+- **Single Point of Truth:** All prompt preparation logic in ONE place
+- **Guaranteed Parity:** Batch and realtime modes cannot diverge (use same code)
+- **Easier Testing:** Test service in isolation with comprehensive unit tests
+- **Better Debugging:** Metadata provides visibility into transformations
+- **Reduced Complexity:** Eliminates ~220 lines of duplicate/wrapper code
+- **Bug Prevention:** Fixed few-shot sample bug (was missing in batch mode before)
+- **Future-Proof:** New features only need to modify one service
+
+**Status:** Added in issue #487 (Phases 1-3)
+
+**Related Components:**
+- Uses: PromptFormatter, ContextScopeProcessor, LLMContextBuilder, PromptUtils, SampleEnricher
+- Used by: DataGenerator, TargetDataGenerator, BatchService
+
+**Tests:**
+- Unit tests: `tests/prompt_generation/test_prompt_preparation_service.py` (22 tests)
+- Integration tests: `tests/integration/test_prompt_preparation_parity.py` (6 parity tests)
+
+### 6. Other Shared Components
 
 All these were already shared before issue #492:
 
