@@ -155,7 +155,6 @@ class ActionExpander:
             agent['context_scope'] = context_scope
 
         agent['dependencies'] = []
-        agent['parent'] = []
         chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
         if chunk_config:
             agent['chunk_config'] = chunk_config
