@@ -85,11 +85,6 @@ class FileHandler:
             str(current_dir), agent_name, 'agent_io'
         )
 
-        if agent_config_dir is None:
-            print(f"Configuration directory for agent '{agent_name}' not found.")
-        if io_dir is None:
-            print(f"IO directory for agent '{agent_name}' not found.")
-
         few_shot_samples_path = None
         if io_dir:
             potential_path = Path(io_dir) / 'few_shot_samples'
