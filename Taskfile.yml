@@ -13,15 +13,26 @@ tasks:
       - uv sync --dev
 
   dev:install:
-    desc: Install editable package with dev dependencies (legacy pip method)
+    desc: Install editable package to dev_env with dev dependencies
     cmds:
-      - pip install -e ".[dev]"
+      - /Users/muizz/Documents/codeshop/virtual_env/dev_env/bin/pip install -e ".[dev]"
+      - echo "Package installed in editable mode to dev_env"
 
   # Production tasks
   prod:
     desc: Install production dependencies only
     cmds:
       - uv sync --no-dev --active
+
+  prod:install:
+    desc: Install package to prod_env (non-editable, production mode)
+    cmds:
+      - echo "Uninstalling any existing editable install from prod_env..."
+      - /Users/muizz/Documents/codeshop/virtual_env/prod_env/bin/pip uninstall -y agent-actions || echo "No existing install found"
+      - echo "Installing package in non-editable mode to prod_env..."
+      - /Users/muizz/Documents/codeshop/virtual_env/prod_env/bin/pip install .
+      - echo "Package installed to prod_env (non-editable)"
+      - /Users/muizz/Documents/codeshop/virtual_env/prod_env/bin/pip show agent-actions
 
   # Build tasks
   build:

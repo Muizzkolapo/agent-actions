@@ -60,3 +60,6 @@ uv.lock.bak
 
 # Ignore generated documentation
 pdoc_docs/
+
+# Ignore Taskfile
+Taskfile.yml
