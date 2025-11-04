@@ -53,10 +53,10 @@ class ConfigManager:
             raise ConfigurationError('Unexpected error loading default config', context={'config_path': str(self.default_path), 'operation': 'load_default_config'}, cause=e)
         user_tool_path = None
         if isinstance(self.user_config, dict):
-            user_tool_path = self.user_config.get('tool_path') or self.user_config.get('tool')
+            user_tool_path = self.user_config.get('tool_path')
         default_tool_path = None
         if isinstance(self.default_config, dict):
-            default_tool_path = self.default_config.get('tool_path') or self.default_config.get('tool')
+            default_tool_path = self.default_config.get('tool_path')
         if user_tool_path is not None:
             self.tool_path = user_tool_path
         else:
