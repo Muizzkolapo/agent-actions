@@ -329,6 +329,8 @@ class BatchService:
             # Call unified service to prepare prompt (handles all steps: field context,
             # context_scope, LLM context building, field reference replacement,
             # function injection, and few-shot samples)
+            # NOTE: source_content is now loaded internally from source folder using source_guid
+            # This ensures batch mode gets the ACTUAL source data, not the previous action's output
             prep_result = PromptPreparationService.prepare_prompt_with_context(
                 agent_config=agent_config,
                 agent_name=agent_name,
@@ -336,7 +338,6 @@ class BatchService:
                 mode='batch',
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
-                source_content=row_content,  # Source is the current row in batch mode
                 current_item=self.context_map.get(custom_id),
                 file_path=file_path_for_history,
                 tools_path=tools_path

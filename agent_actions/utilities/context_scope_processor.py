@@ -410,8 +410,42 @@ class ContextScopeProcessor:
 
         field_context = {}
 
-        # Add source content
-        if source_content:
+        # Load source content internally (unified for batch and realtime)
+        # This ensures both modes get the ACTUAL source data from the source folder
+        if current_item and file_path and agent_name:
+            source_guid = current_item.get('source_guid')
+
+            if source_guid:
+                # Import required classes for source loading
+                from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
+                from agent_actions.preprocessing.data_transformer import DataTransformer
+                from agent_actions.state_management.path_manager import PathManager
+
+                try:
+                    # Initialize path manager and source loader
+                    path_manager = PathManager(agent_name, file_path)
+                    source_loader = SourceDataLoader(agent_name, path_manager)
+
+                    # Load source data from the source folder
+                    source_data = source_loader.load_source_data(file_path)
+
+                    # Get the specific source item by source_guid
+                    if source_data:
+                        source_item = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+                        if source_item:
+                            field_context['source'] = source_item
+                except Exception as e:
+                    # Fallback to passed source_content if loading fails
+                    if source_content:
+                        field_context['source'] = source_content
+                    # Log the error but don't fail - some workflows may not have source folder
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.debug(f"Could not load source from folder: {e}")
+
+        # Fallback: Use passed source_content if not loaded above
+        # This maintains backward compatibility
+        if 'source' not in field_context and source_content:
             field_context['source'] = source_content
 
         # Auto-load ALL previous actions from lineage
