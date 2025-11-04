@@ -9,7 +9,6 @@ class AgentEntryDict(TypedDict, total=False):
     api_key: Optional[str]
     code_path: Optional[str]
     dependencies: List[str]
-    parent: List[str]
     prompt: Optional[str]
     schema_name: Optional[str]
     chunk_config: Dict[str, Any]

@@ -12,7 +12,7 @@ class ConfigValidator(BaseValidator):
     Business rules are unchanged; only comparisons are agnostic to key‑case or value‑case.
     """
     _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', MODEL_NAME_KEY}
-    _OPTIONAL_AGENT_KEYS: Set[str] = {'description', 'version', 'author', 'dependencies', 'imports', 'config', 'parent', 'granularity', MODEL_VENDOR_KEY, JSON_MODE_KEY, 'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot', 'conditional_clause', 'is_operational', 'ephemeral', 'add_dispatch', 'output_field', 'context_scope'}
+    _OPTIONAL_AGENT_KEYS: Set[str] = {'description', 'version', 'author', 'dependencies', 'imports', 'config', 'granularity', MODEL_VENDOR_KEY, JSON_MODE_KEY, 'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot', 'conditional_clause', 'is_operational', 'ephemeral', 'add_dispatch', 'output_field', 'context_scope'}
     _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {'llm': {MODEL_NAME_KEY}, 'function': {'code_path'}, 'tool': {MODEL_NAME_KEY}}
 
     @staticmethod

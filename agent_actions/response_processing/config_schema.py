@@ -78,7 +78,6 @@ class AgentConfig(BaseModel):
     api_key: Optional[str] = None
     code_path: Optional[str] = None
     dependencies: List[str] = Field(default_factory=list)
-    parent: List[str] = Field(default_factory=list)
     prompt: Optional[str] = None
     schema_name: Optional[str] = None
     chunk_config: Dict[str, Any] = Field(default_factory=dict)

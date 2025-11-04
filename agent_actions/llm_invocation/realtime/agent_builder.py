@@ -17,7 +17,7 @@ from agent_actions.utilities.constants import MODEL_VENDOR_KEY, PROMPT_KEY
 VENDOR_HANDLERS: dict[str, Any] = {'openai': OpenAIHandler, 'ollama': OllamaHandler, 'gemini': GeminiHandler, 'cohere': CohereHandler, 'mistral': MistralHandler, 'anthropic': ClaudeHandler, 'groq': GroqLlama3Handler, 'deepseek': DeepSeekHandler, 'tool': ToolHandler}
 SINGLE_RESPONSE_VENDORS: set[str] = {'cohere', 'mistral', 'anthropic', 'groq', 'deepseek'}
 
-def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_str: Union[str, Dict], formatted_prompt: Optional[str]=None, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, additional_context: Optional[Dict]=None) -> List[Any]:
+def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_str: Union[str, Dict], formatted_prompt: Optional[str]=None, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, additional_context: Optional[Dict]=None, original_context: Optional[Union[str, Dict]]=None) -> List[Any]:
     """Build and execute a prompt against the selected vendor.
 
     If the agent configuration specifies response interceptors, the request
@@ -27,20 +27,22 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
     Args:
         agent_config: Agent configuration with model/prompt settings
         udf: User defined function (agent_name)
-        context_data_str: Context data as string or dict
+        context_data_str: Context data for LLM (may be transformed with context_scope.drop applied)
         formatted_prompt: Pre-formatted prompt (optional, from DataGenerator)
         tools_path: Path to tool functions (optional)
         tool_args: Tool arguments (optional)
         source_content: Source content for tool handler (optional)
         additional_context: Additional context from context_scope.observe (optional).
                            Formatted and appended to prompt before LLM invocation.
+        original_context: Original untransformed context for tools/UDFs (optional).
+                         If not provided, uses context_data_str for both LLM and tools.
 
     Returns:
         List of response items from the LLM
     """
     interceptor_configs = agent_config.get('interceptors', [])
     if interceptor_configs:
-        return _execute_with_interceptors(agent_config, udf, context_data_str, formatted_prompt, tools_path, tool_args, source_content, interceptor_configs, additional_context)
+        return _execute_with_interceptors(agent_config, udf, context_data_str, formatted_prompt, tools_path, tool_args, source_content, interceptor_configs, additional_context, original_context)
     prompt_config_base = _prepare_prompt(agent_config, formatted_prompt)
     if not tools_path:
         tools_path = agent_config.get('tools', {}).get('path')
@@ -48,7 +50,13 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
         sys.path.insert(0, tools_path)
     model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
     is_tool = model_vendor == 'tool'
-    context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
+
+    # CRITICAL FIX: For tool actions, use original_context (not transformed llm_data)
+    # Tools need access to ALL fields from previous actions
+    if is_tool and original_context is not None:
+        context_data: Union[str, Dict] = original_context
+    else:
+        context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
 
     # Only process field references if prompt wasn't pre-formatted
     # When formatted_prompt is provided, it's already been processed by DataGenerator
@@ -57,7 +65,17 @@ def create_dynamic_agent(agent_config: Dict[str, Any], udf: Any, context_data_st
         if field_context:
             prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
 
-    prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
+    # CRITICAL FIX: Use original_context for tool injection (has all fields from previous actions)
+    # Use context_data (transformed) for LLM only
+    tool_context = original_context if original_context is not None else context_data_str
+    tool_context_json = tool_context if isinstance(tool_context, str) else json.dumps(tool_context, ensure_ascii=False)
+
+    prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
+        prompt_config_base,
+        tools_path,
+        tool_context_json,  # Pass original context to tools, not transformed llm context
+        agent_config=agent_config
+    )
 
     # Append additional_context to prompt if provided (context_scope.observe fields)
     if additional_context:
@@ -150,7 +168,7 @@ def _invoke_vendor_handler(model_vendor: str, agent_config: Dict[str, Any], prom
         return [response_data]
     return response_data
 
-def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_data_str: Union[str, Dict], formatted_prompt: Optional[str], tools_path: Optional[str], tool_args: Optional[Dict[str, Any]], source_content: Optional[Any], interceptor_configs: List[Dict[str, Any]], additional_context: Optional[Dict]=None) -> List[Any]:
+def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_data_str: Union[str, Dict], formatted_prompt: Optional[str], tools_path: Optional[str], tool_args: Optional[Dict[str, Any]], source_content: Optional[Any], interceptor_configs: List[Dict[str, Any]], additional_context: Optional[Dict]=None, original_context: Optional[Union[str, Dict]]=None) -> List[Any]:
     """Execute the agent with validation and reprompt interceptors."""
     from agent_actions.response_processing.factory import InterceptorFactory
     from agent_actions.prompt_generation.reprompt_interceptor import RepromptInterceptor
@@ -198,7 +216,13 @@ def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_d
             sys.path.insert(0, tools_path)
         model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
         is_tool = model_vendor == 'tool'
-        context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
+
+        # CRITICAL FIX: For tool actions, use original_context (not transformed llm_data)
+        # Tools need access to ALL fields from previous actions
+        if is_tool and original_context is not None:
+            context_data: Union[str, Dict] = original_context
+        else:
+            context_data: Union[str, Dict] = context_data_str if is_tool else json.dumps(context_data_str, ensure_ascii=False) if not isinstance(context_data_str, str) else context_data_str
 
         # Only process field references if prompt wasn't pre-formatted
         # When formatted_prompt is provided, it's already been processed by DataGenerator
@@ -207,7 +231,17 @@ def _execute_with_interceptors(agent_config: Dict[str, Any], udf: Any, context_d
             if field_context:
                 prompt_config_base = PromptUtils.replace_field_references(prompt_config_base, field_context)
 
-        prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(prompt_config_base, tools_path, context_data if isinstance(context_data, str) else json.dumps(context_data, ensure_ascii=False), agent_config=agent_config)
+        # CRITICAL FIX: Use original_context for tool injection (has all fields from previous actions)
+        # Use context_data (transformed) for LLM only
+        tool_context = original_context if original_context is not None else context_data_str
+        tool_context_json = tool_context if isinstance(tool_context, str) else json.dumps(tool_context, ensure_ascii=False)
+
+        prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
+            prompt_config_base,
+            tools_path,
+            tool_context_json,  # Pass original context to tools, not transformed llm context
+            agent_config=agent_config
+        )
 
         # Append additional_context to prompt if provided (context_scope.observe fields)
         if additional_context:

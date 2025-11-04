@@ -61,6 +61,9 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
     # This allows context_scope.drop to work correctly while keeping original data for tools
     llm_data = llm_context if llm_context is not None else processed_context
 
+    # CRITICAL FIX: Pass both contexts to agent_builder
+    # - llm_data: Transformed context for LLM (has context_scope.drop applied)
+    # - processed_context: Original context for tools/UDFs (has all fields from previous actions)
     response = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
@@ -69,7 +72,8 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         tools_path=tools_path,
         tool_args=tool_args,
         source_content=source_content,
-        additional_context=None
+        additional_context=None,
+        original_context=processed_context  # CRITICAL: Pass original context for tools
     )
 
     # Note: passthrough fields are NOT merged here - they're merged later in transform_with_observe()

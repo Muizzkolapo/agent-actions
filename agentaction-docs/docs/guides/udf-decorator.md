@@ -495,8 +495,8 @@ Fix:
 
 #### Discovery Performance
 
-- **Typical Projects** (10-50 UDFs): <100ms discovery time
-- **Large Projects** (100+ UDFs): <500ms discovery time
+- **Typical Projects** (10-50 UDFs): &lt;100ms discovery time
+- **Large Projects** (100+ UDFs): &lt;500ms discovery time
 - **Registry Lookup**: O(1) constant time (dict lookup)
 
 #### Optimization Tips
