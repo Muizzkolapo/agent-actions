@@ -246,9 +246,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     processed = await self.data_processor.process_item_async(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
                 else:
                     processed = await asyncio.to_thread(self.data_processor.process_item, contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
-                node_id = ProcessorUtils.generate_node_id(self.idx)
+                base_node_id = ProcessorUtils.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    # For split records (multiple outputs from one input), append sub-index to node_id
+                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
@@ -377,9 +379,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             )
             if executed:
                 processed = self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
-                node_id = ProcessorUtils.generate_node_id(self.idx)
+                base_node_id = ProcessorUtils.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
                     obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    # For split records (multiple outputs from one input), append sub-index to node_id
+                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
                     obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj

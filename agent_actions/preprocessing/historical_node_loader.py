@@ -87,13 +87,9 @@ class HistoricalNodeDataLoader:
             with open(target_path, 'r') as f:
                 data = json.load(f)
 
-            # DEBUG: Log lineage matching attempt
-            logger.info(f"[LINEAGE DEBUG] Looking for node_id={node_id}, source_guid={source_guid[:20]}..., caller_lineage={caller_lineage}")
             record = HistoricalNodeDataLoader._find_record_by_identifiers(
                 data, source_guid, node_id, caller_lineage
             )
-            if record:
-                logger.info(f"[LINEAGE DEBUG] Found record with target_id={record.get('target_id')}, record_lineage={record.get('lineage')}")
 
             if record:
                 ServiceLogger.log_operation_success(
