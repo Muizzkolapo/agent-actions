@@ -73,22 +73,39 @@ class LineageTrackingMixin:
 
     def add_lineage_to_items(self, items: List[Dict], source_item: Dict) -> List[Dict]:
         """
-        Add lineage tracking to multiple items using the same node ID.
-        
+        Add lineage tracking to multiple items with unique node IDs.
+
+        When a processor outputs multiple items from a single input (e.g., split operations),
+        each output item gets a unique node_id by appending a sub-index to distinguish them.
+        This enables accurate historical data lookups for split records.
+
         Args:
             items: List of items to add lineage to
             source_item: Source item containing existing lineage
-            
+
         Returns:
             List of items with lineage tracking added
+
+        Examples:
+            Single output: node_id = "node_5_abc123"
+            Split outputs:
+                - item[0]: node_id = "node_5_abc123_0"
+                - item[1]: node_id = "node_5_abc123_1"
+                - item[2]: node_id = "node_5_abc123_2"
         """
         if not items:
             return items
-            
-        node_id = self.generate_node_id()
+
+        base_node_id = self.generate_node_id()
+
+        # If only one item, no sub-index needed
+        if len(items) == 1:
+            return [ProcessorUtils.add_lineage_tracking(items[0], source_item, base_node_id)]
+
+        # For multiple items (split records), append sub-index to each
         return [
-            ProcessorUtils.add_lineage_tracking(item, source_item, node_id)
-            for item in items
+            ProcessorUtils.add_lineage_tracking(item, source_item, f"{base_node_id}_{idx}")
+            for idx, item in enumerate(items)
         ]
 
     def create_processed_item_with_lineage(

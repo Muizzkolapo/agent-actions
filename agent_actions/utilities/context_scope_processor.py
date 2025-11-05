@@ -467,7 +467,8 @@ class ContextScopeProcessor:
                         lineage=lineage,
                         source_guid=source_guid,
                         file_path=file_path,
-                        agent_indices=agent_indices
+                        agent_indices=agent_indices,
+                        caller_lineage=lineage
                     )
 
                     if historical_data:

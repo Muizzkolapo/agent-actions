@@ -1,0 +1,74 @@
+[
+  {
+    "description": "Caller Record #1 - Should match Split Record #1 (Branch A)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "node_23_final_output_xyz789_a",
+    "target_id": "caller-record-1-target-id",
+    "lineage": [
+      "node_0_initial_process",
+      "node_1_extract_data",
+      "node_4_validate_input",
+      "node_5_split_abc123",
+      "node_6_process_branch_a",
+      "node_7_transform_a",
+      "node_22_aggregate_a",
+      "node_23_final_output_xyz789_a"
+    ],
+    "expected_match": {
+      "target_id": "split-record-1-target-id",
+      "content": {
+        "status": "active",
+        "priority": "high",
+        "tags": ["tag-a"]
+      }
+    }
+  },
+  {
+    "description": "Caller Record #2 - Should match Split Record #2 (Branch B with 2 tags) - THE BUG CASE",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "node_23_final_output_xyz789_b",
+    "target_id": "caller-record-2-target-id",
+    "lineage": [
+      "node_0_initial_process",
+      "node_1_extract_data",
+      "node_4_validate_input",
+      "node_5_split_abc123",
+      "node_6_process_branch_b",
+      "node_7_transform_b",
+      "node_22_aggregate_b",
+      "node_23_final_output_xyz789_b"
+    ],
+    "expected_match": {
+      "target_id": "split-record-2-target-id",
+      "content": {
+        "status": "pending",
+        "priority": "medium",
+        "tags": ["tag-b", "tag-extra"]
+      }
+    }
+  },
+  {
+    "description": "Caller Record #3 - Should match Split Record #3 (Branch C)",
+    "source_guid": "test-source-guid-12345",
+    "node_id": "node_23_final_output_xyz789_c",
+    "target_id": "caller-record-3-target-id",
+    "lineage": [
+      "node_0_initial_process",
+      "node_1_extract_data",
+      "node_4_validate_input",
+      "node_5_split_abc123",
+      "node_6_process_branch_c",
+      "node_7_transform_c",
+      "node_22_aggregate_c",
+      "node_23_final_output_xyz789_c"
+    ],
+    "expected_match": {
+      "target_id": "split-record-3-target-id",
+      "content": {
+        "status": "completed",
+        "priority": "low",
+        "tags": ["tag-c"]
+      }
+    }
+  }
+]

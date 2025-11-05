@@ -1,0 +1,207 @@
+{
+  "title": "Historical Data Lookup for Split Records - Complete Fix Explanation",
+  "date": "2025-11-05",
+  "summary": "Fixed bug where split records returned wrong historical data. Root cause: identical node_ids. Solution: append sub-indices + lineage matching.",
+
+  // ==========================================================================
+  // ASCII VISUALIZATION: THE WORKFLOW & BUG
+  // ==========================================================================
+  "workflowStructure": "
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    QANALABS_QUIZ_GEN WORKFLOW                           │
+│                                                                         │
+│  Source Record                                                          │
+│  ┌─────────────────────────────┐                                       │
+│  │ source_guid: \"guid-12345\"   │                                       │
+│  │ content: {...}              │                                       │
+│  └──────────┬──────────────────┘                                       │
+│             │                                                           │
+│             ▼                                                           │
+│  ┌─────────────────────────────┐                                       │
+│  │  Node 0: fact_extractor     │  Process: Extract facts               │
+│  │  node_id: node_0_abc...     │                                       │
+│  │  lineage: [node_0_abc]      │                                       │
+│  └──────────┬──────────────────┘                                       │
+│             │                                                           │
+│             ▼                                                           │
+│  ┌─────────────────────────────┐                                       │
+│  │  Node 1: flatten_facts      │  Process: Flatten to list             │
+│  │  node_id: node_1_def...     │                                       │
+│  │  lineage: [node_0, node_1]  │                                       │
+│  └──────────┬──────────────────┘                                       │
+│             │                                                           │
+│             ▼                                                           │
+│  ┌─────────────────────────────┐                                       │
+│  │  Node 4: validate_input     │  Process: Validation                  │
+│  │  node_id: node_4_ghi...     │                                       │
+│  │  lineage: [n0, n1, node_4]  │                                       │
+│  └──────────┬──────────────────┘                                       │
+│             │                                                           │
+│             ▼                                                           │
+│  ╔═════════════════════════════╗                                       │
+│  ║  Node 5: flatten_clusters   ║  🔥 THE SPLIT OPERATION               │
+│  ║  (TOOL - record granularity)║                                       │
+│  ╚═════════════════════════════╝                                       │
+│             │                                                           │
+│             │ 1 INPUT → 3 OUTPUTS                                       │
+│             ├──────────┬──────────┐                                     │
+│             ▼          ▼          ▼                                     │
+│     ┌───────────┐ ┌───────────┐ ┌───────────┐                         │
+│     │ Record #1 │ │ Record #2 │ │ Record #3 │                         │
+│     │ 1 URL     │ │ 2 URLs ⭐ │ │ 1 URL     │                         │
+│     └─────┬─────┘ └─────┬─────┘ └─────┬─────┘                         │
+│           │             │             │                                 │
+│           ▼             ▼             ▼                                 │
+│     ┌───────────┐ ┌───────────┐ ┌───────────┐                         │
+│     │  Node 6   │ │  Node 6   │ │  Node 6   │ generate_summary        │
+│     │  Branch A │ │  Branch B │ │  Branch C │                         │
+│     └─────┬─────┘ └─────┬─────┘ └─────┬─────┘                         │
+│           │             │             │                                 │
+│           ▼             ▼             ▼                                 │
+│     [... nodes 7-22 processing ...]                                    │
+│           │             │             │                                 │
+│           ▼             ▼             ▼                                 │
+│     ┌───────────┐ ┌───────────┐ ┌───────────┐                         │
+│     │  Node 23  │ │  Node 23  │ │  Node 23  │ generate_feynman        │
+│     │  Record A │ │  Record B │ │  Record C │                         │
+│     └───────────┘ └───────────┘ └───────────┘                         │
+│                                                                         │
+│  ❓ PROBLEM: Node 23 needs to retrieve flatten_clusters.url_list       │
+│              via passthrough (context_scope.passthrough)               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+",
+
+  "theBugVisualization": "
+╔═════════════════════════════════════════════════════════════════════════╗
+║                    THE BUG - BEFORE FIX                                 ║
+╚═════════════════════════════════════════════════════════════════════════╝
+
+Node 5 Output (flatten_clusters) - ALL GET SAME NODE_ID:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Record #1              Record #2 ⭐            Record #3                 │
+│ ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐    │
+│ │ source_guid:     │   │ source_guid:     │   │ source_guid:     │    │
+│ │   guid-12345     │   │   guid-12345     │   │   guid-12345     │    │
+│ │                  │   │                  │   │                  │    │
+│ │ node_id:         │   │ node_id:         │   │ node_id:         │    │
+│ │   node_5_abc ◄───┼───┼─ node_5_abc ◄───┼───┼─ node_5_abc      │    │
+│ │     ↑ SAME!      │   │     ↑ SAME!      │   │     ↑ SAME!      │    │
+│ │                  │   │                  │   │                  │    │
+│ │ lineage:         │   │ lineage:         │   │ lineage:         │    │
+│ │ [node_0,         │   │ [node_0,         │   │ [node_0,         │    │
+│ │  node_1,         │   │  node_1,         │   │  node_1,         │    │
+│ │  node_4,         │   │  node_4,         │   │  node_4,         │    │
+│ │  node_5_abc]     │   │  node_5_abc]     │   │  node_5_abc]     │    │
+│ │                  │   │                  │   │                  │    │
+│ │ content:         │   │ content:         │   │ content:         │    │
+│ │ url_list:        │   │ url_list:        │   │ url_list:        │    │
+│ │   [url1]         │   │   [url1, url2] ⭐│   │   [url1]         │    │
+│ └──────────────────┘   └──────────────────┘   └──────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Node 23 Lookup Process - ALL 3 FIND THE SAME RECORDS:
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  Node 23 Record A          Node 23 Record B           Node 23 Record C │
+│  ┌──────────────────┐      ┌──────────────────┐      ┌──────────────┐ │
+│  │ Lineage:         │      │ Lineage:         │      │ Lineage:     │ │
+│  │ [...,            │      │ [...,            │      │ [...,        │ │
+│  │  node_5_abc,     │      │  node_5_abc,     │      │  node_5_abc, │ │
+│  │  node_6_branch_a,│      │  node_6_branch_b,│      │  node_6_bran │ │
+│  │  ...,            │      │  ...,            │      │  ...,        │ │
+│  │  node_23_xxx]    │      │  node_23_yyy]    │      │  node_23_zzz │ │
+│  └────────┬─────────┘      └────────┬─────────┘      └──────┬───────┘ │
+│           │                         │                       │         │
+│           │ ① Extract node_id       │                       │         │
+│           ▼                         ▼                       ▼         │
+│     \"node_5_abc\"              \"node_5_abc\"            \"node_5_abc\"   │
+│           │                         │                       │         │
+│           │ ② Search records        │                       │         │
+│           ▼                         ▼                       ▼         │
+│  ┌──────────────────────────────────────────────────────────────────┐ │
+│  │ _find_record_by_identifiers(                                     │ │
+│  │   data = [Record#1, Record#2, Record#3],                         │ │
+│  │   source_guid = \"guid-12345\",                                    │ │
+│  │   node_id = \"node_5_abc\"                                         │ │
+│  │ )                                                                 │ │
+│  │                                                                   │ │
+│  │ Check Record #1: guid=✓ node_id=✓ → MATCH! Return Record #1     │ │
+│  │ (Never checks Record #2 or #3)                                   │ │
+│  └──────────────────────────────────────────────────────────────────┘ │
+│           │                         │                       │         │
+│           ▼                         ▼                       ▼         │
+│     url_list=[url1]            url_list=[url1]        url_list=[url1] │
+│          ✓                          ❌                      ✓         │
+│                                  WRONG!                               │
+│                            Should be [url1, url2]                     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+",
+
+  "theFixVisualization": "
+╔═════════════════════════════════════════════════════════════════════════╗
+║                    THE FIX - AFTER CHANGES                              ║
+╚═════════════════════════════════════════════════════════════════════════╝
+
+Node 5 Output (flatten_clusters) - NOW GET UNIQUE NODE_IDS:
+┌─────────────────────────────────────────────────────────────────────────┐
+│ Record #1              Record #2 ⭐            Record #3                 │
+│ ┌──────────────────┐   ┌──────────────────┐   ┌──────────────────┐    │
+│ │ source_guid:     │   │ source_guid:     │   │ source_guid:     │    │
+│ │   guid-12345     │   │   guid-12345     │   │   guid-12345     │    │
+│ │                  │   │                  │   │                  │    │
+│ │ node_id:         │   │ node_id:         │   │ node_id:         │    │
+│ │   node_5_abc_0   │   │   node_5_abc_1   │   │   node_5_abc_2   │    │
+│ │     ↑ UNIQUE!    │   │     ↑ UNIQUE!    │   │     ↑ UNIQUE!    │    │
+│ │                  │   │                  │   │                  │    │
+│ │ lineage:         │   │ lineage:         │   │ lineage:         │    │
+│ │ [node_0,         │   │ [node_0,         │   │ [node_0,         │    │
+│ │  node_1,         │   │  node_1,         │   │  node_1,         │    │
+│ │  node_4,         │   │  node_4,         │   │  node_4,         │    │
+│ │  node_5_abc_0]   │   │  node_5_abc_1]   │   │  node_5_abc_2]   │    │
+│ │                  │   │                  │   │                  │    │
+│ │ content:         │   │ content:         │   │ content:         │    │
+│ │ url_list:        │   │ url_list:        │   │ url_list:        │    │
+│ │   [url1]         │   │   [url1, url2] ⭐│   │   [url1]         │    │
+│ └──────────────────┘   └──────────────────┘   └──────────────────┘    │
+└─────────────────────────────────────────────────────────────────────────┘
+
+Node 23 Lookup Process - EACH FINDS ITS UNIQUE MATCH:
+┌─────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  Node 23 Record A          Node 23 Record B           Node 23 Record C │
+│  ┌──────────────────┐      ┌──────────────────┐      ┌──────────────┐ │
+│  │ Lineage:         │      │ Lineage:         │      │ Lineage:     │ │
+│  │ [...,            │      │ [...,            │      │ [...,        │ │
+│  │  node_5_abc_0,   │      │  node_5_abc_1, ⭐│      │  node_5_abc_ │ │
+│  │  node_6_branch_a,│      │  node_6_branch_b,│      │  node_6_bran │ │
+│  │  ...,            │      │  ...,            │      │  ...,        │ │
+│  │  node_23_xxx]    │      │  node_23_yyy]    │      │  node_23_zzz │ │
+│  └────────┬─────────┘      └────────┬─────────┘      └──────┬───────┘ │
+│           │                         │                       │         │
+│           │ ① Extract node_id       │                       │         │
+│           ▼                         ▼                       ▼         │
+│     \"node_5_abc_0\"            \"node_5_abc_1\"          \"node_5_abc_2\" │
+│           │                         │                       │         │
+│           │ ② Search records        │                       │         │
+│           ▼                         ▼                       ▼         │
+│  ┌──────────────────┐      ┌──────────────────┐      ┌────────────┐ │
+│  │ Search for       │      │ Search for       │      │ Search for │ │
+│  │ node_5_abc_0     │      │ node_5_abc_1     │      │ node_5_abc │ │
+│  │                  │      │                  │      │            │ │
+│  │ Rec#1: node=_0 ✓ │      │ Rec#1: node=_0 ❌│      │ Rec#1: nod │ │
+│  │ → MATCH!         │      │ Rec#2: node=_1 ✓ │      │ Rec#2: nod │ │
+│  │                  │      │ → MATCH!         │      │ Rec#3: nod │ │
+│  │                  │      │                  │      │ → MATCH!   │ │
+│  └────────┬─────────┘      └────────┬─────────┘      └──────┬─────┘ │
+│           │                         │                       │         │
+│           ▼                         ▼                       ▼         │
+│     url_list=[url1]            url_list=[url1,url2]   url_list=[url1] │
+│          ✓                              ✓ ⭐                ✓         │
+│                                   CORRECT!                            │
+│                              Got 2 URLs as expected!                  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+"
+}
