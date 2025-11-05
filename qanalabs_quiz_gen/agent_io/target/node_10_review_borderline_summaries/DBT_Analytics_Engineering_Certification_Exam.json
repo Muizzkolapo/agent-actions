@@ -1,0 +1,95 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "quality_score": 70,
+            "quality_tier": "high",
+            "primary_skill_area": "Manage database permissions in dbt models",
+            "syllabus_relevance": 25,
+            "implementation_specificity": 20,
+            "technical_depth": 15,
+            "learning_objectives_coverage": 10,
+            "reasoning": "The summary effectively addresses specific exam objectives related to managing grants and permissions in dbt, such as the transition from `post-hook` to using `grants` configuration. It provides a clear explanation of how `grants` automate privilege management, which is crucial for exam preparation. However, it lacks practical code snippets and explicit configuration examples, which lowers its implementation specificity."
+        },
+        "target_id": "d7db637e-4afb-47ab-b952-6f33c0bd2df4",
+        "node_id": "node_10_fbf1613a-761f-413f-b8b3-9ce1c5188309",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+            "node_4_f7461258-ed6e-4c98-aa5f-c11d3afea07c",
+            "node_5_a2990ecc-cd35-47b7-afc0-30e65bb282e5",
+            "node_6_09eb1d7c-e927-4f30-8db3-2c9743b35d2e",
+            "node_7_2566de25-d038-4a86-b894-fb9430ef9c8d",
+            "node_8_75e2d377-c9ff-4211-b7c7-266080df327e",
+            "node_9_c5f80275-9740-4767-8449-29c4a6f4fe34",
+            "node_10_fbf1613a-761f-413f-b8b3-9ce1c5188309"
+        ],
+        "metadata": {
+            "skipped_by_where_clause": true,
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched"
+        }
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "quality_score": 68,
+            "quality_tier": "high",
+            "primary_skill_area": "Build and manage data models in dbt",
+            "syllabus_relevance": 28,
+            "implementation_specificity": 20,
+            "technical_depth": 12,
+            "learning_objectives_coverage": 8,
+            "reasoning": "The summary directly addresses several key exam objectives, particularly around dbt model materialization, optimization, and testing practices, which are critical for hands-on proficiency. However, it lacks code snippets and specific configurations that could enhance practical learning. While it describes dbt concepts well, it could benefit from deeper technical detail regarding implementation."
+        },
+        "target_id": "205838da-e9d4-4354-95b8-07665d237d65",
+        "node_id": "node_10_bd2989d6-899b-4dc7-b58b-daba97deaed7",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+            "node_4_f7461258-ed6e-4c98-aa5f-c11d3afea07c",
+            "node_5_a2990ecc-cd35-47b7-afc0-30e65bb282e5",
+            "node_6_c674b01c-b300-41bd-86e9-3d5e9505b320",
+            "node_7_64746ae9-170a-4ffc-a92f-14da58317adb",
+            "node_8_feec3ef7-5f88-4ba5-b32f-4431658590a0",
+            "node_9_0529b3ca-747c-44ed-a9ac-a0029d47104b",
+            "node_10_bd2989d6-899b-4dc7-b58b-daba97deaed7"
+        ],
+        "metadata": {
+            "skipped_by_where_clause": true,
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched"
+        }
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "quality_score": 66,
+            "quality_tier": "high",
+            "primary_skill_area": "Implementing and documenting dbt projects",
+            "syllabus_relevance": 28,
+            "implementation_specificity": 20,
+            "technical_depth": 12,
+            "learning_objectives_coverage": 6,
+            "reasoning": "The summary covers multiple specific exam objectives related to dbt Codegen and YAML handling, especially in documentation generation. It references critical commands and concepts necessary for the exam, such as `dbt run-operation generate_model_yaml` and the `dbt ls` command, fulfilling an actionable implementation component. However, while technically detailed, it lacks more advanced coverage and concrete code snippets, which slightly limits its depth."
+        },
+        "target_id": "da5ff0d9-d337-40ee-9b5f-74db07efa9b3",
+        "node_id": "node_10_b5121c38-8755-4850-b6e0-52a7b4e7168c",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+            "node_4_f7461258-ed6e-4c98-aa5f-c11d3afea07c",
+            "node_5_a2990ecc-cd35-47b7-afc0-30e65bb282e5",
+            "node_6_42eb864e-9bba-478a-96ec-72f01d124514",
+            "node_7_723b5fdf-f8e7-4c34-8653-4fd423bf5479",
+            "node_8_bd6b37cc-2c0f-4113-a690-72ae687eac58",
+            "node_9_cd738596-ce54-47ce-bda7-d2cfa68f924d",
+            "node_10_b5121c38-8755-4850-b6e0-52a7b4e7168c"
+        ],
+        "metadata": {
+            "skipped_by_where_clause": true,
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched"
+        }
+    }
+]

@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "generated_at": "2025-11-04T12:16:41.683038Z",
+    "agent_actions_version": "1.2.0",
+    "invocation_id": "40295012-4dea-41af-b5f4-02973b5af2cf",
+    "schema_version": "1.0.0"
+  },
+  "elapsed_time": 0.0,
+  "args": {},
+  "results": [
+    {
+      "unique_id": "score_summary_quality",
+      "status": "error",
+      "timing": [
+        {
+          "name": "compile",
+          "started_at": "2025-11-04T12:16:41.690253Z",
+          "completed_at": "2025-11-04T12:16:41.704295Z"
+        }
+      ],
+      "thread_id": "MainThread",
+      "execution_time": 0.017606,
+      "message": "Error generating target: Error resolving {source.exam_name}: Field 'exam_name' not found in 'source'. Available fields: [code_snippets, removed_snippets, removal_reasoning] [Context: file_path=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets/DBT_Analytics_Engineering_Certification_Exam.json, base_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets, output_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_9_score_summary_quality, agent_name=score_summary_quality]",
+      "failures": 1,
+      "adapter_response": {},
+      "error_details": {
+        "error_type": "AgentActionsException",
+        "error_message": "Error generating target: Error resolving {source.exam_name}: Field 'exam_name' not found in 'source'. Available fields: [code_snippets, removed_snippets, removal_reasoning] [Context: file_path=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets/DBT_Analytics_Engineering_Certification_Exam.json, base_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets, output_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_9_score_summary_quality, agent_name=score_summary_quality]",
+        "context": {
+          "agent_config": {
+            "agent_type": "score_summary_quality",
+            "name": "score_summary_quality",
+            "model_name": "gpt-4o-mini",
+            "model_vendor": "openai",
+            "api_key": "OPENAI_API_KEY",
+            "code_path": "",
+            "dependencies": [
+              "fix_code_snippets"
+            ],
+            "prompt": "# Summary Quality Scoring - {source.exam_name}\n\nYou are an expert certification exam content reviewer evaluating educational summaries for the {source.exam_name}.\n\n## EXAM SYLLABUS REFERENCE\n\nYou will use the following official exam syllabus to assess content relevance and alignment:\n\n```json\n{exam_syllabus}\n```\n\n## YOUR TASK\n\nEvaluate the provided summary and assign a quality score from 0-100 based on how well it prepares candidates for the {source.exam_name}.\n\n## INPUT DATA\n\n- **Summary Title**: {summary_title}\n- **Summary Content**: {summary_content}\n- **Key Concepts**: {key_concepts}\n- **Technical Details**: {technical_details}\n- **Code Snippets**: {code_snippets}\n- **Learning Objectives**: {learning_objectives}\n\n## SCORING CRITERIA (0-100 points)\n\n### 1. Syllabus Relevance (30 points)\n- Does the summary directly address specific exam objectives from the syllabus?\n- Which topic areas does it cover?\n- Are the topics exam-critical or peripheral?\n- **Scoring Guide**:\n  - 25-30: Directly addresses multiple specific exam objectives\n  - 15-24: Addresses 1-2 exam objectives clearly\n  - 5-14: Loosely related to exam topics\n  - 0-4: Minimal or no exam relevance\n\n### 2. Implementation Specificity (30 points)\n- Contains actual code snippets that could be tested\n- Includes specific {source.platform_name} service names, parameters, commands\n- Provides configuration details, syntax, or procedures\n- Actionable content (not just conceptual)\n- **Scoring Guide**:\n  - 25-30: Rich code examples + specific configurations + clear procedures\n  - 15-24: Some code OR detailed technical specifications\n  - 5-14: Generic technical content without specifics\n  - 0-4: Purely conceptual, no implementation details\n\n### 3. Technical Depth (20 points)\n- Level of detail appropriate for mid-senior professionals\n- Goes beyond basic definitions\n- Addresses advanced scenarios, edge cases, or production considerations\n- **Scoring Guide**:\n  - 16-20: Advanced/production-level details\n  - 10-15: Intermediate technical depth\n  - 4-9: Basic technical content\n  - 0-3: Too simplistic or vague\n\n### 4. Learning Objectives Coverage (20 points)\n- Uses appropriate action verbs (configure, deploy, implement, evaluate, etc.)\n- Objectives align with exam skill requirements\n- Covers hands-on skills candidates must demonstrate\n- **Scoring Guide**:\n  - 16-20: Multiple clear, testable learning objectives\n  - 10-15: Some testable objectives present\n  - 4-9: Vague or incomplete objectives\n  - 0-3: No clear learning objectives\n\n## QUALITY TIERS\n\nBased on the final score:\n- **high** (\u226560): Excellent exam preparation material, keep for question generation\n- **borderline** (40-59): May be useful, requires human review\n- **low** (<40): Insufficient for exam prep, filter out\n\n## OUTPUT REQUIREMENTS\n\nProvide your evaluation as structured JSON with:\n\n1. **quality_score**: Total score (0-100) - sum of the 4 components below\n2. **quality_tier**: \"high\" (>=60), \"borderline\" (40-59), or \"low\" (<40)\n3. **primary_skill_area**: Main exam topic area this aligns with (use topics from the syllabus)\n4. **syllabus_relevance**: Score 0-30 points\n5. **implementation_specificity**: Score 0-30 points\n6. **technical_depth**: Score 0-20 points\n7. **learning_objectives_coverage**: Score 0-20 points\n8. **reasoning**: Brief explanation (2-3 sentences) with specific exam objective references\n\n## EVALUATION GUIDELINES\n\n**KEEP summaries that:**\n- Map to specific, testable exam objectives\n- Include {source.platform_name}-specific implementation details\n- Provide code, commands, or configuration examples\n- Enable creation of hands-on scenario questions\n\n**FLAG AS BORDERLINE summaries that:**\n- Have partial exam alignment but lack depth\n- Are conceptually relevant but missing implementation details\n- Cover exam topics but at too basic a level\n\n**SCORE LOW summaries that:**\n- Are generic concepts not specific to {source.platform_name}\n- Lack technical specificity or actionable content\n- Don't align with current exam objectives\n- Are too basic for the target audience\n\n## IMPORTANT NOTES\n\n- Reference the exact exam syllabus provided above\n- Quote specific exam objectives when explaining alignment\n- Consider the exam topic weights and coverage\n- Prioritize content that tests hands-on {source.platform_name} skills\n- Be objective and evidence-based in your scoring\n\nRespond with valid JSON matching the schema. Be thorough in your reasoning.",
+            "schema_name": "summary_quality_score",
+            "chunk_config": {
+              "overlap": 500,
+              "chunk_size": 4000
+            },
+            "observe": [],
+            "drops": [],
+            "is_operational": true,
+            "few_shot": 0,
+            "ephemeral": null,
+            "add_dispatch": null,
+            "run_mode": "batch",
+            "data_source": "",
+            "json_mode": true,
+            "prompt_debug": true,
+            "anthropic_version": "",
+            "enable_prompt_caching": null,
+            "conditional_clause": "",
+            "skip_if": null,
+            "where_clause": null,
+            "skip_condition": null,
+            "max_execution_time": 300,
+            "enable_caching": true,
+            "base_url": null,
+            "output_field": "raw_response",
+            "side_output": false,
+            "granularity": "Record",
+            "context_scope": {
+              "observe": [
+                "generate_summary.summary_title",
+                "generate_summary.summary_content",
+                "generate_summary.key_concepts",
+                "generate_summary.technical_details",
+                "generate_summary.code_snippets",
+                "generate_summary.learning_objectives"
+              ]
+            },
+            "loop_consumption_config": null,
+            "idx": 9,
+            "workflow_session_id": "workflow_1762258601_fe4aeea5"
+          },
+          "idx": 9
+        }
+      }
+    }
+  ]
+}

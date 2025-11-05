@@ -1,0 +1,168 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "candidate_facts_list": [
+                {
+                    "fact": "dbt Core v1.2 introduced a `grants` config for resources",
+                    "quote": "In v1.2, we introduced a `grants` config",
+                    "technical_level": "configuration"
+                },
+                {
+                    "fact": "`grants` is configured as a structured dictionary (e.g., {'select': ['role']}); dbt chooses the most efficient path to apply them",
+                    "quote": "You configure `grants` as a structured dictionary rather than writing all the SQL yourself\n* dbt will take *the most efficient path* to apply those grants",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "If `grants` is missing or set to {} dbt will not manage grants for that table",
+                    "quote": "if `grants` is missing or set to `{{}}`, dbt will understand that you don\u2019t want it managing grants for this table.",
+                    "technical_level": "configuration"
+                },
+                {
+                    "fact": "When changing grants, dbt computes diffs and can issue REVOKE statements (visible in debug-level logs)",
+                    "quote": "you should see ... dbt has run a `revoke` statement.",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "dbt determines whether grants are 'carried over' for incremental models based on materialization and the target database",
+                    "quote": "It knows whether grants are \u201ccarried over\u201d when a model is re-run based on its materialization and your database.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "dbt does not treat schemas as first-class configurable objects; schema USAGE grants must still be applied via hooks",
+                    "quote": "there isn\u2019t really a way to configure *schemas as their own objects* within dbt.\nFor now, it\u2019s still necessary to grant `usage` on schemas",
+                    "technical_level": "constraint"
+                },
+                {
+                    "fact": "The 'manage grants' capability is global \u2014 users with the transformer role can change grants on any object as if they were the owner",
+                    "quote": "It is worth noting that this privilege *is* a global privilege \u2013 now anyone using the `transformer` role can change grants on any object as though they are the owner of the object.",
+                    "technical_level": "constraint"
+                },
+                {
+                    "fact": "Database-specific advanced permissions (Snowflake row access policies, masking) still require post-hooks to apply",
+                    "quote": "in Snowflake, you\u2019ll still want a `post-hook` to apply a [row access policy] or a column [masking policy] to your table",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "`grants` config is exposed via dbt metadata/graph, allowing macros to iterate graph.nodes to infer schema-level grants",
+                    "quote": "Now that `grants` is a real config in dbt, available via dbt metadata, you can do all sorts of fun things with it. For instance, figure out which schemas have at least one object granting `select` to a role",
+                    "technical_level": "integration"
+                }
+            ]
+        },
+        "target_id": "766b4207-03bb-4601-b614-7d30baefba21",
+        "node_id": "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "candidate_facts_list": [
+                {
+                    "fact": "Set folder-level materializations in dbt_project.yml to materialize all models in a folder as tables, avoiding per-model 'materialized: view'.",
+                    "quote": "If all of your models in a folder are tables, define the materialization on the dbt_project.yml file rather than on the model file.",
+                    "technical_level": "configuration"
+                },
+                {
+                    "fact": "dbt models default to materialization 'view' \u2014 you do not need to declare models as views explicitly.",
+                    "quote": "By default, dbt models are materialized as \u201cviews\u201d. This removes the need to declare any models as views.",
+                    "technical_level": "constraint"
+                },
+                {
+                    "fact": "Use post-hooks to grant permissions to other transformers and BI users so model changes remain accessible to collaborators.",
+                    "quote": "Do you use post-hooks to grant permissions to other transformers and BI users? ... This will ensure that any changes made will be accessible to your collaborators",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "Prefer folder selectors or YAML selectors over tagging every model; majority of models should remain untagged.",
+                    "quote": "The majority of your project\u2019s models should be untagged. ... you can use folder selectors in many cases to eliminate over tagging of every model in a folder.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "YAML selectors enable intricate, layered model selection and can replace complicated tagging schemes.",
+                    "quote": "Are you using YAML selectors? These enable intricate, layered model selection and can eliminate complicated tagging mechanisms",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "Install the dbt_utils package to reuse community macros (no need to copy macros into your project).",
+                    "quote": "Do you have the dbt_utils package installed? This is by far our most popular and essential package. ... you have access to the macros (no need to copy them over to your project).",
+                    "technical_level": "integration"
+                },
+                {
+                    "fact": "Incremental models MUST use unique keys and the is_incremental() macro to implement correct incremental logic.",
+                    "quote": "If you have incremental models, are they using unique keys and is_incremental() macro?",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "In dbt Cloud, configure jobs to inherit from the environment to make upgrading dbt versions easier.",
+                    "quote": "What dbt version are the jobs? Are the majority of them inheriting from the environment to make upgrading easier?",
+                    "technical_level": "configuration"
+                },
+                {
+                    "fact": "All sources should have corresponding staging models to clean/standardize structure; avoid direct joins between sources or into intermediates.",
+                    "quote": "All sources should have a corresponding staging model to clean and standardize the data structure. They should not look like the image below.",
+                    "technical_level": "constraint"
+                }
+            ]
+        },
+        "target_id": "5fefb2eb-f0ed-4cbf-ace7-032ababddffc",
+        "node_id": "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "candidate_facts_list": [
+                {
+                    "fact": "dbt Codegen macro generate_model_yaml requires model_names and supports upstream_descriptions (default=False).",
+                    "quote": "* `model_names` (required): The model(s) you wish to generate YAML for.\n* `upstream_descriptions` (optional, `default=False`): Whether you want to include descriptions for identical column names from upstream models.",
+                    "technical_level": "implementation"
+                },
+                {
+                    "fact": "generate_model_yaml accepts multiple model_names in one call to output a single combined .yml for several models.",
+                    "quote": "$ dbt run-operation generate_model_yaml --args '{{\"model_names\": [ \"activity_based_interest_activated\", \"activity_based_interest_deactivated\", \"activity_based_interest_updated\", ...] }}'",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "Use dbt ls -m <path> --output name to programmatically list model names for piping into generate_model_yaml.",
+                    "quote": "$ dbt ls -m models/core/activity_based_interest --output name | xargs -I{{}} echo -n ' \"{{}}\",'",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "Run dbt docs generate to validate YAML and surface syntax errors before running dbt docs serve.",
+                    "quote": "Run `dbt docs generate`. If there are syntax errors, this will be found out at this stage.",
+                    "technical_level": "troubleshooting"
+                },
+                {
+                    "fact": "Create docs blocks with {{% docs <name> %}}...{{% enddocs %}} and reference them in schema YAML via {{ doc('<name>') }}.",
+                    "quote": "$ cat .../_activity_based_interest_docs.md  {{% docs activity_based_interest__id %}} ... {{% enddocs %}}\n$ cat .../_activity_based_interest_docs.yml  ... description: \"{{{{ doc('activity_based_interest__id') }}}\"",
+                    "technical_level": "integration"
+                },
+                {
+                    "fact": "The solution was tested on Mac/VS Code; regex behavior may vary across environments (platform-specific regex caveat).",
+                    "quote": "Note that this solution has been tested on Mac/VS Code, and that regex behavior may vary between stacks.",
+                    "technical_level": "constraint"
+                },
+                {
+                    "fact": "Extract all unique columns in a folder via: grep '      \\- name:' <file> | cut -c 15- | sort -u to produce a deduplicated list.",
+                    "quote": "$ grep '      \\\\- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 15- | sort -u",
+                    "technical_level": "procedure"
+                },
+                {
+                    "fact": "When adding models or columns to an existing folder, prefer adding docs/doc-blocks manually rather than programmatic replacements.",
+                    "quote": "When adding additional models to a folder, or additional columns to an existing model, I would suggest adding new documentation and docs blocks manually rather than programmatically.",
+                    "technical_level": "procedure"
+                }
+            ]
+        },
+        "target_id": "2f780ee4-9250-46ad-9326-817592428cee",
+        "node_id": "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf"
+        ]
+    }
+]

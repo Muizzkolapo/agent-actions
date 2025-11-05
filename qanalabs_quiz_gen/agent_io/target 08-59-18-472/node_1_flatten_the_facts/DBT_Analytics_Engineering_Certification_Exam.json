@@ -1,0 +1,366 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "dbt Core v1.2 introduced a `grants` config for resources",
+            "quote": "In v1.2, we introduced a `grants` config",
+            "technical_level": "configuration"
+        },
+        "target_id": "ad64da58-b243-4865-a3de-9607e067dae7",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "`grants` is configured as a structured dictionary (e.g., {'select': ['role']}); dbt chooses the most efficient path to apply them",
+            "quote": "You configure `grants` as a structured dictionary rather than writing all the SQL yourself\n* dbt will take *the most efficient path* to apply those grants",
+            "technical_level": "implementation"
+        },
+        "target_id": "1b9bed8d-2816-4575-84ca-91879bc720cb",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "If `grants` is missing or set to {} dbt will not manage grants for that table",
+            "quote": "if `grants` is missing or set to `{{}}`, dbt will understand that you don\u2019t want it managing grants for this table.",
+            "technical_level": "configuration"
+        },
+        "target_id": "e7aefb93-dd49-4513-8b92-89a56b96e4e0",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "When changing grants, dbt computes diffs and can issue REVOKE statements (visible in debug-level logs)",
+            "quote": "you should see ... dbt has run a `revoke` statement.",
+            "technical_level": "procedure"
+        },
+        "target_id": "c78d3cff-1504-4aa1-9082-c4e9308dd0fd",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "dbt determines whether grants are 'carried over' for incremental models based on materialization and the target database",
+            "quote": "It knows whether grants are \u201ccarried over\u201d when a model is re-run based on its materialization and your database.",
+            "technical_level": "implementation"
+        },
+        "target_id": "010aa6e5-fb29-4ca7-878a-e5ac20997592",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "dbt does not treat schemas as first-class configurable objects; schema USAGE grants must still be applied via hooks",
+            "quote": "there isn\u2019t really a way to configure *schemas as their own objects* within dbt.\nFor now, it\u2019s still necessary to grant `usage` on schemas",
+            "technical_level": "constraint"
+        },
+        "target_id": "27083217-5521-4567-87fc-97fafb403498",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "The 'manage grants' capability is global \u2014 users with the transformer role can change grants on any object as if they were the owner",
+            "quote": "It is worth noting that this privilege *is* a global privilege \u2013 now anyone using the `transformer` role can change grants on any object as though they are the owner of the object.",
+            "technical_level": "constraint"
+        },
+        "target_id": "b272ef4e-4fc7-417b-b8cb-cf0047ea01e9",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "Database-specific advanced permissions (Snowflake row access policies, masking) still require post-hooks to apply",
+            "quote": "in Snowflake, you\u2019ll still want a `post-hook` to apply a [row access policy] or a column [masking policy] to your table",
+            "technical_level": "procedure"
+        },
+        "target_id": "5d9dab6a-f411-48f8-a450-bd0e52b0de49",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "fact": "`grants` config is exposed via dbt metadata/graph, allowing macros to iterate graph.nodes to infer schema-level grants",
+            "quote": "Now that `grants` is a real config in dbt, available via dbt metadata, you can do all sorts of fun things with it. For instance, figure out which schemas have at least one object granting `select` to a role",
+            "technical_level": "integration"
+        },
+        "target_id": "dcb89bd6-51d2-4c4c-9760-09e5b7ecb891",
+        "node_id": "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "Set folder-level materializations in dbt_project.yml to materialize all models in a folder as tables, avoiding per-model 'materialized: view'.",
+            "quote": "If all of your models in a folder are tables, define the materialization on the dbt_project.yml file rather than on the model file.",
+            "technical_level": "configuration"
+        },
+        "target_id": "2604a06f-ea7d-41b5-b998-f9f72df5932b",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "dbt models default to materialization 'view' \u2014 you do not need to declare models as views explicitly.",
+            "quote": "By default, dbt models are materialized as \u201cviews\u201d. This removes the need to declare any models as views.",
+            "technical_level": "constraint"
+        },
+        "target_id": "ad8a49a1-63e7-4b4d-ae6d-0f94b801f478",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "Use post-hooks to grant permissions to other transformers and BI users so model changes remain accessible to collaborators.",
+            "quote": "Do you use post-hooks to grant permissions to other transformers and BI users? ... This will ensure that any changes made will be accessible to your collaborators",
+            "technical_level": "procedure"
+        },
+        "target_id": "abc22e25-c0ac-4bcd-8e6f-4de9e86f2890",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "Prefer folder selectors or YAML selectors over tagging every model; majority of models should remain untagged.",
+            "quote": "The majority of your project\u2019s models should be untagged. ... you can use folder selectors in many cases to eliminate over tagging of every model in a folder.",
+            "technical_level": "implementation"
+        },
+        "target_id": "2911fd06-ec99-4a91-97bd-24fc73ab9aa6",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "YAML selectors enable intricate, layered model selection and can replace complicated tagging schemes.",
+            "quote": "Are you using YAML selectors? These enable intricate, layered model selection and can eliminate complicated tagging mechanisms",
+            "technical_level": "implementation"
+        },
+        "target_id": "b514a24f-ed93-4bd7-94db-861c71d24fca",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "Install the dbt_utils package to reuse community macros (no need to copy macros into your project).",
+            "quote": "Do you have the dbt_utils package installed? This is by far our most popular and essential package. ... you have access to the macros (no need to copy them over to your project).",
+            "technical_level": "integration"
+        },
+        "target_id": "c3b2db06-4f21-4273-af90-ccd73980f110",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "Incremental models MUST use unique keys and the is_incremental() macro to implement correct incremental logic.",
+            "quote": "If you have incremental models, are they using unique keys and is_incremental() macro?",
+            "technical_level": "implementation"
+        },
+        "target_id": "88e0cdc2-e20b-4abf-960a-1189cf2766df",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "In dbt Cloud, configure jobs to inherit from the environment to make upgrading dbt versions easier.",
+            "quote": "What dbt version are the jobs? Are the majority of them inheriting from the environment to make upgrading easier?",
+            "technical_level": "configuration"
+        },
+        "target_id": "46c0603a-2628-41e1-8857-c56aac822e06",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "fact": "All sources should have corresponding staging models to clean/standardize structure; avoid direct joins between sources or into intermediates.",
+            "quote": "All sources should have a corresponding staging model to clean and standardize the data structure. They should not look like the image below.",
+            "technical_level": "constraint"
+        },
+        "target_id": "9cdae10d-d4ce-4e17-ba0a-106c7a6a8187",
+        "node_id": "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "dbt Codegen macro generate_model_yaml requires model_names and supports upstream_descriptions (default=False).",
+            "quote": "* `model_names` (required): The model(s) you wish to generate YAML for.\n* `upstream_descriptions` (optional, `default=False`): Whether you want to include descriptions for identical column names from upstream models.",
+            "technical_level": "implementation"
+        },
+        "target_id": "619ea6a2-1408-47a1-a696-26e49b1f8883",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "generate_model_yaml accepts multiple model_names in one call to output a single combined .yml for several models.",
+            "quote": "$ dbt run-operation generate_model_yaml --args '{{\"model_names\": [ \"activity_based_interest_activated\", \"activity_based_interest_deactivated\", \"activity_based_interest_updated\", ...] }}'",
+            "technical_level": "procedure"
+        },
+        "target_id": "0bcd5b4e-fb04-4739-80cb-9a69a3c0078d",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "Use dbt ls -m <path> --output name to programmatically list model names for piping into generate_model_yaml.",
+            "quote": "$ dbt ls -m models/core/activity_based_interest --output name | xargs -I{{}} echo -n ' \"{{}}\",'",
+            "technical_level": "procedure"
+        },
+        "target_id": "d8b22bed-9b8a-475d-99c6-3afc1a552033",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "Run dbt docs generate to validate YAML and surface syntax errors before running dbt docs serve.",
+            "quote": "Run `dbt docs generate`. If there are syntax errors, this will be found out at this stage.",
+            "technical_level": "troubleshooting"
+        },
+        "target_id": "6fe6c57f-0a1a-47c0-80f7-f2e97bf257d6",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "Create docs blocks with {{% docs <name> %}}...{{% enddocs %}} and reference them in schema YAML via {{ doc('<name>') }}.",
+            "quote": "$ cat .../_activity_based_interest_docs.md  {{% docs activity_based_interest__id %}} ... {{% enddocs %}}\n$ cat .../_activity_based_interest_docs.yml  ... description: \"{{{{ doc('activity_based_interest__id') }}}\"",
+            "technical_level": "integration"
+        },
+        "target_id": "b83681e7-0d0c-4a45-9c09-b1fd0dffd4eb",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "The solution was tested on Mac/VS Code; regex behavior may vary across environments (platform-specific regex caveat).",
+            "quote": "Note that this solution has been tested on Mac/VS Code, and that regex behavior may vary between stacks.",
+            "technical_level": "constraint"
+        },
+        "target_id": "6614d911-08d6-4b34-a86d-29f23b78186a",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "Extract all unique columns in a folder via: grep '      \\- name:' <file> | cut -c 15- | sort -u to produce a deduplicated list.",
+            "quote": "$ grep '      \\\\- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 15- | sort -u",
+            "technical_level": "procedure"
+        },
+        "target_id": "9a31882e-2fd7-4e47-92af-1b214df05796",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "fact": "When adding models or columns to an existing folder, prefer adding docs/doc-blocks manually rather than programmatic replacements.",
+            "quote": "When adding additional models to a folder, or additional columns to an existing model, I would suggest adding new documentation and docs blocks manually rather than programmatically.",
+            "technical_level": "procedure"
+        },
+        "target_id": "8521c9ec-7296-4d10-89b0-53d61c6ae30b",
+        "node_id": "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab",
+        "lineage": [
+            "node_0_b4a50b16-024f-47c6-a075-96ee89346ecf",
+            "node_1_a0caa8fd-05d3-4cd7-8b71-48ef704430ab"
+        ]
+    }
+]

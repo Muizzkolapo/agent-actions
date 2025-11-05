@@ -1,0 +1,431 @@
+{
+  "requests": [
+    {
+      "custom_id": "95a7dbf8-50bd-4604-8a2a-64312523783b",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Manage grants and permissions in dbt\", \"syllabus_relevance\": 28, \"implementation_specificity\": 25, \"technical_depth\": 16, \"learning_objectives_coverage\": 16, \"reasoning\": \"The summary provides a comprehensive overview of managing grants and permissions in dbt, directly addressing exam objectives related to configuring grants and applying post-hooks. It includes specific code snippets and technical details about grant management, such as the syntax for grants and the behavior of dbt when permissions change. The learning objectives are clear and actionable, aligning well with the skills required for the exam.\", \"code_snippets\": [\"{'select': ['role']}\", \"{{}}\"], \"summary_content\": \"dbt Core v1.2 introduced a structured grants config that lets dbt manage object-level permissions for models and other resources. Grants are declared as a dictionary (for example, {'select': ['role']}) and dbt chooses the most efficient path to apply those grants rather than requiring manual SQL for every permission. If a resource has no grants config or it is set to {{ }}, dbt will not manage grants for that object.\\n\\nWhen grants change, dbt computes the diff between the desired and current permissions and can emit REVOKE statements as part of the update process; these REVOKE statements are visible at debug log level. dbt knows whether existing grants should be \\\"carried over\\\" for incremental model runs based on the model's materialization and the target database. Grants are exposed in dbt metadata and the project graph, enabling macros to iterate graph.nodes to infer or aggregate schema-level grant information.\\n\\nSchemas are not modeled as first-class configurable objects in dbt, so schema-level USAGE grants still need to be applied via hooks or post-hooks. Database-specific advanced permission features (for example, Snowflake row access policies or column masking policies) also require post-hooks to apply. The ability to manage grants is a global capability: users operating with the transformer role can change grants on any object as if they were the owner. Use post-hooks to grant permissions to other transformers and BI users so model changes remain accessible to collaborators.\", \"key_concepts\": [\"dbt v1.2 adds a structured grants config for resources.\", \"Configure grants as a dictionary (e.g., {'select': ['role']}); omit or set to {{}} to prevent dbt from managing grants.\", \"dbt computes diffs and can issue REVOKE statements when permissions change (visible at debug level).\", \"Grant carry-over behavior for incremental models depends on materialization and the target database.\", \"Schemas are not first-class objects in dbt; schema USAGE and advanced DB-specific policies require hooks/post-hooks.\"], \"technical_details\": \"- grants syntax: a structured dictionary mapping privileges to principal lists \\u2014 example: {'select': ['role']}\\n- If grants is missing or set to {{ }}, dbt will not manage grants for that object\\n- dbt selects the most efficient SQL path to apply grants rather than requiring explicit SQL\\n- On grant changes, dbt computes diffs and may issue REVOKE statements; REVOKE activity appears in debug logs\\n- dbt determines whether to carry over existing grants for incremental models based on materialization type and the target database\\n- grants are available via dbt metadata/graph so macros can inspect graph.nodes to infer schema-level grant distributions\\n- Schema-level USAGE grants are not managed via the grants config and must be applied with hooks/post-hooks\\n- Database-specific features (e.g., Snowflake row access policies and column masking) require post-hooks to attach policies to objects\\n- Grant-management is global: a user with the transformer role can alter grants on any object as if they own it\\n- Use post-hooks to grant permissions to other transformers and BI users so collaborators retain access after model changes\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"You are designing\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "79f8bb8b-96d8-4e1d-8a91-36356a9f2c39",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Build and manage dbt models\", \"syllabus_relevance\": 30, \"implementation_specificity\": 30, \"technical_depth\": 20, \"learning_objectives_coverage\": 20, \"reasoning\": \"The summary directly addresses multiple exam objectives related to dbt model management, specifically the use of the generate_model_yaml macro. It includes detailed implementation specifics, such as required parameters and command usage, which are critical for hands-on skills. The learning objectives are clear and actionable, aligning well with the exam's focus on practical dbt skills.\", \"code_snippets\": [\"$ dbt run-operation generate_model_yaml --args '{{\\\"model_names\\\": [ \\\"activity_based_interest_activated\\\", \\\"activity_based_interest_deactivated\\\", \\\"activity_based_interest_updated\\\", ...] }}'\", \"$ dbt ls -m models/core/activity_based_interest --output name | xargs -I{{}} echo -n ' \\\"{{}}\\\",'\", \"$ cat .../_activity_based_interest_docs.md  {{% docs activity_based_interest__id %}} ... {{% enddocs %}\\n$ cat .../_activity_based_interest_docs.yml  ... description: \\\"{{{{ doc('activity_based_interest__id') }}}}\\\"\"], \"summary_content\": \"The generate_model_yaml dbt macro creates schema YAML for one or more models. It requires the model_names parameter and optionally includes upstream column descriptions when upstream_descriptions=True (default is False). A single call can combine multiple model definitions into one .yml output.\\n\\nModel names can be provided programmatically (for example, by piping the output of dbt ls) or listed explicitly. Documentation text can be stored in docs blocks using the {{% docs <name> %}} ... {{% enddocs %}} syntax and then referenced in generated schema YAML with the doc('<name>') function. After generating or editing YAML, run dbt docs generate to validate YAML syntax before serving docs.\\n\\nPrefer adding new docs or docs blocks manually when adding new models or adding columns to existing models rather than fully automated replacements. Regex and command behavior may vary across platforms; verify outputs in your environment (examples were tested on Mac/VS Code).\", \"key_concepts\": [\"model_names is required when invoking generate_model_yaml.\", \"upstream_descriptions is optional and defaults to False; set it to True to include identical column names' descriptions from upstream models.\", \"A single generate_model_yaml call can output a combined .yml for multiple models.\", \"Create docs blocks with {{% docs <name> %}}...{{% enddocs %}} and reference them in schema YAML via {{ doc('<name>') }}.\", \"Run dbt docs generate to validate YAML and catch syntax errors before serving documentation.\"], \"technical_details\": \"- model_names (required): supply one or more model names (string or list of strings).\\n- upstream_descriptions (optional, default=False): Boolean to include identical column names' descriptions from upstream models.\\n- To combine multiple models into one YAML, pass multiple names in model_names in a single call.\\n- Use dbt ls -m <path> --output name to list model names programmatically for piping into generate_model_yaml.\\n- After generating or editing YAML, run dbt docs generate to validate YAML syntax prior to running dbt docs serve.\\n- Add docs text using the docs block syntax: {{% docs <name> %}}...{{% enddocs %}} and reference it in schema YAML via {{ doc('<name>') }}.\\n- Prefer manual addition of docs/doc-blocks when adding models or columns to existing folders to avoid overwriting or incorrect replacements.\\n- Be aware that regex and shell behavior can vary by platform (the provided approach was tested on Mac/VS Code).\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"The system is showing\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "b9836fa5-816a-4214-b25d-1780aeffd62b",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Data transformation and modeling\", \"syllabus_relevance\": 28, \"implementation_specificity\": 30, \"technical_depth\": 18, \"learning_objectives_coverage\": 20, \"reasoning\": \"The summary directly addresses the exam objective of data transformation by demonstrating a practical application of shell commands to extract and deduplicate YAML entries, which is relevant for dbt users. It includes specific code snippets and technical details that are actionable, aligning well with the hands-on skills required for the exam.\", \"code_snippets\": [\"$ grep '      \\\\\\\\- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 15- | sort -u\"], \"summary_content\": \"Use a short shell pipeline to extract the values of YAML \\\"- name:\\\" entries and produce a deduplicated list. The pipeline locates lines that contain the indented \\\"- name:\\\" property, strips the leading indentation and marker, and then sorts and uniquifies the resulting names.\\n\\nEach stage performs a single transformation: grep filters for the property lines, cut removes the fixed-width prefix to leave only the name value, and sort -u sorts alphabetically while removing duplicates. Run the pipeline against each file (or iterate files) to collect unique column names across a folder.\", \"key_concepts\": [\"grep '      \\\\- name:' matches lines that contain six spaces followed by '- name:'.\", \"cut -c 15- removes the first 14 characters of each matched line, leaving the name value.\", \"sort -u sorts the output and removes duplicate entries, producing a unique list.\", \"The pipeline yields a deduplicated, sorted list of the YAML name values.\"], \"technical_details\": \"\\u2022 Command pipeline: grep '      \\\\- name:' <file> | cut -c 15- | sort -u\\n\\u2022 grep pattern and quoting: the pattern includes leading spaces and an escaped hyphen; wrap the pattern in single quotes to prevent shell interpretation.\\n\\u2022 cut -c 15-: select characters from position 15 through end (removes the first 14 characters which include indentation and the \\\"- name:\\\" marker plus following space).\\n\\u2022 sort -u: sort lines and remove duplicates to produce a unique list.\\n\\u2022 File target: replace <file> with the YAML file path; run the pipeline per file or across multiple files to aggregate results.\\n\\u2022 Leading '$' in examples denotes the shell prompt and is not part of the command to type.\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"You are configuring\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "0748216f-d8e2-4c31-a6c0-64ab69e85850",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Configure and manage dbt models and materializations\", \"syllabus_relevance\": 25, \"implementation_specificity\": 20, \"technical_depth\": 15, \"learning_objectives_coverage\": 15, \"reasoning\": \"The summary effectively addresses multiple exam objectives related to dbt model materialization and incremental models, specifically covering the configuration of folder-level materializations and the requirements for incremental models. However, it lacks code snippets that would enhance implementation specificity. The learning objectives are clear and actionable, aligning well with the skills needed for the exam.\", \"code_snippets\": [], \"summary_content\": \"dbt models are materialized as views by default; explicitly declaring models as views is unnecessary. When a group of models in a folder should be tables instead of views, declare the materialization at the folder level in dbt_project.yml so all models in that folder inherit the table materialization and individual models do not each require a materialized: view or materialized: table line.\\n\\nIncremental models require explicit incremental logic to behave correctly. Incremental models must use unique keys to deduplicate or merge incoming data and must use the is_incremental() macro to separate full-refresh behavior from incremental logic. Implementations should ensure that insert/update/delete logic that applies only on incremental runs is guarded by is_incremental() to avoid incorrect results on full-refresh runs.\\n\\nSet folder-level materializations to reduce redundancy and enforce consistent materialization across multiple models, and always design incremental models with a unique key and is_incremental() guards to maintain correctness and idempotence.\", \"key_concepts\": [\"dbt models default to materialization 'view' \\u2014 no explicit view declaration is required.\", \"Set folder-level materializations in dbt_project.yml to materialize all models in a folder as tables rather than adding per-model materialized settings.\", \"Incremental models must define unique keys and use the is_incremental() macro to separate incremental logic from full-refresh logic.\"], \"technical_details\": \"- Default materialization: models are materialized as \\\"view\\\" by default; do not need to declare models as views.\\n- Folder-level materialization: define materialization for a folder in dbt_project.yml to materialize all models in that folder as tables (avoids per-model materialized: view or materialized: table entries).\\n- Incremental model requirements:\\n  - Define a unique key for the incremental model to support correct deduplication/merging behavior.\\n  - Use the is_incremental() macro to conditionally execute incremental-only SQL (separate from full-refresh SQL).\\n  - Ensure incremental logic uses the unique key to update or deduplicate rows during incremental runs.\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"You are configuring\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "15c9db3d-5491-49e1-9093-adf9cc66c245",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Implement dbt selectors and tagging strategies\", \"syllabus_relevance\": 25, \"implementation_specificity\": 20, \"technical_depth\": 15, \"learning_objectives_coverage\": 10, \"reasoning\": \"The summary effectively addresses the exam objectives related to model organization and selection strategies in dbt, particularly focusing on minimizing tagging overhead and using folder and YAML selectors. However, it lacks code snippets and specific implementation examples, which would enhance its practical application. The learning objectives are clear but could be more detailed to align with hands-on skills required for the exam.\", \"code_snippets\": [], \"summary_content\": \"Prefer folder selectors or YAML selectors instead of tagging every model; the majority of a project\\u2019s models should remain untagged to reduce maintenance overhead. Organize models into folders when natural grouping exists so selectors can target groups without adding tags to each model.\\n\\nUse YAML selectors for intricate, layered model selection to replace complicated tagging schemes. YAML selectors enable expressive, composable selection logic so teams can apply selection rules centrally rather than proliferating tags across many models.\", \"key_concepts\": [\"The majority of project models should remain untagged to minimize tagging overhead.\", \"Folder selectors can eliminate the need to tag every model in a folder by selecting models by location.\", \"YAML selectors enable intricate, layered selection logic and can replace complicated tagging schemes.\"], \"technical_details\": \"- Keep most models untagged; reserve tags for a small set of special cases.\\n- Organize related models into folders so folder selectors can target them without per-model tags.\\n- Use folder selectors in cases where grouping by location or project structure is sufficient.\\n- Implement YAML selectors to express layered, composable selection rules that replace complex tag combinations.\\n- Prefer selector-based selection (folder or YAML) as the primary mechanism for model retrieval; apply tags only when a model requires special, individual identification.\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"You are\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "cb9a9903-1957-44ec-9f73-bc0ea73bb10c",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Implement dbt models and manage dbt Cloud jobs\", \"syllabus_relevance\": 25, \"implementation_specificity\": 20, \"technical_depth\": 15, \"learning_objectives_coverage\": 8, \"reasoning\": \"The summary effectively addresses specific exam objectives related to using community packages and configuring dbt Cloud jobs, which are critical for exam preparation. It discusses the installation of the dbt_utils package and the importance of job inheritance in dbt Cloud, aligning with the syllabus. However, it lacks code snippets and detailed technical configurations, which limits its implementation specificity. The learning objectives are clear but could be more comprehensive to fully cover the hands-on skills required for the exam.\", \"code_snippets\": [], \"summary_content\": \"Install the dbt_utils package to reuse community macros directly in your project so you do not need to copy macros into your codebase. Using the package provides immediate access to community-maintained macros and reduces duplication and maintenance overhead.\\n\\nIn dbt Cloud, configure jobs to inherit from the environment so upgrades to the environment-wide dbt version apply to those jobs without editing each job individually. Having the majority of jobs inherit from the environment makes version upgrades simpler and reduces per-job configuration work.\\n\\nApply both practices together: rely on community packages like dbt_utils to centralize shared logic and set jobs to inherit from the environment so platform-level changes (for example, updating the dbt version) propagate broadly and consistently.\", \"key_concepts\": [\"Install dbt_utils to access community macros without copying them into your project.\", \"dbt Cloud jobs can inherit from the environment so upgrades to the environment-wide dbt version affect those jobs.\", \"Making most jobs inherit from the environment simplifies version upgrades and reduces per-job configuration.\"], \"technical_details\": \"- Install the dbt_utils package so macros are available in your project; copying macros into the project is not required.\\n- Verify that dbt Cloud jobs are configured to inherit from the environment to allow environment-level dbt version upgrades to apply to those jobs.\\n- Confirm the dbt version used by jobs and check whether the majority of jobs inherit from the environment to streamline future upgrades.\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"As a software engineer, you are\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    },
+    {
+      "custom_id": "cbb47397-1f86-47e0-ab55-fa4ae774170e",
+      "params": {
+        "model": "claude-haiku-4-5-20251001",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"primary_skill_area\": \"Modeling and transforming data in dbt\", \"syllabus_relevance\": 28, \"implementation_specificity\": 20, \"technical_depth\": 18, \"learning_objectives_coverage\": 19, \"reasoning\": \"The summary directly addresses the exam objective of modeling and transforming data in dbt by emphasizing the importance of staging models and their constraints. It provides clear guidelines on how to structure staging models, which aligns with the need for candidates to demonstrate hands-on skills in data transformation. However, it lacks code snippets, which would enhance implementation specificity. Overall, it covers critical aspects of staging models and their role in dbt effectively.\", \"code_snippets\": [], \"summary_content\": \"Every source must have a corresponding staging model that ingests the raw source and cleans and standardizes its structure. Staging models are the single place to apply column renames, type normalization, null handling, and minimal business-rule normalization for that source. Staging models should represent a normalized, predictable view of the source data for downstream models to consume.\\n\\nDo not perform direct joins between different source systems inside staging models, and do not join other sources or intermediate models into a source's staging model. Downstream models should combine the standardized outputs of staging models rather than coupling sources together inside staging. This keeps source-specific logic isolated, prevents fragile cross-source dependencies, and makes testing and maintenance straightforward.\\n\\nEnforce this constraint consistently: staging models remain simple, source-focused transformation layers. Complex cross-source logic belongs only in higher-level transformation models that explicitly reference multiple staging models and are designed for combining data across sources.\", \"key_concepts\": [\"One staging model per source: each source must have a dedicated staging model that standardizes its structure.\", \"Staging models perform cleaning and standardization only (renames, types, nulls, canonicalization), not cross-source joins.\", \"No direct joins between sources inside staging models; cross-source joins belong in downstream models that consume staging outputs.\", \"Isolating source logic in staging models reduces coupling, simplifies testing, and limits blast radius of source changes.\"], \"technical_details\": \" - Create a single staging model for each raw source that: reads the raw table/view, applies column renames, enforces data types, handles nulls/malformed values, and outputs a standardized schema.\\n - Do not include any joins to other sources or intermediate models inside a staging model; joins across data origins must occur only in downstream models that explicitly combine staging outputs.\\n - Keep staging transformations idempotent and minimal (no complex aggregations or business-logic joins).\\n - Downstream models should reference staging model outputs as canonical inputs for joins, aggregations, and business logic.\\n - Use clear, discoverable naming and documentation for each staging model so consumers can identify which source and cleaning steps are applied.\"}"
+          }
+        ],
+        "system": "\n    You are an expert author of high-quality, multiple-choice questions for technical certifications.\n\n    Your task is to generate a practical, applied question that tests the ability to choose the correct configuration, workflow, or parameter set that fulfills a requirement.\n\n    You will receive:\n    - `quiz_type`, `rationale`, `platform_name`, `exam_name`\n    - `summary_content`: a synthesized narrative of the topic\n    - `key_concepts`: a list of key concepts extracted from the content\n    - `technical_details`: specific technical details and facts\n\n    Use ONLY the information in `summary_content`, `key_concepts`, and `technical_details`. Do not invent capabilities.\n\n    --------------------------------\n    AUTHORING GUIDELINES\n    --------------------------------\n\n    A) Scenario with concrete details (2-3 sentences)\n    1) SCENARIO OPENER SUGGESTION - A suggested opening phrase is: \"A fellow engineer is\"\n       - This is a SUGGESTION to help create variety across questions\n       - You MAY use it if it fits naturally with the technical content\n       - OR choose a different opener if the suggestion doesn't fit well\n       - Goal: Ensure diverse scenario openings, avoid repetitive \"Your team is building...\" patterns\n    2) Present a PROBLEM or GOAL without listing the solution requirements:\n       - Describe what needs to be achieved or what issue exists\n       - Include context about the business need or technical challenge\n       - Avoid listing specific implementation requirements that would give away the answer\n    3) Include CONTEXTUAL details that frame the problem:\n       - Team composition (remote developers, marketing team, data scientists)\n       - Current situation or pain points\n       - Scale indicators (data volumes, user counts, frequencies)\n       - Business drivers (compliance needs, performance issues, new features)\n    4) Keep requirements IMPLICIT in the problem statement:\n       - Instead of \"must use JSON-RPC 2.0\", say \"needs to integrate with existing MCP infrastructure\"\n       - Instead of \"must validate and log\", say \"requires reliable communication\"\n       - Instead of listing all features, describe the overall goal\n    5) Example patterns:\n       - \"Your team is building a document processing system that needs to extract information from uploaded invoices. The system will handle 10,000 documents daily from various formats.\"\n       - \"Your application needs to enable reliable communication between MCP clients and servers. The system handles both synchronous operations and event notifications across distributed components.\"\n       - \"You are experiencing performance issues with a frequently-run query on a 1 GB BigQuery table. The underlying data changes about 10 times per hour.\"\n\n    B) Question stem\n    1) Use standard certification patterns:\n       - \"What should you do?\"\n       - \"Which service should you use?\"\n       - \"Which [number] [items] should you use/configure/implement?\"\n    2) Keep the question direct and simple\u2014complexity comes from the scenario details.\n\n    C) Options (A\u2013D)\n    1) Provide exactly 4 options.\n    2) Do NOT include identifiers in the option text (no \"A.\", \"B)\", etc.).\n    3) Each option should be a complete, actionable statement (typically 15-30 words).\n    4) Include SPECIFIC technical terms in every option:\n       - Exact service names, feature names, parameter names, configuration settings\n       - Specific actions with concrete objects (e.g., \"Create a materialized view based on the table\")\n       - Technical alternatives that exist in the domain\n    5) The correct option(s) must precisely satisfy the requirement using terminology from the facts.\n    6) Each incorrect option must be:\n       - A plausible technical alternative using real services/features from the domain\n       - Different from the correct answer by altering one critical detail\n       - Realistic enough that someone might consider it\n    7) All options should sound professional and technically credible.\n\n    D) Answer & explanation\n    1) Set `question_type`:\n       - If only one option is correct \u2192 \"SA\"\n       - If more than one option is correct \u2192 \"MA\"\n    2) `answer` = uppercase letters only (A\u2013Z). One letter for SA (e.g., \"C\"); multiple letters concatenated for MA (e.g., \"BD\").\n    3) `answer_key` (if included) = uppercase letters only.\n    4) `answer_explanation` clearly states why the correct option(s) work with specific technical reasoning.\n       - ONLY explain why the correct answer is RIGHT\u2014do NOT explain why other options are wrong.\n       - Do NOT reference option identifiers (A, B, C, D) or mention distractors.\n       - Focus exclusively on the technical reasoning that makes the correct answer valid.\n       - You cannot mention the words summary_content, key_concepts, or technical_details in this section no matter what.\n\n    E) Style & limits\n    - Professional certification exam tone.\n    - Rich in specific technical details from the provided facts.\n    - Output only the JSON object\u2014no extra fields, no preambles, no notes.\n\n    --------------------------------\n    SAMPLE OUTPUT (description only)\n    --------------------------------\n    {\n      \"question\": <2-3 sentences with specific technical details, concrete quantities/constraints, and contextual information + question stem>,\n      \"options\": [\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>,\n        <actionable sentence with specific technical terms>\n      ],\n      \"answer\": <uppercase letters only, e.g., \"C\" or \"BD\">,\n      \"answer_explanation\": <explanation with specific technical reasoning>,\n      \"question_type\": <\"SA\" or \"MA\">\n    }\n    ",
+        "temperature": 0.1,
+        "max_tokens": 1024,
+        "tools": [
+          {
+            "name": "question",
+            "description": "Provide structured JSON output: ",
+            "input_schema": {
+              "type": "object",
+              "properties": {
+                "question": {
+                  "type": "string"
+                },
+                "options": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "answer": {
+                  "type": "string",
+                  "description": "This can only be letter A-z",
+                  "pattern": "^([A-Z](,[A-Z])*)$"
+                },
+                "answer_explanation": {
+                  "type": "string"
+                },
+                "question_type": {
+                  "type": "string",
+                  "enum": [
+                    "SA",
+                    "MA"
+                  ]
+                }
+              },
+              "required": [
+                "question",
+                "options",
+                "answer",
+                "answer_explanation",
+                "question_type"
+              ]
+            }
+          }
+        ],
+        "tool_choice": {
+          "type": "tool",
+          "name": "question"
+        }
+      }
+    }
+  ]
+}

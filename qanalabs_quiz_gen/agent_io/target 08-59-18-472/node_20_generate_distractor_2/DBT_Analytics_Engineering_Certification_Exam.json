@@ -1,0 +1,395 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "distractor_2": "Run dbt run-operation generate_model_yaml -m models/core/activity_based_interest --args '{upstream_descriptions: True}' and then run dbt docs generate to build the docs",
+            "explanation_why_it_is_incorrect_2": "This is wrong because dbt run-operation macros (like generate_model_yaml) do not accept the model selector (-m) to target models. The macro expects an explicit model_names list (or you must programmatically supply names via dbt ls), so relying on the selector means no models will be passed to the macro and the YAML won't be generated as intended.",
+            "thinking_process_2": "I assumed dbt's selector flags (-m) could be applied to any dbt command the same way they are to dbt run or dbt test, so using -m with run-operation would conveniently target the directory. However, run-operation is for executing macros and doesn't interpret model selectors; you must supply model names through the macro arguments (e.g., from dbt ls) rather than using -m.",
+            "question": "Your team is building a dbt project with multiple core models in the models/core/activity_based_interest directory. You need to generate schema YAML documentation for all models in this folder and include column descriptions from upstream models where column names match. After generation, you want to validate the YAML syntax before publishing the documentation. Which approach should you use?",
+            "options": [
+                "Run dbt ls -m models/core/activity_based_interest --output name to list models, then invoke dbt run-operation generate_model_yaml with the model names and upstream_descriptions=True, followed by dbt docs generate",
+                "Manually create a .yml file for each model in the directory, then run dbt docs serve to validate the YAML syntax and publish the documentation",
+                "Use dbt run-operation generate_model_yaml with model_names parameter set to the directory path models/core/activity_based_interest and upstream_descriptions=False",
+                "Create docs blocks using {{% docs <name> %}} syntax for each column, then run dbt run-operation generate_model_yaml with upstream_descriptions=True to automatically replace all existing YAML files"
+            ],
+            "answer": "A",
+            "answer_explanation": "The correct approach combines three key steps: (1) use dbt ls -m models/core/activity_based_interest --output name to programmatically list all model names in the directory, (2) invoke dbt run-operation generate_model_yaml with the collected model names and set upstream_descriptions=True to include matching column descriptions from upstream models, and (3) run dbt docs generate to validate YAML syntax before serving. This workflow ensures all models are captured, upstream descriptions are included where applicable, and syntax validation occurs before documentation is published.",
+            "distractor_1": "Run dbt ls -m models/core/activity_based_interest --output name to list the models, then run dbt run to compile and materialize those models and finally run dbt docs generate to produce and validate schema documentation",
+            "explanation_why_it_is_incorrect_1": "This is wrong because dbt run compiles and materializes models but does not create schema .yml files or merge column descriptions from upstream models. The generate_model_yaml macro (dbt run-operation) with upstream_descriptions=True is required to produce YAML with upstream column descriptions before running dbt docs generate.",
+            "thinking_process_1": "I thought listing models and running them would compile SQL and produce metadata that dbt docs generate could use to build documentation, so materializing models seemed like a way to capture columns. However, dbt run doesn't create or update schema YAML or pull matching upstream descriptions\u2014generate_model_yaml must be used to generate those YAML docs first.",
+            "answer_text": "Run dbt ls -m models/core/activity_based_interest --output name to list models, then invoke dbt run-operation generate_model_yaml with the model names and upstream_descriptions=True, followed by dbt docs generate"
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 935,
+                "completion_tokens": 1573,
+                "total_tokens": 2508,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1344,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331391,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_bab818a2-b7fb-4100-a65a-c9e587a2032f",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_6c9efe6f-a745-49d6-b17e-9ce20b702c74",
+            "node_7_cc4dcde0-1945-4e0e-84b3-e79ce54f4136",
+            "node_8_b795e2f9-3e28-4285-9bcf-90ac4240ae03",
+            "node_9_f4aa62b1-3ab3-4be6-b68e-cc76dd913eee",
+            "node_10_45a028a2-d3f0-40b9-af78-392ccb1c72c5",
+            "node_11_753103ef-6a4e-4791-9b0a-62634ec3e8c8",
+            "node_12_e3998629-646b-42e7-8fd6-7199f6abce32",
+            "node_13_32f7ea75-7121-495d-864f-9c3ff1d25ac6",
+            "node_14_8f3ece4e-fbad-47df-b3f1-12277e30c506",
+            "node_15_09261667-6c47-43bd-bda0-61bee3a345b1",
+            "node_16_310d99f0-2d97-4dcb-8bde-e506ba81bc81",
+            "node_17_6510bfa3-f1b2-436b-ac1b-50936fc2a7b6",
+            "node_18_f4d7d29e-63d4-4e94-87f9-e53c779056c5",
+            "node_19_db549808-eb3d-4d9c-bfed-11e8c4c47836",
+            "node_20_bab818a2-b7fb-4100-a65a-c9e587a2032f"
+        ],
+        "target_id": "9605e3ec-b59f-4b76-835a-ca382a991922"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "distractor_2": "Set the project-level default materialization to 'table' in dbt_project.yml so all models become tables, then add explicit 'materialized: view' overrides for the other folders that should remain views",
+            "explanation_why_it_is_incorrect_2": "This uses the wrong configuration scope: changing the global default to tables affects every model in the project and forces you to add many overrides for folders that should remain views. It's more error-prone and harder to maintain than targeting the staging folder specifically with a folder-level config. The correct, cleaner approach is to scope the table materialization to the staging directory in dbt_project.yml so only those models inherit it.",
+            "thinking_process_2": "I looked for a plausible dbt configuration alternative that someone might choose: instead of configuring a folder-level setting, they could flip the project-wide default to tables and then explicitly mark other folders as views. That is a valid dbt mechanism in other contexts (when most models should be tables), but in this question it is the wrong concept because it broadens the change's scope, increases maintenance burden, and risks inadvertently materializing models that should stay as views. So although technically possible, it uses the wrong approach for enforcing consistent staging-folder materialization.",
+            "question": "Your analytics team is building a dbt project with 12 models in the `staging` folder that should all be materialized as tables for performance reasons, while models in other folders remain as views. Currently, each model file contains a materialized: table declaration, creating redundant configuration across the project. What should you do to enforce consistent table materialization for the staging folder while reducing configuration overhead?",
+            "options": [
+                "Add materialized: table to the dbt_project.yml file under the staging folder configuration so all models in that folder inherit the table materialization",
+                "Remove the materialized: table declarations from individual model files and configure folder-level materialization in dbt_project.yml for the staging folder",
+                "Create a separate dbt_project.yml file in the staging folder directory to override the default materialization for all models in that folder",
+                "Add a materialized: view declaration to each model file in the staging folder to explicitly override the default table materialization"
+            ],
+            "answer": "B",
+            "answer_explanation": "Folder-level materialization in dbt_project.yml is the correct approach to enforce consistent materialization across multiple models while reducing redundancy. By configuring the materialization setting at the folder level in dbt_project.yml, all models in the staging folder automatically inherit the table materialization without requiring individual materialized: table declarations in each model file. This eliminates redundant per-model configuration and ensures consistency across the folder. Individual model files should have their redundant materialization declarations removed since the folder-level setting will apply to all models in that directory.",
+            "distractor_1": "Create an Airflow DAG that post-processes the staging models by running CTAS statements in the warehouse to convert the built views into tables after dbt runs",
+            "explanation_why_it_is_incorrect_1": "This uses the wrong service (Airflow/warehouse post-processing) instead of configuring materialization in dbt. It duplicates work, bypasses dbt's materialization and lineage, and doesn't enforce consistent table materialization at the model level\u2014dbt folder-level settings in dbt_project.yml are the correct mechanism.",
+            "thinking_process_1": "I looked for a plausible operational workaround that someone might choose: use an orchestrator like Airflow to turn views into tables after dbt runs, implementing CTAS statements per model. That approach is technically possible in a different scenario (when you need external post-processing), but it relies on the wrong technology for this need. The task is to enforce materialization within dbt so models inherit a table materialization; using Airflow/warehouse SQL adds complexity, duplicates logic, and loses dbt metadata and lineage, so it's incorrect here.",
+            "answer_text": "Remove the materialized: table declarations from individual model files and configure folder-level materialization in dbt_project.yml for the staging folder"
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 921,
+                "completion_tokens": 855,
+                "total_tokens": 1776,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 576,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331413,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_d4fe8d0b-73f3-4b27-b3a4-d715601ff7a8",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_f7f88838-07c7-4904-9536-1be78e5fccb9",
+            "node_7_71a00420-121f-4c66-ab55-3031d617719a",
+            "node_8_a2979211-9cc9-4182-83cc-951ed6db5ced",
+            "node_9_d659e4a8-8d8f-4119-8a9c-fe7850a31c3c",
+            "node_10_e3c407fc-21af-4c38-af46-c3ff92529655",
+            "node_11_ea7a4c19-1cb3-4437-9af3-6dc80390b2ea",
+            "node_12_3eacad6d-35cd-493c-9e1e-0f579551c35a",
+            "node_13_dd2946f7-f2ba-4f3f-8cd7-9fa1cdaa7e34",
+            "node_14_8c08f74e-1bdc-434c-91fd-e04af3ec89eb",
+            "node_15_05340eb8-1029-4eda-9ac9-0edb27f516e8",
+            "node_16_367d4f7a-bcf7-4f42-878c-a46544a64e90",
+            "node_17_fd961d2b-3b3d-4f06-91a1-08e931382d7f",
+            "node_18_536363b1-e81f-4a32-88c9-66b10af8f36c",
+            "node_19_7a453af7-de81-4803-9fa5-0976d5419a9c",
+            "node_20_d4fe8d0b-73f3-4b27-b3a4-d715601ff7a8"
+        ],
+        "target_id": "1f72c74b-0c13-4f39-b169-9dacbfcb5a39"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "distractor_2": "Adopt a naming convention that prefixes model names with workflow labels (e.g., daily_, weekly_, compliance_) and run targeted jobs using dbt name/wildcard selectors (--models daily_*), leaving unprefixed models out of those workflows.",
+            "explanation_why_it_is_incorrect_2": "This encodes selection intent into model filenames rather than using dbt's selector abstractions. It's invasive (requires renaming many models and updating refs), brittle (wildcards can accidentally match unintended models), and doesn't support composing layered selectors or graph-aware selections well. It trades tag maintenance for risky, error-prone renames and loses the benefits of centralized YAML selectors.",
+            "thinking_process_2": "I considered a common alternative teams use to avoid tagging: bake workflow membership into model names and rely on dbt's name/wildcard selection. That seems straightforward and uses dbt's existing CLI filters, but it conflates naming and selection responsibilities. While viable for very small projects, renaming at scale is disruptive, hard to maintain, and prevents flexible, composable selections that YAML selectors provide\u2014so it is the wrong conceptual approach here.",
+            "question": "Your dbt project contains 150 models organized into folders: staging, intermediate, and marts. Currently, you have tags applied to 80 models to support various selection workflows (daily runs, weekly aggregations, compliance checks). The team reports that maintaining these tags is becoming a significant overhead, and new models frequently miss the required tags. You need to reduce tagging maintenance while preserving the ability to run targeted model selections for different workflows.",
+            "options": [
+                "Consolidate all 80 tagged models into a single folder and use a folder selector to target them, then apply YAML selectors to define layered selection rules for daily runs, weekly aggregations, and compliance checks.",
+                "Create individual tags for each workflow (daily, weekly, compliance) and apply them to all 150 models to ensure complete coverage and eliminate folder-based selection.",
+                "Implement YAML selectors that define composable selection logic for each workflow without requiring tags on individual models, and keep most models untagged while reserving tags only for special cases that don't fit folder or YAML selector patterns.",
+                "Reorganize models into 80 separate folders (one per tagged model) and use folder selectors exclusively to replace all tagging, then remove all existing tags from the project."
+            ],
+            "answer": "C",
+            "answer_explanation": "YAML selectors enable intricate, layered selection logic that can replace complicated tagging schemes without requiring tags on every model. By implementing YAML selectors to define composable selection rules for daily runs, weekly aggregations, and compliance checks, the team can centrally manage selection logic rather than maintaining tags across 80 models. Keeping most models untagged minimizes maintenance overhead while reserving tags only for special cases that cannot be addressed through folder organization or YAML selector composition. This approach directly addresses the stated problem of tagging overhead while preserving targeted selection workflows.",
+            "distractor_1": "Use your CI pipeline to maintain lists of model names per workflow and invoke dbt run with explicit --models lists generated in the pipeline, removing all tags from models.",
+            "explanation_why_it_is_incorrect_1": "This moves selection logic out of dbt into the CI system (wrong service). It\u2019s brittle and duplicates selection rules, doesn\u2019t leverage dbt\u2019s composable selectors or graph-aware operators, and requires manual updates when models change.",
+            "thinking_process_1": "I considered a plausible non-tag approach that teams sometimes adopt: centralize workflow mappings in CI and call dbt with explicit model lists. That appears to reduce in-repo tagging, but it replaces dbt-native selector logic with CI-managed lists, creating duplication, maintenance burden, and loss of dependency-aware selection\u2014so it\u2019s the wrong technology choice for this problem.",
+            "answer_text": "Implement YAML selectors that define composable selection logic for each workflow without requiring tags on individual models, and keep most models untagged while reserving tags only for special cases that don't fit folder or YAML selector patterns."
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 952,
+                "completion_tokens": 1154,
+                "total_tokens": 2106,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 896,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331284,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_155dd3e8-961e-41a5-ab82-870f9d43a726",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_49351322-7781-445c-8058-3b1c3aef1029",
+            "node_7_3545fa1f-212e-48b6-961c-3e43327a084d",
+            "node_8_bd3fdf1e-a074-4ea1-b8c9-1b019a8ef947",
+            "node_9_b362e128-7ed5-439c-90a4-510aa9e79f0b",
+            "node_10_444a1553-2995-4c00-9e12-498d93f9fba3",
+            "node_11_beee85f6-e6e6-44d6-8ccc-b5780dcbf84f",
+            "node_12_6e07ac25-a2ca-492d-9b5f-3777979156ea",
+            "node_13_7b2c7598-48b3-4d7b-a6d4-61eae1676a28",
+            "node_14_332ae46d-3be6-458f-83f3-b0d203801216",
+            "node_15_3ecd8f79-60b1-458f-bb5e-36e60e206dd5",
+            "node_16_1a7c0ab1-2d7a-434f-bfc7-8584ffb2fd42",
+            "node_17_e0bf3d40-141c-44c6-b081-f2f564fb21d2",
+            "node_18_9370b2f9-f7f6-4712-9d3f-620c69fccaea",
+            "node_19_2661b917-19e7-4d1f-bc9f-858c39299f7c",
+            "node_20_155dd3e8-961e-41a5-ab82-870f9d43a726"
+        ],
+        "target_id": "165db570-382e-4b38-a2f8-34a1a60c649a"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "distractor_2": "Publish the shared macros as a private Python package (wheel) and install that dependency into each dbt Cloud job's Python environment, then pin every job to the target dbt version.",
+            "explanation_why_it_is_incorrect_2": "dbt macros are loaded via dbt's package system (packages.yml) and Jinja SQL files, not as Python packages; shipping macros as a wheel won't make them available to dbt the way a dbt package does. Additionally, pinning every job individually to the new dbt version is manual and doesn't take advantage of dbt Cloud environment-level inheritance, so it doesn't scale across 40+ jobs.",
+            "thinking_process_2": "I considered a common software-reuse pattern\u2014publishing shared code as a private Python package\u2014because teams often distribute libraries that way. The plan pairs that with per-job version pinning to ensure compatibility. Step-by-step: factor macros into a reusable artifact, publish it to an internal package index, add it to each job's Python deps, and then control dbt runtime by pinning jobs. This is technically plausible for typical Python code, but it confuses dbt's packaging model and ignores the scalable environment inheritance mechanism in dbt Cloud.",
+            "question": "Your analytics team is building a dbt project that will transform raw customer data into reporting tables. The team wants to reuse common data quality checks and utility macros across multiple models without maintaining duplicate code. Additionally, your organization plans to upgrade the dbt version across all environments next quarter, and you need a strategy to apply this upgrade consistently to the 40+ jobs running in dbt Cloud without manually editing each job configuration. What should you do?",
+            "options": [
+                "Install the dbt_utils package in your dbt_packages.yml file and configure the majority of your dbt Cloud jobs to inherit from the environment.",
+                "Copy all community macros directly into your project's macros folder and set each dbt Cloud job to use a pinned dbt version.",
+                "Create custom macros in your project to replicate dbt_utils functionality and configure each job individually with the new dbt version.",
+                "Use only built-in dbt macros and set all dbt Cloud jobs to use the latest dbt version automatically without environment inheritance."
+            ],
+            "answer": "A",
+            "answer_explanation": "Installing the dbt_utils package provides immediate access to community-maintained macros without duplicating code in your project, reducing maintenance overhead. Configuring the majority of jobs to inherit from the environment ensures that when you upgrade the dbt version at the environment level, those jobs automatically use the new version without requiring individual job edits. This approach scales efficiently across 40+ jobs and centralizes both shared logic and platform-level configuration management.",
+            "distractor_1": "Embed Great Expectations checks and their Python helper functions into each dbt model and then script individual dbt Cloud job updates through the REST API to pin and modify the dbt version for every job.",
+            "explanation_why_it_is_incorrect_1": "Great Expectations is a separate data\u2011validation tool and does not provide reusable dbt macros like dbt_utils; embedding GE checks per model duplicates logic rather than sharing macros. Using the dbt Cloud REST API to script updates would force you to modify or manage every job individually instead of leveraging environment-level inheritance for consistent, centralized dbt version upgrades.",
+            "thinking_process_1": "I aimed to provide a plausible alternative that addresses both quality checks and version rollout: GE is a well-known data quality framework, and programmatically updating jobs via the dbt Cloud API is a real automation approach. Step by step: choose a quality tool (Great Expectations) to implement checks inside models, then automate job configuration changes by scripting API calls to pin versions. This is technically credible in some contexts, but it uses the wrong technology for reusable dbt macros and ignores the simpler, built\u2011in environment inheritance mechanism in dbt Cloud, making it a poorer fit here.",
+            "answer_text": "Install the dbt_utils package in your dbt_packages.yml file and configure the majority of your dbt Cloud jobs to inherit from the environment."
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 936,
+                "completion_tokens": 1364,
+                "total_tokens": 2300,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1088,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331376,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_bb6f15d7-e483-4079-9a68-db8e781bead1",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_32c23ea7-aec5-4d7d-98f6-6661be23ef40",
+            "node_7_0f715d37-c8cd-47bd-abdb-44cfcaf0a9ac",
+            "node_8_826fda38-a05c-41b8-885b-f05163e3370c",
+            "node_9_dc5cd312-698d-4c9e-b95e-ac53941cdcfa",
+            "node_10_2a45c9ea-62bc-43fa-bfd1-cd7127670d21",
+            "node_11_8b7ce367-fc60-48c0-ac0d-802d4d47174c",
+            "node_12_6026d49a-d3a7-4c0e-90da-04cd18550aa5",
+            "node_13_c51c7582-d2b0-4835-89cd-53a555d92172",
+            "node_14_993ce713-3c85-43ea-a00e-618d16aeb878",
+            "node_15_9cebc8c8-32c9-41ba-b1be-f05123c8e062",
+            "node_16_571189db-4d50-4eff-881a-bc9d2ccc3b4b",
+            "node_17_97d53d74-cb6e-4ae9-87ec-0dfb3fc365a5",
+            "node_18_4c4c13ca-828b-4226-89be-f9f5f83dcec7",
+            "node_19_a0f6e928-57d5-47cb-aa77-3c6b13fd84e1",
+            "node_20_bb6f15d7-e483-4079-9a68-db8e781bead1"
+        ],
+        "target_id": "b437d043-bd72-4a5c-b873-d09e94cd5121"
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "distractor_2": "Create a single staging model that ingests all three source systems, applies universal column renames, type normalization, and null handling, and performs the cross-source joins to produce a consolidated customer table",
+            "explanation_why_it_is_incorrect_2": "This is wrong because it lumps source-specific cleaning and cross-source logic into one model. Combining all sources in a single staging model creates tight coupling between sources, makes it hard to test and reason about source-specific transformations, increases blast radius when one source changes, and prevents reusing clean, canonical views of each source in downstream models. The correct dbt pattern is to keep one staging model per source (isolated, testable canonical representations) and perform joins in explicit downstream transformations.",
+            "thinking_process_2": "I crafted a plausible-sounding alternative that some teams use to simplify pipeline structure \u2014 one consolidated staging model that does everything. It follows the same surface pattern (column renames, type normalization, null handling) but applies them across all sources at once. I highlighted the conceptual mistake (wrong architectural approach: coupling and lack of isolation) rather than a wrong technology, to meet the requirement of using the right tools but the wrong method.",
+            "question": "A data engineering team is building a dbt project to consolidate customer data from three separate source systems: a CRM platform, an ERP system, and a marketing automation tool. Each source contains customer identifiers, contact information, and transaction history in different formats and naming conventions. The team needs to ensure that data from each source is cleaned, standardized, and ready for downstream analytics models without creating fragile dependencies between sources. Which approach should the team implement?",
+            "options": [
+                "Create one staging model per source system that applies column renames, type normalization, and null handling, then join all three sources inside each staging model to create a unified customer view",
+                "Create one staging model per source system that applies column renames, type normalization, and null handling, then reference all three staging models in a downstream transformation model to perform cross-source joins",
+                "Create a single staging model that reads from all three source systems simultaneously, applies unified column renames and type normalization, and performs all necessary joins to create a consolidated customer table",
+                "Create one staging model per source system that applies column renames and type normalization, then use a separate utility model to join staging outputs only when needed for specific analytics queries"
+            ],
+            "answer": "B",
+            "answer_explanation": "The correct approach creates one staging model per source system, each applying source-specific cleaning and standardization (column renames, type normalization, null handling), then uses a downstream transformation model to reference and join all three staging models. This architecture isolates source-specific logic in staging models, prevents fragile cross-source dependencies, and keeps transformations simple and testable. Each staging model becomes a canonical, predictable view of its source that downstream models can safely consume. Cross-source joins belong only in higher-level transformation models explicitly designed to combine data across multiple sources, not within staging models themselves.",
+            "distractor_1": "Create one staging model per source system that applies column renames, type normalization, and null handling, then orchestrate cross-source joins in Airflow tasks to produce the unified customer view",
+            "explanation_why_it_is_incorrect_1": "This is wrong because it uses Airflow (an orchestration tool) to perform SQL joins and transformations instead of keeping cross-source joins in dbt. Implementing transformation logic in Airflow embeds SQL in DAGs, bypasses dbt\u2019s testing, documentation, lineage, and model dependency features, and makes the pipeline harder to maintain and more fragile.",
+            "thinking_process_1": "I aimed to produce a plausible alternative that follows the same structure as the correct answer (one staging model per source, source-specific cleaning, then a separate step to join). I intentionally swapped the downstream technology from dbt to Airflow to satisfy the 'wrong technology' requirement. This is believable because teams sometimes use Airflow to run SQL or scripts that combine tables \u2014 but Airflow is designed for orchestration rather than as the primary transformation layer. Key caveats in this scenario: joining in Airflow loses dbt benefits (testing, modular models, clear dependencies), increases duplication of SQL, and makes debugging and evolution of cross-source logic harder, which is why this approach is incorrect here.",
+            "answer_text": "Create one staging model per source system that applies column renames, type normalization, and null handling, then reference all three staging models in a downstream transformation model to perform cross-source joins"
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 1031,
+                "completion_tokens": 1474,
+                "total_tokens": 2505,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 1216,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331283,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_9ba503ac-f427-4bca-91ba-c123b5382483",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+            "node_4_41436813-5364-4164-a443-85fff8687a44",
+            "node_5_5701d95e-6cc3-4a19-b782-fdc2dbc14980",
+            "node_6_0917a0cb-e934-42b3-8724-9eb8b7402b2e",
+            "node_7_1558947d-7de3-4d6a-9481-5498ec54e80d",
+            "node_8_208d6eb9-d86e-486a-9dda-3e85640c5982",
+            "node_9_99dfbac8-453d-4608-b909-a95a0c6f093c",
+            "node_10_125065d1-5d4c-40ae-9173-664e70048745",
+            "node_11_f435cde1-ec73-416c-917d-283292bd468d",
+            "node_12_fd098bdb-6873-4faf-bb9d-7e4c4621e242",
+            "node_13_21d5d6af-df66-4582-a8cc-530bf201a608",
+            "node_14_1604c87b-1a83-4b18-928b-afd3308cea11",
+            "node_15_1512113f-6323-42d1-8388-f56312c8813f",
+            "node_16_66fa9b3f-9757-4ab6-bda5-13bf4a437764",
+            "node_17_9a013811-abb4-4ae9-bab7-fcbda45fac9c",
+            "node_18_367a6f9a-2987-41bf-9508-9ee970099e5c",
+            "node_19_68b7bce6-e76e-4771-8022-42de4ebf4b5e",
+            "node_20_9ba503ac-f427-4bca-91ba-c123b5382483"
+        ],
+        "target_id": "2fa48e4b-c682-46c7-8993-fb1d10272333"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "distractor_2": "Define grants at the schema level in dbt_project.yml (e.g., grants: {'select': ['role']}) so dbt applies SELECT to every model in that schema, and handle Snowflake row access policies outside dbt in a separate deployment pipeline.",
+            "explanation_why_it_is_incorrect_2": "This uses the wrong approach: schema-level grants apply broadly to all objects and can't provide the per-model, selective permission control required. It assumes dbt-level schema grants can replace model-level grants and that managing row access policies outside dbt avoids permission drift, but this prevents excluding individual models from dbt-managed permissions and breaks the fine-grained access requirement.",
+            "thinking_process_2": "I looked for a plausible alternative that someone might try: setting grants once at the schema level is a common shortcut to avoid repeating configs per model, and running row-access policy changes in a separate pipeline is a realistic operational choice. I then identified why that approach fails here: the question demands selective model-level control and the ability to leave some models unmanaged by dbt, which schema-wide grants cannot provide. I emphasized conceptual misuse (schema-level vs object-level grants) rather than a mere syntax or tooling error to meet the requirement that the distractor be wrong due to the wrong approach.",
+            "question": "Your team is managing a dbt project with multiple models that need fine-grained access control. Some models should grant SELECT permissions to specific roles, while others should not have dbt-managed permissions at all. Additionally, your organization requires schema-level USAGE grants and Snowflake row access policies on sensitive tables. Which configurations and approaches should you implement to meet these requirements?",
+            "options": [
+                "Configure grants as a dictionary (e.g., {'select': ['role']}) for models requiring managed permissions, set grants to {{}} for models without dbt-managed permissions, and use post-hooks to apply schema USAGE grants and row access policies",
+                "Configure all models with grants set to {'select': ['all_roles']} to ensure universal access, then use pre-hooks to revoke unnecessary permissions and apply row access policies",
+                "Use the grants config with {'select': ['role']} for all models, rely on dbt to automatically manage schema USAGE grants, and configure column masking policies directly in the model materialization",
+                "Set grants to null for models without managed permissions, configure {'select': ['role']} for others, and use hooks to apply database-specific policies like Snowflake row access policies"
+            ],
+            "answer": "A",
+            "answer_explanation": "The correct approach uses the structured grants config introduced in dbt v1.2 to manage object-level permissions selectively. Models requiring managed permissions should declare grants as a dictionary (e.g., {'select': ['role']}), while models without dbt-managed permissions should set grants to {{}} to prevent dbt from managing them. Schema-level USAGE grants and database-specific advanced features like Snowflake row access policies are not first-class configurable objects in dbt and must be applied via post-hooks. This combination ensures selective permission management at the model level while enabling advanced policies through post-hooks.",
+            "answer_text": "Configure grants as a dictionary (e.g., {'select': ['role']}) for models requiring managed permissions, set grants to {{}} for models without dbt-managed permissions, and use post-hooks to apply schema USAGE grants and row access policies"
+        },
+        "metadata": {
+            "model": "gpt-5-mini-2025-08-07",
+            "usage": {
+                "prompt_tokens": 817,
+                "completion_tokens": 1245,
+                "total_tokens": 2062,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 960,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762331277,
+            "system_fingerprint": null,
+            "status_code": 200
+        },
+        "node_id": "node_20_9cd1a12d-6818-4201-b0bb-3370a5ca3f58",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_931f683c-e7d9-4baa-a03c-a1dc67e3f254",
+            "node_7_09a37a6f-3aac-4233-b97a-16cca10dee91",
+            "node_8_d699cb1d-c76b-42a7-81e4-89664e93fc2d",
+            "node_9_9addc92e-324d-4e40-9e9e-abee0eece626",
+            "node_10_37f39bbe-afca-4b12-a7fc-4cb60ed40837",
+            "node_11_9967dedf-0306-48bc-ab2c-38e6e259b13d",
+            "node_12_dc13fb60-9755-471c-be79-8e00d8a558a2",
+            "node_13_cf7de32f-696c-4262-81c3-8cdc49869fb8",
+            "node_14_8e412b02-c3cd-413f-8224-52b2e167fac6",
+            "node_15_2f42e3fb-2b48-400e-aff4-5fc5dff78cdb",
+            "node_16_67770de0-d0a9-40d7-bf31-b10db233507d",
+            "node_17_807fc747-7ef9-40b9-a664-1f235673da27",
+            "node_18_b7ed29a6-7b4b-43d7-a236-2da06590c059",
+            "node_19_1babced2-9000-4e0c-8ccb-46493626bd27",
+            "node_20_9cd1a12d-6818-4201-b0bb-3370a5ca3f58"
+        ],
+        "target_id": "9e70bff3-2e8b-429e-a641-b123661d0293"
+    }
+]

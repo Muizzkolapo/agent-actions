@@ -1,0 +1,325 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "In dbt v1.2, `grants` config replaces `post-hook` for managing privileges, enhancing efficiency.",
+            "quote": "You configure `grants` as a structured dictionary rather than writing all the SQL yourself",
+            "technical_level": "configuration",
+            "semantic_unique_id": "efdfdcf1-56db-451e-9224-36a086e204e9",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "8b52e73f-3bd0-4468-9916-77483e3a8f3e",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "Using the `grants` feature allows dbt to automatically revoke privileges when model materializations are adjusted during re-runs.",
+            "quote": "dbt has run a `revoke` statement.",
+            "technical_level": "implementation",
+            "semantic_unique_id": "9483ff76-aeb0-4c26-889c-78c696a2ea92",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "89a0e864-89c6-49b5-aae7-4a6917b41aa0",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "To grant usage on schemas, dbt still requires `on-run-end` hooks, as schemas cannot be configured as separate objects within dbt.",
+            "quote": "we need to repeat the same list of roles here that we specified in our `grants` config.",
+            "technical_level": "procedure",
+            "semantic_unique_id": "a7bad563-94af-4373-8e3a-730ceffe43b6",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "ebd5e999-e513-4b43-8bd4-1994a7755bd4",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "The `manage grants` privilege in dbt is a global permission, allowing users with this role to alter any object's grants.",
+            "quote": "now anyone using the `transformer` role can change grants on any object as though they are the owner of the object.",
+            "technical_level": "security",
+            "semantic_unique_id": "2e578e8f-a7bb-4604-9f96-9ebb53fefe25",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "6387a709-217b-4f55-9332-33da40c95c63",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "dbt models created with `grants` will automatically manage access based on specified privileges when models are run.",
+            "quote": "dbt will take *the most efficient path* to apply those grants",
+            "technical_level": "implementation",
+            "semantic_unique_id": "f64fa743-3a48-4e88-a90a-51113204e642",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "7d8a4370-1e5a-4079-b364-3e59f47ebd30",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/configuring-grants",
+            "fact": "Advanced permissions, such as row-level access policies and column masking policies, require custom hooks based on the database being used.",
+            "quote": "you\u2019ll still want a `post-hook` to apply a row access policy",
+            "technical_level": "configuration",
+            "semantic_unique_id": "70f3b4d2-f70d-4e0a-affd-22591aa0bce2",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "675b911c-9bc0-4ede-86c8-aeb0ff2ee51a",
+        "node_id": "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f",
+        "lineage": [
+            "node_0_b37e248b-170f-42e7-b982-9096d3fb4614",
+            "node_1_ca20cda2-2383-4c11-aab2-edab805f7d7f"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/essential-dbt-project-checklist#-dag-auditing",
+            "fact": "dbt models by default are materialized as views unless specified otherwise in the dbt_project.yml file.",
+            "quote": "By default, dbt models are materialized as 'views'. This removes the need to declare any models as views.",
+            "technical_level": "configuration",
+            "semantic_unique_id": "5ce83409-ccef-42ca-b831-57bdb95ec14c",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "4eaaf8f0-17f8-4946-8dfa-a0e8ce5f53ac",
+        "node_id": "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc",
+        "lineage": [
+            "node_0_acfd09ce-114e-48ec-86e7-a92f9da88e99",
+            "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/essential-dbt-project-checklist#-dag-auditing",
+            "fact": "Using the command 'dbt run' without optimizing SQL could lead to very long model execution times.",
+            "quote": "What happens when you dbt run? How long does it take to run the entire dbt project?",
+            "technical_level": "procedure",
+            "semantic_unique_id": "86bb9a6a-3a1f-41cc-8689-0d71741e5dcf",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "ae82bab2-c2af-4d80-8d37-210e278029e1",
+        "node_id": "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc",
+        "lineage": [
+            "node_0_acfd09ce-114e-48ec-86e7-a92f9da88e99",
+            "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/essential-dbt-project-checklist#-dag-auditing",
+            "fact": "Models in dbt must utilize unique keys and the is_incremental() macro for incremental strategies.",
+            "quote": "If you have incremental models, are they using unique keys and is_incremental() macro?",
+            "technical_level": "implementation",
+            "semantic_unique_id": "33f976cd-63c4-4ddc-becb-8b908e2aed46",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "6bd19c05-948c-4b39-9a1e-8cf5ff4235d3",
+        "node_id": "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc",
+        "lineage": [
+            "node_0_acfd09ce-114e-48ec-86e7-a92f9da88e99",
+            "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/essential-dbt-project-checklist#-dag-auditing",
+            "fact": "A project should target at least 100% test coverage on all models, focusing on not_null and unique tests on primary keys.",
+            "quote": "The ideal project has 100% test coverage on all of its models. Our rule of thumb is models should have at least a not_null/unique test on the primary key.",
+            "technical_level": "testing",
+            "semantic_unique_id": "0740abd1-d7c4-40d6-8b9a-5619a5557b29",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "899746af-d5bc-4490-b5fb-74c14f7962d4",
+        "node_id": "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc",
+        "lineage": [
+            "node_0_acfd09ce-114e-48ec-86e7-a92f9da88e99",
+            "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/essential-dbt-project-checklist#-dag-auditing",
+            "fact": "Using YAML selectors in your dbt project can improve legibility and eliminate complicated tagging mechanisms.",
+            "quote": "YAML selectors enable intricate, layered model selection and can eliminate complicated tagging mechanisms and improve the legibility of the project configuration.",
+            "technical_level": "implementation",
+            "semantic_unique_id": "f5d2a76c-873d-4f04-a656-32174c78ea09",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "3aaf598d-1f5e-4334-b3e3-bb9c17fa66dc",
+        "node_id": "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc",
+        "lineage": [
+            "node_0_acfd09ce-114e-48ec-86e7-a92f9da88e99",
+            "node_1_2ec8cfa3-9a95-4c80-8ea2-4aff214513dc"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "The dbt Codegen package requires dbt version 1.0 or higher to function correctly.",
+            "quote": "dbt Codegen package requires dbt version 1.0 or higher",
+            "technical_level": "implementation",
+            "semantic_unique_id": "4c8706ca-c1e9-4dce-b8ac-eb58adc1bc91",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "8e0932cc-f904-4062-90ee-43c08ec034e9",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "The `generate_model_yaml` macro MUST include the `model_names` argument as a JSON array of model names.",
+            "quote": "The arguments are, as per Codegen\u2019s documentation: model_names (required)",
+            "technical_level": "implementation",
+            "semantic_unique_id": "3ebcb377-9ffd-47c5-b3dc-6939c9abb080",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "77645e36-ed80-4692-a705-211e1f09b55b",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "Using `dbt ls -m models/core/activity_based_interest --output name` will list model names for the specified directory, allowing for dynamic documentation generation.",
+            "quote": "$ dbt ls -m models/core/activity_based_interest --output name",
+            "technical_level": "implementation",
+            "semantic_unique_id": "06f6cf13-21a7-4cc0-a156-735f7e0ad0dc",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "6a414ffe-847a-411e-8527-9942f020a2e7",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "dbt requires indentation of 2 spaces in .yml files to avoid parsing errors.",
+            "quote": "the correct indentation in .yml files is crucial to avoid parsing errors",
+            "technical_level": "configuration",
+            "semantic_unique_id": "728d449e-f2bc-4057-9e98-962629145204",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "b6324765-4adc-4459-b0a5-87472147d915",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "You can reduce documentation redundancy by utilizing Jinja docs blocks in dbt, which links multiple models to the same documentation.",
+            "quote": "using docs blocks to write more DRY and robust documentation",
+            "technical_level": "implementation",
+            "semantic_unique_id": "2fa311d7-7523-49bf-8fcc-ffde20036ade",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "3d79c0fc-41d0-4049-873c-fcceadbb13be",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "The command `dbt run-operation generate_model_yaml --args '{{ \"model_names\": [\"your_model_name\"] }}'` generates YAML for a single model.",
+            "quote": "dbt run-operation generate_model_yaml --args '{{ \"model_names\": [\"your_model_name\"] }}'",
+            "technical_level": "procedure",
+            "semantic_unique_id": "94ba7bc6-862a-4cf2-b011-539c2b15877b",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "067e9030-303e-4721-8e80-205d9fb5b97f",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "When generating documentation for multiple models, include all model names in the list parameter separated by commas within the `args` argument.",
+            "quote": "'model_names.accepts several models'",
+            "technical_level": "procedure",
+            "semantic_unique_id": "84c4f978-f4f6-4d26-b17d-d5e7530062ac",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "de87a19d-1fc1-488f-b115-d575c0c00d47",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    },
+    {
+        "source_guid": "5e4da262-5166-5660-81d2-63eace2ca89e",
+        "content": {
+            "url": "https://docs.getdbt.com/blog/generating-dynamic-docs-dbt",
+            "fact": "A successful execution of `dbt docs generate` confirms that the model YAML does not contain any YAML syntax errors.",
+            "quote": "Run `dbt docs generate` to check for syntax errors",
+            "technical_level": "procedure",
+            "semantic_unique_id": "75559754-fb87-45ef-94f5-6a188fe89a0d",
+            "similarity_group_id": "55228509-095c-476f-a8c2-eaa8fffc7dbe"
+        },
+        "target_id": "c998020e-f519-4fff-91e8-05a436bdc4d7",
+        "node_id": "node_1_06d474d4-7881-49f0-903a-b186b6eccc65",
+        "lineage": [
+            "node_0_de8370b7-0fb2-413d-9e36-4d518e6b5761",
+            "node_1_06d474d4-7881-49f0-903a-b186b6eccc65"
+        ]
+    }
+]

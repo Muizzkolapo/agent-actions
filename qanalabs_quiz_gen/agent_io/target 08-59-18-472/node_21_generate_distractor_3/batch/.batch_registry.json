@@ -1,0 +1,12 @@
+{
+  "DBT_Analytics_Engineering_Certification_Exam.json": {
+    "batch_id": "batch_690b0b55a54881909c96c93617ca87eb",
+    "status": "submitted",
+    "timestamp": "2025-11-05T08:31:17.806133",
+    "provider": "openai",
+    "parent_batch_id": null,
+    "retry_attempt": 0,
+    "has_retry_batch": false,
+    "record_count": 6
+  }
+}

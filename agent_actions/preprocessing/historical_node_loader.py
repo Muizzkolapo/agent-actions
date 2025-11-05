@@ -22,7 +22,8 @@ class HistoricalNodeDataLoader:
         lineage: List[str],
         source_guid: str,
         file_path: str,
-        agent_indices: Dict[str, int]
+        agent_indices: Dict[str, int],
+        caller_lineage: Optional[List[str]] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Load historical node data for a specific action from target files.
@@ -33,6 +34,9 @@ class HistoricalNodeDataLoader:
             source_guid: Source GUID to match the record
             file_path: Current file path being processed
             agent_indices: Mapping of agent names to their node indices
+            caller_lineage: Optional lineage from the calling record for precise matching.
+                          Used to distinguish split records that share the same source_guid
+                          and node_id. If None, uses legacy matching behavior.
 
         Returns:
             Content dict from the historical node, or None if not found
@@ -83,9 +87,13 @@ class HistoricalNodeDataLoader:
             with open(target_path, 'r') as f:
                 data = json.load(f)
 
+            # DEBUG: Log lineage matching attempt
+            logger.info(f"[LINEAGE DEBUG] Looking for node_id={node_id}, source_guid={source_guid[:20]}..., caller_lineage={caller_lineage}")
             record = HistoricalNodeDataLoader._find_record_by_identifiers(
-                data, source_guid, node_id
+                data, source_guid, node_id, caller_lineage
             )
+            if record:
+                logger.info(f"[LINEAGE DEBUG] Found record with target_id={record.get('target_id')}, record_lineage={record.get('lineage')}")
 
             if record:
                 ServiceLogger.log_operation_success(
@@ -184,21 +192,89 @@ class HistoricalNodeDataLoader:
         return target_file
 
     @staticmethod
+    def _lineages_match(
+        record_lineage: Optional[List[str]],
+        caller_lineage: Optional[List[str]]
+    ) -> bool:
+        """
+        Check if record's lineage is a prefix of caller's lineage.
+
+        For split records scenarios, a record from node_5 may have lineage:
+            [node_0, node_1, node_4, node_5, node_6_branch_a]
+
+        A caller from node_23 in the same branch would have lineage:
+            [node_0, node_1, node_4, node_5, node_6_branch_a, ..., node_23]
+
+        The record's lineage must be a PREFIX of the caller's lineage for a match.
+
+        Args:
+            record_lineage: Lineage from the historical record
+            caller_lineage: Lineage from the current record looking up historical data
+
+        Returns:
+            True if record's lineage is a prefix of caller's lineage, False otherwise
+
+        Examples:
+            >>> _lineages_match(
+            ...     ['node_0', 'node_1', 'node_5', 'node_6_a'],
+            ...     ['node_0', 'node_1', 'node_5', 'node_6_a', 'node_23']
+            ... )
+            True
+
+            >>> _lineages_match(
+            ...     ['node_0', 'node_1', 'node_5', 'node_6_b'],
+            ...     ['node_0', 'node_1', 'node_5', 'node_6_a', 'node_23']
+            ... )
+            False
+
+            >>> _lineages_match(None, ['node_0', 'node_1'])
+            False
+        """
+        # Handle None/empty cases
+        if not record_lineage or not caller_lineage:
+            return False
+
+        # Record lineage cannot be longer than caller lineage
+        if len(record_lineage) > len(caller_lineage):
+            return False
+
+        # Check if record's lineage is a prefix of caller's lineage
+        return record_lineage == caller_lineage[:len(record_lineage)]
+
+    @staticmethod
     def _find_record_by_identifiers(
         data: List[Dict],
         source_guid: str,
-        node_id: str
+        node_id: str,
+        caller_lineage: Optional[List[str]] = None
     ) -> Optional[Dict]:
         """
-        Find a record in the data that matches both source_guid and node_id.
+        Find a record in the data that matches source_guid, node_id, and optionally lineage.
+
+        When multiple records share the same source_guid and node_id (e.g., after a split
+        operation), lineage-based matching is used to identify the correct record by
+        checking if the record's lineage is a prefix of the caller's lineage.
 
         Args:
             data: List of records from the target file
             source_guid: Source GUID to match
             node_id: Node ID to match
+            caller_lineage: Optional lineage from the calling record for precise matching.
+                          If None, uses legacy matching (source_guid + node_id only).
+                          If provided, also checks lineage prefix matching.
 
         Returns:
             The matching record or None if not found
+
+        Examples:
+            # Legacy matching (backward compatible)
+            >>> _find_record_by_identifiers(data, "guid-123", "node_5_abc")
+            # Returns first record matching source_guid and node_id
+
+            # Lineage-based matching (for split records)
+            >>> caller_lineage = ["node_0", "node_1", "node_5", "node_6_a", "node_23"]
+            >>> _find_record_by_identifiers(data, "guid-123", "node_5_abc", caller_lineage)
+            # Returns only the record whose lineage is a prefix of caller_lineage
         """
         if not isinstance(data, list):
             return None
@@ -207,9 +283,19 @@ class HistoricalNodeDataLoader:
             if not isinstance(record, dict):
                 continue
 
-            # Match by both source_guid and node_id for precise identification
+            # Match by both source_guid and node_id
             if (record.get('source_guid') == source_guid and
                 record.get('node_id') == node_id):
+
+                # If caller_lineage is provided, also check lineage matching
+                if caller_lineage is not None:
+                    record_lineage = record.get('lineage')
+                    if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
+                        return record
+                    # If lineages don't match, continue searching
+                    continue
+
+                # Legacy behavior: return first match when no lineage checking
                 return record
 
         return None

@@ -1,0 +1,71 @@
+{
+  "error_type": "workflow_failure",
+  "operation": "run_workflow",
+  "target": "qanalabs_quiz_gen",
+  "error_class": "AgentActionsException",
+  "error_message": "Error generating target: Error resolving {source.exam_name}: Field 'exam_name' not found in 'source'. Available fields: [code_snippets, removed_snippets, removal_reasoning] [Context: file_path=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets/DBT_Analytics_Engineering_Certification_Exam.json, base_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_8_fix_code_snippets, output_directory=/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/qanalabs_quiz_gen/agent_io/target/node_9_score_summary_quality, agent_name=score_summary_quality]",
+  "context": {
+    "execution_order": [
+      "fact_extractor",
+      "flatten_the_facts",
+      "cluster_list",
+      "group_by_similarity",
+      "Cluster_Validation_Agent",
+      "flatten_clusters",
+      "generate_summary",
+      "review_code_snippets",
+      "fix_code_snippets",
+      "score_summary_quality",
+      "review_borderline_summaries",
+      "filter_low_quality_summaries",
+      "generate_scenarios",
+      "flatten_questions",
+      "fix_options_format",
+      "score_question_quality",
+      "filter_low_quality_questions",
+      "suggest_distractor_counts",
+      "add_answer_text",
+      "generate_distractor_1",
+      "generate_distractor_2",
+      "generate_distractor_3",
+      "reconstruct_options",
+      "generate_feynman_explanation",
+      "OptionsCombiner",
+      "format_quiz_text"
+    ],
+    "agent_status": {
+      "fact_extractor": {
+        "status": "completed"
+      },
+      "flatten_the_facts": {
+        "status": "completed"
+      },
+      "cluster_list": {
+        "status": "completed"
+      },
+      "group_by_similarity": {
+        "status": "completed"
+      },
+      "Cluster_Validation_Agent": {
+        "status": "completed"
+      },
+      "flatten_clusters": {
+        "status": "completed"
+      },
+      "generate_summary": {
+        "status": "completed"
+      },
+      "review_code_snippets": {
+        "status": "completed"
+      },
+      "fix_code_snippets": {
+        "status": "completed"
+      },
+      "score_summary_quality": {
+        "status": "failed"
+      }
+    }
+  },
+  "user_message": "Workflow execution failed. Check the error details and agent configurations.",
+  "timestamp": "2025-11-04T12:12:06.426282Z"
+}

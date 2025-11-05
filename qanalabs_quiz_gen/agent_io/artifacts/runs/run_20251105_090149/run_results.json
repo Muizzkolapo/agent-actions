@@ -1,0 +1,29 @@
+{
+  "metadata": {
+    "generated_at": "2025-11-05T09:01:49.354836Z",
+    "agent_actions_version": "1.2.0",
+    "invocation_id": "1075f7d8-1f63-4dbd-a26f-f864b25541f3",
+    "schema_version": "1.0.0"
+  },
+  "elapsed_time": 0.0,
+  "args": {},
+  "results": [
+    {
+      "unique_id": "fact_extractor",
+      "status": "success",
+      "timing": [
+        {
+          "name": "compile",
+          "started_at": "2025-11-05T09:01:49.355795Z",
+          "completed_at": "2025-11-05T09:02:21.157864Z"
+        }
+      ],
+      "thread_id": "MainThread",
+      "execution_time": 31.80247,
+      "message": "Completed successfully",
+      "failures": 0,
+      "adapter_response": {},
+      "error_details": null
+    }
+  ]
+}

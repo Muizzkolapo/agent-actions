@@ -1,0 +1,268 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "syllabus_alignment_score": 90,
+            "aligned_skill_area": "Access control & permissions management (model configuration, grants, hooks, Snowflake security features)",
+            "reasoning": "This question directly tests syllabus objectives around model configuration for permissions (the dbt grants config introduced in v1.2), selective management vs. opting out (empty dict), and use of hooks for schema-level grants and database-specific features like Snowflake row access policies \u2014 all practical, implementation-focused topics from the exam. It is hands-on and references specific dbt features and real-world Snowflake considerations, meeting the exam's practical and technical specificity requirements.",
+            "question": "Your team is managing a dbt project with multiple models that need fine-grained access control. Some models should grant SELECT permissions to specific roles, while others should not have dbt-managed permissions at all. Additionally, your organization requires schema-level USAGE grants and Snowflake row access policies on sensitive tables. Which configurations and approaches should you implement to meet these requirements?",
+            "options": [
+                "Configure grants as a dictionary (e.g., {'select': ['role']}) for models requiring managed permissions, set grants to {{}} for models without dbt-managed permissions, and use post-hooks to apply schema USAGE grants and row access policies",
+                "Configure all models with grants set to {'select': ['all_roles']} to ensure universal access, then use pre-hooks to revoke unnecessary permissions and apply row access policies",
+                "Use the grants config with {'select': ['role']} for all models, rely on dbt to automatically manage schema USAGE grants, and configure column masking policies directly in the model materialization",
+                "Set grants to null for models without managed permissions, configure {'select': ['role']} for others, and use hooks to apply database-specific policies like Snowflake row access policies"
+            ],
+            "answer": "A",
+            "answer_explanation": "The correct approach uses the structured grants config introduced in dbt v1.2 to manage object-level permissions selectively. Models requiring managed permissions should declare grants as a dictionary (e.g., {'select': ['role']}), while models without dbt-managed permissions should set grants to {{}} to prevent dbt from managing them. Schema-level USAGE grants and database-specific advanced features like Snowflake row access policies are not first-class configurable objects in dbt and must be applied via post-hooks. This combination ensures selective permission management at the model level while enabling advanced policies through post-hooks.",
+            "question_status": "KEEP",
+            "status_reason": "Score 90/100 meets threshold (80)"
+        },
+        "target_id": "01262f08-08cc-48ad-a00f-3b681a8d0c65",
+        "node_id": "node_16_67770de0-d0a9-40d7-bf31-b10db233507d",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_931f683c-e7d9-4baa-a03c-a1dc67e3f254",
+            "node_7_09a37a6f-3aac-4233-b97a-16cca10dee91",
+            "node_8_d699cb1d-c76b-42a7-81e4-89664e93fc2d",
+            "node_9_9addc92e-324d-4e40-9e9e-abee0eece626",
+            "node_10_37f39bbe-afca-4b12-a7fc-4cb60ed40837",
+            "node_11_9967dedf-0306-48bc-ab2c-38e6e259b13d",
+            "node_12_dc13fb60-9755-471c-be79-8e00d8a558a2",
+            "node_13_cf7de32f-696c-4262-81c3-8cdc49869fb8",
+            "node_14_8e412b02-c3cd-413f-8224-52b2e167fac6",
+            "node_15_2f42e3fb-2b48-400e-aff4-5fc5dff78cdb",
+            "node_16_67770de0-d0a9-40d7-bf31-b10db233507d"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "syllabus_alignment_score": 90,
+            "aligned_skill_area": "Documentation & metadata (dbt docs), CLI model selection, and macros (run-operation)",
+            "reasoning": "The question directly tests practical dbt CLI usage (dbt ls), macros/run-operation (generate_model_yaml) and documentation workflow (upstream_descriptions and dbt docs generate), which map to syllabus objectives on generating and validating schema YAML, using macros, and producing docs \u2014 all hands-on, implementation-focused skills.",
+            "question": "Your team is building a dbt project with multiple core models in the models/core/activity_based_interest directory. You need to generate schema YAML documentation for all models in this folder and include column descriptions from upstream models where column names match. After generation, you want to validate the YAML syntax before publishing the documentation. Which approach should you use?",
+            "options": [
+                "Run dbt ls -m models/core/activity_based_interest --output name to list models, then invoke dbt run-operation generate_model_yaml with the model names and upstream_descriptions=True, followed by dbt docs generate",
+                "Manually create a .yml file for each model in the directory, then run dbt docs serve to validate the YAML syntax and publish the documentation",
+                "Use dbt run-operation generate_model_yaml with model_names parameter set to the directory path models/core/activity_based_interest and upstream_descriptions=False",
+                "Create docs blocks using {{% docs <name> %}} syntax for each column, then run dbt run-operation generate_model_yaml with upstream_descriptions=True to automatically replace all existing YAML files"
+            ],
+            "answer": "A",
+            "answer_explanation": "The correct approach combines three key steps: (1) use dbt ls -m models/core/activity_based_interest --output name to programmatically list all model names in the directory, (2) invoke dbt run-operation generate_model_yaml with the collected model names and set upstream_descriptions=True to include matching column descriptions from upstream models, and (3) run dbt docs generate to validate YAML syntax before serving. This workflow ensures all models are captured, upstream descriptions are included where applicable, and syntax validation occurs before documentation is published.",
+            "question_status": "KEEP",
+            "status_reason": "Score 90/100 meets threshold (80)"
+        },
+        "target_id": "587e7cd7-3c15-42c4-a0d5-cd2e0d98e6ea",
+        "node_id": "node_16_310d99f0-2d97-4dcb-8bde-e506ba81bc81",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_6c9efe6f-a745-49d6-b17e-9ce20b702c74",
+            "node_7_cc4dcde0-1945-4e0e-84b3-e79ce54f4136",
+            "node_8_b795e2f9-3e28-4285-9bcf-90ac4240ae03",
+            "node_9_f4aa62b1-3ab3-4be6-b68e-cc76dd913eee",
+            "node_10_45a028a2-d3f0-40b9-af78-392ccb1c72c5",
+            "node_11_753103ef-6a4e-4791-9b0a-62634ec3e8c8",
+            "node_12_e3998629-646b-42e7-8fd6-7199f6abce32",
+            "node_13_32f7ea75-7121-495d-864f-9c3ff1d25ac6",
+            "node_14_8f3ece4e-fbad-47df-b3f1-12277e30c506",
+            "node_15_09261667-6c47-43bd-bda0-61bee3a345b1",
+            "node_16_310d99f0-2d97-4dcb-8bde-e506ba81bc81"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "syllabus_alignment_score": 55,
+            "aligned_skill_area": "Documentation (YAML schema / model column documentation)",
+            "reasoning": "The question relates to documenting models and column metadata in YAML (an exam objective), but it tests a generic shell text-processing pipeline rather than dbt-specific commands or workflows (e.g., dbt docs, schema.yml structure validation, or dbt parse), so it has limited direct syllabus alignment and only moderate hands\u2011on dbt relevance.",
+            "question": "Your dbt project contains multiple YAML documentation files in the models/core/ directory, each defining column metadata with \"- name:\" entries at varying indentation levels. You need to extract all unique column names from a specific YAML file to audit which columns are documented and identify any duplicates across the file. Which command pipeline should you use to extract and deduplicate the column names?",
+            "options": [
+                "Execute grep '      \\- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 15- | sort -u to filter indented name entries, remove the prefix, and output a sorted unique list",
+                "Execute grep '- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 8- | sort to match all name entries regardless of indentation and sort without deduplication",
+                "Execute sed 's/.*- name: //' models/core/activity_based_interest/_activity_based_interest_docs.yml | uniq to extract names using pattern substitution and remove consecutive duplicates",
+                "Execute awk '/- name:/ {print $NF}' models/core/activity_based_interest/_activity_based_interest_docs.yml | sort -u to extract the last field of matching lines and deduplicate"
+            ],
+            "answer": "A",
+            "answer_explanation": "The correct pipeline uses grep with the specific pattern '      \\\\- name:' (six spaces followed by an escaped hyphen) to match only the properly indented YAML name entries. The cut -c 15- command removes exactly the first 14 characters (the six spaces, hyphen, \"name:\", and following space), leaving only the column name value. Finally, sort -u sorts the output alphabetically while simultaneously removing duplicate entries, producing a deduplicated, sorted list of unique column names. This three-stage approach ensures precision: grep filters for the correct indentation level, cut extracts the name value, and sort -u guarantees uniqueness.",
+            "question_status": "FILTER",
+            "status_reason": "Score 55/100 below threshold (80)"
+        },
+        "target_id": "0a2058c1-28b9-4484-87dd-8fa225602e55",
+        "node_id": "node_16_40a96a2b-1e9f-49e9-ac8d-24576a68ba10",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+            "node_4_41436813-5364-4164-a443-85fff8687a44",
+            "node_5_5701d95e-6cc3-4a19-b782-fdc2dbc14980",
+            "node_6_cdbee945-bd32-4d4d-8ba9-dfeade09b814",
+            "node_7_695634ce-4dd1-490b-b2ab-3ef03f7deb46",
+            "node_8_69ea9da5-02f5-4391-90ee-158ddeb3f7bd",
+            "node_9_84f4f331-4df6-4a94-9a17-6e914a587fd8",
+            "node_10_84c18958-7a33-4d8c-a91f-800ca44dc00f",
+            "node_11_327259cc-b37d-4a75-be2e-a99257275e6f",
+            "node_12_f37037fe-8d79-4bb0-a6ad-503000c34241",
+            "node_13_7bc49956-6d53-4dab-b5d5-3e4b18215b6f",
+            "node_14_44c08e26-e52f-48cb-8d31-a4e3f9b175ce",
+            "node_15_e5ee1258-bc65-48fa-aa12-6ed695fd51a6",
+            "node_16_40a96a2b-1e9f-49e9-ac8d-24576a68ba10"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "syllabus_alignment_score": 95,
+            "aligned_skill_area": "Model configuration and materializations (dbt_project.yml, folder-level config)",
+            "reasoning": "The question directly tests dbt project configuration and model materialization inheritance (setting folder-level materializations in dbt_project.yml), matching syllabus objectives on model configuration, project structure, and reducing per-model redundancy with practical, hands-on implementation details.",
+            "question": "Your analytics team is building a dbt project with 12 models in the `staging` folder that should all be materialized as tables for performance reasons, while models in other folders remain as views. Currently, each model file contains a materialized: table declaration, creating redundant configuration across the project. What should you do to enforce consistent table materialization for the staging folder while reducing configuration overhead?",
+            "options": [
+                "Add materialized: table to the dbt_project.yml file under the staging folder configuration so all models in that folder inherit the table materialization",
+                "Remove the materialized: table declarations from individual model files and configure folder-level materialization in dbt_project.yml for the staging folder",
+                "Create a separate dbt_project.yml file in the staging folder directory to override the default materialization for all models in that folder",
+                "Add a materialized: view declaration to each model file in the staging folder to explicitly override the default table materialization"
+            ],
+            "answer": "B",
+            "answer_explanation": "Folder-level materialization in dbt_project.yml is the correct approach to enforce consistent materialization across multiple models while reducing redundancy. By configuring the materialization setting at the folder level in dbt_project.yml, all models in the staging folder automatically inherit the table materialization without requiring individual materialized: table declarations in each model file. This eliminates redundant per-model configuration and ensures consistency across the folder. Individual model files should have their redundant materialization declarations removed since the folder-level setting will apply to all models in that directory.",
+            "question_status": "KEEP",
+            "status_reason": "Score 95/100 meets threshold (80)"
+        },
+        "target_id": "19ba1fb2-8f64-4ec6-bd63-15d91f8c9a12",
+        "node_id": "node_16_367d4f7a-bcf7-4f42-878c-a46544a64e90",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_f7f88838-07c7-4904-9536-1be78e5fccb9",
+            "node_7_71a00420-121f-4c66-ab55-3031d617719a",
+            "node_8_a2979211-9cc9-4182-83cc-951ed6db5ced",
+            "node_9_d659e4a8-8d8f-4119-8a9c-fe7850a31c3c",
+            "node_10_e3c407fc-21af-4c38-af46-c3ff92529655",
+            "node_11_ea7a4c19-1cb3-4437-9af3-6dc80390b2ea",
+            "node_12_3eacad6d-35cd-493c-9e1e-0f579551c35a",
+            "node_13_dd2946f7-f2ba-4f3f-8cd7-9fa1cdaa7e34",
+            "node_14_8c08f74e-1bdc-434c-91fd-e04af3ec89eb",
+            "node_15_05340eb8-1029-4eda-9ac9-0edb27f516e8",
+            "node_16_367d4f7a-bcf7-4f42-878c-a46544a64e90"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "syllabus_alignment_score": 90,
+            "aligned_skill_area": "Model selection & project organization (selectors, tags, YAML selectors)",
+            "reasoning": "The question directly tests the syllabus objective on model selection and project configuration\u2014specifically use of tags, folder organization, and YAML selectors to build composable selection logic. It is implementation-focused (how to replace tagging with YAML selectors) and exercises practical dbt configuration and selection workflows. ",
+            "question": "Your dbt project contains 150 models organized into folders: staging, intermediate, and marts. Currently, you have tags applied to 80 models to support various selection workflows (daily runs, weekly aggregations, compliance checks). The team reports that maintaining these tags is becoming a significant overhead, and new models frequently miss the required tags. You need to reduce tagging maintenance while preserving the ability to run targeted model selections for different workflows.",
+            "options": [
+                "Consolidate all 80 tagged models into a single folder and use a folder selector to target them, then apply YAML selectors to define layered selection rules for daily runs, weekly aggregations, and compliance checks.",
+                "Create individual tags for each workflow (daily, weekly, compliance) and apply them to all 150 models to ensure complete coverage and eliminate folder-based selection.",
+                "Implement YAML selectors that define composable selection logic for each workflow without requiring tags on individual models, and keep most models untagged while reserving tags only for special cases that don't fit folder or YAML selector patterns.",
+                "Reorganize models into 80 separate folders (one per tagged model) and use folder selectors exclusively to replace all tagging, then remove all existing tags from the project."
+            ],
+            "answer": "C",
+            "answer_explanation": "YAML selectors enable intricate, layered selection logic that can replace complicated tagging schemes without requiring tags on every model. By implementing YAML selectors to define composable selection rules for daily runs, weekly aggregations, and compliance checks, the team can centrally manage selection logic rather than maintaining tags across 80 models. Keeping most models untagged minimizes maintenance overhead while reserving tags only for special cases that cannot be addressed through folder organization or YAML selector composition. This approach directly addresses the stated problem of tagging overhead while preserving targeted selection workflows.",
+            "question_status": "KEEP",
+            "status_reason": "Score 90/100 meets threshold (80)"
+        },
+        "target_id": "8c1c4566-4567-4e66-b5ce-ca6d796aae06",
+        "node_id": "node_16_1a7c0ab1-2d7a-434f-bfc7-8584ffb2fd42",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_49351322-7781-445c-8058-3b1c3aef1029",
+            "node_7_3545fa1f-212e-48b6-961c-3e43327a084d",
+            "node_8_bd3fdf1e-a074-4ea1-b8c9-1b019a8ef947",
+            "node_9_b362e128-7ed5-439c-90a4-510aa9e79f0b",
+            "node_10_444a1553-2995-4c00-9e12-498d93f9fba3",
+            "node_11_beee85f6-e6e6-44d6-8ccc-b5780dcbf84f",
+            "node_12_6e07ac25-a2ca-492d-9b5f-3777979156ea",
+            "node_13_7b2c7598-48b3-4d7b-a6d4-61eae1676a28",
+            "node_14_332ae46d-3be6-458f-83f3-b0d203801216",
+            "node_15_3ecd8f79-60b1-458f-bb5e-36e60e206dd5",
+            "node_16_1a7c0ab1-2d7a-434f-bfc7-8584ffb2fd42"
+        ]
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "syllabus_alignment_score": 82,
+            "aligned_skill_area": "Package management (community packages/macros) and dbt Cloud job & environment configuration",
+            "reasoning": "The question directly tests syllabus objectives about reusing community packages/macros (e.g., dbt_utils) and centrally managing dbt Cloud jobs via environment inheritance, demonstrating practical, hands-on configuration choices; score is tempered slightly for a minor technical inaccuracy (incorrect packages file name) rather than substantive misalignment.",
+            "question": "Your analytics team is building a dbt project that will transform raw customer data into reporting tables. The team wants to reuse common data quality checks and utility macros across multiple models without maintaining duplicate code. Additionally, your organization plans to upgrade the dbt version across all environments next quarter, and you need a strategy to apply this upgrade consistently to the 40+ jobs running in dbt Cloud without manually editing each job configuration. What should you do?",
+            "options": [
+                "Install the dbt_utils package in your dbt_packages.yml file and configure the majority of your dbt Cloud jobs to inherit from the environment.",
+                "Copy all community macros directly into your project's macros folder and set each dbt Cloud job to use a pinned dbt version.",
+                "Create custom macros in your project to replicate dbt_utils functionality and configure each job individually with the new dbt version.",
+                "Use only built-in dbt macros and set all dbt Cloud jobs to use the latest dbt version automatically without environment inheritance."
+            ],
+            "answer": "A",
+            "answer_explanation": "Installing the dbt_utils package provides immediate access to community-maintained macros without duplicating code in your project, reducing maintenance overhead. Configuring the majority of jobs to inherit from the environment ensures that when you upgrade the dbt version at the environment level, those jobs automatically use the new version without requiring individual job edits. This approach scales efficiently across 40+ jobs and centralizes both shared logic and platform-level configuration management.",
+            "question_status": "KEEP",
+            "status_reason": "Score 82/100 meets threshold (80)"
+        },
+        "target_id": "bce7d8d1-431f-4bbf-98d6-720685f01810",
+        "node_id": "node_16_571189db-4d50-4eff-881a-bc9d2ccc3b4b",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_32c23ea7-aec5-4d7d-98f6-6661be23ef40",
+            "node_7_0f715d37-c8cd-47bd-abdb-44cfcaf0a9ac",
+            "node_8_826fda38-a05c-41b8-885b-f05163e3370c",
+            "node_9_dc5cd312-698d-4c9e-b95e-ac53941cdcfa",
+            "node_10_2a45c9ea-62bc-43fa-bfd1-cd7127670d21",
+            "node_11_8b7ce367-fc60-48c0-ac0d-802d4d47174c",
+            "node_12_6026d49a-d3a7-4c0e-90da-04cd18550aa5",
+            "node_13_c51c7582-d2b0-4835-89cd-53a555d92172",
+            "node_14_993ce713-3c85-43ea-a00e-618d16aeb878",
+            "node_15_9cebc8c8-32c9-41ba-b1be-f05123c8e062",
+            "node_16_571189db-4d50-4eff-881a-bc9d2ccc3b4b"
+        ]
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "syllabus_alignment_score": 92,
+            "aligned_skill_area": "dbt modeling and project structure (staging models, modular transformations, dependency management)",
+            "reasoning": "The question directly tests syllabus objectives around dbt project architecture and modeling best practices \u2014 isolating source-specific logic in staging models and composing higher-level transformations via references \u2014 mapping to topics on modularity, dependency management (ref), and transformation design. It emphasizes practical implementation choices (staging patterns and where to perform cross-source joins), which align with hands-on modeling and project-structure objectives in the syllabus.",
+            "question": "A data engineering team is building a dbt project to consolidate customer data from three separate source systems: a CRM platform, an ERP system, and a marketing automation tool. Each source contains customer identifiers, contact information, and transaction history in different formats and naming conventions. The team needs to ensure that data from each source is cleaned, standardized, and ready for downstream analytics models without creating fragile dependencies between sources. Which approach should the team implement?",
+            "options": [
+                "Create one staging model per source system that applies column renames, type normalization, and null handling, then join all three sources inside each staging model to create a unified customer view",
+                "Create one staging model per source system that applies column renames, type normalization, and null handling, then reference all three staging models in a downstream transformation model to perform cross-source joins",
+                "Create a single staging model that reads from all three source systems simultaneously, applies unified column renames and type normalization, and performs all necessary joins to create a consolidated customer table",
+                "Create one staging model per source system that applies column renames and type normalization, then use a separate utility model to join staging outputs only when needed for specific analytics queries"
+            ],
+            "answer": "B",
+            "answer_explanation": "The correct approach creates one staging model per source system, each applying source-specific cleaning and standardization (column renames, type normalization, null handling), then uses a downstream transformation model to reference and join all three staging models. This architecture isolates source-specific logic in staging models, prevents fragile cross-source dependencies, and keeps transformations simple and testable. Each staging model becomes a canonical, predictable view of its source that downstream models can safely consume. Cross-source joins belong only in higher-level transformation models explicitly designed to combine data across multiple sources, not within staging models themselves.",
+            "question_status": "KEEP",
+            "status_reason": "Score 92/100 meets threshold (80)"
+        },
+        "target_id": "80d51ba2-e55d-45ac-868d-8ef414cc2103",
+        "node_id": "node_16_66fa9b3f-9757-4ab6-bda5-13bf4a437764",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+            "node_4_41436813-5364-4164-a443-85fff8687a44",
+            "node_5_5701d95e-6cc3-4a19-b782-fdc2dbc14980",
+            "node_6_0917a0cb-e934-42b3-8724-9eb8b7402b2e",
+            "node_7_1558947d-7de3-4d6a-9481-5498ec54e80d",
+            "node_8_208d6eb9-d86e-486a-9dda-3e85640c5982",
+            "node_9_99dfbac8-453d-4608-b909-a95a0c6f093c",
+            "node_10_125065d1-5d4c-40ae-9173-664e70048745",
+            "node_11_f435cde1-ec73-416c-917d-283292bd468d",
+            "node_12_fd098bdb-6873-4faf-bb9d-7e4c4621e242",
+            "node_13_21d5d6af-df66-4582-a8cc-530bf201a608",
+            "node_14_1604c87b-1a83-4b18-928b-afd3308cea11",
+            "node_15_1512113f-6323-42d1-8388-f56312c8813f",
+            "node_16_66fa9b3f-9757-4ab6-bda5-13bf4a437764"
+        ]
+    }
+]

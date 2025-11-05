@@ -1,0 +1,265 @@
+[
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "code_snippets": [
+                "{'select': ['role']}"
+            ],
+            "removed_snippets": [
+                "{{}}"
+            ],
+            "removal_reasoning": "The snippet '{{}}' is not executable code; it is a placeholder indicating that grants should not be managed, rather than a functional code block."
+        },
+        "metadata": {
+            "model": "gpt-4o-mini-2024-07-18",
+            "usage": {
+                "prompt_tokens": 1143,
+                "completion_tokens": 56,
+                "total_tokens": 1199,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 0,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762244754,
+            "system_fingerprint": "fp_51db84afab",
+            "status_code": 200
+        },
+        "node_id": "node_7_09a37a6f-3aac-4233-b97a-16cca10dee91",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_931f683c-e7d9-4baa-a03c-a1dc67e3f254",
+            "node_7_09a37a6f-3aac-4233-b97a-16cca10dee91"
+        ],
+        "target_id": "ca5ec197-e8dc-4adb-9527-f67dd6565706"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "code_snippets": [
+                "$ dbt run-operation generate_model_yaml --args '{{\"model_names\": [ \"activity_based_interest_activated\", \"activity_based_interest_deactivated\", \"activity_based_interest_updated\", ...] }}'",
+                "$ dbt ls -m models/core/activity_based_interest --output name | xargs -I{{}} echo -n ' \"{{}}\",'",
+                "$ cat .../_activity_based_interest_docs.md  {{% docs activity_based_interest__id %}} ... {{% enddocs %}\n$ cat .../_activity_based_interest_docs.yml  ... description: \"{{{{ doc('activity_based_interest__id') }}}}\""
+            ],
+            "removed_snippets": [],
+            "removal_reasoning": ""
+        },
+        "metadata": {
+            "model": "gpt-4o-mini-2024-07-18",
+            "usage": {
+                "prompt_tokens": 1130,
+                "completion_tokens": 146,
+                "total_tokens": 1276,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 0,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762244655,
+            "system_fingerprint": "fp_51db84afab",
+            "status_code": 200
+        },
+        "node_id": "node_7_cc4dcde0-1945-4e0e-84b3-e79ce54f4136",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_6c9efe6f-a745-49d6-b17e-9ce20b702c74",
+            "node_7_cc4dcde0-1945-4e0e-84b3-e79ce54f4136"
+        ],
+        "target_id": "06754a13-5b47-4bb0-975e-a029deaa9e39"
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "code_snippets": [
+                "$ grep '      \\\\- name:' models/core/activity_based_interest/_activity_based_interest_docs.yml | cut -c 15- | sort -u"
+            ],
+            "removed_snippets": [],
+            "removal_reasoning": ""
+        },
+        "metadata": {
+            "model": "gpt-4o-mini-2024-07-18",
+            "usage": {
+                "prompt_tokens": 870,
+                "completion_tokens": 50,
+                "total_tokens": 920,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "audio_tokens": 0
+                },
+                "completion_tokens_details": {
+                    "reasoning_tokens": 0,
+                    "audio_tokens": 0,
+                    "accepted_prediction_tokens": 0,
+                    "rejected_prediction_tokens": 0
+                }
+            },
+            "finish_reason": "stop",
+            "created": 1762244735,
+            "system_fingerprint": "fp_51db84afab",
+            "status_code": 200
+        },
+        "node_id": "node_7_695634ce-4dd1-490b-b2ab-3ef03f7deb46",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+            "node_4_41436813-5364-4164-a443-85fff8687a44",
+            "node_5_5701d95e-6cc3-4a19-b782-fdc2dbc14980",
+            "node_6_cdbee945-bd32-4d4d-8ba9-dfeade09b814",
+            "node_7_695634ce-4dd1-490b-b2ab-3ef03f7deb46"
+        ],
+        "target_id": "ece122e7-094a-467e-bdf0-0bf3dce32c33"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "summary_title": "Materialization and Incremental Models (dbt)",
+            "summary_content": "dbt models are materialized as views by default; explicitly declaring models as views is unnecessary. When a group of models in a folder should be tables instead of views, declare the materialization at the folder level in dbt_project.yml so all models in that folder inherit the table materialization and individual models do not each require a materialized: view or materialized: table line.\n\nIncremental models require explicit incremental logic to behave correctly. Incremental models must use unique keys to deduplicate or merge incoming data and must use the is_incremental() macro to separate full-refresh behavior from incremental logic. Implementations should ensure that insert/update/delete logic that applies only on incremental runs is guarded by is_incremental() to avoid incorrect results on full-refresh runs.\n\nSet folder-level materializations to reduce redundancy and enforce consistent materialization across multiple models, and always design incremental models with a unique key and is_incremental() guards to maintain correctness and idempotence.",
+            "key_concepts": [
+                "dbt models default to materialization 'view' \u2014 no explicit view declaration is required.",
+                "Set folder-level materializations in dbt_project.yml to materialize all models in a folder as tables rather than adding per-model materialized settings.",
+                "Incremental models must define unique keys and use the is_incremental() macro to separate incremental logic from full-refresh logic."
+            ],
+            "technical_details": "- Default materialization: models are materialized as \"view\" by default; do not need to declare models as views.\n- Folder-level materialization: define materialization for a folder in dbt_project.yml to materialize all models in that folder as tables (avoids per-model materialized: view or materialized: table entries).\n- Incremental model requirements:\n  - Define a unique key for the incremental model to support correct deduplication/merging behavior.\n  - Use the is_incremental() macro to conditionally execute incremental-only SQL (separate from full-refresh SQL).\n  - Ensure incremental logic uses the unique key to update or deduplicate rows during incremental runs.",
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure folder-level materializations in dbt_project.yml to materialize all models in a folder as tables (configuration).",
+                "Identify the default materialization behavior: dbt models default to views and do not require explicit view declarations (understanding).",
+                "Configure incremental models to use a unique key and wrap incremental-only SQL with is_incremental() to implement correct incremental behavior (implementation)."
+            ]
+        },
+        "metadata": {
+            "skipped_by_conditional": true,
+            "agent_type": "passthrough"
+        },
+        "node_id": "node_7_71a00420-121f-4c66-ab55-3031d617719a",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_f7f88838-07c7-4904-9536-1be78e5fccb9",
+            "node_7_71a00420-121f-4c66-ab55-3031d617719a"
+        ],
+        "target_id": "e67ce324-dfda-4ac4-80d0-8ae796ac5ef0"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "summary_title": "Selectors and Tagging Best Practices",
+            "summary_content": "Prefer folder selectors or YAML selectors instead of tagging every model; the majority of a project\u2019s models should remain untagged to reduce maintenance overhead. Organize models into folders when natural grouping exists so selectors can target groups without adding tags to each model.\n\nUse YAML selectors for intricate, layered model selection to replace complicated tagging schemes. YAML selectors enable expressive, composable selection logic so teams can apply selection rules centrally rather than proliferating tags across many models.",
+            "key_concepts": [
+                "The majority of project models should remain untagged to minimize tagging overhead.",
+                "Folder selectors can eliminate the need to tag every model in a folder by selecting models by location.",
+                "YAML selectors enable intricate, layered selection logic and can replace complicated tagging schemes."
+            ],
+            "technical_details": "- Keep most models untagged; reserve tags for a small set of special cases.\n- Organize related models into folders so folder selectors can target them without per-model tags.\n- Use folder selectors in cases where grouping by location or project structure is sufficient.\n- Implement YAML selectors to express layered, composable selection rules that replace complex tag combinations.\n- Prefer selector-based selection (folder or YAML) as the primary mechanism for model retrieval; apply tags only when a model requires special, individual identification.",
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure folder selectors to target groups of models by their location.",
+                "Set up YAML selectors to express layered, composable selection rules.",
+                "Deploy selector-based workflows so the majority of models remain untagged and tagging is minimized."
+            ]
+        },
+        "metadata": {
+            "skipped_by_conditional": true,
+            "agent_type": "passthrough"
+        },
+        "node_id": "node_7_3545fa1f-212e-48b6-961c-3e43327a084d",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_49351322-7781-445c-8058-3b1c3aef1029",
+            "node_7_3545fa1f-212e-48b6-961c-3e43327a084d"
+        ],
+        "target_id": "da1a49fc-b77d-4861-a514-2a9465b8db43"
+    },
+    {
+        "source_guid": "d9a360ed-6ac0-54d5-a381-efb9726d3144",
+        "content": {
+            "summary_title": "Community package reuse and dbt Cloud job configuration",
+            "summary_content": "Install the dbt_utils package to reuse community macros directly in your project so you do not need to copy macros into your codebase. Using the package provides immediate access to community-maintained macros and reduces duplication and maintenance overhead.\n\nIn dbt Cloud, configure jobs to inherit from the environment so upgrades to the environment-wide dbt version apply to those jobs without editing each job individually. Having the majority of jobs inherit from the environment makes version upgrades simpler and reduces per-job configuration work.\n\nApply both practices together: rely on community packages like dbt_utils to centralize shared logic and set jobs to inherit from the environment so platform-level changes (for example, updating the dbt version) propagate broadly and consistently.",
+            "key_concepts": [
+                "Install dbt_utils to access community macros without copying them into your project.",
+                "dbt Cloud jobs can inherit from the environment so upgrades to the environment-wide dbt version affect those jobs.",
+                "Making most jobs inherit from the environment simplifies version upgrades and reduces per-job configuration."
+            ],
+            "technical_details": "- Install the dbt_utils package so macros are available in your project; copying macros into the project is not required.\n- Verify that dbt Cloud jobs are configured to inherit from the environment to allow environment-level dbt version upgrades to apply to those jobs.\n- Confirm the dbt version used by jobs and check whether the majority of jobs inherit from the environment to streamline future upgrades.",
+            "code_snippets": [],
+            "learning_objectives": [
+                "Apply the dbt_utils package to reuse community macros and avoid copying macros into your project.",
+                "Configure dbt Cloud jobs to inherit from the environment to simplify dbt version upgrades.",
+                "Choose to centralize shared macros via community packages rather than duplicating macro code in your project."
+            ]
+        },
+        "metadata": {
+            "skipped_by_conditional": true,
+            "agent_type": "passthrough"
+        },
+        "node_id": "node_7_0f715d37-c8cd-47bd-abdb-44cfcaf0a9ac",
+        "lineage": [
+            "node_0_9fdfaf83-628a-4f1a-8818-7e586136e873",
+            "node_1_4be27c2f-4c75-43ba-af56-25cb64beb025",
+            "node_4_60cee09f-b052-477d-88b5-44042c5d8fb3",
+            "node_5_1d51febe-ccc2-4849-9c2c-7f26d53078a5",
+            "node_6_32c23ea7-aec5-4d7d-98f6-6661be23ef40",
+            "node_7_0f715d37-c8cd-47bd-abdb-44cfcaf0a9ac"
+        ],
+        "target_id": "a60c3feb-d189-4524-97a7-19dd3558b6cc"
+    },
+    {
+        "source_guid": "9d8dbf64-a013-51ca-8a39-c5e9a32c7799",
+        "content": {
+            "summary_title": "Staging Models per Source (Modeling Constraint)",
+            "summary_content": "Every source must have a corresponding staging model that ingests the raw source and cleans and standardizes its structure. Staging models are the single place to apply column renames, type normalization, null handling, and minimal business-rule normalization for that source. Staging models should represent a normalized, predictable view of the source data for downstream models to consume.\n\nDo not perform direct joins between different source systems inside staging models, and do not join other sources or intermediate models into a source's staging model. Downstream models should combine the standardized outputs of staging models rather than coupling sources together inside staging. This keeps source-specific logic isolated, prevents fragile cross-source dependencies, and makes testing and maintenance straightforward.\n\nEnforce this constraint consistently: staging models remain simple, source-focused transformation layers. Complex cross-source logic belongs only in higher-level transformation models that explicitly reference multiple staging models and are designed for combining data across sources.",
+            "key_concepts": [
+                "One staging model per source: each source must have a dedicated staging model that standardizes its structure.",
+                "Staging models perform cleaning and standardization only (renames, types, nulls, canonicalization), not cross-source joins.",
+                "No direct joins between sources inside staging models; cross-source joins belong in downstream models that consume staging outputs.",
+                "Isolating source logic in staging models reduces coupling, simplifies testing, and limits blast radius of source changes."
+            ],
+            "technical_details": " - Create a single staging model for each raw source that: reads the raw table/view, applies column renames, enforces data types, handles nulls/malformed values, and outputs a standardized schema.\n - Do not include any joins to other sources or intermediate models inside a staging model; joins across data origins must occur only in downstream models that explicitly combine staging outputs.\n - Keep staging transformations idempotent and minimal (no complex aggregations or business-logic joins).\n - Downstream models should reference staging model outputs as canonical inputs for joins, aggregations, and business logic.\n - Use clear, discoverable naming and documentation for each staging model so consumers can identify which source and cleaning steps are applied.",
+            "code_snippets": [],
+            "learning_objectives": [
+                "Apply a one-to-one mapping from raw source to staging model to standardize data structure.",
+                "Use staging models to isolate source-specific cleaning and normalization steps.",
+                "Choose downstream models to perform any cross-source joins or complex business logic instead of placing those joins in staging."
+            ]
+        },
+        "metadata": {
+            "skipped_by_conditional": true,
+            "agent_type": "passthrough"
+        },
+        "node_id": "node_7_1558947d-7de3-4d6a-9481-5498ec54e80d",
+        "lineage": [
+            "node_0_041b0655-de5a-409a-8df9-d336766d07f2",
+            "node_1_ff0de4d2-2045-4f95-a4f9-484afea4e122",
+            "node_4_41436813-5364-4164-a443-85fff8687a44",
+            "node_5_5701d95e-6cc3-4a19-b782-fdc2dbc14980",
+            "node_6_0917a0cb-e934-42b3-8724-9eb8b7402b2e",
+            "node_7_1558947d-7de3-4d6a-9481-5498ec54e80d"
+        ],
+        "target_id": "c7c5f6d2-03ca-4062-9423-3ce765108400"
+    }
+]

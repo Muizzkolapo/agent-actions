@@ -1,0 +1,491 @@
+################################################################################
+# QanaLabs Quiz Generation Workflow
+################################################################################
+# Description: Educational quiz generation workflow with fact extraction,
+#              clustering, validation, and distractor generation
+# Version: 2.0.0
+#
+# Workflow Phases:
+#   1. Fact Extraction & Validation
+#   2. Summary Generation & Code Cleanup
+#   3. Question Generation & Validation
+#   4. Explanation & Distractor Generation
+#   5. Quiz Validation
+#
+# See workflow plan at bottom of file for execution order
+################################################################################
+
+name: qanalabs_quiz_gene
+description: "Educational quiz generation workflow with fact extraction, clustering, validation, and distractor generation"
+version: "2.0.0"
+
+# Global defaults applied to all actions unless overridden
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+  is_operational: true
+  prompt_debug: false
+  few_shot: 0
+  # Most common fields across actions - each action only adds unique fields
+  observe: [id, url, platform_name, exam_name, page_content, bloom_details, fact, quote, fact_explanation, technical_level, questionable,quiz_type]
+  drops: [rewrite_instruction, needs_rewrite, quiz_type, rationale]
+
+
+
+actions:
+  # ============================================================================
+  # PHASE 1: FACT EXTRACTION & VALIDATION
+  # ============================================================================
+
+  - name: fact_extractor
+    intent: "Extract candidate facts from educational content"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: candidate_facts_list
+    drops: [id, url, topic]  # overrides defaults - unique drops for this action
+    prompt: $qanalabs_quiz_gen.Fact_extraction
+
+  - name: flatten_the_facts
+    kind: tool
+    impl: flatten_quotes
+    intent: "Group extracted facts into logical clusters"
+    observe: [topic, summary]  # only unique additions
+    guard: 
+      condition:  'candidate_facts_list != []'  # overrides default guard
+      on_false: "filter"  # Options: "skip" | "filter"
+
+
+  - name: fact_questionability
+    intent: "Generate detailed explanations for extracted facts"
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    schema: fact_questionability
+    observe: [candidate_facts_list, why_questionable, flagged_items]  # only unique additions
+    drop: [page_content]  # only unique additions
+    prompt: $qanalabs_quiz_gen.fact_questionability
+    prompt_debug: False
+    guard: 
+      condition:  'candidate_facts_list != []'  # overrides default guard
+      on_false: "filter"  # Options: "skip" | "filter"
+
+  - name: explain_facts
+    intent: "Generate detailed explanations for extracted facts"
+    schema: {fact_explanation: string}
+    observe: [candidate_facts_list, why_questionable, flagged_items,questionable]  # only unique additions
+    prompt: $qanalabs_quiz_gen.Fact_Explanation_Agent_new
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    guard:  
+      condition: 'questionable != "Low Value"' 
+      on_false: "filter"  # Options: "skip" | "filter"
+
+
+  - name: classify_feynman
+    intent: "Classify quiz type using Feynman technique principles"
+    schema: {quiz_type: string, rationale: string}
+    drops: [id, url, page_content, bloom_details]  # overrides defaults
+    observe: [summary, question, options, answer_explanation, answer, excerpt, options_answer, question_type, target_word_counts, correct_answer_words, flagged_items]  # only unique additions
+    few_shot: 6
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    prompt: $feynman.classifer_feynman
+    guard: 'questionable != "Low Value"'
+    prompt_debug: False
+
+  # ============================================================================
+  # PHASE 2: SUMMARY GENERATION & CODE CLEANUP
+  # ============================================================================
+
+  - name: generate_summary
+    intent: "Generate quiz-type specific summaries with appropriate technical details and code snippets"
+    schema: {
+      summary_title: string,
+      summary_content: string,
+      key_concepts: array,
+      technical_details: string,
+      code_snippets: array,
+      learning_objectives: array
+    }
+    observe: [quiz_type, rationale, fact_explanation, fact, quote,id,page_content,bloom_details, questionable, url]
+    drops: [id,bloom_details, questionable, url]  # Drop after using them
+    prompt: $qanalabs_quiz_gen.Summary_Generator
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    prompt_debug: true
+    guard: 'quiz_type != null'
+
+
+  - name: review_summary_content
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    intent: "This takes the quiz to show us if we have issues"
+    schema: {"summary_content_valid": "boolean","summary_content_reasoning": "string","summary_content_response_confidence_level": "string"}
+    prompt: $qanalabs_quiz_gen.Review_Summary_Content
+    prompt_debug: True
+    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, code_snippets, technical_details, quiz_type, rationale, fact_explanation, fact, quote, page_content, platform_name, exam_name, technical_level, summary_content]
+    drops: [id, bloom_details, questionable, url, learning_objectives, key_concepts, code_snippets, technical_details, quiz_type, rationale, fact_explanation, fact, quote, page_content, platform_name, exam_name]  # Drop after using them
+
+  - name: regenerate_summary
+    intent: "Regenerate summary_content for records where summary_content_valid is false"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: {
+      summary_title: string,
+      summary_content: string,
+      key_concepts: array,
+      technical_details: string,
+      code_snippets: array,
+      learning_objectives: array
+    }
+    observe: [id, bloom_details, questionable, url, quiz_type, rationale, fact_explanation, fact, quote, page_content, platform_name, exam_name, technical_level, summary_content_valid, summary_content_reasoning, summary_content_response_confidence_level]
+    drops: [id, bloom_details, questionable, url, learning_objectives, key_concepts, code_snippets, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name]  # Drop after using them
+    prompt: $qanalabs_quiz_gen.Summary_Generator
+    prompt_debug: True
+    guard:
+      condition: 'summary_content_valid == false'
+      on_false: "skip"
+
+  - name: review_code_snippets
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    intent: "Review code snippets and filter out non-code documentation"
+    schema: {"code_snippets": "array", "removed_snippets": "array", "removal_reasoning": "string"}
+    prompt: $qanalabs_quiz_gen.Review_Code_Snippets
+    prompt_debug: True
+    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, code_snippets, page_content]
+    drops: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, summary_content_valid, summary_content_reasoning, summary_content_response_confidence_level, technical_level, page_content]  
+    guard:
+      condition: 'code_snippets != []'
+      on_false: "skip" 
+
+# - name: fix_code_snippets_llm
+#    model_vendor: openai
+#    model_name: gpt-5-mini
+#    api_key: OPENAI_API_KEY
+#    intent: "Fix double-escaped and malformed code snippets using LLM"
+#    schema: {"code_snippets": "array"}
+#    prompt: $qanalabs_quiz_gen.Fix_Code_Snippets_LLM
+#    prompt_debug: True
+#    guard:
+#      condition: 'code_snippets != []'
+#      on_false: "skip"
+#    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, code_snippets, page_content]
+#    drops: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, summary_content_valid, summary_content_reasoning, summary_content_response_confidence_level, technical_level, page_content]  
+
+
+  - name: fix_code_snippets
+    kind: tool
+    impl: fix_code_snippets
+    intent: "Fix double-escaped code snippets in content.code_snippets field"
+    granularity: Record
+    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, code_snippets, page_content]
+    drops: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, summary_content_valid, summary_content_reasoning, summary_content_response_confidence_level, technical_level, page_content]  
+
+  # ============================================================================
+  # PHASE 3: QUESTION GENERATION & VALIDATION
+  # ============================================================================
+
+  - name: generate_scenarios
+    intent: "Generate quiz scenarios based on classified facts and learning objectives"
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-3-5-haiku-20241022"
+    schema: ScenarioGenerator_schema
+    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, code_snippets, page_content]
+    drops: [rationale, bloom_details, page_content]
+    prompt: $feynman.ScenarioGenerator_prompt
+    prompt_debug: true
+
+  - name: fix_options_format
+    kind: tool
+    impl: fix_options_format
+    intent: "Group extracted facts into logical clusters"
+
+
+
+  - name: flatten_questions
+    kind: tool
+    impl: flatten_questions
+    intent: "Flatten nested question structures for processing"
+    granularity: Record
+
+
+  - name: review_quiz_content
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    intent: "This takes the quiz to show us if we have issues"
+    schema: {"question_context_based": "boolean","question_context_reasoning": "string","question_context_response_confidence_level": "string"}
+    prompt: $qanalabs_quiz_gen.Review_Quiz_Content
+    prompt_debug: True
+    observe: [id, url, platform_name, exam_name, page_content, bloom_details,fact,quote,fact_explanation,technical_level,questionable,quiz_type,learning_objectives,key_concepts,technical_details,summary_content,code_snippets,question,options,answer_explanation,answer,question_type]
+    drops: [id, bloom_details, questionable, url, learning_objectives, quiz_type, rationale, fact, quote, platform_name, exam_name, page_content] 
+
+
+
+  - name: regenerate_grounded_question
+    intent: "Regenerate questions that failed context validation to ensure they are properly grounded"
+    schema: {question: string, options: array, answer: string, answer_explanation: string, question_type: string}
+    observe: [id, bloom_details, questionable, url, learning_objectives, key_concepts, technical_details, quiz_type, rationale, fact_explanation, fact, quote, platform_name, exam_name, summary_content, summary_title, code_snippets, page_content, summary_content_valid, summary_content_reasoning, summary_content_response_confidence_level, technical_level]
+    drops: [id, bloom_details, questionable, url, platform_name, exam_name, quiz_type, rationale, page_content] 
+    prompt: $qanalabs_quiz_gen.Regenerate_Grounded_Question
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-3-5-haiku-20241022"
+    prompt_debug: True
+    guard:
+      condition: 'question_context_based == false'
+      on_false: "skip"
+
+  # ============================================================================
+  # PHASE 4: EXPLANATION & DISTRACTOR GENERATION
+  # ============================================================================
+
+  - name: generate_feynman_explanation
+    intent: "Generate Feynman-style explanations for why the quiz answer is correct"
+    schema: {
+      question_explanation: string,
+      answer_reasoning: string,
+      key_concept_analogy: string,
+      memorable_takeaway: string
+    }
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-3-5-haiku-20241022"
+    observe: [question, options, answer, answer_explanation, quiz_type, learning_objectives, summary_content, summary_title, fact_explanation, key_concepts, technical_details, platform_name, exam_name, code_snippets]
+    drops: [id, bloom_details, questionable, url, platform_name, exam_name, quiz_type, rationale, page_content] 
+    prompt: $qanalabs_quiz_gen.Feynman_Explanation_Generator
+    prompt_debug: true
+
+  - name: suggest_distractor_counts
+    kind: tool
+    impl: suggest_word_counts
+    intent: "Suggest word counts for answer distractors"
+    observe: [question, options, answer, answer_explanation, quiz_type, learning_objectives, summary_content, summary_title, fact_explanation, key_concepts, technical_details, platform_name, exam_name, code_snippets, candidate_facts_list, why_questionable, flagged_items, question_explanation, key_concept_analogy, memorable_takeaway, answer_reasoning, question_type]
+
+  - name: add_answer_text
+    kind: tool
+    impl: add_answer_text
+    granularity: Record
+    intent: "Add structured answer text to questions"
+    observe: [candidate_facts_list, why_questionable, flagged_items, summary_title, summary_content, key_concepts, learning_objectives, technical_details, code_snippets, question_explanation, key_concept_analogy, memorable_takeaway, answer_reasoning, question, options, answer, answer_explanation, quiz_type, fact_explanation, platform_name, exam_name, question_type]  # Enhanced with summary outputs
+
+  # ============================================================================
+  # SEQUENTIAL DISTRACTOR GENERATION (replaces parallel loop)
+  # ============================================================================
+  # Each distractor sees previous ones to ensure variety and avoid duplicates
+
+  - name: generate_distractor_1
+    intent: "Generate first distractor - focus on wrong technology/service"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_1: string
+      explanation_why_it_is_incorrect_1: string
+      thinking_process_1: string
+    observe: [summary, question, answer_explanation, answer, excerpt, options_answer, question_type, target_word_counts, correct_answer_words, answer_text, flagged_items, quiz_type, summary_title, summary_content, key_concepts, learning_objectives, technical_details, code_snippets, question_explanation, key_concept_analogy, memorable_takeaway, answer_reasoning, questionable]  # Enhanced with learning objectives
+    drops: [id, url, page_content, bloom_details, fact, quote, technical_level, key_concepts, questionable, fact_explanation]   
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_1
+    prompt_debug: true
+
+  - name: generate_distractor_2
+    intent: "Generate second distractor - focus on wrong approach/concept - MUST differ from distractor_1"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_2: string
+      explanation_why_it_is_incorrect_2: string
+      thinking_process_2: string
+    observe: [summary, question, answer_explanation, answer, excerpt, options_answer, question_type, target_word_counts, correct_answer_words, answer_text, flagged_items, quiz_type, summary_title, summary_content, key_concepts, learning_objectives, technical_details, code_snippets, question_explanation, key_concept_analogy, memorable_takeaway, answer_reasoning, questionabl, distractor_1, explanation_why_it_is_incorrect_1, thinking_process_1]  # Enhanced with learning objectives
+    drops: [id, url, page_content, bloom_details, fact, quote, technical_level, key_concepts, questionable, fact_explanation]   
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_2
+    prompt_debug: true
+
+  - name: generate_distractor_3
+    intent: "Generate third distractor - focus on edge case/misconception - MUST differ from both previous"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_3: string
+      explanation_why_it_is_incorrect_3: string
+      thinking_process_3: string
+    observe: [summary, question, answer_explanation, answer, excerpt, options_answer, question_type, target_word_counts, correct_answer_words, answer_text, flagged_items, quiz_type, summary_title, summary_content, key_concepts, learning_objectives, technical_details, code_snippets, question_explanation, key_concept_analogy, memorable_takeaway, answer_reasoning, questionabl, distractor_1, explanation_why_it_is_incorrect_1, thinking_process_1, distractor_2, explanation_why_it_is_incorrect_2, thinking_process_2]  # Enhanced with learning objectives
+    drops: [id, url, page_content, bloom_details, fact, quote, technical_level, key_concepts, questionable, fact_explanation]   
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_3
+    prompt_debug: true
+
+  - name: reconstruct_options
+    kind: tool
+    impl: apply_edited_distractors
+    intent: "Reconstruct final answer options from correct answer and distractors"
+    observe: [target_word_counts,summary_title, summary_content, key_concepts, learning_objectives, technical_details, code_snippets,question_explanation,key_concept_analogy,memorable_takeaway,answer_reasoning]
+    granularity: Record
+    #guard: 'questionable != "Low Value"'
+
+  - name: review_quiz_ui
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    api_key: OPENAI_API_KEY
+    intent: "This takes the quiz to show us if we have issues"
+    schema: {"ui_based": "boolean","ui_based_reasoning": "string","ui_based_response_confidence_level": "string"}
+    prompt: "You are a quiz reviewer. Your task is to identify if a question is click ops style where user needs a ui, they need to click around a ui to get it, because we are technical assessment, we actually dont need UI based questions ui_based: true or false is this ui base,ui_based_reasoning: what was your thought process, ui_based_confidence_level: what is your confidence level for your response"
+    prompt_debug: True
+    observe: [
+      question, options, answer_explanation, summary_content, fact_explanation,
+      answer, answer_indices, answer_reasoning, answer_text,
+      my_answer_key, my_answer_text, my_confidence_level, my_reasoning,
+      bloom_details, code_snippets, combined_explanation,
+      concept_explanation_collapsible, correct_answers,
+      distractor_1, distractor_2, distractor_3, distractors,
+      exam_name, explanation_why_it_is_incorrect_1,
+      explanation_why_it_is_incorrect_2, explanation_why_it_is_incorrect_3,
+      fact, feynman_explanation_collapsible, id, key_concept_analogy,
+      key_concepts, learning_objectives, marked_result_is_correct,
+      memorable_takeaway, options_combined, page_content, platform_name,
+      question_explanation, question_type, questionable, quiz_type,
+      quote, technical_details, technical_level, url,target_word_counts
+    ]
+    drops: [
+      answer, answer_indices, answer_reasoning, answer_text,
+      my_answer_key, my_answer_text, my_confidence_level, my_reasoning,
+      bloom_details, code_snippets, combined_explanation,
+      concept_explanation_collapsible, correct_answers,
+      distractor_1, distractor_2, distractor_3, distractors,
+      exam_name, explanation_why_it_is_incorrect_1,
+      explanation_why_it_is_incorrect_2, explanation_why_it_is_incorrect_3,
+      fact, feynman_explanation_collapsible, id, key_concept_analogy,
+      key_concepts, learning_objectives, marked_result_is_correct,
+      memorable_takeaway, options_combined, page_content, platform_name,
+      question_explanation, question_type, questionable, quiz_type,
+      quote, technical_details, technical_level, url
+    ]
+
+
+
+
+  # ============================================================================
+  # PHASE 5: FINAL PROCESSING
+  # ============================================================================
+
+  - name: OptionsCombiner
+    kind: tool
+    impl: merge_correct_answer_with_distractors
+    intent: "Create the quiz structure"
+    granularity: Record
+    guard:
+      condition: 'ui_based == false'
+      on_false: "filter"
+
+  - name: format_quiz_text
+    kind: tool
+    impl: format_quiz_object
+    intent: "Format the quiz"
+    granularity: Record
+
+
+
+
+################################################################################
+# WORKFLOW EXECUTION PLAN
+################################################################################
+# This defines the order of action execution and their dependencies.
+# Actions flow from top to bottom, with <- indicating dependencies.
+################################################################################
+
+plan:
+  # ============================================================================
+  # PHASE 1: FACT EXTRACTION & VALIDATION
+  # ============================================================================
+  # Extract atomic facts from documentation and validate their questionability
+
+  - fact_extractor                          # Extract candidate facts from content
+  - flatten_the_facts <- fact_extractor    # Flatten nested fact structures
+  - fact_questionability <- flatten_the_facts  # Assess fact quality for quizzes
+  - explain_facts <- fact_questionability  # Generate pedagogical explanations
+  - classify_feynman <- explain_facts      # Classify into quiz types
+
+  # ============================================================================
+  # PHASE 2: SUMMARY GENERATION & CODE CLEANUP
+  # ============================================================================
+  # Generate summaries and clean up code snippets before question generation
+
+  - generate_summary <- classify_feynman           # Create quiz-type specific summaries
+  - review_summary_content <- generate_summary     # Validate summary quality
+  - regenerate_summary <- review_summary_content   # Regenerate if invalid (guard: summary_content_valid == false)
+  - review_code_snippets <- regenerate_summary     # Filter actual code from documentation
+  #- fix_code_snippets_llm <- review_code_snippets  # Fix double-escaped code
+  - fix_code_snippets <- review_code_snippets     # Apply code formatting fixes
+
+  # ============================================================================
+  # PHASE 3: QUESTION GENERATION & VALIDATION (COMMENTED OUT)
+  # ============================================================================
+  # Generate questions and ensure they're answerable from provided context
+
+  - generate_scenarios <- fix_code_snippets           # Generate scenario-based questions (uses dispatch for opener suggestion)
+  - fix_options_format <- generate_scenarios           # Generate scenario-based questions (uses dispatch for opener suggestion)
+  - flatten_questions <- fix_options_format           # Flatten nested question structures
+  - review_quiz_content <- flatten_questions          # Validate questions are context-based
+  - regenerate_grounded_question <- review_quiz_content  # Regenerate if not grounded (guard: question_context_based == false)
+
+  # ============================================================================
+  # PHASE 4: EXPLANATION & DISTRACTOR GENERATION (COMMENTED OUT)
+  # ============================================================================
+  # Add Feynman explanations and generate high-quality distractors
+  # Note: Processes ALL questions (original + regenerated via passthrough guard)
+
+  - generate_feynman_explanation <- regenerate_grounded_question  # Create pedagogical explanations
+  - suggest_distractor_counts <- generate_feynman_explanation     # Suggest word counts for distractors
+  - add_answer_text <- suggest_distractor_counts                  # Add structured answer text
+  - generate_distractor_1 <- add_answer_text                      # First distractor (wrong technology/service)
+  - generate_distractor_2 <- generate_distractor_1                # Second distractor (sees #1 - wrong approach/concept)
+  - generate_distractor_3 <- generate_distractor_2                # Third distractor (sees #1 & #2 - edge case/misconception)
+  - reconstruct_options <- generate_distractor_3                  # Build final options array (no merge needed!)
+  - review_quiz_ui <- reconstruct_options
+
+  # ============================================================================
+  # PHASE 5: FINAL PROCESSING
+  # ============================================================================
+  # Validate quiz quality by attempting to answer and marking results
+  - OptionsCombiner <- review_quiz_ui
+  - format_quiz_text <- OptionsCombiner
+
+################################################################################
+# ARCHIVED NOTES & ISSUES
+################################################################################
+# Previous workflow configurations and known issues for reference
+
+# ============================================================================
+# OLD WORKFLOW PLAN (REPLACED)
+# ============================================================================
+# - {{ thinkific_plan('format_quiz_text') }}
+
+# ============================================================================
+# QUALITY GUIDELINES
+# ============================================================================
+# Things our explanation cannot include:
+# 1. Referencing fact_explanation directly
+# 2. Making answer_explanation too long (e.g., "it would work in another situation")
+
+# ============================================================================
+# KNOWN ISSUES TO ADDRESS
+# ============================================================================
+# 1. Some questions have scenario in imaginario field, not in actual question field
+#    → Leads to incomplete questions
+# 2. Option length not aligning with count and recommended word counts
+#    → Need better word count validation
+# 3. Cannot mention "Option A" etc in explanations
+#    → Options are randomized, letter references become incorrect
+# 4. Loops like OptionsCombiner have some issues
+#    → Needs investigation
