@@ -12,15 +12,15 @@ from dataclasses import dataclass, field
 
 from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.utilities.utils_processor_utils import ProcessorUtils
-from agent_actions.llm_invocation.batch.result_reconciler import ResultReconciler
-from agent_actions.llm_invocation.batch.passthrough_builder import PassthroughDataBuilder
+from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
+from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
 from agent_actions.llm_invocation.realtime.providers.base import BatchResult
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ProcessingContext:
+class BatchProcessingContext:
     """
     Context passed through the processing pipeline.
 
@@ -39,7 +39,7 @@ class ProcessingContext:
     output_field: str = 'content'
 
     # Reconciliation
-    reconciler: Optional[ResultReconciler] = None
+    reconciler: Optional[BatchResultReconciler] = None
 
     # Accumulated output
     processed_data: List[Dict[str, Any]] = field(default_factory=list)
@@ -128,7 +128,7 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         agent_config: Optional[Dict[str, Any]]
-    ) -> ProcessingContext:
+    ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
 
@@ -137,7 +137,7 @@ class BatchResultProcessor:
         context_map = context_map or {}
 
         # Extract node index from output_directory
-        node_idx = PassthroughDataBuilder._extract_node_index(output_directory)
+        node_idx = BatchPassthroughBuilder._extract_node_index(output_directory)
 
         # Extract agent config values
         json_mode = True
@@ -146,7 +146,7 @@ class BatchResultProcessor:
             json_mode = agent_config.get('json_mode', True)
             output_field = agent_config.get('output_field', 'content')
 
-        ctx = ProcessingContext(
+        ctx = BatchProcessingContext(
             batch_results=batch_results,
             context_map=context_map,
             output_directory=output_directory,
@@ -161,16 +161,16 @@ class BatchResultProcessor:
 
         return ctx
 
-    def _stage_2_reconcile(self, ctx: ProcessingContext) -> ProcessingContext:
+    def _stage_2_reconcile(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """
         Stage 2: Reconcile requests with responses.
 
-        Sets up ResultReconciler for tracking processed vs missing records.
+        Sets up BatchResultReconciler for tracking processed vs missing records.
         """
-        ctx.reconciler = ResultReconciler(ctx.context_map)
+        ctx.reconciler = BatchResultReconciler(ctx.context_map)
         return ctx
 
-    def _stage_3_4_process_results(self, ctx: ProcessingContext) -> ProcessingContext:
+    def _stage_3_4_process_results(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """
         Stages 3-4: Process all batch results (success + errors).
 
@@ -213,7 +213,7 @@ class BatchResultProcessor:
 
     def _process_successful_result(
         self,
-        ctx: ProcessingContext,
+        ctx: BatchProcessingContext,
         batch_result: BatchResult,
         custom_id: str
     ) -> List[Dict[str, Any]]:
@@ -282,7 +282,7 @@ class BatchResultProcessor:
 
     def _apply_context_passthrough(
         self,
-        ctx: ProcessingContext,
+        ctx: BatchProcessingContext,
         custom_id: str,
         generated_list: List[Any],
         original_row: Dict[str, Any]
@@ -330,7 +330,7 @@ class BatchResultProcessor:
 
     def _create_error_item(
         self,
-        ctx: ProcessingContext,
+        ctx: BatchProcessingContext,
         custom_id: str,
         error_message: str,
         metadata: Optional[Dict[str, Any]] = None,
@@ -363,19 +363,19 @@ class BatchResultProcessor:
 
         return error_item
 
-    def _stage_6_merge_passthroughs(self, ctx: ProcessingContext) -> ProcessingContext:
+    def _stage_6_merge_passthroughs(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """
         Stage 6: Merge passthrough records for missing/skipped items.
 
-        Uses ResultReconciler to find records that need passthrough treatment,
-        then uses PassthroughDataBuilder to create properly formatted passthrough items.
+        Uses BatchResultReconciler to find records that need passthrough treatment,
+        then uses BatchPassthroughBuilder to create properly formatted passthrough items.
         """
         # Get reconciliation result
         reconciliation = ctx.reconciler.reconcile()
 
         # Build passthrough items for missing/skipped records
         if reconciliation.passthrough_records:
-            builder = PassthroughDataBuilder(ctx.output_directory)
+            builder = BatchPassthroughBuilder(ctx.output_directory)
 
             for custom_id, original_row in reconciliation.passthrough_records:
                 # Legacy behavior: Always use 'conditional_clause_failed' reason

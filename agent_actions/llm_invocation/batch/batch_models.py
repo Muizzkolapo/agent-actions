@@ -56,7 +56,7 @@ class BatchJobEntry:
 
 
 @dataclass
-class RegistryStats:
+class BatchRegistryStats:
     """
     Aggregated statistics for all batches in registry.
 
@@ -94,7 +94,7 @@ class RegistryStats:
 # Phase 4 Models: Task Preparation
 
 @dataclass
-class FilterResult:
+class BatchFilterResult:
     """
     Result of filtering a single item.
 
@@ -111,7 +111,7 @@ class FilterResult:
 
 
 @dataclass
-class TaskPreparationStats:
+class BatchTaskPreparationStats:
     """
     Statistics from batch task preparation.
 
@@ -154,7 +154,7 @@ class PreparedBatchTasks:
     """
     tasks: List[Dict[str, Any]]
     context_map: Dict[str, Any]
-    stats: TaskPreparationStats
+    stats: BatchTaskPreparationStats
     config: Optional[Dict[str, Any]] = None
 
     @property

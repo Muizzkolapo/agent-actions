@@ -27,27 +27,27 @@ class BatchContextManager:
         manager = BatchContextManager()
 
         # Save context
-        manager.save_context(
+        manager.save_batch_context_map(
             context_map={'rec_1': {...}},
             output_directory='/tmp/node_1_Agent',
             batch_name='test.json'
         )
 
         # Load context
-        context = manager.load_context(
+        context = manager.load_batch_context_map(
             output_directory='/tmp/node_1_Agent',
             batch_name='test.json'
         )
     """
 
     @staticmethod
-    def save_context(
+    def save_batch_context_map(
         context_map: Dict[str, Any],
         output_directory: str,
         batch_name: str
     ) -> Path:
         """
-        Save context map to batch directory.
+        Save batch processing context map to batch directory.
 
         Args:
             context_map: Context map to save
@@ -88,12 +88,12 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
-    def load_context(
+    def load_batch_context_map(
         output_directory: str,
         batch_name: str
     ) -> Dict[str, Any]:
         """
-        Load context map from batch directory.
+        Load batch processing context map from batch directory.
 
         Args:
             output_directory: Output directory path
@@ -149,12 +149,12 @@ class BatchContextManager:
             ) from e
 
     @staticmethod
-    def context_exists(
+    def batch_context_exists(
         output_directory: str,
         batch_name: str
     ) -> bool:
         """
-        Check if context map file exists.
+        Check if batch context map file exists.
 
         Args:
             output_directory: Output directory path
@@ -189,12 +189,12 @@ class BatchContextManager:
         return batch_dir / context_file_name
 
     @staticmethod
-    def delete_context(
+    def delete_batch_context_map(
         output_directory: str,
         batch_name: str
     ) -> bool:
         """
-        Delete context map file if it exists.
+        Delete batch context map file if it exists.
 
         Args:
             output_directory: Output directory path

@@ -67,7 +67,7 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
                 row['target_id'] = str(uuid.uuid4())
         batch_service = BatchService()
         file_name = Path(file_path).name
-        result = batch_service.submit_batch_job_from_data(agent_config, file_name, data_chunk, output_directory)
+        result = batch_service.submit_batch_job(agent_config, file_name, data_chunk, output_directory)
         relative_path = Path(file_path).relative_to(base_directory)
         output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
         output_file_path.parent.mkdir(parents=True, exist_ok=True)

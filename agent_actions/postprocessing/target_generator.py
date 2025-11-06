@@ -80,7 +80,7 @@ class TargetGenerator:
             file_reader = FileReader(file_path)
             data = file_reader.read()
             file_name = Path(file_path).name
-            result = batch_service.submit_batch_job_from_data(agent_config, file_name, data, output_directory)
+            result = batch_service.submit_batch_job(agent_config, file_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
             output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -138,7 +138,7 @@ class TargetGenerator:
                 dependency_configs=self.agent_configs
             )
             file_name = Path(file_path).name
-            result = batch_service.submit_batch_job_from_data(self.agent_config, file_name, data, output_directory)
+            result = batch_service.submit_batch_job(self.agent_config, file_name, data, output_directory)
             relative_path = Path(file_path).relative_to(base_directory)
             output_file_path = Path(output_directory) / relative_path
             output_file_path.parent.mkdir(parents=True, exist_ok=True)

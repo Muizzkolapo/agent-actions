@@ -16,8 +16,8 @@ from agent_actions.utilities.utils_processor_utils import ProcessorUtils
 from agent_actions.shared.exceptions import ConfigurationError
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
-    TaskPreparationStats,
-    FilterResult
+    BatchTaskPreparationStats,
+    BatchFilterResult
 )
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ class BatchTaskPreparator:
         # 6. Initialize builders
         context_map_builder = {}
         tasks_builder = []
-        stats = TaskPreparationStats(total_items=len(data))
+        stats = BatchTaskPreparationStats(total_items=len(data))
 
         # 7. Process each data item
         for row in data:
@@ -160,7 +160,7 @@ class BatchTaskPreparator:
         batch_name: Optional[str],
         tools_path: Optional[str],
         context_map_builder: Dict[str, Any],
-        stats: TaskPreparationStats
+        stats: BatchTaskPreparationStats
     ) -> Optional[Dict[str, Any]]:
         """
         Process a single data item.
@@ -270,11 +270,11 @@ class BatchTaskPreparator:
         where_clause_config: Optional[Dict[str, Any]],
         conditional_clause: str,
         filter_service
-    ) -> FilterResult:
+    ) -> BatchFilterResult:
         """
         Apply WHERE clause and conditional filtering to a single item.
 
-        Returns FilterResult with status and should_include flag.
+        Returns BatchFilterResult with status and should_include flag.
         """
         filter_status_result = filter_service.filter_single_item(
             row_content,
@@ -282,7 +282,7 @@ class BatchTaskPreparator:
             conditional_clause if conditional_clause else None
         )
 
-        return FilterResult(
+        return BatchFilterResult(
             status=filter_status_result.status,
             should_include=filter_status_result.should_include,
             reason=getattr(filter_status_result, 'reason', None),

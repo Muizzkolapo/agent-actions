@@ -6,7 +6,12 @@ from pydantic import ValidationError
 
 @click.group()
 def batch():
-    """Manages the lifecycle of batch processing jobs."""
+    """
+    CLI command group for batch processing operations.
+
+    Manages the lifecycle of batch processing jobs including submission,
+    status checking, and result retrieval.
+    """
     pass
 
 @batch.command()

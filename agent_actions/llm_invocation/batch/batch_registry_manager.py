@@ -10,7 +10,7 @@ import os
 import threading
 from pathlib import Path
 from typing import Dict, Optional, Callable
-from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry, RegistryStats
+from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
@@ -158,17 +158,17 @@ class BatchRegistryManager:
             self._ensure_cache_loaded()
             return self._cache.copy()  # Return copy to prevent external mutation
 
-    def get_registry_stats(self) -> RegistryStats:
+    def get_registry_stats(self) -> BatchRegistryStats:
         """
         Get aggregated statistics for all batches.
 
         Returns:
-            RegistryStats with counts by status
+            BatchRegistryStats with counts by status
         """
         with self._lock:
             self._ensure_cache_loaded()
 
-            stats = RegistryStats(
+            stats = BatchRegistryStats(
                 total_jobs=len(self._cache),
                 completed=0,
                 failed=0,

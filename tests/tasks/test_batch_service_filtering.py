@@ -62,8 +62,8 @@ class TestBatchServiceFiltering:
         mock_factory.create_provider.return_value = mock_provider
         agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
         data = [{'target_id': 'test1', 'content': 'test content'}]
-        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=([], {})):
-            result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
+        with patch.object(batch_service, 'prepare_batch_tasks', return_value=([], {})):
+            result = batch_service.submit_batch_job(agent_config, 'test_batch', data, temp_output_dir)
         assert isinstance(result, dict)
         assert result.get('type') == 'passthrough'
         assert result.get('data') == []
@@ -83,8 +83,8 @@ class TestBatchServiceFiltering:
         mock_provider.validate_config.return_value = (True, None)
         mock_factory.create_provider.return_value = mock_provider
         agent_config = {'where_clause': {'clause': 'questionable == "Low Value"', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
-        # Call prepare_batch_tasks_from_data to get context_map
-        tasks, context_map = batch_service.prepare_batch_tasks_from_data(agent_config, sample_data, temp_output_dir, 'test_batch')
+        # Call prepare_batch_tasks to get context_map
+        tasks, context_map = batch_service.prepare_batch_tasks(agent_config, sample_data, temp_output_dir, 'test_batch')
         assert len(context_map) == 3
         item1 = context_map['item1']
         item2 = context_map['item2']
@@ -105,12 +105,12 @@ class TestBatchServiceFiltering:
         agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'skip'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
         data = [{'target_id': 'test1', 'content': 'test content'}]
         mock_passthrough_data = {'type': 'passthrough', 'data': [{'target_id': 'test1', 'content': 'test content', 'metadata': {'skipped_by_where_clause': True, 'agent_type': 'passthrough'}}], 'output_directory': temp_output_dir}
-        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=([], {})):
-            with patch('agent_actions.llm_invocation.batch.batch_service.PassthroughDataBuilder') as mock_builder_class:
+        with patch.object(batch_service, 'prepare_batch_tasks', return_value=([], {})):
+            with patch('agent_actions.llm_invocation.batch.batch_service.BatchPassthroughBuilder') as mock_builder_class:
                 mock_builder = Mock()
                 mock_builder.from_context.return_value = mock_passthrough_data
                 mock_builder_class.return_value = mock_builder
-                result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
+                result = batch_service.submit_batch_job(agent_config, 'test_batch', data, temp_output_dir)
         assert isinstance(result, dict)
         assert result.get('type') == 'passthrough'
         assert len(result.get('data')) == 1
@@ -158,7 +158,7 @@ class TestBatchServiceFiltering:
         with patch('agent_actions.utilities.tooling.execute_user_defined_function') as mock_execute_udf:
             # Mock execute_user_defined_function to return True for item1, False for item2
             mock_execute_udf.side_effect = lambda func_name, data, **kwargs: data.get('process', True)
-            tasks, context_map = batch_service.prepare_batch_tasks_from_data(agent_config, data)
+            tasks, context_map = batch_service.prepare_batch_tasks(agent_config, data)
             assert tasks is not None
             assert context_map['item1']['_batch_filter_status'] == 'included'
             assert context_map['item2']['_batch_filter_status'] == 'skipped'

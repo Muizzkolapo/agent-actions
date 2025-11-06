@@ -13,7 +13,7 @@ from agent_actions.utilities.utils_processor_utils import ProcessorUtils
 NODE_DIRECTORY_PATTERN = r'node_(\d+)_(\w+)'
 
 
-class PassthroughDataBuilder:
+class BatchPassthroughBuilder:
     """
     Builder for creating passthrough data structures.
 
@@ -22,7 +22,7 @@ class PassthroughDataBuilder:
     passthrough item construction logic.
 
     Example:
-        builder = PassthroughDataBuilder(output_directory)
+        builder = BatchPassthroughBuilder(output_directory)
 
         # From raw data
         result = builder.from_data(

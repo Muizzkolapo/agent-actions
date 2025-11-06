@@ -6,8 +6,8 @@ output to the original _convert_batch_results_to_workflow_format method.
 """
 import pytest
 from unittest.mock import patch, Mock
-from agent_actions.llm_invocation.batch.result_processor import (
-    BatchResultProcessor, ProcessingContext
+from agent_actions.llm_invocation.batch.batch_result_processor import (
+    BatchResultProcessor, BatchProcessingContext
 )
 from agent_actions.llm_invocation.realtime.providers.base import BatchResult
 
@@ -91,7 +91,7 @@ class TestBatchResultProcessor:
 
     def test_stage_2_creates_reconciler(self, processor):
         """Test that stage 2 creates ResultReconciler."""
-        ctx = ProcessingContext(
+        ctx = BatchProcessingContext(
             batch_results=[],
             context_map={'rec_1': {}},
             output_directory=None,

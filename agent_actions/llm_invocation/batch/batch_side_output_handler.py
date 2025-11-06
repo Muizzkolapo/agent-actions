@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Tuple
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists
 
 
-class SideOutputHandler:
+class BatchSideOutputHandler:
     """
     Handles side output operations for batch processing.
 
@@ -20,7 +20,7 @@ class SideOutputHandler:
     that need to be stored separately from main workflow output.
 
     Example:
-        handler = SideOutputHandler()
+        handler = BatchSideOutputHandler()
         main_output, side_output = handler.separate(processed_items)
         if side_output:
             handler.save(side_output, '/path/to/side_output.json')

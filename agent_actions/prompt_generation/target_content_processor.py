@@ -63,7 +63,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         if self._get_config_value('run_mode') == 'batch':
             source_file_info = self._extract_source_file_info(data)
-            result = await asyncio.to_thread(self.batch_service.submit_batch_job_from_data, self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            result = await asyncio.to_thread(self.batch_service.submit_batch_job, self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
             return []
@@ -95,7 +95,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         if self._get_config_value('run_mode') == 'batch':
             source_file_info = self._extract_source_file_info(data)
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            result = self.batch_service.submit_batch_job(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
             return []
@@ -133,7 +133,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         if self._get_config_value('run_mode') == 'batch':
             source_file_info = self._extract_source_file_info(data)
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            result = self.batch_service.submit_batch_job(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return self.data_processor.separate_side_output(result['data'])
             return ([], [])
@@ -170,7 +170,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         if self._get_config_value('run_mode') == 'batch':
             source_file_info = self._extract_source_file_info(data)
-            result = self.batch_service.submit_batch_job_from_data(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
+            result = self.batch_service.submit_batch_job(self.agent_config, self.agent_name, data, output_directory, source_file_info=source_file_info)
             if isinstance(result, dict) and result.get('type') == 'passthrough':
                 return result['data']
             return []

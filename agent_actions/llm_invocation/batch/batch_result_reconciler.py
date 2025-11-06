@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ReconciliationResult:
+class BatchReconciliationResult:
     """
     Result of reconciling batch results with expected records.
 
@@ -27,7 +27,7 @@ class ReconciliationResult:
     passthrough_records: List[Tuple[str, Dict[str, Any]]]
 
 
-class ResultReconciler:
+class BatchResultReconciler:
     """
     Reconciles batch results with expected records from context map.
 
@@ -138,7 +138,7 @@ class ResultReconciler:
 
         return passthrough_records
 
-    def reconcile(self) -> ReconciliationResult:
+    def reconcile(self) -> BatchReconciliationResult:
         """
         Perform full reconciliation.
 
@@ -146,7 +146,7 @@ class ResultReconciler:
         providing a complete picture of processing status.
 
         Returns:
-            ReconciliationResult containing processed, missing, and passthrough records
+            BatchReconciliationResult containing processed, missing, and passthrough records
         """
         missing_ids = self.get_missing_ids()
 
@@ -160,7 +160,7 @@ class ResultReconciler:
 
         passthrough_records = self.get_passthrough_records()
 
-        return ReconciliationResult(
+        return BatchReconciliationResult(
             processed_ids=self._processed_ids.copy(),
             missing_ids=missing_ids,
             passthrough_records=passthrough_records

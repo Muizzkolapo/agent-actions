@@ -12,14 +12,14 @@ from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.realtime.providers.base import BatchProvider, BatchResult
 from agent_actions.llm_invocation.realtime.providers.factory import BatchProviderFactory
 from agent_actions.shared.exceptions import ConfigValidationError, ExternalServiceError, ProcessingError
-from agent_actions.llm_invocation.batch.registry_manager import BatchRegistryManager
+from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
-from agent_actions.llm_invocation.batch.passthrough_builder import PassthroughDataBuilder
-from agent_actions.llm_invocation.batch.result_processor import BatchResultProcessor
-from agent_actions.llm_invocation.batch.task_preparator import BatchTaskPreparator
-from agent_actions.llm_invocation.batch.context_manager import BatchContextManager
-from agent_actions.llm_invocation.batch.side_output_handler import SideOutputHandler
-from agent_actions.llm_invocation.batch.provider_resolver import BatchProviderResolver
+from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
+from agent_actions.llm_invocation.batch.batch_result_processor import BatchResultProcessor
+from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPreparator
+from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
+from agent_actions.llm_invocation.batch.batch_side_output_handler import BatchSideOutputHandler
+from agent_actions.llm_invocation.batch.batch_provider_resolver import BatchProviderResolver
 
 logger = logging.getLogger(__name__)
 
@@ -58,14 +58,14 @@ class BatchService:
             self._registry_manager = BatchRegistryManager(Path(output_directory) / 'batch' / '.batch_registry.json')
         return self._registry_manager
 
-    def prepare_batch_tasks_from_data(self, agent_config, data, output_directory=None, batch_name=None):
+    def prepare_batch_tasks(self, agent_config, data, output_directory=None, batch_name=None):
         """Prepare batch tasks from data (delegates to BatchTaskPreparator)."""
         provider = self._provider_resolver.get_for_config(agent_config)
         prepared = self._task_preparator.prepare_tasks(agent_config=agent_config, data=data, provider=provider, output_directory=output_directory, batch_name=batch_name)
         logger.info("Task preparation complete: %d tasks, %d filtered, %d skipped", prepared.task_count, prepared.stats.filtered_items, prepared.stats.skipped_items)
         return prepared.tasks, prepared.context_map
 
-    def submit_batch_job_from_data(self, agent_config, batch_name, data, output_directory=None, force=False):
+    def submit_batch_job(self, agent_config, batch_name, data, output_directory=None, force=False):
         force_submission = force or self.force_batch
         if not force_submission and output_directory:
             # Check for existing in-flight batch
@@ -76,18 +76,18 @@ class BatchService:
                 logger.info('Skipping new batch submission. Use --batch_continue to process completed batches.')
                 return entry.batch_id
 
-        tasks, context_map = self.prepare_batch_tasks_from_data(agent_config, data, output_directory, batch_name)
+        tasks, context_map = self.prepare_batch_tasks(agent_config, data, output_directory, batch_name)
         if not tasks:
             where_config = agent_config.get('where_clause', {})
             behavior = where_config.get('behavior', 'filter')
             if behavior == 'filter':
                 return {'type': 'passthrough', 'data': [], 'output_directory': output_directory}
             elif behavior == 'skip':
-                return PassthroughDataBuilder(output_directory).from_context(context_map, reason='where_clause_not_matched')
+                return BatchPassthroughBuilder(output_directory).from_context(context_map, reason='where_clause_not_matched')
             else:
-                return PassthroughDataBuilder(output_directory).from_data(data, reason='conditional_clause_failed')
+                return BatchPassthroughBuilder(output_directory).from_data(data, reason='conditional_clause_failed')
 
-        self._context_manager.save_context(context_map, output_directory, batch_name)
+        self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
         try:
             provider = self._provider_resolver.get_for_config(agent_config)
             provider_type = agent_config.get('model_vendor')
@@ -130,7 +130,7 @@ class BatchService:
             file_name = entry.file_name if entry else None
 
             # Load context and retrieve results
-            context_map = self._context_manager.load_context(output_dir, file_name or 'default') if file_name else {}
+            context_map = self._context_manager.load_batch_context_map(output_dir, file_name or 'default') if file_name else {}
             batch_results = self._retrieve_results(provider, batch_id, output_dir, context_map=context_map, record_count=entry.record_count if entry else None, file_name=file_name)
 
             # Write results to JSONL
@@ -146,7 +146,7 @@ class BatchService:
         except Exception as e:
             raise ExternalServiceError(self.vendor_type or 'unknown', f'Failed to retrieve batch results: {e}', cause=e)
 
-    def process_batch_results_to_workflow_output(self, batch_id: str, output_directory: str, base_directory: str, file_path: str, agent_config: Optional[Dict[str, Any]]=None):
+    def process_batch_results(self, batch_id: str, output_directory: str, base_directory: str, file_path: str, agent_config: Optional[Dict[str, Any]]=None):
         """Process batch results and integrate them into workflow output system."""
         try:
             manager = self._get_registry_manager(output_directory)
@@ -158,12 +158,12 @@ class BatchService:
             # Get entry and load context
             entry = manager.get_batch_job_by_id(batch_id)
             file_name = entry.file_name if entry else None
-            context_map = self._context_manager.load_context(output_directory, file_name or 'default') if file_name else {}
+            context_map = self._context_manager.load_batch_context_map(output_directory, file_name or 'default') if file_name else {}
 
             # Retrieve and process results
             batch_results = self._retrieve_results(provider, batch_id, output_directory, context_map=context_map, agent_config=agent_config, record_count=entry.record_count if entry else None, file_name=file_name)
             processed_data = self._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
-            main_output, side_output_data = SideOutputHandler.separate(processed_data)
+            main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
             # Write output files
             output_file = Path(output_directory) / Path(file_path).relative_to(base_directory).with_suffix('.json')
@@ -172,7 +172,7 @@ class BatchService:
 
             if side_output_data:
                 side_output_file = create_side_output_directory(output_directory) / Path(file_path).relative_to(base_directory).name
-                SideOutputHandler.save(side_output_data, side_output_file)
+                BatchSideOutputHandler.save(side_output_data, side_output_file)
 
             return str(output_file)
         except Exception as e:
@@ -182,7 +182,7 @@ class BatchService:
         """Convert batch results to workflow format (delegates to BatchResultProcessor)."""
         return self._result_processor.process(batch_results=batch_results, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
 
-    def process_all_batch_results_to_workflow_output(self, output_directory: str, agent_config: Dict[str, Any]=None):
+    def process_all_batch_results(self, output_directory: str, agent_config: Dict[str, Any]=None):
         """Process all completed batch jobs in the registry to workflow output."""
         manager = self._get_registry_manager(output_directory)
         registry = manager.get_all_jobs()
@@ -204,7 +204,7 @@ class BatchService:
 
             # Process batch
             try:
-                context_map = self._context_manager.load_context(output_directory, file_name or 'default')
+                context_map = self._context_manager.load_batch_context_map(output_directory, file_name or 'default')
                 provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_directory)
                 batch_results = self._retrieve_results(provider, batch_id, output_directory, context_map=context_map, agent_config=agent_config, record_count=entry.record_count, file_name=file_name)
 
@@ -213,7 +213,7 @@ class BatchService:
 
                 # Convert and write output
                 processed_data = self._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=output_directory, agent_config=agent_config)
-                main_output, side_output_data = SideOutputHandler.separate(processed_data)
+                main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
                 output_file = Path(output_directory) / f'{Path(file_name).stem}.json' if file_name and file_name != 'default' else Path(output_directory) / f'{batch_id}_processed_output.json'
                 ensure_directory_exists(output_file, is_file=True)
@@ -222,7 +222,7 @@ class BatchService:
                 if side_output_data:
                     side_output_dir = create_side_output_directory(output_directory)
                     side_output_file = side_output_dir / (f'{Path(file_name).stem}.json' if file_name and file_name != 'default' else f'{batch_id}_processed_output.json')
-                    SideOutputHandler.save(side_output_data, side_output_file)
+                    BatchSideOutputHandler.save(side_output_data, side_output_file)
 
                 processed_files.append(str(output_file))
             except Exception as e:
@@ -334,14 +334,14 @@ class BatchService:
 
     def _retrieve_results(self, provider: BatchProvider, batch_id: str, output_directory: Optional[str], *, context_map: Optional[Dict[str, Any]]=None, agent_config: Optional[Dict[str, Any]]=None, record_count: Optional[int]=None, file_name: Optional[str]=None) -> List[BatchResult]:
         """Retrieve batch results from provider and log reconciliation."""
-        from agent_actions.llm_invocation.batch.result_reconciler import ResultReconciler
+        from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
 
         batch_results = provider.retrieve_results(batch_id, output_directory)
 
         # Log reconciliation
-        expected = ResultReconciler.collect_expected_custom_ids(context_map or {})
-        received = ResultReconciler.collect_result_custom_ids(batch_results)
-        ResultReconciler.log_batch_reconciliation(
+        expected = BatchResultReconciler.collect_expected_custom_ids(context_map or {})
+        received = BatchResultReconciler.collect_result_custom_ids(batch_results)
+        BatchResultReconciler.log_batch_reconciliation(
             batch_id=batch_id,
             expected_count=len(expected) or record_count or 0,
             received_count=len(received),

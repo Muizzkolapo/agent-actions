@@ -1,29 +1,29 @@
 """
-Tests for ResultReconciler.
+Tests for BatchResultReconciler.
 
 Tests the reconciliation logic for matching batch results to expected records.
 """
 import pytest
-from agent_actions.llm_invocation.batch.result_reconciler import ResultReconciler, ReconciliationResult
+from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler, BatchReconciliationResult
 
 
-class TestResultReconciler:
-    """Tests for ResultReconciler class."""
+class TestBatchResultReconciler:
+    """Tests for BatchResultReconciler class."""
 
     def test_init_with_empty_context_map(self):
         """Test initialization with empty context map."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         assert reconciler.context_map == {}
         assert reconciler._processed_ids == set()
 
     def test_init_with_none_context_map(self):
         """Test initialization with None context map."""
-        reconciler = ResultReconciler(None)
+        reconciler = BatchResultReconciler(None)
         assert reconciler.context_map == {}
 
     def test_mark_processed_adds_to_set(self):
         """Test that mark_processed adds custom_id to processed set."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         reconciler.mark_processed('rec_1')
         reconciler.mark_processed('rec_2')
 
@@ -33,7 +33,7 @@ class TestResultReconciler:
 
     def test_mark_processed_converts_to_string(self):
         """Test that mark_processed converts custom_id to string."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         reconciler.mark_processed(123)  # Integer
         reconciler.mark_processed('123')  # String
 
@@ -43,7 +43,7 @@ class TestResultReconciler:
 
     def test_mark_processed_ignores_none(self):
         """Test that mark_processed ignores None values."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         reconciler.mark_processed(None)
 
         assert len(reconciler._processed_ids) == 0
@@ -57,7 +57,7 @@ class TestResultReconciler:
             'rec_4': {'_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         expected_ids = reconciler.get_expected_ids()
 
         assert expected_ids == {'rec_1', 'rec_4'}
@@ -71,7 +71,7 @@ class TestResultReconciler:
             'rec_2': {'_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         expected_ids = reconciler.get_expected_ids()
 
         # Both should be expected (default is 'included')
@@ -85,7 +85,7 @@ class TestResultReconciler:
             3: {'_batch_filter_status': 'filtered'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         expected_ids = reconciler.get_expected_ids()
 
         assert all(isinstance(id, str) for id in expected_ids)
@@ -98,7 +98,7 @@ class TestResultReconciler:
             'rec_2': {'_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_1')
         reconciler.mark_processed('rec_2')
 
@@ -113,7 +113,7 @@ class TestResultReconciler:
             'rec_3': {'_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_1')
         # rec_2 and rec_3 not processed
 
@@ -127,7 +127,7 @@ class TestResultReconciler:
             'rec_2': {'_batch_filter_status': 'filtered'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         # Don't mark any as processed
 
         missing_ids = reconciler.get_missing_ids()
@@ -141,7 +141,7 @@ class TestResultReconciler:
             'rec_2': {'content': 'data2', '_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_2')  # rec_2 processed
 
         passthrough = reconciler.get_passthrough_records()
@@ -158,7 +158,7 @@ class TestResultReconciler:
             'rec_2': {'content': 'data2', '_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_1')  # Only rec_1 processed
 
         passthrough = reconciler.get_passthrough_records()
@@ -176,7 +176,7 @@ class TestResultReconciler:
             'rec_3': {'_batch_filter_status': 'skipped'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         # Don't process any
 
         passthrough = reconciler.get_passthrough_records()
@@ -195,7 +195,7 @@ class TestResultReconciler:
             'rec_2': {'_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_1')
         reconciler.mark_processed('rec_2')
 
@@ -213,7 +213,7 @@ class TestResultReconciler:
             'rec_4': {'content': 'data4', '_batch_filter_status': 'included'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         reconciler.mark_processed('rec_1')
         # rec_1: processed
         # rec_2: skipped (not processed)
@@ -240,7 +240,7 @@ class TestResultReconciler:
             'rec_1': {'target_id': 'rec_1', 'content': 'data1'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         record = reconciler.get_record_by_id('rec_1')
 
         assert record['target_id'] == 'rec_1'
@@ -248,7 +248,7 @@ class TestResultReconciler:
 
     def test_get_record_by_id_not_found(self):
         """Test get_record_by_id returns empty dict for missing ID."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         record = reconciler.get_record_by_id('nonexistent')
 
         assert record == {}
@@ -259,7 +259,7 @@ class TestResultReconciler:
             'rec_1': {'source_guid': 'src_1'}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         source_guid = reconciler.get_source_guid('rec_1')
 
         assert source_guid == 'src_1'
@@ -270,14 +270,14 @@ class TestResultReconciler:
             'rec_1': {}  # No source_guid
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
         source_guid = reconciler.get_source_guid('rec_1')
 
         assert source_guid == 'rec_1'
 
     def test_get_source_guid_custom_fallback(self):
         """Test get_source_guid with custom fallback value."""
-        reconciler = ResultReconciler({})
+        reconciler = BatchResultReconciler({})
         source_guid = reconciler.get_source_guid('nonexistent', fallback='unknown')
 
         assert source_guid == 'unknown'
@@ -290,7 +290,7 @@ class TestResultReconciler:
             'rec_2': {}
         }
 
-        reconciler = ResultReconciler(context_map)
+        reconciler = BatchResultReconciler(context_map)
 
         assert reconciler.get_record_index('rec_0') == 0
         assert reconciler.get_record_index('rec_1') == 1
@@ -298,17 +298,17 @@ class TestResultReconciler:
 
     def test_get_record_index_not_found(self):
         """Test get_record_index returns -1 for missing ID."""
-        reconciler = ResultReconciler({'rec_1': {}})
+        reconciler = BatchResultReconciler({'rec_1': {}})
 
         assert reconciler.get_record_index('nonexistent') == -1
 
 
-class TestReconciliationResult:
-    """Tests for ReconciliationResult dataclass."""
+class TestBatchReconciliationResult:
+    """Tests for BatchReconciliationResult dataclass."""
 
     def test_reconciliation_result_creation(self):
-        """Test creating ReconciliationResult."""
-        result = ReconciliationResult(
+        """Test creating BatchReconciliationResult."""
+        result = BatchReconciliationResult(
             processed_ids={'rec_1', 'rec_2'},
             missing_ids={'rec_3'},
             passthrough_records=[('rec_3', {'content': 'data'})]
