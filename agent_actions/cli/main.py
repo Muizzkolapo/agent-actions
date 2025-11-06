@@ -13,7 +13,7 @@ from agent_actions.cli.test import clean_cli as clean
 from agent_actions.cli.init import init
 from agent_actions.cli.compile import render
 from agent_actions.cli.run import run
-from agent_actions.llm_invocation.batch.batch import batch
+from agent_actions.llm_invocation.batch.batch_cli import batch
 from agent_actions.cli.status import status
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
