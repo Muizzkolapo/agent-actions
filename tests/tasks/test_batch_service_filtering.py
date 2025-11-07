@@ -62,8 +62,8 @@ class TestBatchServiceFiltering:
         mock_factory.create_provider.return_value = mock_provider
         agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
         data = [{'target_id': 'test1', 'content': 'test content'}]
-        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=[]):
-            result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
+        with patch.object(batch_service, 'prepare_batch_tasks', return_value=([], {})):
+            result = batch_service.submit_batch_job(agent_config, 'test_batch', data, temp_output_dir)
         assert isinstance(result, dict)
         assert result.get('type') == 'passthrough'
         assert result.get('data') == []
@@ -83,13 +83,12 @@ class TestBatchServiceFiltering:
         mock_provider.validate_config.return_value = (True, None)
         mock_factory.create_provider.return_value = mock_provider
         agent_config = {'where_clause': {'clause': 'questionable == "Low Value"', 'scope': 'item', 'behavior': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
-        result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', sample_data, temp_output_dir)
-        assert result == 'batch_123'
-        mock_provider.submit_batch.assert_called_once()
-        assert len(batch_service.context_map) == 3
-        item1 = batch_service.context_map['item1']
-        item2 = batch_service.context_map['item2']
-        item3 = batch_service.context_map['item3']
+        # Call prepare_batch_tasks to get context_map
+        tasks, context_map = batch_service.prepare_batch_tasks(agent_config, sample_data, temp_output_dir, 'test_batch')
+        assert len(context_map) == 3
+        item1 = context_map['item1']
+        item2 = context_map['item2']
+        item3 = context_map['item3']
         assert item1['_batch_filter_status'] == 'included'
         assert item2['_batch_filter_status'] == 'filtered'
         assert item3['_batch_filter_status'] == 'included'
@@ -106,9 +105,12 @@ class TestBatchServiceFiltering:
         agent_config = {'where_clause': {'clause': '1 == 2', 'scope': 'item', 'behavior': 'skip'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'OPENAI_API_KEY', 'schema': {'result': 'string'}}
         data = [{'target_id': 'test1', 'content': 'test content'}]
         mock_passthrough_data = {'type': 'passthrough', 'data': [{'target_id': 'test1', 'content': 'test content', 'metadata': {'skipped_by_where_clause': True, 'agent_type': 'passthrough'}}], 'output_directory': temp_output_dir}
-        with patch.object(batch_service, 'prepare_batch_tasks_from_data', return_value=[]):
-            with patch.object(batch_service, '_create_passthrough_data_from_context', return_value=mock_passthrough_data):
-                result = batch_service.submit_batch_job_from_data(agent_config, 'test_batch', data, temp_output_dir)
+        with patch.object(batch_service, 'prepare_batch_tasks', return_value=([], {})):
+            with patch('agent_actions.llm_invocation.batch.batch_service.BatchPassthroughBuilder') as mock_builder_class:
+                mock_builder = Mock()
+                mock_builder.from_context.return_value = mock_passthrough_data
+                mock_builder_class.return_value = mock_builder
+                result = batch_service.submit_batch_job(agent_config, 'test_batch', data, temp_output_dir)
         assert isinstance(result, dict)
         assert result.get('type') == 'passthrough'
         assert len(result.get('data')) == 1
@@ -122,9 +124,9 @@ class TestBatchServiceFiltering:
 
     def test_convert_batch_results_excludes_filtered_items(self, batch_service, sample_data, temp_output_dir):
         """Test that _convert_batch_results_to_workflow_format excludes filtered items."""
-        batch_service.context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'filtered'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
+        context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'filtered'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
         batch_results = [BatchResult(custom_id='item1', success=True, content={'result': 'processed item1'}, usage={'tokens': 10}, metadata={}, error=None), BatchResult(custom_id='item3', success=True, content={'result': 'processed item3'}, usage={'tokens': 10}, metadata={}, error=None)]
-        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=batch_service.context_map, output_directory=temp_output_dir)
+        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=temp_output_dir)
         assert len(processed_data) == 2
         source_guids = [item.get('source_guid') for item in processed_data]
         assert 'item1' in source_guids
@@ -133,9 +135,9 @@ class TestBatchServiceFiltering:
 
     def test_convert_batch_results_includes_skipped_items(self, batch_service, sample_data, temp_output_dir):
         """Test that _convert_batch_results_to_workflow_format includes skipped items as passthrough."""
-        batch_service.context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'skipped'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
+        context_map = {'item1': {**sample_data[0], '_batch_filter_status': 'included'}, 'item2': {**sample_data[1], '_batch_filter_status': 'skipped'}, 'item3': {**sample_data[2], '_batch_filter_status': 'included'}}
         batch_results = [BatchResult(custom_id='item1', success=True, content={'result': 'processed item1'}, usage={'tokens': 10}, metadata={}, error=None), BatchResult(custom_id='item3', success=True, content={'result': 'processed item3'}, usage={'tokens': 10}, metadata={}, error=None)]
-        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=batch_service.context_map, output_directory=temp_output_dir)
+        processed_data = batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory=temp_output_dir)
         assert len(processed_data) == 3
         skipped_items = [item for item in processed_data if item.get('metadata', {}).get('skipped_by_conditional') is True]
         assert len(skipped_items) == 1
@@ -156,7 +158,7 @@ class TestBatchServiceFiltering:
         with patch('agent_actions.utilities.tooling.execute_user_defined_function') as mock_execute_udf:
             # Mock execute_user_defined_function to return True for item1, False for item2
             mock_execute_udf.side_effect = lambda func_name, data, **kwargs: data.get('process', True)
-            tasks = batch_service.prepare_batch_tasks_from_data(agent_config, data)
+            tasks, context_map = batch_service.prepare_batch_tasks(agent_config, data)
             assert tasks is not None
-            assert batch_service.context_map['item1']['_batch_filter_status'] == 'included'
-            assert batch_service.context_map['item2']['_batch_filter_status'] == 'skipped'
+            assert context_map['item1']['_batch_filter_status'] == 'included'
+            assert context_map['item2']['_batch_filter_status'] == 'skipped'

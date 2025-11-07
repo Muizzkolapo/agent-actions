@@ -12,4 +12,4 @@ from .xml_loader import *
 from .tabular_loader import *
 from .text_loader import *
 from .base_base_loader import *
-from agent_actions.llm_invocation.batch.data_loaders_batch_data_loader import *
+from agent_actions.llm_invocation.batch.loaders_batch_data_loader import *

@@ -437,7 +437,7 @@ class AgentWorkflow:
     def _process_all_batch_results(self, output_directory, agent_config=None):
         """Process all completed batch jobs in the registry together as one dataset."""
         try:
-            processed_files = self.batch_service.process_all_batch_results_to_workflow_output(output_directory, agent_config=agent_config)
+            processed_files = self.batch_service.process_all_batch_results(output_directory, agent_config=agent_config)
             if not processed_files:
                 from agent_actions.shared.exceptions import ProcessingError
                 raise ProcessingError('No batch results were successfully processed')

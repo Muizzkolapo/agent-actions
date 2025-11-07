@@ -1,0 +1,1132 @@
+{
+  "issue_number": 502,
+  "title": "Refactor batch_service.py - Complexity 269, 212 violations",
+  "priority": "HIGH",
+  "severity": "🔴 CRITICAL",
+  "type": "refactoring",
+  "labels": ["complexity", "priority-high", "refactoring", "tech-debt"],
+
+  "completion_status": {
+    "phase_1": {
+      "status": "✅ COMPLETED",
+      "completed_date": "2025-11-06",
+      "deliverables": [
+        "BatchRegistryManager (415 lines)",
+        "models.py with BatchJobEntry and RegistryStats",
+        "Quick wins: removed dead imports, extracted constants, fixed force_batch bug",
+        "8 deprecated wrapper methods for backward compatibility"
+      ]
+    },
+    "phase_2": {
+      "status": "✅ COMPLETED",
+      "completed_date": "2025-11-06",
+      "deliverables": [
+        "PassthroughDataBuilder (185 lines)",
+        "Reduced code duplication from 80% to 0%",
+        "Fixed 3 bare exception handlers",
+        "Replaced 16 print() statements with logger calls"
+      ]
+    },
+    "phase_3": {
+      "status": "✅ COMPLETED",
+      "completed_date": "2025-11-06",
+      "deliverables": [
+        "ResultReconciler (~220 lines)",
+        "BatchResultProcessor (~395 lines) with clean pipeline architecture",
+        "Comprehensive test suite: 73 tests total",
+        "Parity tests prove identical output to legacy implementation",
+        "Feature flag integration (use_batch_result_processor)",
+        "Reduced complexity from CC:46 to <10 per method"
+      ],
+      "notes": [
+        "HIGH RISK phase completed successfully",
+        "Feature flag defaults to False (legacy) for safe rollout",
+        "100% backward compatibility maintained",
+        "Zero functional changes - parity tests verify identical output"
+      ]
+    },
+    "phase_4": {
+      "status": "✅ COMPLETED",
+      "completed_date": "2025-11-06",
+      "deliverables": [
+        "FilterResult, TaskPreparationStats, PreparedBatchTasks data models",
+        "BatchTaskPreparator (~330 lines) - Pure function, no state mutation",
+        "BatchContextManager (~200 lines) - Context persistence logic",
+        "Feature flags removed - always use new services",
+        "Dependency injection in BatchService __init__",
+        "prepare_batch_tasks_from_data() now returns (tasks, context_map) tuple",
+        "All deprecated registry wrapper methods removed (7 methods)",
+        "Removed 95 lines of legacy code from BatchService"
+      ],
+      "notes": [
+        "All feature flags removed - new services always used",
+        "BatchService reduced from 788 → 693 lines",
+        "All self.context_map mutations eliminated",
+        "9 unused imports removed",
+        "Core filtering and result processing tests all passing (33/33)"
+      ]
+    },
+    "phase_5": {
+      "status": "📋 PLANNED",
+      "name": "Final Cleanup - True Orchestrator Pattern",
+      "goal": "Reduce BatchService to <200 lines as pure orchestrator",
+      "current_state": {
+        "line_count": 693,
+        "method_count": 25,
+        "issues": [
+          "Legacy context map implementation conflicts with BatchContextManager",
+          "Provider management still in BatchService (~85 lines)",
+          "Reconciliation helpers duplicated from ResultReconciler (~60 lines)",
+          "Side output handling not extracted (~30 lines)",
+          "Schema/tools resolution not extracted (~45 lines)",
+          "Passthrough creation methods just wrap PassthroughDataBuilder"
+        ]
+      },
+      "target_state": {
+        "line_count": "<200",
+        "method_count": "<10",
+        "pattern": "Pure orchestrator - delegates everything to services"
+      }
+    }
+  },
+
+  "problem_statement": {
+    "summary": "batch_service.py has become the most complex file in the codebase with a complexity score of 269 (target: <50), maintainability index of 0.0, and 212 violations across 1001 lines.",
+    "current_metrics": {
+      "complexity_score": 269,
+      "target_score": 50,
+      "maintainability_index": 0.0,
+      "violations": 212,
+      "lines_of_code": 1001,
+      "downstream_dependencies": 10
+    },
+    "high_complexity_functions": [
+      {
+        "name": "_convert_batch_results_to_workflow_format()",
+        "cyclomatic_complexity": 46,
+        "lines": "709-835",
+        "line_count": 126,
+        "issues": [
+          "Deeply nested loops and conditionals (4-5 levels)",
+          "Multiple try-except blocks within loops",
+          "13+ distinct responsibilities in one method",
+          "Context scope passthrough with legacy fallback",
+          "Business logic mixed with data transformation"
+        ]
+      },
+      {
+        "name": "prepare_batch_tasks_from_data()",
+        "cyclomatic_complexity": 19,
+        "lines": "263-357",
+        "line_count": 94,
+        "issues": [
+          "Complex filtering and conditional logic",
+          "Side effects on self.context_map during iteration",
+          "10+ parameters passed to external services",
+          "No separation between setup and processing"
+        ]
+      },
+      {
+        "name": "process_all_batch_results_to_workflow_output()",
+        "cyclomatic_complexity": 15,
+        "lines": "837-904",
+        "line_count": 67,
+        "issues": [
+          "Registry iteration with nested error handling",
+          "Multiple file operations",
+          "Complex orchestration logic"
+        ]
+      }
+    ],
+    "dead_code": [
+      {"line": 6, "import": "Set", "confidence": "90%"},
+      {"line": 9, "import": "PromptLoader", "confidence": "90%"},
+      {"line": 10, "import": "PromptUtils", "confidence": "90%"}
+    ]
+  },
+
+  "root_causes": {
+    "god_class_antipattern": {
+      "description": "BatchService class violates Single Responsibility Principle with 10+ distinct responsibilities",
+      "responsibilities": [
+        "Batch task preparation & submission",
+        "Provider management & caching",
+        "Registry management (8+ methods for .batch_registry.json)",
+        "Context map management & persistence",
+        "Result retrieval & processing",
+        "Data transformation & validation",
+        "Passthrough data creation (2 duplicate methods)",
+        "File I/O operations (15+ locations)",
+        "Reconciliation & logging",
+        "Schema preparation & prompt formatting"
+      ]
+    },
+    "code_duplication": {
+      "description": "80% code duplication between _create_passthrough_data() and _create_passthrough_data_from_context()",
+      "affected_lines": "42-102",
+      "shared_logic": [
+        "Node index extraction via regex",
+        "Passthrough item building with target_id/source_guid",
+        "Lineage and node_id generation"
+      ]
+    },
+    "registry_operations": {
+      "description": "8 methods performing repeated file I/O on .batch_registry.json without caching",
+      "methods": [
+        "_save_batch_job_id() - writes",
+        "_get_batch_job_id_for_file() - reads",
+        "_update_batch_registry_status() - read + write",
+        "_are_all_batch_jobs_completed() - read + write",
+        "_get_batch_registry_status() - reads",
+        "_get_last_batch_job_id() - reads",
+        "_check_for_existing_batch_job() - reads indirectly",
+        "_get_provider_for_batch_id() - reads"
+      ],
+      "issues": [
+        "No caching - file read on every call",
+        "JSON parsing repeated 8+ times",
+        "Inconsistent error handling",
+        "Race conditions possible with concurrent access",
+        "O(n²) file reads in loops"
+      ]
+    },
+    "error_handling": {
+      "description": "Bare exception handling and silent failures throughout",
+      "locations": [
+        {"line": 243, "method": "_resolve_tools_path", "issue": "Silent failure, returns None"},
+        {"line": 455, "method": "_load_context_map", "issue": "Lost context data, no logging"},
+        {"lines": "614, 511, 546", "methods": "registry operations", "issue": "Multiple silent pass statements"}
+      ]
+    },
+    "state_management": {
+      "description": "Side effects and mutable state causing testability issues",
+      "issues": [
+        "Line 133: force_batch as class variable affects all instances",
+        "Line 275: self.context_map cleared and mutated in prepare_batch_tasks_from_data()",
+        "Lines 273-274: sys.path mutation inside business logic",
+        "Cannot call prepare methods twice without losing state"
+      ]
+    }
+  },
+
+  "critical_issues": [
+    {
+      "severity": "CRITICAL",
+      "type": "Design",
+      "issue": "Misleading method name: _retrieve_results_with_validation_and_retry()",
+      "location": "line 964",
+      "description": "Docstring states 'No validation, no retry logic' but method name promises both",
+      "impact": "Creates confusion and false expectations for callers"
+    },
+    {
+      "severity": "CRITICAL",
+      "type": "Type Safety",
+      "issue": "Inconsistent return types in submit_batch_job_from_data()",
+      "location": "line 359",
+      "description": "Returns str (batch_id) on success but dict with {type, data, output_directory} when no tasks",
+      "impact": "Callers must handle two completely different types, error-prone"
+    },
+    {
+      "severity": "HIGH",
+      "type": "Concurrency",
+      "issue": "Registry race conditions",
+      "description": "Read-modify-write pattern without locking in 5+ methods",
+      "impact": "Lost updates possible in concurrent workflows"
+    },
+    {
+      "severity": "HIGH",
+      "type": "Performance",
+      "issue": "Repeated file I/O in loops",
+      "location": "_are_all_batch_jobs_completed() line 501",
+      "description": "O(n²) file reads for n batches in registry",
+      "impact": "Performance degradation with many batches"
+    },
+    {
+      "severity": "MEDIUM",
+      "type": "Testability",
+      "issue": "Hard-coded dependencies prevent mocking",
+      "examples": [
+        "Line 229: AgentManager.find_project_root(Path.cwd())",
+        "Line 278: get_filter_service()",
+        "Line 316: PromptPreparationService import inside method"
+      ],
+      "impact": "Unit testing requires extensive mocking setup"
+    }
+  ],
+
+  "refactoring_strategy": {
+    "approach": "Incremental extraction with backward compatibility",
+    "principles": [
+      "Extract services following Single Responsibility Principle",
+      "Keep old methods as deprecated wrappers during transition",
+      "Write comprehensive tests before each refactor",
+      "Each phase should be independently deployable",
+      "Minimize changes to downstream dependencies"
+    ],
+    "new_classes": [
+      {
+        "name": "BatchRegistryManager",
+        "responsibility": "Manage .batch_registry.json CRUD operations with caching and locking",
+        "replaces_methods": [
+          "_save_batch_job_id",
+          "_get_batch_job_id_for_file",
+          "_update_batch_registry_status",
+          "_are_all_batch_jobs_completed",
+          "_get_batch_registry_status",
+          "_get_last_batch_job_id",
+          "_check_for_existing_batch_job"
+        ],
+        "benefits": [
+          "Single source of truth for registry structure",
+          "In-memory caching eliminates repeated file reads",
+          "Thread-safe with locking",
+          "Consistent error handling"
+        ]
+      },
+      {
+        "name": "BatchResultProcessor",
+        "responsibility": "Transform batch provider results to workflow format",
+        "replaces_methods": [
+          "_convert_batch_results_to_workflow_format"
+        ],
+        "pipeline_stages": [
+          "_process_single_result - orchestrates processing",
+          "_process_success - handles successful results",
+          "_process_error - handles failed results",
+          "_parse_content - JSON parsing and validation",
+          "_apply_passthrough - context_scope passthrough logic",
+          "_transform_structure - data transformation",
+          "_add_metadata - metadata and lineage enrichment"
+        ],
+        "benefits": [
+          "Reduces complexity from 46 → ~5 per method",
+          "Each stage testable independently",
+          "Clear data flow through pipeline",
+          "Easy to add transformation steps"
+        ]
+      },
+      {
+        "name": "BatchTaskPreparator",
+        "responsibility": "Prepare batch tasks with filtering and prompt generation",
+        "replaces_methods": [
+          "prepare_batch_tasks_from_data"
+        ],
+        "methods": [
+          "prepare_tasks - main orchestration",
+          "_validate_and_prepare_config - config validation",
+          "_apply_filters - WHERE clause and conditional filtering",
+          "_prepare_prompts - prompt preparation with context",
+          "_build_context_map - context map construction"
+        ],
+        "benefits": [
+          "Separates validation from processing",
+          "Context map built as return value (no side effects)",
+          "Easier to test each stage",
+          "Clear data flow"
+        ]
+      },
+      {
+        "name": "PassthroughDataBuilder",
+        "responsibility": "Build passthrough data structures for filtered/skipped items",
+        "replaces_methods": [
+          "_create_passthrough_data",
+          "_create_passthrough_data_from_context"
+        ],
+        "methods": [
+          "from_data - create from raw data list",
+          "from_context - create from context map",
+          "_extract_node_index - shared regex extraction",
+          "_build_item - shared item construction"
+        ],
+        "benefits": [
+          "Eliminates 80% code duplication",
+          "Shared utilities for common operations",
+          "Clear builder pattern",
+          "Easy to extend"
+        ]
+      },
+      {
+        "name": "BatchProviderResolver",
+        "responsibility": "Resolve and cache batch providers based on configuration",
+        "replaces_methods": [
+          "_get_provider_for_config",
+          "_get_provider_for_batch_id"
+        ],
+        "benefits": [
+          "Centralizes provider lifecycle",
+          "Clear caching strategy",
+          "Better error messages"
+        ]
+      },
+      {
+        "name": "BatchContextManager",
+        "responsibility": "Manage context map persistence and retrieval",
+        "replaces_methods": [
+          "_save_context_map",
+          "_load_context_map"
+        ],
+        "benefits": [
+          "Encapsulates context storage format",
+          "Consistent error handling",
+          "Easier to change storage backend"
+        ]
+      }
+    ]
+  },
+
+  "implementation_phases": [
+    {
+      "phase": 1,
+      "name": "Quick Wins & Foundation",
+      "duration": "Week 1",
+      "effort": "Low",
+      "risk": "Low",
+      "tasks": [
+        {
+          "task": "Remove dead imports",
+          "files": ["batch_service.py:6,9,10"],
+          "time": "30 seconds",
+          "changes": "Delete Set, PromptLoader, PromptUtils imports"
+        },
+        {
+          "task": "Extract magic regex pattern to constant",
+          "time": "2 minutes",
+          "changes": "NODE_DIRECTORY_PATTERN = r'node_(\\d+)_(\\w+)'"
+        },
+        {
+          "task": "Convert force_batch to instance variable",
+          "time": "1 minute",
+          "changes": "Move from class variable to __init__ parameter"
+        },
+        {
+          "task": "Fix misleading method name",
+          "time": "2 minutes",
+          "changes": "_retrieve_results_with_validation_and_retry → _retrieve_results"
+        },
+        {
+          "task": "Move exception imports to module level",
+          "time": "10 minutes",
+          "changes": "Move all exception imports from inside methods to top"
+        },
+        {
+          "task": "Create BatchRegistryManager",
+          "time": "2 days",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/registry_manager.py",
+            "tests/llm_invocation/batch/test_registry_manager.py",
+            "Unit tests with 100% coverage"
+          ],
+          "acceptance_criteria": [
+            "All registry operations use BatchRegistryManager",
+            "In-memory caching reduces file I/O by 80%",
+            "Thread-safe with locking",
+            "All existing tests pass"
+          ]
+        },
+        {
+          "task": "Integrate BatchRegistryManager into BatchService",
+          "time": "1 day",
+          "changes": [
+            "Replace 8 registry methods with BatchRegistryManager calls",
+            "Keep old methods as deprecated wrappers",
+            "Update integration tests"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "All quick wins implemented",
+        "BatchRegistryManager fully tested and integrated",
+        "No performance regression",
+        "All existing tests pass"
+      ]
+    },
+    {
+      "phase": 2,
+      "name": "PassthroughDataBuilder & Error Handling",
+      "duration": "Week 2",
+      "effort": "Low-Medium",
+      "risk": "Low",
+      "tasks": [
+        {
+          "task": "Create PassthroughDataBuilder",
+          "time": "1 day",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/passthrough_builder.py",
+            "tests/llm_invocation/batch/test_passthrough_builder.py"
+          ],
+          "acceptance_criteria": [
+            "from_data() and from_context() produce identical output for same input",
+            "Code duplication reduced from 80% to 0%",
+            "All edge cases tested"
+          ]
+        },
+        {
+          "task": "Replace bare exception handlers",
+          "time": "2 days",
+          "changes": [
+            "Replace 'except Exception:' with specific exceptions",
+            "Add logging to all error handlers",
+            "Add error context for debugging"
+          ],
+          "locations": [
+            "_resolve_tools_path:243",
+            "_load_context_map:455",
+            "Registry methods: 614, 511, 546"
+          ]
+        },
+        {
+          "task": "Standardize logging",
+          "time": "1 day",
+          "changes": [
+            "Replace all print() with logger calls",
+            "Use appropriate log levels (debug, info, warning, error)",
+            "Add structured logging context"
+          ],
+          "affected_lines": "364, 369, 374, 377, 815, 863, 872, 892, 895, 900, 999-1000"
+        },
+        {
+          "task": "Create BatchProviderResolver",
+          "time": "1 day",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/provider_resolver.py",
+            "tests/llm_invocation/batch/test_provider_resolver.py"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "PassthroughDataBuilder integrated and tested",
+        "No bare exception handlers remain",
+        "All logging uses logger with appropriate levels",
+        "Provider resolution centralized"
+      ]
+    },
+    {
+      "phase": 3,
+      "name": "BatchResultProcessor - High Risk",
+      "duration": "Week 3",
+      "effort": "High",
+      "risk": "High",
+      "pre_requisites": [
+        "Comprehensive integration tests covering all result formats",
+        "Test fixtures for all provider types (OpenAI, Gemini, Anthropic)",
+        "Snapshot tests for workflow output format"
+      ],
+      "tasks": [
+        {
+          "task": "Create comprehensive integration tests",
+          "time": "2 days",
+          "deliverables": [
+            "tests/integration/test_batch_result_processing.py",
+            "Test fixtures for all scenarios",
+            "Snapshot tests for output verification"
+          ],
+          "test_coverage": [
+            "Successful batch results with json_mode=true",
+            "Successful batch results with json_mode=false",
+            "Failed results with error metadata",
+            "Missing results (partial batch completion)",
+            "Context scope passthrough scenarios",
+            "Filtered/skipped items reconciliation",
+            "Multi-item expansion (1 result → N items)",
+            "Side output separation"
+          ]
+        },
+        {
+          "task": "Create BatchResultProcessor",
+          "time": "3 days",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/result_processor.py",
+            "tests/llm_invocation/batch/test_result_processor.py"
+          ],
+          "pipeline_stages": [
+            {
+              "stage": "process_results",
+              "description": "Main orchestration, iterates over batch results",
+              "complexity": "Low"
+            },
+            {
+              "stage": "_process_single_result",
+              "description": "Routes to success/error handler",
+              "complexity": "Low"
+            },
+            {
+              "stage": "_process_success",
+              "description": "Orchestrates success pipeline",
+              "complexity": "Medium"
+            },
+            {
+              "stage": "_parse_content",
+              "description": "Parse JSON, handle json_mode flag",
+              "complexity": "Low"
+            },
+            {
+              "stage": "_apply_passthrough",
+              "description": "Context scope passthrough with stored/fallback logic",
+              "complexity": "Medium"
+            },
+            {
+              "stage": "_transform_structure",
+              "description": "DataTransformer integration",
+              "complexity": "Low"
+            },
+            {
+              "stage": "_add_metadata",
+              "description": "Metadata, lineage, node_id, loop correlation",
+              "complexity": "Medium"
+            },
+            {
+              "stage": "_process_error",
+              "description": "Error item creation",
+              "complexity": "Low"
+            },
+            {
+              "stage": "_reconcile_missing",
+              "description": "Handle missing/filtered items",
+              "complexity": "Medium"
+            }
+          ]
+        },
+        {
+          "task": "Integrate BatchResultProcessor",
+          "time": "1 day",
+          "changes": [
+            "Replace _convert_batch_results_to_workflow_format with processor",
+            "Keep old method as deprecated wrapper",
+            "Verify all integration tests pass"
+          ]
+        }
+      ],
+      "rollback_plan": [
+        "Keep _convert_batch_results_to_workflow_format as primary implementation",
+        "Use feature flag to switch between old and new processor",
+        "Monitor metrics for 1 week before removing old code"
+      ],
+      "success_criteria": [
+        "All integration tests pass with new processor",
+        "Complexity reduced from 46 → <10 average per method",
+        "100% unit test coverage on processor",
+        "No regression in output format",
+        "Performance within 5% of original"
+      ]
+    },
+    {
+      "phase": 4,
+      "name": "BatchTaskPreparator & Final Integration",
+      "duration": "Week 4",
+      "effort": "High",
+      "risk": "Medium-High",
+      "tasks": [
+        {
+          "task": "Create BatchTaskPreparator",
+          "time": "3 days",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/task_preparator.py",
+            "tests/llm_invocation/batch/test_task_preparator.py"
+          ],
+          "design_changes": [
+            "Return PreparedBatchTasks(tasks, context_map) instead of mutating self.context_map",
+            "Inject FilterService as dependency (no global get_filter_service())",
+            "Separate validation from processing",
+            "Extract PromptPreparationService config building"
+          ]
+        },
+        {
+          "task": "Create BatchContextManager",
+          "time": "1 day",
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/context_manager.py",
+            "tests/llm_invocation/batch/test_context_manager.py"
+          ]
+        },
+        {
+          "task": "Refactor BatchService to orchestrator",
+          "time": "2 days",
+          "changes": [
+            "Inject all extracted services via __init__",
+            "Delegate to services instead of implementing logic",
+            "Keep high-level orchestration only",
+            "Target: <200 lines for BatchService"
+          ]
+        },
+        {
+          "task": "Integration testing & verification",
+          "time": "2 days",
+          "activities": [
+            "Run full test suite",
+            "Test against real workflows",
+            "Performance benchmarking",
+            "Code coverage verification (target: >90%)"
+          ]
+        }
+      ],
+      "success_criteria": [
+        "BatchService reduced to <200 lines",
+        "All services fully tested and integrated",
+        "prepare_batch_tasks_from_data() no longer mutates state",
+        "All downstream dependencies working",
+        "Complexity score <50"
+      ]
+    },
+    {
+      "phase": 5,
+      "name": "Final Cleanup - True Orchestrator Pattern",
+      "duration": "Week 5",
+      "effort": "Medium",
+      "risk": "Low",
+      "goal": "Reduce BatchService from 693 → <200 lines by delegating all remaining logic to services",
+      "tasks": [
+        {
+          "task": "Step 1: Fix context map implementation conflict",
+          "time": "2 hours",
+          "problem": "BatchService uses legacy _save_context_map() / _load_context_map() which conflicts with BatchContextManager",
+          "legacy_format": {
+            "path": "{output_dir}/batch/{batch_name}_context_map.json",
+            "structure": "{'data': context_map}"
+          },
+          "new_format": {
+            "path": "{output_dir}/batch/.context_map_{batch_name}",
+            "structure": "context_map (direct JSON)"
+          },
+          "solution": [
+            "Replace all _save_context_map() calls with _context_manager.save_context()",
+            "Replace all _load_context_map() calls with _context_manager.load_context()",
+            "Delete _save_context_map() method (13 lines)",
+            "Delete _load_context_map() method (18 lines)"
+          ],
+          "files_affected": [
+            "submit_batch_job_from_data() line 346",
+            "process_batch_results_to_workflow_output() line 478",
+            "process_all_batch_results_to_workflow_output() line 552"
+          ],
+          "line_savings": "31 lines"
+        },
+        {
+          "task": "Step 2: Remove passthrough wrapper methods",
+          "time": "1 hour",
+          "problem": "_create_passthrough_data() and _create_passthrough_data_from_context() just wrap PassthroughDataBuilder",
+          "solution": [
+            "Inline PassthroughDataBuilder.from_data() at 3 call sites",
+            "Inline PassthroughDataBuilder.from_context() at 2 call sites",
+            "Delete _create_passthrough_data() method (8 lines)",
+            "Delete _create_passthrough_data_from_context() method (9 lines)"
+          ],
+          "line_savings": "17 lines"
+        },
+        {
+          "task": "Step 3: Move reconciliation helpers to ResultReconciler",
+          "time": "3 hours",
+          "problem": "BatchService has reconciliation helpers that duplicate ResultReconciler logic",
+          "methods_to_move": [
+            "_collect_expected_custom_ids() - 15 lines",
+            "_collect_result_custom_ids() - 26 lines",
+            "_log_batch_reconciliation() - 21 lines"
+          ],
+          "solution": [
+            "Move methods to ResultReconciler as static methods",
+            "Update _retrieve_results() to use ResultReconciler.collect_expected_custom_ids()",
+            "Update _retrieve_results() to use ResultReconciler.collect_result_custom_ids()",
+            "Update _retrieve_results() to use ResultReconciler.log_reconciliation()",
+            "Delete the 3 methods from BatchService"
+          ],
+          "line_savings": "62 lines"
+        },
+        {
+          "task": "Step 4: Extract side output handling to SideOutputHandler",
+          "time": "2 hours",
+          "problem": "Side output logic scattered in BatchService",
+          "methods": [
+            "_separate_side_output() - 13 lines",
+            "_save_side_output() - 18 lines"
+          ],
+          "solution": [
+            "Create SideOutputHandler service (~40 lines)",
+            "Methods: separate(), save()",
+            "Replace 5 call sites with handler.separate() and handler.save()",
+            "Delete _separate_side_output() and _save_side_output()"
+          ],
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/side_output_handler.py",
+            "Inject handler in BatchService __init__"
+          ],
+          "line_savings": "31 lines"
+        },
+        {
+          "task": "Step 5: Extract provider management to BatchProviderResolver",
+          "time": "4 hours",
+          "problem": "Provider resolution and caching scattered across 2 methods",
+          "methods": [
+            "_get_provider_for_config() - 37 lines",
+            "_get_provider_for_batch_id() - 23 lines"
+          ],
+          "solution": [
+            "Create BatchProviderResolver service (~85 lines)",
+            "Methods: get_for_config(), get_for_batch_id(), _validate_config()",
+            "Handles provider caching internally",
+            "Replace 8 call sites with resolver.get_for_config()",
+            "Delete _get_provider_for_config() and _get_provider_for_batch_id()"
+          ],
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/provider_resolver.py",
+            "tests/tasks/test_provider_resolver.py",
+            "Inject resolver in BatchService __init__"
+          ],
+          "line_savings": "60 lines"
+        },
+        {
+          "task": "Step 6: Extract schema/tools resolution to ConfigResolver",
+          "time": "3 hours",
+          "problem": "Config resolution logic mixed in BatchService",
+          "methods": [
+            "_resolve_tools_path() - 30 lines",
+            "_prepare_schema() - 15 lines"
+          ],
+          "solution": [
+            "Create ConfigResolver service (~60 lines)",
+            "Methods: resolve_tools_path(), prepare_schema()",
+            "Replace 4 call sites with resolver methods",
+            "Delete _resolve_tools_path() and _prepare_schema()"
+          ],
+          "deliverables": [
+            "agent_actions/llm_invocation/batch/config_resolver.py",
+            "Inject resolver in BatchService __init__"
+          ],
+          "line_savings": "45 lines"
+        },
+        {
+          "task": "Step 7: Remove remaining utility methods",
+          "time": "1 hour",
+          "methods": [
+            "_extract_node_index() - can be static in PassthroughDataBuilder",
+            "_save_task_source() - likely unused, verify and delete"
+          ],
+          "solution": [
+            "Grep for _save_task_source() usage",
+            "If unused, delete method (35 lines)",
+            "Move _extract_node_index() to PassthroughDataBuilder",
+            "Update any callers"
+          ],
+          "line_savings": "~40 lines"
+        },
+        {
+          "task": "Step 8: Simplify orchestration methods",
+          "time": "4 hours",
+          "methods_to_simplify": [
+            "retrieve_results() - 36 lines → can be 10 lines",
+            "process_batch_results_to_workflow_output() - 45 lines → can be 15 lines",
+            "process_all_batch_results_to_workflow_output() - 80 lines → can be 30 lines",
+            "_retrieve_results() - 50 lines → can be 15 lines"
+          ],
+          "approach": [
+            "Extract complex logic to helper services",
+            "Keep only high-level orchestration",
+            "Reduce nesting by early returns",
+            "Move error handling to services"
+          ],
+          "line_savings": "~140 lines"
+        },
+        {
+          "task": "Step 9: Final verification and testing",
+          "time": "4 hours",
+          "activities": [
+            "Run all batch tests (should be ~33 passing)",
+            "Update any broken tests due to refactoring",
+            "Verify line count <200",
+            "Check complexity score <50",
+            "Run full integration suite",
+            "Performance comparison with Phase 4 baseline"
+          ]
+        }
+      ],
+      "total_line_savings": {
+        "step_1_context_map": 31,
+        "step_2_passthrough": 17,
+        "step_3_reconciliation": 62,
+        "step_4_side_output": 31,
+        "step_5_provider": 60,
+        "step_6_config": 45,
+        "step_7_utilities": 40,
+        "step_8_orchestration": 140,
+        "total": 426,
+        "projected_final": "693 - 426 = ~267 lines (need additional cleanup to reach <200)"
+      },
+      "new_services_created": [
+        "SideOutputHandler (~40 lines)",
+        "BatchProviderResolver (~85 lines)",
+        "ConfigResolver (~60 lines)"
+      ],
+      "success_criteria": [
+        "BatchService <200 lines (stretch goal: <150)",
+        "Method count <10 (currently 25)",
+        "All methods <20 lines each",
+        "Complexity score <50 (target: <30)",
+        "All 33 batch tests passing",
+        "Zero functional changes - same behavior",
+        "Performance within 5% of Phase 4"
+      ],
+      "rollback_plan": [
+        "Each step is independent and can be reverted",
+        "Git commit after each step for easy rollback",
+        "Run tests after each step to catch issues early",
+        "If any step breaks tests, revert that step and investigate"
+      ]
+    }
+  ],
+
+  "testing_strategy": {
+    "approach": "Test-first for high-risk refactors",
+    "levels": [
+      {
+        "level": "Unit Tests",
+        "coverage_target": "100% for new services",
+        "focus": [
+          "Each service in isolation",
+          "Edge cases and error conditions",
+          "State transitions",
+          "Validation logic"
+        ]
+      },
+      {
+        "level": "Integration Tests",
+        "coverage_target": "All workflow scenarios",
+        "focus": [
+          "Batch submission → retrieval → processing flow",
+          "Multi-file batch processing",
+          "Registry state management",
+          "Provider interaction",
+          "Context map persistence"
+        ]
+      },
+      {
+        "level": "Snapshot Tests",
+        "purpose": "Detect unintended output changes",
+        "scope": [
+          "Workflow output format",
+          "Batch result transformation",
+          "Registry file structure",
+          "Context map format"
+        ]
+      },
+      {
+        "level": "Performance Tests",
+        "benchmarks": [
+          "Batch task preparation time",
+          "Result processing throughput",
+          "Registry access latency",
+          "Memory usage for large batches (10K+ records)"
+        ],
+        "acceptance": "Within 5% of baseline performance"
+      }
+    ],
+    "test_data": [
+      "Small batches (10 records)",
+      "Medium batches (100 records)",
+      "Large batches (10,000 records)",
+      "All provider types (OpenAI, Gemini, Anthropic)",
+      "Error scenarios (partial failures, missing results)",
+      "Filter scenarios (WHERE clause, conditional clause)",
+      "Multi-item expansion scenarios"
+    ]
+  },
+
+  "migration_strategy": {
+    "approach": "Gradual migration with feature flags",
+    "phases": [
+      {
+        "phase": "Parallel Implementation",
+        "description": "New services coexist with old implementation",
+        "duration": "Weeks 1-4",
+        "actions": [
+          "New services created alongside existing code",
+          "Old methods kept as deprecated wrappers",
+          "Feature flags control which implementation is used"
+        ]
+      },
+      {
+        "phase": "Soft Launch",
+        "description": "New implementation used in testing/staging only",
+        "duration": "Week 5",
+        "actions": [
+          "Enable new implementation in test environments",
+          "Monitor metrics and logs",
+          "Gather feedback from QA"
+        ]
+      },
+      {
+        "phase": "Canary Release",
+        "description": "Gradually roll out to production",
+        "duration": "Week 6",
+        "actions": [
+          "10% of workflows use new implementation",
+          "Monitor error rates, performance, correctness",
+          "Increase to 50%, then 100% over 1 week"
+        ]
+      },
+      {
+        "phase": "Deprecation",
+        "description": "Remove old implementation",
+        "duration": "Week 7-8",
+        "actions": [
+          "Remove feature flags",
+          "Delete deprecated methods",
+          "Update documentation"
+        ]
+      }
+    ],
+    "rollback_plan": {
+      "triggers": [
+        "Error rate increase >1%",
+        "Performance degradation >10%",
+        "Output format inconsistency",
+        "Critical bug in new implementation"
+      ],
+      "procedure": [
+        "Disable feature flag immediately",
+        "Revert to old implementation",
+        "Investigate root cause",
+        "Fix and re-test before re-enabling"
+      ]
+    }
+  },
+
+  "risk_assessment": {
+    "high_risks": [
+      {
+        "risk": "Breaking downstream dependencies",
+        "impact": "HIGH - 10 files depend on BatchService",
+        "probability": "MEDIUM",
+        "mitigation": [
+          "Maintain backward compatibility with old API",
+          "Comprehensive integration tests",
+          "Gradual rollout with monitoring"
+        ]
+      },
+      {
+        "risk": "Data corruption in registry or context maps",
+        "impact": "CRITICAL - Could lose batch job state",
+        "probability": "LOW",
+        "mitigation": [
+          "Atomic file writes with temp + rename",
+          "Registry backups before modifications",
+          "Extensive testing of concurrent access"
+        ]
+      },
+      {
+        "risk": "Output format changes break workflow",
+        "impact": "HIGH - Workflow processing could fail",
+        "probability": "MEDIUM",
+        "mitigation": [
+          "Snapshot tests for output validation",
+          "Format compatibility tests",
+          "Side-by-side comparison in testing"
+        ]
+      }
+    ],
+    "medium_risks": [
+      {
+        "risk": "Performance regression",
+        "impact": "MEDIUM - Slower batch processing",
+        "probability": "LOW",
+        "mitigation": [
+          "Performance benchmarks before/after",
+          "Caching strategies in new services",
+          "Load testing with large batches"
+        ]
+      },
+      {
+        "risk": "Incomplete error handling migration",
+        "impact": "MEDIUM - Missing error scenarios",
+        "probability": "MEDIUM",
+        "mitigation": [
+          "Error scenario test matrix",
+          "Code review checklist for error handling",
+          "Monitoring for unhandled exceptions"
+        ]
+      }
+    ]
+  },
+
+  "success_metrics": {
+    "code_quality": {
+      "complexity_score": {
+        "before": 269,
+        "target": 50,
+        "success_threshold": "<60"
+      },
+      "maintainability_index": {
+        "before": 0.0,
+        "target": 80,
+        "success_threshold": ">70"
+      },
+      "violations": {
+        "before": 212,
+        "target": 0,
+        "success_threshold": "<10"
+      },
+      "lines_of_code": {
+        "before": 1001,
+        "target_batch_service": 200,
+        "total_with_services": 800,
+        "success_threshold": "BatchService <250 lines"
+      },
+      "test_coverage": {
+        "before": "Unknown",
+        "target": 90,
+        "success_threshold": ">85%"
+      }
+    },
+    "functional_metrics": {
+      "all_tests_pass": true,
+      "no_regressions": true,
+      "backward_compatible": true,
+      "documentation_updated": true
+    },
+    "performance_metrics": {
+      "batch_preparation_time": "Within 5% of baseline",
+      "result_processing_time": "Within 5% of baseline",
+      "registry_access_latency": "Improved by >50% (due to caching)",
+      "memory_usage": "Within 10% of baseline"
+    }
+  },
+
+  "documentation_updates": [
+    "Update architecture docs with new service structure",
+    "Add sequence diagrams for batch processing flow",
+    "Document each service's responsibilities",
+    "Update migration guide for downstream consumers",
+    "Add troubleshooting guide for common issues"
+  ],
+
+  "timeline": {
+    "week_1": "Quick wins + BatchRegistryManager",
+    "week_2": "PassthroughDataBuilder + Error handling + BatchProviderResolver",
+    "week_3": "BatchResultProcessor (high risk, extensive testing)",
+    "week_4": "BatchTaskPreparator + Final integration",
+    "week_5": "Testing and soft launch",
+    "week_6": "Canary release to production",
+    "week_7_8": "Deprecation and cleanup",
+    "total_duration": "6-8 weeks",
+    "core_refactoring": "4 weeks",
+    "deployment_and_stabilization": "2-4 weeks"
+  },
+
+  "dependencies": {
+    "blocking": [],
+    "related_issues": [
+      "Issue #487: Prompt Preparation Service (already completed)",
+      "Issue #492: Batch/Realtime Refactor (already completed)"
+    ],
+    "downstream_files": [
+      "Identified 10 files depend on batch_service.py",
+      "Need analysis to determine exact files and APIs used"
+    ]
+  },
+
+  "notes": [
+    "This refactoring is critical for maintainability but carries risk due to 10 downstream dependencies",
+    "Test-first approach is mandatory, especially for Phase 3 (BatchResultProcessor)",
+    "Feature flags and gradual rollout are essential for safe deployment",
+    "Consider pairing sessions for high-risk refactors",
+    "Monitor production metrics closely during rollout",
+    "Keep old implementation for at least 1 release cycle as safety net"
+  ]
+}
