@@ -13,7 +13,7 @@ Registry tracking is handled by BatchService, not this provider.
 import json
 import time
 import uuid
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from ollama import Client
 from ..base import BatchProvider, BatchTask, BatchResult
@@ -172,7 +172,7 @@ class OllamaLocalBatchProvider(BatchProvider):
     def submit_batch(self,
                     tasks: List[Dict[str, Any]],
                     batch_name: str,
-                    output_directory: Optional[str] = None) -> str:
+                    output_directory: Optional[str] = None) -> Tuple[str, str]:
         """
         Submit batch and process immediately.
 
@@ -180,9 +180,12 @@ class OllamaLocalBatchProvider(BatchProvider):
         1. Writes input JSONL file
         2. Processes all tasks using Ollama
         3. Writes output JSONL file
-        4. Returns batch_id
+        4. Returns (batch_id, status)
 
         Note: Registry is managed by BatchService, not this provider.
+
+        Returns:
+            Tuple of (batch_id, status) - status is always 'completed' for Ollama
         """
         # Use base class helper for directory setup
         batch_dir = self._get_batch_directory(output_directory)
@@ -271,7 +274,8 @@ class OllamaLocalBatchProvider(BatchProvider):
         print(f"Batch completed: {completed} succeeded, {failed} failed")
 
         # Note: Registry is managed by BatchService, not this provider
-        return batch_id
+        # Ollama processes synchronously, so status is always 'completed'
+        return (batch_id, 'completed')
 
     def check_status(self, batch_id: str) -> str:
         """

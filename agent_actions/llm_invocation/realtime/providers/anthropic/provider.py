@@ -7,7 +7,7 @@ specific requirements.
 """
 import json
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from ..base import BatchProvider, BatchTask, BatchResult
 
 class AnthropicBatchProvider(BatchProvider):
@@ -233,17 +233,17 @@ class AnthropicBatchProvider(BatchProvider):
             tasks.append(anthropic_task)
         return tasks
 
-    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> str:
+    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> Tuple[str, str]:
         """
         Submit batch job to Anthropic using the Message Batches API.
-        
+
         Args:
             tasks: List of tasks formatted for Anthropic API
             batch_name: Name for the batch job
             output_directory: Optional directory for storing batch-related files
-            
+
         Returns:
-            Anthropic batch job ID
+            Tuple of (batch_id, initial_status)
         """
         try:
             batch_dir = self._get_batch_directory(output_directory)
@@ -255,9 +255,10 @@ class AnthropicBatchProvider(BatchProvider):
             print(f'Submitting batch with {len(tasks)} tasks to Anthropic...')
             batch_response = self.client.messages.batches.create(requests=tasks)
             batch_id = batch_response.id
+            status = batch_response.processing_status
             print(f'✅ Anthropic batch job created with ID: {batch_id}')
-            print(f'Status: {batch_response.processing_status}')
-            return batch_id
+            print(f'Status: {status}')
+            return (batch_id, status)
         except self.anthropic.APIError as e:
             error_msg = f'Anthropic API error during batch submission: {str(e)}'
             print(f'❌ {error_msg}')

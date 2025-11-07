@@ -307,10 +307,12 @@ class BaseBatchProviderTests(ABC):
         """
         tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
         assert len(tasks) == 3, 'Prepare step must create tasks'
-        batch_id = provider.submit_batch(tasks, 'integration_test_batch', str(tmp_path))
+        batch_id, initial_status = provider.submit_batch(tasks, 'integration_test_batch', str(tmp_path))
         assert batch_id is not None, 'submit_batch must return batch_id'
         assert isinstance(batch_id, str), 'batch_id must be string'
         assert len(batch_id) > 0, 'batch_id must not be empty'
+        assert isinstance(initial_status, str), 'initial_status must be string'
+        assert initial_status in ['completed', 'in_progress', 'validating', 'submitted'], f'Initial status must be valid: {initial_status}'
         status = provider.check_status(batch_id)
         assert status in ['completed', 'in_progress', 'validating'], f'Status must be valid: {status}'
         if status == 'completed':
