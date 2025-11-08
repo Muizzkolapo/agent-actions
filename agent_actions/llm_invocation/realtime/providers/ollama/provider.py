@@ -185,7 +185,7 @@ class OllamaLocalBatchProvider(BatchProvider):
         Note: Registry is managed by BatchService, not this provider.
 
         Returns:
-            Tuple of (batch_id, status) - status is always 'completed' for Ollama
+            Tuple of (batch_id, status) - status is 'submitted' to mimic async behavior
         """
         # Use base class helper for directory setup
         batch_dir = self._get_batch_directory(output_directory)
@@ -274,8 +274,8 @@ class OllamaLocalBatchProvider(BatchProvider):
         print(f"Batch completed: {completed} succeeded, {failed} failed")
 
         # Note: Registry is managed by BatchService, not this provider
-        # Ollama processes synchronously, so status is always 'completed'
-        return (batch_id, 'completed')
+        # Return 'submitted' to mimic async providers (actual processing is complete, but workflow will check on next run)
+        return (batch_id, 'submitted')
 
     def check_status(self, batch_id: str) -> str:
         """

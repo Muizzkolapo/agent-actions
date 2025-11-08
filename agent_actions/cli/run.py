@@ -75,7 +75,12 @@ class RunCommand:
             asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
         else:
             workflow.run()
-        click.echo(f'Successfully completed agent run for: {self.args.agent}')
+
+        # Check if workflow actually completed or stopped for batch processing
+        if workflow.state_manager.is_workflow_complete():
+            click.echo(f'Successfully completed agent run for: {self.args.agent}')
+        else:
+            click.echo(f'Workflow paused - batch job(s) submitted. Run again to check status and continue.')
 
 @click.command()
 @click.option('-a', '--agent', required=True, help='Agent configuration file name without path or extension')
