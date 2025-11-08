@@ -8,7 +8,7 @@ Different agent types have different required fields:
 """
 
 from pathlib import Path
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

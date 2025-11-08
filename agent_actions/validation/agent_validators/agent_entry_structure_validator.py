@@ -7,7 +7,7 @@ This is the first validator in the chain and performs critical checks:
 """
 
 from typing import Dict, Any
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

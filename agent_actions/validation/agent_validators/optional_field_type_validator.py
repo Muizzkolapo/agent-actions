@@ -10,7 +10,7 @@ Validates that optional fields have correct types when present:
 - prompt_debug: boolean
 """
 
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

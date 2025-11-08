@@ -7,7 +7,7 @@ Checks:
 - Deprecated batch_provider field warnings
 """
 
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

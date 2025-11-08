@@ -5,7 +5,7 @@ Issues warnings (not errors) for keys that are not recognized,
 which may indicate typos or deprecated fields.
 """
 
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

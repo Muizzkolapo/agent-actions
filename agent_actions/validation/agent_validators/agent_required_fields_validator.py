@@ -5,7 +5,7 @@ Checks that all mandatory fields are present in the agent entry.
 """
 
 from typing import Set
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )

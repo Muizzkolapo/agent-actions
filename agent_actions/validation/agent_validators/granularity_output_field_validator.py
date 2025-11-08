@@ -6,7 +6,7 @@ Checks:
 - output_field can only be used when json_mode is false
 """
 
-from agent_actions.validation.validators.base_agent_validator import (
+from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )
