@@ -1,4 +1,4 @@
-"""Migration utilities for workflow configuration formats."""
+"""Workflow configuration schema definitions."""
 
 from .new_format_schema import (
     ActionKind,
@@ -8,7 +8,6 @@ from .new_format_schema import (
     DefaultsConfig,
     WorkflowConfigV2
 )
-from .format_migrator import WorkflowMigrator
 
 __all__ = [
     "ActionKind",
@@ -16,6 +15,5 @@ __all__ = [
     "LoopConfig",
     "ActionConfig",
     "DefaultsConfig",
-    "WorkflowConfigV2",
-    "WorkflowMigrator"
+    "WorkflowConfigV2"
 ]
