@@ -7,7 +7,7 @@ specific requirements.
 """
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 from ..base import BatchProvider, BatchTask, BatchResult
 
@@ -108,14 +108,19 @@ class OpenAIBatchProvider(BatchProvider):
             tasks.append(openai_task)
         return tasks
 
-    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> str:
-        """Submit batch job to OpenAI."""
+    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> Tuple[str, str]:
+        """Submit batch job to OpenAI.
+
+        Returns:
+            Tuple of (batch_id, initial_status)
+        """
         batch_dir = self._get_batch_directory(output_directory)
         file_path = self._write_jsonl_file(tasks, batch_dir, batch_name, 'openai')
         batch_file = self.client.files.create(file=open(file_path, 'rb'), purpose='batch')
         batch_job = self.client.batches.create(input_file_id=batch_file.id, endpoint='/v1/chat/completions', completion_window='24h')
         print(f'OpenAI batch job created with ID: {batch_job.id}')
-        return batch_job.id
+        print(f'Status: {batch_job.status}')
+        return (batch_job.id, batch_job.status)
 
     def check_status(self, batch_id: str) -> str:
         """Check OpenAI batch job status."""

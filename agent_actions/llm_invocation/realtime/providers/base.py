@@ -106,17 +106,19 @@ class BatchProvider(ABC):
         pass
 
     @abstractmethod
-    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> str:
+    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> Tuple[str, str]:
         """
         Submit a batch job to the provider.
-        
+
         Args:
             tasks: List of provider-specific tasks from prepare_tasks()
             batch_name: Name for the batch job
             output_directory: Optional directory for storing batch-related files
-            
+
         Returns:
-            Batch job ID from the provider
+            Tuple of (batch_id, initial_status) where:
+            - batch_id: Provider-specific batch job ID
+            - initial_status: Initial status from provider (e.g., 'in_progress', 'completed', 'submitted')
         """
         pass
 

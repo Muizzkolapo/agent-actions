@@ -5,6 +5,7 @@ from agent_actions.response_processing.config_types import AgentConfigMap
 from agent_actions.llm_invocation.realtime.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY, API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, CHUNK_CONFIG_KEY
+from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import AgentEntryValidationOrchestrator
 
 class ConfigValidator(BaseValidator):
     """Validate agent‑configuration files with **case‑insensitive** key handling.
@@ -58,91 +59,27 @@ class ConfigValidator(BaseValidator):
             self.add_error(f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}")
 
     def _validate_single_agent_entry_logic(self, entry: Dict[str, Any], cfg_ctx_name: str, proj_root: Optional[Path]=None) -> None:
-        desc = f"agent entry {entry['agent_type']} in '{cfg_ctx_name}'"
-        if not isinstance(entry, dict):
-            self.add_error(f'{desc} is not a dictionary.')
-            return
-        entry_ci = self._ci_dict(entry)
-        missing_req = self._REQUIRED_AGENT_KEYS - set(entry_ci)
-        if missing_req:
-            self.add_error(f"{desc} missing required key(s): {', '.join(missing_req)}.")
-        name = entry_ci.get('name')
-        agent_type = str(entry_ci.get('agent_type', '')).lower()
-        model_vendor = str(entry_ci.get(MODEL_VENDOR_KEY, '')).lower()
-        granularity_raw = entry_ci.get('granularity', 'record')
-        granularity = str(granularity_raw).lower()
-        if 'name' in entry_ci and (not isinstance(name, str)):
-            self.add_error(f"{desc} 'name' must be string.")
-        if 'agent_type' in entry_ci:
-            if not isinstance(self._ci_get(entry, 'agent_type'), str):
-                self.add_error(f"{desc} 'agent_type' must be string.")
-            elif agent_type in self._AGENT_TYPE_REQUIRED_KEYS:
-                missing_type_specific = {k for k in self._AGENT_TYPE_REQUIRED_KEYS[agent_type] if k not in entry_ci}
-                if missing_type_specific:
-                    self.add_error(f"{desc} (type '{agent_type}') missing type‑specific key(s): {', '.join(missing_type_specific)}.")
-            if agent_type == 'function' and 'code_path' in entry_ci:
-                cp_val = entry_ci['code_path']
-                if not isinstance(cp_val, str):
-                    self.add_error(f"{desc} 'code_path' for function agent must be a string.")
-                elif proj_root and (not cp_val.startswith(('http://', 'https://'))):
-                    abs_cp = Path(cp_val) if Path(cp_val).is_absolute() else proj_root / cp_val
-                    if not self._ensure_path_exists(abs_cp):
-                        self.add_error(f"{desc} 'code_path' ({abs_cp}) does not exist.")
-                    elif not self._is_file(abs_cp):
-                        self.add_error(f"{desc} 'code_path' ({abs_cp}) is not a file.")
-        run_mode = str(entry_ci.get('run_mode', '')).lower()
-        if run_mode == 'batch':
-            valid_batch_vendors = {'openai', 'gemini', 'anthropic'}
-            if model_vendor and model_vendor not in valid_batch_vendors:
-                if model_vendor == 'tool':
-                    self.add_error(f"{desc} 'tool' vendor does not support batch processing. Use one of: {', '.join(sorted(valid_batch_vendors))} for batch mode.")
-                else:
-                    self.add_error(f"{desc} model_vendor '{model_vendor}' is not supported for batch processing. Supported batch providers: {', '.join(sorted(valid_batch_vendors))}")
-            batch_provider = entry_ci.get('batch_provider')
-            if batch_provider and (not model_vendor):
-                self.add_warning(f"{desc} 'batch_provider' is deprecated. Use 'model_vendor' instead. Found: batch_provider='{batch_provider}'")
-        all_known_keys = self._REQUIRED_AGENT_KEYS | self._OPTIONAL_AGENT_KEYS
-        if agent_type in self._AGENT_TYPE_REQUIRED_KEYS:
-            all_known_keys |= self._AGENT_TYPE_REQUIRED_KEYS[agent_type]
-        keys_to_check = {k.lower() for k in entry if k.lower() != 'config'}
-        unknown_keys = keys_to_check - all_known_keys
-        if unknown_keys:
-            self.add_warning(f"{desc} has unknown key(s): {', '.join(sorted(unknown_keys))}. Ensure these are intended or correct typos.")
-        if 'description' in entry_ci and (not isinstance(entry_ci['description'], str)):
-            self.add_error(f"{desc} 'description' should be a string.")
-        if 'version' in entry_ci and (not isinstance(entry_ci['version'], (str, int, float))):
-            self.add_error(f"{desc} 'version' should be a string or number.")
-        if 'dependencies' in entry_ci and (not isinstance(entry_ci['dependencies'], list)):
-            self.add_error(f"{desc} 'dependencies' should be a list.")
-        if 'is_operational' in entry_ci and (not isinstance(entry_ci['is_operational'], bool)):
-            self.add_error(f"{desc} 'is_operational' should be a boolean.")
-        if JSON_MODE_KEY in entry_ci and (not isinstance(entry_ci[JSON_MODE_KEY], bool)):
-            self.add_error(f"{desc} 'json_mode' should be a boolean.")
-        if 'prompt_debug' in entry_ci and (not isinstance(entry_ci['prompt_debug'], bool)):
-            self.add_error(f"{desc} 'prompt_debug' should be a boolean.")
-        if 'granularity' in entry_ci and granularity not in ['record', 'file']:
-            self.add_error(f"{desc} 'granularity' must be 'record' or 'file'.")
-        if 'output_field' in entry_ci and entry_ci.get(JSON_MODE_KEY, True):
-            self.add_error(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
-        if SCHEMA_KEY in entry_ci:
-            inline_schema = entry_ci[SCHEMA_KEY]
-            if not isinstance(inline_schema, dict):
-                self.add_error(f"{desc} 'schema' must be a dictionary with field names as keys and types as values.")
-            else:
-                valid_types = {'string', 'number', 'integer', 'boolean', 'array', 'object'}
-                valid_array_types = {'array[string]', 'array[number]', 'array[integer]', 'array[boolean]', 'array[object]'}
-                for field_name, field_type in inline_schema.items():
-                    if not isinstance(field_name, str):
-                        self.add_error(f"{desc} 'schema' keys must be strings, found {type(field_name).__name__}.")
-                        continue
-                    if not isinstance(field_type, str):
-                        self.add_error(f"{desc} 'schema' value for field '{field_name}' must be a string type, found {type(field_type).__name__}.")
-                        continue
-                    base_type = field_type.rstrip('!')
-                    if not self._is_valid_schema_type(base_type, valid_types, valid_array_types):
-                        self.add_error(f"{desc} 'schema' field '{field_name}' has invalid type '{base_type}'. Valid types are: {', '.join(sorted(valid_types | valid_array_types))} or array[object:{{'prop': 'type'}}]")
-                if SCHEMA_NAME_KEY in entry_ci:
-                    self.add_warning(f"{desc} has both 'schema' and 'schema_name' defined. The inline 'schema' will take precedence over 'schema_name'.")
+        """
+        Validate a single agent entry using the orchestrator.
+
+        This method now delegates to AgentEntryValidationOrchestrator which runs
+        a chain of specialized validators. This reduces complexity from CC 52 to ~5.
+
+        Args:
+            entry: Agent configuration entry to validate
+            cfg_ctx_name: Context name for error messages
+            proj_root: Optional project root for path resolution
+        """
+        # Create orchestrator and run validation chain
+        orchestrator = AgentEntryValidationOrchestrator()
+        orchestrator.validate_agent_entry(entry, cfg_ctx_name, proj_root)
+
+        # Collect errors and warnings from orchestrator
+        for error in orchestrator.get_validation_errors():
+            self.add_error(error)
+
+        for warning in orchestrator.get_validation_warnings():
+            self.add_warning(warning)
 
     def _is_valid_schema_type(self, type_str: str, valid_types: set, valid_array_types: set) -> bool:
         """

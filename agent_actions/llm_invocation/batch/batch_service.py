@@ -94,27 +94,17 @@ class BatchService:
             if not provider_type:
                 raise ConfigValidationError('model_vendor', "Missing required field 'model_vendor' for batch processing.")
             provider_type = provider_type.lower()
-            batch_id = provider.submit_batch(tasks, batch_name, output_directory)
 
-            # Save batch job to registry
+            # Providers now return (batch_id, initial_status)
+            batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+
+            # Save batch job to registry with initial status from provider
             if output_directory:
                 manager = self._get_registry_manager(output_directory)
 
-                # For synchronous providers (like Ollama), check if batch is already complete
-                status = 'submitted'
-                if provider_type == 'ollama':
-                    # Ollama processes synchronously, so batch is complete immediately
-                    try:
-                        batch_status = provider.check_status(batch_id)
-                        if batch_status == 'completed':
-                            status = 'completed'
-                            logger.info(f'Ollama batch {batch_id} completed synchronously')
-                    except Exception as e:
-                        logger.warning(f'Could not check Ollama batch status: {e}. Marking as submitted.')
-
                 entry = BatchJobEntry(
                     batch_id=batch_id,
-                    status=status,
+                    status=initial_status,  # Use status from provider
                     timestamp=datetime.now().isoformat(),
                     provider=provider_type,
                     record_count=len(tasks)

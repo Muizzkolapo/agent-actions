@@ -293,7 +293,10 @@ class AgentWorkflow:
             self.console.print(f'Found {total_agents} agents to run.')
 
             for idx, agent_name in enumerate(self.execution_order):
-                self._run_single_agent(idx, agent_name, total_agents)
+                should_stop = self._run_single_agent(idx, agent_name, total_agents)
+                if should_stop:
+                    # Batch submitted or workflow needs to stop
+                    break
 
             # Check if workflow is complete
             if self.state_manager.is_workflow_complete():
@@ -303,8 +306,13 @@ class AgentWorkflow:
             self._handle_workflow_error(e)
             raise
 
-    def _run_single_agent(self, idx: int, agent_name: str, total_agents: int):
-        """Run a single agent in sequential mode."""
+    def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
+        """
+        Run a single agent in sequential mode.
+
+        Returns:
+            bool: True if workflow should stop, False to continue
+        """
         agent_config = self.agent_configs[agent_name]
         start_time = datetime.now()
 
@@ -316,7 +324,7 @@ class AgentWorkflow:
         # Check if already completed
         if self.state_manager.is_completed(agent_name):
             self._log_agent_skip(idx, agent_name, total_agents, start_time)
-            return
+            return False
 
         # Execute agent
         is_last = idx == len(self.execution_order) - 1
@@ -334,11 +342,16 @@ class AgentWorkflow:
 
         # Handle result
         if result.success:
+            # If batch was submitted, stop workflow to wait for completion
+            if result.status == 'batch_submitted':
+                return True  # Signal to stop workflow
+
             if result.output_folder and result.status == 'completed':
                 self.ephemeral_directories.append({
                     'output_folder': result.output_folder,
                     'ephemeral': agent_config.get('ephemeral', False)
                 })
+            return False  # Continue to next agent
         else:
             raise result.error
 
