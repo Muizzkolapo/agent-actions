@@ -9,17 +9,19 @@ class ChunkingStrategy(ABC):
     """Abstract base class for text chunking strategies."""
 
     @abstractmethod
-    def chunk(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+    def split_text_into_chunks(
+        self, text_content: str, maximum_chunk_size: int, overlap_size: int
+    ) -> List[str]:
         """
-        Chunk text according to the strategy.
+        Split text content into smaller chunks according to the strategy.
 
         Args:
-            text: The text to chunk
-            chunk_size: Maximum size of each chunk
-            overlap: Number of tokens/characters to overlap between chunks
+            text_content: The complete text content to split into chunks
+            maximum_chunk_size: Maximum allowed size for each individual chunk
+            overlap_size: Number of tokens/characters to overlap between consecutive chunks
 
         Returns:
-            List of text chunks
+            List of text chunks with applied overlap
         """
         pass
 
@@ -27,86 +29,92 @@ class ChunkingStrategy(ABC):
 class TiktokenChunkingStrategy(ChunkingStrategy):
     """Token-based chunking strategy using tiktoken tokenizer."""
 
-    def __init__(self, tokenizer_model: str = 'cl100k_base'):
+    def __init__(self, tokenizer_model_name: str = 'cl100k_base'):
         """
-        Initialize tiktoken chunking strategy.
+        Initialize tiktoken-based chunking strategy.
 
         Args:
-            tokenizer_model: The tiktoken model to use for tokenization
+            tokenizer_model_name: The tiktoken model name to use for tokenization
         """
-        self.tokenizer_model = tokenizer_model
+        self.tokenizer_model_name = tokenizer_model_name
 
-    def chunk(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+    def split_text_into_chunks(
+        self, text_content: str, maximum_chunk_size: int, overlap_size: int
+    ) -> List[str]:
         """
-        Chunk text based on token count using tiktoken.
+        Split text into chunks based on token count using tiktoken tokenizer.
 
         Args:
-            text: The text to chunk
-            chunk_size: Maximum number of tokens per chunk
-            overlap: Number of tokens to overlap between chunks
+            text_content: The complete text content to split
+            maximum_chunk_size: Maximum number of tokens allowed per chunk
+            overlap_size: Number of tokens to overlap between consecutive chunks
 
         Returns:
-            List of text chunks
+            List of text chunks with token-based boundaries
         """
-        if not text:
+        if not text_content:
             return ['']
 
         return Tokenizer.split_text_content(
-            text,
-            chunk_size,
-            overlap,
-            tokenizer_model=self.tokenizer_model,
+            text_content,
+            maximum_chunk_size,
+            overlap_size,
+            tokenizer_model=self.tokenizer_model_name,
             split_method='tiktoken'
         )
 
 
 class CharBasedChunkingStrategy(ChunkingStrategy):
-    """Character-based chunking strategy."""
+    """Character-based chunking strategy that splits on character boundaries."""
 
-    def chunk(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+    def split_text_into_chunks(
+        self, text_content: str, maximum_chunk_size: int, overlap_size: int
+    ) -> List[str]:
         """
-        Chunk text based on character count.
+        Split text into chunks based on character count.
 
         Args:
-            text: The text to chunk
-            chunk_size: Maximum number of characters per chunk
-            overlap: Number of characters to overlap between chunks
+            text_content: The complete text content to split
+            maximum_chunk_size: Maximum number of characters allowed per chunk
+            overlap_size: Number of characters to overlap between consecutive chunks
 
         Returns:
-            List of text chunks
+            List of text chunks with character-based boundaries
         """
-        if not text:
+        if not text_content:
             return ['']
 
         return Tokenizer.split_text_content(
-            text,
-            chunk_size,
-            overlap,
+            text_content,
+            maximum_chunk_size,
+            overlap_size,
             split_method='chars'
         )
 
 
 class SpacyChunkingStrategy(ChunkingStrategy):
-    """Spacy-based semantic chunking strategy."""
+    """Semantic chunking strategy using spaCy sentence boundaries."""
 
-    def chunk(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+    def split_text_into_chunks(
+        self, text_content: str, maximum_chunk_size: int, overlap_size: int
+    ) -> List[str]:
         """
-        Chunk text based on spacy sentence boundaries.
+        Split text into chunks based on spaCy sentence boundaries.
 
         Args:
-            text: The text to chunk
-            chunk_size: Target chunk size (in tokens)
-            overlap: Number of tokens to overlap between chunks
+            text_content: The complete text content to split
+            maximum_chunk_size: Target chunk size in tokens
+            overlap_size: Number of tokens to overlap between consecutive chunks
 
         Returns:
-            List of text chunks
+            List of text chunks with semantic sentence boundaries
         """
-        if not text:
+        if not text_content:
             return ['']
 
         return Tokenizer.split_text_content(
-            text,
-            chunk_size,
-            overlap,
+            text_content,
+            maximum_chunk_size,
+            overlap_size,
             split_method='spacy'
         )

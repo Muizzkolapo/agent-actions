@@ -187,60 +187,61 @@ class FieldChunker:
         for field_name in analysis.fields_to_chunk:
             try:
                 field_value = record.get(field_name, '')
-                fallback_msg = None
+                fallback_operation_message = None
 
-                # Apply truncation if needed using fallback strategy
+                # Handle oversized field if needed using fallback strategy
                 if len(field_value) > self.truncate_at:
-                    field_value, fallback_msg = self.fallback_strategy.apply_truncation(
+                    field_value, fallback_operation_message = self.fallback_strategy.handle_oversized_field(
                         field_value, field_name, self.truncate_at
                     )
 
-                # Chunk the field
-                chunks = self.chunk_field(field_value, field_name)
+                # Chunk the field into smaller pieces
+                chunk_list = self.chunk_field(field_value, field_name)
 
-                # Handle excessive chunks using fallback strategy
-                if len(chunks) > self.max_chunks_per_record:
-                    chunks, fallback_msg = self.fallback_strategy.apply_excessive_chunks(
-                        chunks, field_name, self.max_chunks_per_record
+                # Handle excessive chunk count using fallback strategy
+                if len(chunk_list) > self.max_chunks_per_record:
+                    chunk_list, fallback_operation_message = self.fallback_strategy.handle_excessive_chunk_count(
+                        chunk_list, field_name, self.max_chunks_per_record
                     )
 
-                # Create chunk records
-                for idx, chunk in enumerate(chunks, 1):
+                # Create individual chunk records
+                for chunk_index, chunk_text in enumerate(chunk_list, 1):
                     chunked_record = record.copy()
-                    chunked_record[field_name] = chunk
+                    chunked_record[field_name] = chunk_text
 
                     # Create metadata using metadata strategy
-                    context = MetadataContext(
+                    metadata_context = MetadataContext(
                         record=record,
                         field_name=field_name,
                         field_value=field_value,
-                        chunk=chunk,
-                        chunk_index=idx,
-                        total_chunks=len(chunks),
+                        chunk=chunk_text,
+                        chunk_index=chunk_index,
+                        total_chunks=len(chunk_list),
                     )
-                    chunk_info = self.metadata_strategy.create_metadata(context)
+                    chunk_metadata_info = self.metadata_strategy.create_metadata(metadata_context)
 
-                    # Add fallback message if applicable
-                    if fallback_msg:
-                        chunk_info['fallback_applied'] = fallback_msg
+                    # Add fallback operation message if applicable
+                    if fallback_operation_message:
+                        chunk_metadata_info['fallback_applied'] = fallback_operation_message
 
-                    # Handle special metadata fields that should be at record level
-                    chunk_id_field = self.chunk_metadata.get('chunk_id_field')
-                    parent_id_field = self.chunk_metadata.get('original_record_id')
-                    if chunk_id_field and chunk_id_field in chunk_info:
-                        chunked_record[chunk_id_field] = chunk_info.pop(chunk_id_field)
-                    if parent_id_field and parent_id_field in chunk_info:
-                        chunked_record[parent_id_field] = chunk_info.pop(parent_id_field)
+                    # Extract special metadata fields to record level
+                    chunk_id_field_name = self.chunk_metadata.get('chunk_id_field')
+                    parent_id_field_name = self.chunk_metadata.get('original_record_id')
 
-                    chunked_record['chunk_info'] = chunk_info
+                    if chunk_id_field_name and chunk_id_field_name in chunk_metadata_info:
+                        chunked_record[chunk_id_field_name] = chunk_metadata_info.pop(chunk_id_field_name)
+                    if parent_id_field_name and parent_id_field_name in chunk_metadata_info:
+                        chunked_record[parent_id_field_name] = chunk_metadata_info.pop(parent_id_field_name)
+
+                    chunked_record['chunk_info'] = chunk_metadata_info
                     all_chunks.append(chunked_record)
 
-            except Exception as e:
-                fallback_result = self.fallback_strategy.handle_error(
-                    record, field_name, str(e)
+            except Exception as exception:
+                error_fallback_result = self.fallback_strategy.handle_chunking_error(
+                    record, field_name, str(exception)
                 )
-                if fallback_result:
-                    all_chunks.extend(fallback_result)
+                if error_fallback_result:
+                    all_chunks.extend(error_fallback_result)
 
         return all_chunks
 
@@ -254,9 +255,9 @@ class FieldChunker:
         chunk_size = field_rule.get('chunk_size', self.chunk_size)
         overlap = field_rule.get('overlap', self.overlap)
 
-        # Use field-specific strategy if specified, otherwise use default
+        # Use field-specific chunking strategy if specified, otherwise use default
         if field_name and 'split_method' in field_rule:
-            strategy = self._create_chunking_strategy(
+            field_specific_strategy = self._create_chunking_strategy(
                 {
                     'split_method': field_rule['split_method'],
                     'tokenizer_model': field_rule.get(
@@ -265,6 +266,8 @@ class FieldChunker:
                 }
             )
         else:
-            strategy = self.chunking_strategy
+            field_specific_strategy = self.chunking_strategy
 
-        return strategy.chunk(field_value, chunk_size, overlap)
+        return field_specific_strategy.split_text_into_chunks(
+            field_value, chunk_size, overlap
+        )

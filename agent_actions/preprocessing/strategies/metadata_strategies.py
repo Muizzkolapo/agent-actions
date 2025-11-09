@@ -96,13 +96,13 @@ class EnhancedMetadataStrategy(MetadataStrategy):
             if original_id:
                 metadata[self.config['original_record_id']] = original_id
 
-        # Add character positions if configured
+        # Add character position information if configured
         if self.config.get('add_char_positions', False):
-            metadata.update(self._add_char_positions(context))
+            metadata.update(self._calculate_character_positions(context))
 
-        # Add token counts if configured
+        # Add token count information if configured
         if self.config.get('add_token_counts', False):
-            metadata.update(self._add_token_counts(context))
+            metadata.update(self._calculate_token_counts(context))
 
         return metadata
 
@@ -119,42 +119,45 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         original_id = context.record.get('id', 'unknown')
         return f'{original_id}_{context.field_name}_{context.chunk_index}'
 
-    def _add_char_positions(self, context: MetadataContext) -> Dict[str, Any]:
+    def _calculate_character_positions(self, context: MetadataContext) -> Dict[str, Any]:
         """
-        Add character position metadata.
+        Calculate and return character position metadata for the chunk.
 
         Args:
-            context: MetadataContext with chunk details
+            context: MetadataContext containing chunk information
 
         Returns:
-            Dictionary with character position metadata
+            Dictionary with character position metadata including start, end, and sizes
         """
-        chunk_size_chars = len(context.chunk)
-        estimated_start = (context.chunk_index - 1) * chunk_size_chars
+        chunk_size_in_characters = len(context.chunk)
+        estimated_start_position = (context.chunk_index - 1) * chunk_size_in_characters
+        estimated_end_position = estimated_start_position + chunk_size_in_characters
+
         return {
-            'chunk_start_char': max(0, estimated_start),
-            'chunk_end_char': estimated_start + chunk_size_chars,
-            'chunk_size_chars': chunk_size_chars,
+            'chunk_start_char': max(0, estimated_start_position),
+            'chunk_end_char': estimated_end_position,
+            'chunk_size_chars': chunk_size_in_characters,
             'original_field_size_chars': len(context.field_value),
         }
 
-    def _add_token_counts(self, context: MetadataContext) -> Dict[str, Any]:
+    def _calculate_token_counts(self, context: MetadataContext) -> Dict[str, Any]:
         """
-        Add token count metadata.
+        Calculate and return token count metadata for the chunk.
 
         Args:
-            context: MetadataContext with chunk details
+            context: MetadataContext containing chunk information
 
         Returns:
-            Dictionary with token count metadata
+            Dictionary with token count metadata for chunk and original field
         """
-        chunk_tokens = Tokenizer.num_tokens_from_string(
+        chunk_token_count = Tokenizer.num_tokens_from_string(
             context.chunk, self.tokenizer_model
         )
-        original_tokens = Tokenizer.num_tokens_from_string(
+        original_field_token_count = Tokenizer.num_tokens_from_string(
             context.field_value, self.tokenizer_model
         )
+
         return {
-            'chunk_size_tokens': chunk_tokens,
-            'original_field_size_tokens': original_tokens,
+            'chunk_size_tokens': chunk_token_count,
+            'original_field_size_tokens': original_field_token_count,
         }
