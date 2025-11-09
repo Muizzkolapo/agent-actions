@@ -57,12 +57,38 @@ class BaseOperator(ABC):
 
 class ComparisonOperator(BaseOperator):
     """Base class for comparison operators."""
-    pass
+
+    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Evaluate the comparison operator with given operands.
+
+        Args:
+            left: Left operand
+            right: Right operand (None for unary operators)
+            context: Optional evaluation context
+
+        Returns:
+            Boolean result of the comparison
+        """
+        raise NotImplementedError("Subclasses must implement evaluate()")
 
 
 class LogicalOperator(BaseOperator):
     """Base class for logical operators."""
-    pass
+
+    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Evaluate the logical operator with given operands.
+
+        Args:
+            left: Left operand
+            right: Right operand (None for unary operators like NOT)
+            context: Optional evaluation context
+
+        Returns:
+            Boolean result of the logical operation
+        """
+        raise NotImplementedError("Subclasses must implement evaluate()")
 
 
 class FunctionOperator(BaseOperator):
@@ -211,24 +237,32 @@ class NotContainsOperator(ComparisonOperator):
 
 class LikeOperator(ComparisonOperator):
     """SQL LIKE pattern matching operator."""
-    
+
     def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
         if left is None or right is None:
             return False
-        
+
         text = str(left)
         pattern = str(right)
-        
+
         # Convert SQL LIKE pattern to regex
+        # Replace % and _ with placeholders first
+        pattern = pattern.replace('%', '\x00').replace('_', '\x01')
+
+        # Escape special regex characters
         escaped = re.escape(pattern)
-        regex_pattern = escaped.replace(r'\%', '.*').replace(r'\_', '.')
+
+        # Replace placeholders with regex equivalents
+        regex_pattern = escaped.replace('\x00', '.*').replace('\x01', '.')
+
+        # Add anchors to match the entire string
         regex_pattern = f'^{regex_pattern}$'
-        
+
         try:
             return bool(re.match(regex_pattern, text, re.IGNORECASE))
         except re.error:
             return False
-    
+
     def get_info(self) -> OperatorInfo:
         return OperatorInfo("LIKE", "LIKE", OperatorType.COMPARISON, 7, "left", 2, "SQL LIKE pattern matching")
 
