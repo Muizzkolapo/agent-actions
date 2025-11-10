@@ -12,7 +12,18 @@ import json
 import pytest
 from typing import Any, Dict, List, Optional, Union
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.llm_invocation.realtime.agent_builder import create_dynamic_agent, VENDOR_HANDLERS, SINGLE_RESPONSE_VENDORS, _prepare_prompt, _prepare_schema, _invoke_vendor_handler, _debug_print_prompt
+from agent_actions.llm_invocation.realtime.agent_builder import create_dynamic_agent
+from agent_actions.llm_invocation.realtime.services.vendor_invocation_service import (
+    VENDOR_HANDLERS, SINGLE_RESPONSE_VENDORS, VendorInvocationService
+)
+from agent_actions.llm_invocation.realtime.services.prompt_service import PromptService
+from agent_actions.llm_invocation.realtime.services.schema_service import SchemaService
+
+# Aliases for backward compatibility in tests
+_prepare_prompt = PromptService.prepare_prompt
+_prepare_schema = SchemaService.prepare_schema
+_invoke_vendor_handler = VendorInvocationService.invoke_vendor
+_debug_print_prompt = PromptService.debug_print_prompt
 from agent_actions.input_loading.base_base_loader import BaseLoader
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.response_processing.config_types import AgentEntryDict

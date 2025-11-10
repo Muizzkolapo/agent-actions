@@ -1,7 +1,7 @@
 from __future__ import annotations
 'Interceptor that generates improved prompts on validation failure.'
 from typing import Any, Dict
-from .base import InterceptorResult, ResponseInterceptor
+from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
 from agent_actions.orchestration.agent_strategies import LLMRepromptStrategy, RepromptContext, RepromptStrategy, TemplateRepromptStrategy
 
 class RepromptInterceptor(ResponseInterceptor):

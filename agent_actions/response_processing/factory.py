@@ -2,7 +2,7 @@ from __future__ import annotations
 'Factory for creating response interceptors from configuration.'
 from typing import Dict, List, Type
 from .base import InterceptorChain, ResponseInterceptor
-from .reprompt_interceptor import RepromptInterceptor
+from agent_actions.prompt_generation.reprompt_interceptor import RepromptInterceptor
 from agent_actions.validation.validation_interceptor import ValidationInterceptor
 
 class InterceptorFactory:
