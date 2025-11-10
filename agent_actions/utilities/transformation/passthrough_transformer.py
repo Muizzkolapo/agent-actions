@@ -9,8 +9,8 @@ from agent_actions.utilities.field_management import FieldManager
 from .strategies import (
     PrecomputedStructuredStrategy,
     PrecomputedUnstructuredStrategy,
-    LegacyStructuredStrategy,
-    LegacyUnstructuredStrategy,
+    ContextScopeStructuredStrategy,
+    ContextScopeUnstructuredStrategy,
     NoOpStrategy,
     DefaultStructureStrategy
 )
@@ -22,8 +22,8 @@ class PassthroughTransformer:
 
     Applies context_scope.passthrough logic to generated data using
     specialized strategies for different scenarios:
-    - Precomputed fields (new behavior)
-    - Legacy context_scope extraction (backward compatibility)
+    - Precomputed fields (from field_context)
+    - Context scope extraction (from context_scope.passthrough config)
     - Structured vs unstructured data
     """
 
@@ -42,8 +42,8 @@ class PassthroughTransformer:
         self.strategies = [
             PrecomputedStructuredStrategy(),
             PrecomputedUnstructuredStrategy(),
-            LegacyStructuredStrategy(),
-            LegacyUnstructuredStrategy(),
+            ContextScopeStructuredStrategy(),
+            ContextScopeUnstructuredStrategy(),
             NoOpStrategy(),
             DefaultStructureStrategy()  # Catch-all
         ]

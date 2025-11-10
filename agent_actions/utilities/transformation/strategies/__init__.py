@@ -5,9 +5,9 @@ from .precomputed_strategies import (
     PrecomputedStructuredStrategy,
     PrecomputedUnstructuredStrategy
 )
-from .legacy_strategies import (
-    LegacyStructuredStrategy,
-    LegacyUnstructuredStrategy,
+from .context_scope_strategies import (
+    ContextScopeStructuredStrategy,
+    ContextScopeUnstructuredStrategy,
     NoOpStrategy,
     DefaultStructureStrategy
 )
@@ -16,8 +16,8 @@ __all__ = [
     'IPassthroughTransformStrategy',
     'PrecomputedStructuredStrategy',
     'PrecomputedUnstructuredStrategy',
-    'LegacyStructuredStrategy',
-    'LegacyUnstructuredStrategy',
+    'ContextScopeStructuredStrategy',
+    'ContextScopeUnstructuredStrategy',
     'NoOpStrategy',
     'DefaultStructureStrategy'
 ]

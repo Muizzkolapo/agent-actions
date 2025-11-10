@@ -1,17 +1,17 @@
 """
-Legacy Passthrough Strategies.
+Context Scope Passthrough Strategies.
 
-These strategies handle transformation using the old
-context_scope.passthrough extraction method (backward compatibility).
+These strategies handle transformation by extracting fields from
+context_scope.passthrough configuration at runtime.
 """
 from typing import Dict, List, Optional
 from .base import IPassthroughTransformStrategy
 from agent_actions.preprocessing.data_transformer import DataTransformer
 
 
-class LegacyStructuredStrategy(IPassthroughTransformStrategy):
+class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
     """
-    Handle legacy context_scope passthrough with structured data.
+    Handle context_scope passthrough with structured data.
 
     Extracts fields from context_scope.passthrough config,
     then merges into structured data.
@@ -40,8 +40,8 @@ class LegacyStructuredStrategy(IPassthroughTransformStrategy):
         agent_config: Dict,
         passthrough_fields: Optional[Dict] = None
     ) -> List:
-        """Extract and merge legacy passthrough fields."""
-        fields_to_merge = self._extract_legacy_fields(agent_config)
+        """Extract and merge context_scope passthrough fields."""
+        fields_to_merge = self._extract_context_scope_fields(agent_config)
 
         context_for_passthrough = context_data
         if (
@@ -80,7 +80,7 @@ class LegacyStructuredStrategy(IPassthroughTransformStrategy):
         return bool(context_scope and context_scope.get('passthrough'))
 
     @staticmethod
-    def _extract_legacy_fields(agent_config: Dict) -> List[str]:
+    def _extract_context_scope_fields(agent_config: Dict) -> List[str]:
         """Extract field names from context_scope.passthrough."""
         context_scope = agent_config.get('context_scope', {})
         fields_to_merge = []
@@ -99,9 +99,9 @@ class LegacyStructuredStrategy(IPassthroughTransformStrategy):
         return fields_to_merge
 
 
-class LegacyUnstructuredStrategy(IPassthroughTransformStrategy):
+class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
     """
-    Handle legacy context_scope passthrough with unstructured data.
+    Handle context_scope passthrough with unstructured data.
 
     Extracts fields from context_scope.passthrough config,
     then merges into unstructured data.
@@ -116,7 +116,7 @@ class LegacyUnstructuredStrategy(IPassthroughTransformStrategy):
     ) -> bool:
         """Check if we have no precomputed fields, unstructured data."""
         has_passthrough_config = (
-            LegacyStructuredStrategy._has_passthrough_config(agent_config)
+            ContextScopeStructuredStrategy._has_passthrough_config(agent_config)
         )
         return (
             (passthrough_fields is None or len(passthrough_fields) == 0)
@@ -132,9 +132,9 @@ class LegacyUnstructuredStrategy(IPassthroughTransformStrategy):
         agent_config: Dict,
         passthrough_fields: Optional[Dict] = None
     ) -> List:
-        """Extract and merge legacy passthrough fields."""
+        """Extract and merge context_scope passthrough fields."""
         fields_to_merge = (
-            LegacyStructuredStrategy._extract_legacy_fields(agent_config)
+            ContextScopeStructuredStrategy._extract_context_scope_fields(agent_config)
         )
 
         context_for_passthrough = context_data
@@ -183,7 +183,7 @@ class NoOpStrategy(IPassthroughTransformStrategy):
     ) -> bool:
         """Check if structured data with no passthrough."""
         has_passthrough_config = (
-            LegacyStructuredStrategy._has_passthrough_config(agent_config)
+            ContextScopeStructuredStrategy._has_passthrough_config(agent_config)
         )
         return (
             already_structured
