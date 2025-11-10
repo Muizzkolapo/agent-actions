@@ -12,7 +12,10 @@ from pathlib import Path
 
 from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.utilities.constants import JSON_MODE_KEY
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.shared.exceptions import ConfigurationError
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
@@ -171,7 +174,7 @@ class BatchTaskPreparator:
         # 1. Generate target_id if missing
         custom_id = row.get('target_id')
         if not custom_id:
-            custom_id = ProcessorUtils.generate_target_id()
+            custom_id = IDGenerator.generate_target_id()
             row['target_id'] = custom_id
 
         # 2. Store row in context map with initial status

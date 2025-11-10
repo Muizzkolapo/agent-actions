@@ -11,7 +11,10 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
 from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
 from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
 from agent_actions.llm_invocation.realtime.providers.base import BatchResult
@@ -258,13 +261,13 @@ class BatchResultProcessor:
 
             # Lineage tracking (if node_idx available)
             if ctx.node_idx is not None:
-                item_node_id = ProcessorUtils.generate_node_id(ctx.node_idx)
+                item_node_id = IDGenerator.generate_node_id(ctx.node_idx)
                 item['node_id'] = item_node_id
-                item['lineage'] = ProcessorUtils.build_lineage(original_row, item_node_id)
+                item['lineage'] = LineageBuilder.build_lineage(original_row, item_node_id)
 
             # Target ID (ensure present)
             if 'target_id' not in item or not item['target_id']:
-                item['target_id'] = original_row.get('target_id', ProcessorUtils.generate_target_id())
+                item['target_id'] = original_row.get('target_id', IDGenerator.generate_target_id())
 
             # Source GUID (ensure present)
             if 'source_guid' not in item or not item['source_guid']:
@@ -274,7 +277,7 @@ class BatchResultProcessor:
             if ctx.agent_config:
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 if record_index >= 0:
-                    structured_items[idx] = ProcessorUtils.add_loop_correlation_id(
+                    structured_items[idx] = LoopCorrelator.add_loop_correlation_id(
                         item, ctx.agent_config, record_index=record_index
                     )
 

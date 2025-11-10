@@ -6,7 +6,10 @@ import time
 import pytest
 from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Any
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import LoopCorrelator
 
 class TestProcessorUtilsIntegration:
     """Integration tests for ProcessorUtils in realistic parallel processing scenarios."""
@@ -18,11 +21,11 @@ class TestProcessorUtilsIntegration:
 
     def setup_method(self):
         """Clear the registry before each test."""
-        ProcessorUtils.clear_loop_correlation_registry()
+        LoopCorrelator.clear_loop_correlation_registry()
 
     def teardown_method(self):
         """Clear the registry after each test."""
-        ProcessorUtils.clear_loop_correlation_registry()
+        LoopCorrelator.clear_loop_correlation_registry()
 
     def test_parallel_loop_agents_simulation(self):
         """Simulate parallel loop agents processing the same data."""
@@ -36,7 +39,7 @@ class TestProcessorUtilsIntegration:
             """Simulate a loop agent processing records."""
             for record in records:
                 source_guid = record['source_guid']
-                correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
+                correlation_id = LoopCorrelator.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
                 time.sleep(0.001)
                 with results_lock:
                     if source_guid not in results:
@@ -72,7 +75,7 @@ class TestProcessorUtilsIntegration:
         def simulate_batch_processor(processor_id: int):
             """Simulate a batch processor working on specific positions."""
             for position in range(batch_size):
-                correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(position, loop_base_name, self.get_test_session_id(), file_context)
+                correlation_id = LoopCorrelator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, self.get_test_session_id(), file_context)
                 time.sleep(0.002)
                 with results_lock:
                     if position not in results:
@@ -108,7 +111,7 @@ class TestProcessorUtilsIntegration:
         def worker_source_guid(source_guid: str):
             """Worker using source_guid strategy."""
             for _ in range(3):
-                correlation_id = ProcessorUtils.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
+                correlation_id = LoopCorrelator.get_or_create_loop_correlation_id(source_guid, loop_base_name, self.get_test_session_id())
                 with results_lock:
                     if source_guid not in guid_results:
                         guid_results[source_guid] = []
@@ -117,7 +120,7 @@ class TestProcessorUtilsIntegration:
         def worker_position(position: int):
             """Worker using position strategy."""
             for _ in range(3):
-                correlation_id = ProcessorUtils.get_or_create_position_based_loop_correlation_id(position, loop_base_name, self.get_test_session_id())
+                correlation_id = LoopCorrelator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, self.get_test_session_id())
                 with results_lock:
                     if position not in position_results:
                         position_results[position] = []
@@ -154,7 +157,7 @@ class TestProcessorUtilsIntegration:
         def simulate_loop_agent_processing(agent_id: int, data_subset: List[Dict]):
             """Simulate a loop agent processing a subset of data."""
             for record_index, item in enumerate(data_subset):
-                processed_item = ProcessorUtils.add_loop_correlation_id(item.copy(), agent_config, record_index=record_index)
+                processed_item = LoopCorrelator.add_loop_correlation_id(item.copy(), agent_config, record_index=record_index)
                 time.sleep(0.001)
                 processed_item['processed_by'] = f'agent-{agent_id}'
                 processed_item['processing_time'] = time.time()
