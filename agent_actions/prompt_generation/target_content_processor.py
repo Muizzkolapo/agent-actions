@@ -5,7 +5,10 @@ from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.configuration.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import registry
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
 from agent_actions.shared.exceptions import DependencyError
 from agent_actions.preprocessing.filter_service import get_filter_service
@@ -246,13 +249,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     processed = await self.data_processor.process_item_async(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
                 else:
                     processed = await asyncio.to_thread(self.data_processor.process_item, contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
-                base_node_id = ProcessorUtils.generate_node_id(self.idx)
+                base_node_id = IDGenerator.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
-                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records (multiple outputs from one input), append sub-index to node_id
                     node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
-                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
-                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
+                    obj = LoopCorrelator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -260,9 +263,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # Filtered out entirely (behavior: 'filter')
                     return []
                 # Skipped but passed through (behavior: 'skip')
-                node_id = ProcessorUtils.generate_node_id(self.idx)
-                lineage = ProcessorUtils.build_lineage(item, node_id)
-                processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                node_id = IDGenerator.generate_node_id(self.idx)
+                lineage = LineageBuilder.build_lineage(item, node_id)
+                processed_item = FieldManager().create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
 
                 # CRITICAL: Merge passthrough fields into skipped item
                 # This ensures fields from context_scope.passthrough are carried forward
@@ -379,13 +382,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             )
             if executed:
                 processed = self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
-                base_node_id = ProcessorUtils.generate_node_id(self.idx)
+                base_node_id = IDGenerator.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
-                    obj = ProcessorUtils.ensure_required_fields(obj, source_guid, self.idx)
+                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records (multiple outputs from one input), append sub-index to node_id
                     node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
-                    obj = ProcessorUtils.add_lineage_tracking(obj, item, node_id)
-                    obj = ProcessorUtils.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
+                    obj = LoopCorrelator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -393,9 +396,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # Filtered out entirely (behavior: 'filter')
                     return []
                 # Skipped but passed through (behavior: 'skip')
-                node_id = ProcessorUtils.generate_node_id(self.idx)
-                lineage = ProcessorUtils.build_lineage(item, node_id)
-                processed_item = ProcessorUtils.create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                node_id = IDGenerator.generate_node_id(self.idx)
+                lineage = LineageBuilder.build_lineage(item, node_id)
+                processed_item = FieldManager().create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
 
                 # CRITICAL: Merge passthrough fields into skipped item
                 # This ensures fields from context_scope.passthrough are carried forward
@@ -412,7 +415,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_item['metadata']['skipped_by_where_clause'] = True
                 processed_item['metadata']['agent_type'] = 'passthrough'
                 processed_item['metadata']['reason'] = 'where_clause_not_matched'
-                processed_item = ProcessorUtils.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
+                processed_item = LoopCorrelator.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
                 processed = [processed_item]
             return processed
         except Exception as e:

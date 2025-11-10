@@ -2,7 +2,9 @@
 from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
 from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.shared.exceptions import ProcessingError
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.preprocessing.pp_sample_enricher import SampleEnricher
 from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.pp_response_transformer import ResponseTransformer
@@ -38,15 +40,15 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             source_guid, enriched_data = ContextPreprocessor.extract_guid_and_content(context_data)
             response, executed = run_dynamic_agent(self.agent_config, self.agent_name, enriched_data, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'))
             if not source_guid:
-                source_guid = ProcessorUtils.generate_deterministic_source_guid(enriched_data or context_data)
+                source_guid = IDGenerator.generate_deterministic_source_guid(enriched_data or context_data)
             if executed:
                 transformed_response = ResponseTransformer.transform_response(response, enriched_data, source_guid, self.agent_config)
             else:
-                transformed_response = [ProcessorUtils.create_processed_item(source_guid=source_guid, content=response)]
+                transformed_response = [FieldManager().create_processed_item(source_guid=source_guid, content=response)]
             idx = self.agent_config.get('idx', 0)
             for i, node in enumerate(transformed_response):
-                node_id = ProcessorUtils.generate_node_id(idx)
-                transformed_response[i] = ProcessorUtils.add_context_lineage_tracking(node, context_data, node_id)
+                node_id = IDGenerator.generate_node_id(idx)
+                transformed_response[i] = LineageBuilder.add_context_lineage_tracking(node, context_data, node_id)
             if source_guid:
                 if isinstance(enriched_data, dict) and 'chunk_info' in enriched_data:
                     original_data = {k: v for k, v in enriched_data.items() if k not in ['target_id', 'record_index', 'chunk_index']}

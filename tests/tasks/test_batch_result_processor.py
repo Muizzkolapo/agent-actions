@@ -301,7 +301,7 @@ class TestBatchResultProcessor:
         )
         ctx = processor._stage_2_reconcile(ctx)
 
-        with patch('agent_actions.utilities.utils_processor_utils.ProcessorUtils.add_loop_correlation_id') as mock_add:
+        with patch('agent_actions.utilities.correlation.LoopCorrelator.add_loop_correlation_id') as mock_add:
             mock_add.side_effect = lambda item, cfg, **kwargs: item
 
             ctx = processor._stage_3_4_process_results(ctx)

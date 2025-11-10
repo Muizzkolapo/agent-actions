@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
-from .utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.transformation import PassthroughTransformer
 
 def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_context: Optional[Any]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
@@ -122,4 +122,5 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
 
 def transform_with_passthrough(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0, passthrough_fields: Optional[Dict]=None) -> list:
     """Apply ``context_scope.passthrough`` logic to generated data consistently."""
-    return ProcessorUtils.transform_with_passthrough(data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields)
+    transformer = PassthroughTransformer()
+    return transformer.transform_with_passthrough(data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields)

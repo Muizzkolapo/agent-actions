@@ -7,7 +7,10 @@ Eliminates code duplication between different passthrough creation scenarios.
 
 import re
 from typing import Dict, List, Optional, Any
-from agent_actions.utilities.utils_processor_utils import ProcessorUtils
+from agent_actions.utilities.id_generation import IDGenerator
+from agent_actions.utilities.field_management import FieldManager
+from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.correlation import LoopCorrelator
 
 # Import the constant from batch_service (or define here if needed)
 NODE_DIRECTORY_PATTERN = r'node_(\d+)_(\w+)'
@@ -135,7 +138,7 @@ class BatchPassthroughBuilder:
         # 1. Determine target_id (generate if missing)
         target_id = row.get('target_id')
         if not target_id:
-            target_id = custom_id or ProcessorUtils.generate_target_id()
+            target_id = custom_id or IDGenerator.generate_target_id()
             row['target_id'] = target_id
 
         # 2. Determine source_guid (defaults to target_id)
@@ -152,9 +155,9 @@ class BatchPassthroughBuilder:
 
         # 5. Add node tracking if node_idx is available
         if self.node_idx is not None:
-            item_node_id = ProcessorUtils.generate_node_id(self.node_idx)
+            item_node_id = IDGenerator.generate_node_id(self.node_idx)
             passthrough_item['node_id'] = item_node_id
-            passthrough_item['lineage'] = ProcessorUtils.build_lineage(row, item_node_id)
+            passthrough_item['lineage'] = LineageBuilder.build_lineage(row, item_node_id)
 
         # 6. Add metadata with passthrough reason
         # Determine the legacy flag based on reason for backward compatibility
