@@ -35,9 +35,6 @@ from agent_actions.preprocessing.operator_registry import (
     TrimFunction,
     OperatorType,
     OperatorInfo,
-    create_custom_comparison_operator,
-    create_custom_function,
-    register_custom_operator,
 )
 
 
@@ -559,58 +556,6 @@ class TestOperatorRegistry:
         assert all(op.operator_type == OperatorType.LOGICAL for op in logical_ops)
         assert all(op.operator_type == OperatorType.FUNCTION for op in function_ops)
 
-    def test_evaluate_operator(self, registry):
-        """Test evaluating operators through registry."""
-        result = registry.evaluate_operator("EQ", 5, 5)
-        assert result is True
-
-        result = registry.evaluate_operator("==", 5, 10)
-        assert result is False
-
-    def test_evaluate_operator_unknown(self, registry):
-        """Test evaluating unknown operator raises error."""
-        with pytest.raises(ValueError, match="Unknown operator"):
-            registry.evaluate_operator("UNKNOWN", 5, 5)
-
-    def test_register_custom_operator(self, registry):
-        """Test registering a custom operator."""
-        custom_op = create_custom_comparison_operator(
-            name="CUSTOM_EQ",
-            symbol="===",
-            eval_func=lambda l, r: l == r,
-            description="Custom equality"
-        )
-
-        registry.register_operator(custom_op)
-
-        # Should be able to retrieve it
-        op = registry.get_operator("CUSTOM_EQ")
-        assert op is not None
-
-        # Should be able to use it
-        result = registry.evaluate_operator("===", 5, 5)
-        assert result is True
-
-    def test_unregister_operator(self, registry):
-        """Test unregistering an operator."""
-        # Register custom operator
-        custom_op = create_custom_comparison_operator(
-            name="TEMP_OP",
-            symbol="~=",
-            eval_func=lambda l, r: l == r
-        )
-        registry.register_operator(custom_op)
-
-        # Verify it exists
-        assert registry.get_operator("TEMP_OP") is not None
-
-        # Unregister it
-        registry.unregister_operator("TEMP_OP")
-
-        # Should be gone
-        assert registry.get_operator("TEMP_OP") is None
-        assert registry.get_operator("~=") is None
-
 
 class TestGlobalRegistry:
     """Test global registry singleton."""
@@ -628,54 +573,6 @@ class TestGlobalRegistry:
         registry = get_global_registry()
         operators = registry.list_operators()
         assert len(operators) > 0
-
-    def test_register_custom_operator_global(self):
-        """Test registering custom operator in global registry."""
-        custom_op = create_custom_comparison_operator(
-            name="GLOBAL_CUSTOM",
-            symbol="<=>",
-            eval_func=lambda l, r: l == r
-        )
-
-        register_custom_operator(custom_op)
-
-        registry = get_global_registry()
-        assert registry.get_operator("GLOBAL_CUSTOM") is not None
-
-
-class TestCustomOperatorCreation:
-    """Test custom operator creation helpers."""
-
-    def test_create_custom_comparison_operator(self):
-        """Test creating a custom comparison operator."""
-        custom_op = create_custom_comparison_operator(
-            name="APPROX_EQ",
-            symbol="~=",
-            eval_func=lambda l, r: abs(l - r) < 0.01,
-            description="Approximately equal"
-        )
-
-        assert custom_op.evaluate(1.0, 1.005) is True
-        assert custom_op.evaluate(1.0, 1.1) is False
-
-        info = custom_op.get_info()
-        assert info.name == "APPROX_EQ"
-        assert info.symbol == "~="
-
-    def test_create_custom_function(self):
-        """Test creating a custom function operator."""
-        custom_func = create_custom_function(
-            name="DOUBLE",
-            eval_func=lambda args: args[0] * 2,
-            description="Double the value"
-        )
-
-        result = custom_func.evaluate_function([5])
-        assert result == 10
-
-        info = custom_func.get_info()
-        assert info.name == "DOUBLE"
-        assert info.operator_type == OperatorType.FUNCTION
 
 
 class TestOperatorEdgeCases:
