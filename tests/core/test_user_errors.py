@@ -44,9 +44,8 @@ class TestErrorTranslator:
         """Test ErrorTranslator initialization."""
         translator = ErrorTranslator()
         assert hasattr(translator, 'translate')
-        assert hasattr(translator, '_is_config_error')
-        assert hasattr(translator, '_is_file_error')
-        assert hasattr(translator, '_is_auth_error')
+        assert hasattr(translator, 'formatters')
+        assert len(translator.formatters) > 0
 
     def test_validation_error_handling(self):
         """Test handling ValidationError."""
@@ -207,7 +206,7 @@ class TestFormatUserError:
         result = format_user_error(wrapper, context)
         assert 'Missing required field' in result or 'Configuration Error' in result
 
-    @patch('agent_actions.core.user_errors.ErrorTranslator')
+    @patch('agent_actions.shared.user_errors.ErrorTranslator')
     def test_format_uses_translator(self, mock_translator_class):
         """Test that format_user_error uses ErrorTranslator."""
         mock_translator = Mock()
