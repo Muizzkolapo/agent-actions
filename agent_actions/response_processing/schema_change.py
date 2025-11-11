@@ -17,26 +17,79 @@ def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, An
         }
     }
 
+    Also supports primitive arrays:
+    {
+        'name': 'tags',
+        'type': 'array',
+        'items': {'type': 'string'}
+    }
+
     Converts to unified format by wrapping the array in a field with the schema name.
+
+    Args:
+        json_schema: JSON Schema format dictionary with type='array'
+
+    Returns:
+        Dictionary in unified format with fields array
     """
     schema_name = json_schema.get('name', 'response')
     items = json_schema.get('items', {})
 
-    # Extract properties and required fields from items
-    item_properties = items.get('properties', {})
-    item_required = items.get('required', [])
+    logger.debug(f"Converting array-type schema: {schema_name}")
 
-    # Create a single field that represents the array
-    fields = [{
-        'id': schema_name,
-        'type': 'array',
-        'required': True,
-        'items': {
-            'type': 'object',
-            'properties': item_properties,
-            'required': item_required
+    # Validation: Check if items is valid
+    if not items or not isinstance(items, dict):
+        logger.warning(f"Array schema '{schema_name}' has empty or invalid 'items'. Creating fallback structure.")
+        # Create a minimal valid fallback
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': json_schema.get('required', True),
+            'items': {'type': 'object', 'properties': {}, 'required': []}
+        }]
+        return {
+            'name': schema_name,
+            'description': json_schema.get('description', ''),
+            'fields': fields
         }
-    }]
+
+    # Check if array is required (default to True for backward compatibility)
+    is_required = json_schema.get('required', True)
+
+    # Determine if items are objects or primitives
+    item_type = items.get('type', 'object')
+
+    logger.debug(f"  - Items type: {item_type}")
+
+    if item_type == 'object':
+        # Handle object arrays (existing logic)
+        item_properties = items.get('properties', {})
+        item_required = items.get('required', [])
+
+        logger.debug(f"  - Item properties: {list(item_properties.keys())}")
+
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': is_required,
+            'items': {
+                'type': 'object',
+                'properties': item_properties,
+                'required': item_required
+            }
+        }]
+    else:
+        # Handle primitive arrays (string, number, boolean, etc.)
+        logger.debug(f"  - Handling primitive array")
+
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': is_required,
+            'items': items  # Pass items as-is for primitives
+        }]
+
+    logger.debug(f"Converted to unified format with {len(fields)} field(s)")
 
     return {
         'name': schema_name,

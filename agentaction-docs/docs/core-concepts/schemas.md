@@ -146,6 +146,72 @@ Agent Actions uses JSON Schema Draft 7:
 }
 ```
 
+## Array-Type Root Schemas
+
+Agent Actions supports array-type schemas at the root level, allowing you to define schemas where the response is directly an array:
+
+```yaml
+name: candidate_facts_list
+description: "List of candidate facts extracted from content"
+type: array
+items:
+  type: object
+  properties:
+    fact:
+      type: string
+      description: "A testable fact"
+      maxLength: 250
+    source:
+      type: string
+      description: "Source of the fact"
+    confidence:
+      type: string
+      description: "Confidence level"
+  required:
+    - fact
+    - source
+```
+
+This format is automatically converted to the unified format internally and works with all providers (OpenAI, Anthropic, Gemini, Ollama).
+
+The array will be wrapped in an object with a property matching the schema name in the API response:
+
+```json
+{
+  "candidate_facts_list": [
+    {
+      "fact": "GitHub Actions supports matrix builds",
+      "source": "GitHub documentation",
+      "confidence": "high"
+    },
+    {
+      "fact": "Workflows can be triggered by 20+ event types",
+      "source": "GitHub API reference",
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+### Primitive Array Schemas
+
+You can also define arrays of primitive types:
+
+```yaml
+name: tags
+type: array
+items:
+  type: string
+```
+
+This will result in:
+
+```json
+{
+  "tags": ["python", "automation", "ci-cd"]
+}
+```
+
 ## Schema Design Patterns
 
 ### Basic Analysis Result
