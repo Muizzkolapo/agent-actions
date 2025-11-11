@@ -82,12 +82,6 @@ class AnthropicBatchProvider(BatchProvider):
                 tool_name = tools[0]['name']
                 params['tools'] = tools
                 params['tool_choice'] = {'type': 'tool', 'name': tool_name}
-                print(f'🛠️ Added tools for structured JSON output: {len(tools)} tools')
-                print(f'🎯 Tool choice set to: {tool_name}')
-            else:
-                print('⚠️ Schema provided but no tools created')
-        else:
-            print('ℹ️ No schema provided - using regular text mode')
         if self.enable_prompt_caching:
             params['extra_headers'] = {'anthropic-beta': 'prompt-caching-2024-07-31'}
         return {'custom_id': batch_task.custom_id, 'params': params}
@@ -268,26 +262,19 @@ class AnthropicBatchProvider(BatchProvider):
                 data = json.load(f)
                 tasks = data['requests']
 
-            print(f'Submitting batch with {len(tasks)} tasks to Anthropic...')
             batch_response = self.client.messages.batches.create(requests=tasks)
             batch_id = batch_response.id
             status = batch_response.processing_status
-            print(f'✅ Anthropic batch job created with ID: {batch_id}')
+            print(f'Anthropic batch job created with ID: {batch_id}')
             print(f'Status: {status}')
             return (batch_id, status)
         except self.anthropic.APIError as e:
-            error_msg = f'Anthropic API error during batch submission: {str(e)}'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Anthropic API error during batch submission', context={'operation': 'batch_submission', 'batch_name': batch_name}, cause=e)
         except self.anthropic.AuthenticationError as e:
-            error_msg = f'Anthropic authentication failed: {str(e)}. Check your API key.'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Anthropic authentication failed during batch submission', context={'operation': 'batch_submission', 'batch_name': batch_name, 'error': 'Check your API key'}, cause=e)
         except Exception as e:
-            error_msg = f'Failed to submit batch to Anthropic: {str(e)}'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Failed to submit batch to Anthropic', context={'operation': 'batch_submission', 'batch_name': batch_name}, cause=e)
 
@@ -325,9 +312,7 @@ class AnthropicBatchProvider(BatchProvider):
         try:
             status = self.check_status(batch_id)
             if status != 'completed':
-                print(f'Batch {batch_id} is not completed. Status: {status}')
                 return []
-            print(f'Retrieving results for Anthropic batch {batch_id}...')
             results_stream = self.client.messages.batches.results(batch_id)
             batch_results = []
             raw_entries = []
@@ -340,28 +325,20 @@ class AnthropicBatchProvider(BatchProvider):
                     raw_entries.append(entry.__dict__)
                 else:
                     raw_entries.append(entry)
-            print(f'✅ Retrieved {len(batch_results)} results from Anthropic batch {batch_id}')
             if output_directory and raw_entries:
                 batch_dir = self._get_batch_directory(output_directory)
                 raw_results_file = batch_dir / f'{batch_id}_anthropic_raw_results.jsonl'
                 with open(raw_results_file, 'w') as f:
                     for entry in raw_entries:
                         f.write(json.dumps(entry) + '\n')
-                print(f'Raw results saved to: {raw_results_file}')
             return batch_results
         except self.anthropic.APIError as e:
-            error_msg = f'Anthropic API error retrieving batch results: {str(e)}'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Anthropic API error retrieving batch results', context={'operation': 'retrieve_results', 'batch_id': batch_id}, cause=e)
         except self.anthropic.AuthenticationError as e:
-            error_msg = f'Anthropic authentication failed: {str(e)}. Check your API key.'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Anthropic authentication failed during retrieve results', context={'operation': 'retrieve_results', 'batch_id': batch_id, 'error': 'Check your API key'}, cause=e)
         except Exception as e:
-            error_msg = f'Failed to retrieve Anthropic batch results: {str(e)}'
-            print(f'❌ {error_msg}')
             from agent_actions.shared.exceptions import AnthropicError
             raise AnthropicError('Failed to retrieve Anthropic batch results', context={'operation': 'retrieve_results', 'batch_id': batch_id}, cause=e)
 
@@ -376,10 +353,10 @@ class AnthropicBatchProvider(BatchProvider):
     def _create_json_tool_from_schema(self, schema: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Create an Anthropic tool definition from a JSON schema to force structured output.
-        
+
         Args:
             schema: JSON schema dictionary or list of schema objects from BatchService
-            
+
         Returns:
             List containing tool definition for structured JSON response
         """
@@ -392,27 +369,20 @@ class AnthropicBatchProvider(BatchProvider):
                 actual_schema = schema_obj.get('input_schema', {})
                 tool_name = schema_obj.get('name', 'json_response').lower().replace('schema', '_response')
                 schema_description = schema_obj.get('description', schema_description)
-                print(f"🔧 Processing schema from list format: {schema_obj.get('name', 'Unknown')}")
         elif isinstance(schema, dict) and ('properties' in schema or 'type' in schema):
             actual_schema = schema
             schema_description = schema.get('description', schema_description)
-            print(f'🔧 Processing direct schema format')
         else:
-            print(f'⚠️ Unsupported schema format: {type(schema)} - {schema}')
             return []
         if not actual_schema:
-            print(f'⚠️ No valid schema found in: {schema}')
             return []
         properties = actual_schema.get('properties', {})
         required = actual_schema.get('required', [])
         if not properties:
-            print(f'⚠️ No properties found in schema: {actual_schema}')
             tool_schema = {'type': 'object', 'properties': {'response': {'type': 'string', 'description': 'The response content'}}, 'required': ['response']}
         else:
             tool_schema = {'type': 'object', 'properties': properties, 'required': required}
-            print(f'✅ Created tool schema with properties: {list(properties.keys())}')
         tool_definition = {'name': tool_name, 'description': f'Provide structured JSON output: {schema_description}', 'input_schema': tool_schema}
-        print(f"🛠️ Created tool definition: {tool_definition['name']}")
         return [tool_definition]
 
     def _validate_provider_specific_config(self, agent_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
