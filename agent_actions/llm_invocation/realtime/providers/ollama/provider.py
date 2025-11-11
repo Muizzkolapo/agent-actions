@@ -13,6 +13,7 @@ Registry tracking is handled by BatchService, not this provider.
 import json
 import time
 import uuid
+from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
 from ollama import Client
@@ -76,125 +77,65 @@ class OllamaLocalBatchProvider(BatchProvider):
             "body": body
         }
 
-    def parse_provider_response(self, raw_response: Dict[str, Any]) -> BatchResult:
-        """
-        Parse JSONL output format to BatchResult.
-
-        Expected format:
-        {
-            "custom_id": "request-1",
-            "response": {
-                "status_code": 200,
-                "body": {
-                    "choices": [{"message": {"content": "..."}}],
-                    "usage": {...}
-                }
-            },
-            "error": null
-        }
-        """
-        custom_id = raw_response.get("custom_id", "unknown")
-
-        # Check for errors
+    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+        """Extract error from Ollama response."""
         if raw_response.get("error"):
-            return BatchResult(
-                custom_id=custom_id,
-                content=None,
-                success=False,
-                error=str(raw_response["error"]),
-                metadata={"raw_error": raw_response["error"]}
-            )
+            return str(raw_response["error"])
+        response_data = raw_response.get("response", {})
+        status_code = response_data.get("status_code")
+        if status_code and status_code != 200:
+            return f"HTTP {status_code}"
+        return None
 
+    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+        """Extract content from Ollama response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
-
-        # Extract content
-        content = None
         if "choices" in response_body and response_body["choices"]:
             choice = response_body["choices"][0]
             if "message" in choice and "content" in choice["message"]:
-                content_str = choice["message"]["content"]
+                return choice["message"]["content"]
+        return None
 
-                # Try to parse as JSON
-                try:
-                    content = json.loads(content_str)
-                except json.JSONDecodeError:
-                    content = content_str
-
-        # Build metadata
-        metadata = {
+    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from Ollama response."""
+        response_data = raw_response.get("response", {})
+        response_body = response_data.get("body", {})
+        return {
             "model": response_body.get("model"),
-            "usage": response_body.get("usage"),
             "finish_reason": response_body.get("choices", [{}])[0].get("finish_reason"),
             "status_code": response_data.get("status_code")
         }
 
-        return BatchResult(
-            custom_id=custom_id,
-            content=content,
-            success=response_data.get("status_code") == 200,
-            error=None if response_data.get("status_code") == 200 else f"HTTP {response_data.get('status_code')}",
-            metadata=metadata,
-            usage=response_body.get("usage")
-        )
+    def _extract_usage_from_response(self, raw_response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract usage from Ollama response."""
+        response_data = raw_response.get("response", {})
+        response_body = response_data.get("body", {})
+        return response_body.get("usage")
 
-    def prepare_tasks(self,
-                     data: List[Dict[str, Any]],
-                     agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Convert agent-actions data to JSONL task format.
-        """
-        tasks = []
+    def _get_default_model(self) -> str:
+        """Return Ollama's default model."""
+        return 'llama2'
 
-        # Only use schema if json_mode is enabled
-        # When json_mode is False, we should NOT add response_format/schema
-        json_mode = agent_config.get("json_mode", True)  # Default to True for backwards compatibility
-        schema = agent_config.get("compiled_schema") if json_mode else None
+    def _get_default_temperature(self) -> float:
+        """Return Ollama's default temperature. Ollama defaults to 1.0, not 0.1."""
+        return 1.0
 
-        for row in data:
-            batch_task = BatchTask(
-                custom_id=row.get("target_id", row.get("id", "")),
-                prompt=row.get("prompt", agent_config.get("prompt", "")),
-                user_content=json.dumps(row.get("content", row)),
-                model_config={
-                    "model_name": agent_config.get("model_name", "llama2"),
-                    "temperature": agent_config.get("temperature", 1.0),
-                    "max_tokens": agent_config.get("max_tokens")
-                },
-                metadata=row
-            )
+    def _prepare_batch_input_file(self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str) -> Path:
+        """Write tasks to JSONL file for Ollama."""
+        return self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
-            task = self.format_task_for_provider(batch_task, schema)
-            tasks.append(task)
-
-        return tasks
-
-    def submit_batch(self,
-                    tasks: List[Dict[str, Any]],
-                    batch_name: str,
-                    output_directory: Optional[str] = None) -> Tuple[str, str]:
-        """
-        Submit batch and process immediately.
-
-        This method:
-        1. Writes input JSONL file
-        2. Processes all tasks using Ollama
-        3. Writes output JSONL file
-        4. Returns (batch_id, status)
-
-        Note: Registry is managed by BatchService, not this provider.
-
-        Returns:
-            Tuple of (batch_id, status) - status is 'submitted' to mimic async behavior
-        """
-        # Use base class helper for directory setup
-        batch_dir = self._get_batch_directory(output_directory)
-
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
+        """Process batch synchronously with Ollama (no actual API submission)."""
         # Generate batch ID
         batch_id = f"batch_{uuid.uuid4().hex}"
 
-        # Use base class helper to write input JSONL
-        self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
+        # Read tasks from input file
+        tasks = []
+        with open(input_file, 'r') as f:
+            for line in f:
+                if line.strip():
+                    tasks.append(json.loads(line))
 
         # Process all tasks immediately
         results = []
@@ -210,25 +151,22 @@ class OllamaLocalBatchProvider(BatchProvider):
                 messages = body["messages"]
                 model = body.get("model", "llama2")
 
-                # Call Ollama
-                # Build options dict, handling None values
+                # Build options dict
                 options = {
                     "temperature": body.get("temperature") if body.get("temperature") is not None else 1.0
                 }
-                # Only add num_predict if max_tokens is specified
                 max_tokens = body.get("max_tokens")
                 if max_tokens is not None:
                     options["num_predict"] = max_tokens
 
-                # Check if response_format is specified (for JSON mode)
-                # Ollama uses 'format' parameter, not 'response_format'
+                # Handle JSON mode
                 format_param = None
                 response_format = body.get("response_format")
                 if response_format and isinstance(response_format, dict):
                     if response_format.get("type") == "json_schema":
-                        # Ollama expects format="json" for JSON mode
                         format_param = "json"
 
+                # Call Ollama
                 ollama_response = self.client.chat(
                     model=model,
                     messages=messages,
@@ -248,8 +186,6 @@ class OllamaLocalBatchProvider(BatchProvider):
 
             except Exception as e:
                 print(f"Error processing {task['custom_id']}: {e}")
-
-                # Create error response
                 error_response = {
                     "custom_id": task["custom_id"],
                     "response": None,
@@ -263,8 +199,8 @@ class OllamaLocalBatchProvider(BatchProvider):
                 failed += 1
 
         # Write output JSONL file
-        output_file_name = f"{batch_id}_results.jsonl"
-        output_file_path = batch_dir / output_file_name
+        batch_dir = input_file.parent
+        output_file_path = batch_dir / f"{batch_id}_results.jsonl"
 
         with open(output_file_path, 'w') as f:
             for result in results:
@@ -273,32 +209,35 @@ class OllamaLocalBatchProvider(BatchProvider):
         print(f"Ollama batch output file: {output_file_path}")
         print(f"Batch completed: {completed} succeeded, {failed} failed")
 
-        # Note: Registry is managed by BatchService, not this provider
-        # Return 'submitted' to mimic async providers (actual processing is complete, but workflow will check on next run)
+        # Return 'submitted' to mimic async providers
         return (batch_id, 'submitted')
 
-    def check_status(self, batch_id: str) -> str:
-        """
-        Check batch status.
-
-        Since we process synchronously, always returns "completed".
-        """
-        # In a real implementation, you could read from registry
-        # For simplicity, we assume if batch_id exists, it's completed
+    def _fetch_status(self, batch_id: str) -> str:
+        """Fetch raw status. Ollama processes synchronously, so always completed."""
         return "completed"
 
-    def retrieve_results(self,
-                        batch_id: str,
-                        output_directory: Optional[str] = None) -> List[BatchResult]:
+    def _normalize_status(self, raw_status: str) -> str:
+        """Ollama statuses are already in standard format."""
+        return raw_status
+
+    def retrieve_results(self, batch_id: str, output_directory: Optional[str] = None) -> List[BatchResult]:
         """
         Retrieve results from output JSONL file.
+
+        NOTE: Ollama overrides the base template method because it needs to use
+        the same output_directory where results were written during submit_batch.
         """
-        # Use base class helper for directory
         batch_dir = self._get_batch_directory(output_directory)
         output_file_path = batch_dir / f"{batch_id}_results.jsonl"
-
-        # Use base class helper to read and parse JSONL
         return self._read_jsonl_file(output_file_path)
+
+    def _get_result_file_name(self, batch_id: str) -> str:
+        """Not used by Ollama (overrides retrieve_results)."""
+        return f"{batch_id}_results.jsonl"
+
+    def _fetch_raw_results(self, batch_id: str) -> bytes:
+        """Not used by Ollama (overrides retrieve_results)."""
+        raise NotImplementedError("Ollama uses custom file-based retrieve_results()")
 
     def _transform_ollama_response(self,
                                    ollama_response: dict,
