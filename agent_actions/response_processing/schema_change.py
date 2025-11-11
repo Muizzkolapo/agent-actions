@@ -2,6 +2,101 @@ from typing import Tuple, Dict, Any, Optional
 import logging
 logger = logging.getLogger(__name__)
 
+def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert JSON Schema format (type: array) to unified format (fields: [...]).
+
+    Handles schemas like:
+    {
+        'name': 'candidate_facts_list',
+        'type': 'array',
+        'items': {
+            'type': 'object',
+            'properties': {'fact': {...}, 'paraphrase': {...}},
+            'required': ['fact', 'paraphrase']
+        }
+    }
+
+    Also supports primitive arrays:
+    {
+        'name': 'tags',
+        'type': 'array',
+        'items': {'type': 'string'}
+    }
+
+    Converts to unified format by wrapping the array in a field with the schema name.
+
+    Args:
+        json_schema: JSON Schema format dictionary with type='array'
+
+    Returns:
+        Dictionary in unified format with fields array
+    """
+    schema_name = json_schema.get('name', 'response')
+    items = json_schema.get('items', {})
+
+    logger.debug(f"Converting array-type schema: {schema_name}")
+
+    # Validation: Check if items is valid
+    if not items or not isinstance(items, dict):
+        logger.warning(f"Array schema '{schema_name}' has empty or invalid 'items'. Creating fallback structure.")
+        # Create a minimal valid fallback
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': json_schema.get('required', True),
+            'items': {'type': 'object', 'properties': {}, 'required': []}
+        }]
+        return {
+            'name': schema_name,
+            'description': json_schema.get('description', ''),
+            'fields': fields
+        }
+
+    # Check if array is required (default to True for backward compatibility)
+    is_required = json_schema.get('required', True)
+
+    # Determine if items are objects or primitives
+    item_type = items.get('type', 'object')
+
+    logger.debug(f"  - Items type: {item_type}")
+
+    if item_type == 'object':
+        # Handle object arrays (existing logic)
+        item_properties = items.get('properties', {})
+        item_required = items.get('required', [])
+
+        logger.debug(f"  - Item properties: {list(item_properties.keys())}")
+
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': is_required,
+            'items': {
+                'type': 'object',
+                'properties': item_properties,
+                'required': item_required
+            }
+        }]
+    else:
+        # Handle primitive arrays (string, number, boolean, etc.)
+        logger.debug(f"  - Handling primitive array")
+
+        fields = [{
+            'id': schema_name,
+            'type': 'array',
+            'required': is_required,
+            'items': items  # Pass items as-is for primitives
+        }]
+
+    logger.debug(f"Converted to unified format with {len(fields)} field(s)")
+
+    return {
+        'name': schema_name,
+        'description': json_schema.get('description', ''),
+        'fields': fields
+    }
+
 def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]:
     """
     Convert a single unified field into the shape required by the target system.
@@ -28,7 +123,17 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
     """
     Convert a unified YAML/JSON definition into the schema dialect required by
     OpenAI, Anthropic, Gemini, **or Ollama** (new).
+
+    Handles two schema formats:
+    1. Unified format: {'name': '...', 'fields': [{id: 'field', type: 'string'}, ...]}
+    2. JSON Schema format: {'name': '...', 'type': 'array', 'items': {...}}
     """
+    # Check if this is a JSON Schema format (type: array) instead of unified format (fields: [...])
+    if 'type' in unified and unified.get('type') == 'array' and 'items' in unified and 'fields' not in unified:
+        # This is a JSON Schema array format - convert to unified format
+        logger.debug(f"Converting JSON Schema array format to unified format for schema: {unified.get('name', 'unknown')}")
+        unified = _convert_json_schema_to_unified(unified)
+
     properties: Dict[str, Any] = {}
     required: list[str] = []
     for field in unified.get('fields', []):

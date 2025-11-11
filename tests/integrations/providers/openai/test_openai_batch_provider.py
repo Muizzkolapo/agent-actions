@@ -30,6 +30,7 @@ class TestOpenAIBatchProvider(BaseBatchProviderTests):
         provider.client = mock_client
         mock_created_batch = Mock()
         mock_created_batch.id = 'batch-test-12345'
+        mock_created_batch.status = 'validating'
         mock_client.batches.create.return_value = mock_created_batch
         mock_batch = Mock()
         mock_batch.status = 'completed'

@@ -70,175 +70,126 @@ class GeminiBatchProvider(BatchProvider):
             request['response_mime_type'] = 'application/json'
         return {'key': batch_task.custom_id, 'request': request}
 
-    def parse_provider_response(self, raw_response: Dict[str, Any]) -> BatchResult:
-        """
-        Transform Gemini's response format to our standardized BatchResult.
-        
-        Gemini returns:
-        {
-            "response": {
-                "responseId": "abc123",
-                "modelVersion": "gemini-2.5-flash",
-                "candidates": [{
-                    "content": {
-                        "role": "model",
-                        "parts": [{
-                            "text": "response text"
-                        }]
-                    },
-                    "finishReason": "STOP",
-                    "index": 0
-                }],
-                "usageMetadata": {
-                    "totalTokenCount": 100,
-                    "promptTokenCount": 20,
-                    "candidatesTokenCount": 80
-                }
-            },
-            "key": "request-1"
-        }
-        """
-        custom_id = raw_response.get('key', 'unknown')
+    def _extract_custom_id(self, raw_response: Dict[str, Any]) -> str:
+        """Extract custom_id from Gemini response (uses 'key' instead)."""
+        return raw_response.get('key', 'unknown')
+
+    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+        """Extract error from Gemini response."""
         if 'error' in raw_response:
-            return BatchResult(custom_id=custom_id, content=None, success=False, error=str(raw_response['error']), metadata={'raw_error': raw_response['error']})
+            return str(raw_response['error'])
+        # Check if content is missing (Gemini-specific error condition)
         response_data = raw_response.get('response', {})
-        content = None
+        candidates = response_data.get('candidates', [])
+        if not candidates:
+            return 'No candidates in response'
+        candidate = candidates[0]
+        candidate_content = candidate.get('content', {})
+        parts = candidate_content.get('parts', [])
+        if not parts or not parts[0].get('text'):
+            return 'No content in response'
+        return None
+
+    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+        """Extract content from Gemini response."""
+        response_data = raw_response.get('response', {})
         candidates = response_data.get('candidates', [])
         if candidates:
             candidate = candidates[0]
             candidate_content = candidate.get('content', {})
             parts = candidate_content.get('parts', [])
             if parts:
-                text_content = parts[0].get('text', '')
-                try:
-                    content = json.loads(text_content)
-                except json.JSONDecodeError:
-                    content = text_content
-        metadata = {'model_version': response_data.get('modelVersion'), 'response_id': response_data.get('responseId'), 'finish_reason': candidates[0].get('finishReason') if candidates else None}
+                return parts[0].get('text', '')
+        return None
+
+    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from Gemini response."""
+        response_data = raw_response.get('response', {})
+        candidates = response_data.get('candidates', [])
+        return {
+            'model_version': response_data.get('modelVersion'),
+            'response_id': response_data.get('responseId'),
+            'finish_reason': candidates[0].get('finishReason') if candidates else None
+        }
+
+    def _extract_usage_from_response(self, raw_response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Extract usage from Gemini response."""
+        response_data = raw_response.get('response', {})
         usage_metadata = response_data.get('usageMetadata', {})
-        usage = {'total_tokens': usage_metadata.get('totalTokenCount'), 'prompt_tokens': usage_metadata.get('promptTokenCount'), 'completion_tokens': usage_metadata.get('candidatesTokenCount')}
-        return BatchResult(custom_id=custom_id, content=content, success=bool(content is not None), error=None if content is not None else 'No content in response', metadata=metadata, usage=usage)
+        return {
+            'total_tokens': usage_metadata.get('totalTokenCount'),
+            'prompt_tokens': usage_metadata.get('promptTokenCount'),
+            'completion_tokens': usage_metadata.get('candidatesTokenCount')
+        }
 
-    def prepare_tasks(self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """
-        Convert agent-actions data to Gemini batch format.
-        
-        This method orchestrates the transformation of multiple data items
-        into Gemini-formatted tasks.
-        """
-        tasks = []
-        schema = agent_config.get('compiled_schema')
-        for row in data:
-            batch_task = BatchTask(custom_id=row.get('target_id', row.get('id', '')), prompt=row.get('prompt', agent_config.get('prompt', '')), user_content=json.dumps(row.get('content', row)), model_config={'model_name': agent_config.get('model_name', 'gemini-2.5-flash'), 'temperature': agent_config.get('temperature', 0.1), 'max_tokens': agent_config.get('max_tokens')}, metadata=row)
-            gemini_task = self.format_task_for_provider(batch_task, schema)
-            tasks.append(gemini_task)
-        return tasks
+    def _get_default_model(self) -> str:
+        """Return Gemini's default model."""
+        return 'gemini-2.5-flash'
 
-    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> str:
-        """Submit batch job to Gemini."""
-        if output_directory:
-            batch_dir = Path(output_directory) / 'batch'
-        else:
-            batch_dir = Path.cwd() / 'batch'
-        ensure_directory_exists(batch_dir)
+    def _prepare_batch_input_file(self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str) -> Path:
+        """Write tasks to JSONL file for Gemini."""
         file_name = f'{Path(batch_name).stem}_batch_input.json'
         file_path = batch_dir / file_name
         with open(file_path, 'w') as file:
             for task in tasks:
                 file.write(json.dumps(task) + '\n')
         print(f'Gemini batch file created at: {file_path}')
+        return file_path
+
+    def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> tuple[str, str]:
+        """Submit batch to Gemini API."""
         try:
-            print(f'Uploading file: {file_path}')
-            uploaded_file = self.client.files.upload(file=str(file_path), config=types.UploadFileConfig(display_name=f'{batch_name}-batch-input'))
+            print(f'Uploading file: {input_file}')
+            uploaded_file = self.client.files.upload(file=str(input_file), config=types.UploadFileConfig(display_name=f'{batch_name}-batch-input'))
             print(f'Uploaded file: {uploaded_file.name}')
-            model_name = 'gemini-2.5-flash'
-            if tasks and 'model_name' in tasks[0].get('request', {}).get('generation_config', {}):
-                model_name = tasks[0]['request']['generation_config']['model_name']
-            elif hasattr(self, '_last_model_name'):
-                model_name = self._last_model_name
+            model_name = self._get_default_model()
             batch_job = self.client.batches.create(model=model_name, src=uploaded_file.name, config={'display_name': batch_name})
             print(f'Gemini batch job created with ID: {batch_job.name}')
-            return batch_job.name
+            status = batch_job.state.name if hasattr(batch_job.state, 'name') else str(batch_job.state)
+            return (batch_job.name, status)
         except Exception as e:
             from agent_actions.shared.exceptions import VendorAPIError
             raise VendorAPIError(vendor='gemini', endpoint='batches.create', context={'message': 'Failed to submit Gemini batch job', 'batch_name': batch_name}, cause=e)
 
-    def check_status(self, batch_id: str) -> str:
-        """Check Gemini batch job status."""
-        try:
-            batch_job = self.client.batches.get(name=batch_id)
-            status_mapping = {'JOB_STATE_PENDING': 'in_progress', 'JOB_STATE_RUNNING': 'in_progress', 'JOB_STATE_SUCCEEDED': 'completed', 'JOB_STATE_FAILED': 'failed', 'JOB_STATE_CANCELLED': 'cancelled'}
-            gemini_status = batch_job.state.name
-            return status_mapping.get(gemini_status, gemini_status.lower())
-        except Exception as e:
-            from agent_actions.shared.exceptions import VendorAPIError
-            raise VendorAPIError(vendor='gemini', endpoint='batches.get', context={'message': 'Failed to check Gemini batch status', 'batch_id': batch_id}, cause=e)
+    def _fetch_status(self, batch_id: str) -> str:
+        """Fetch raw status from Gemini API."""
+        batch_job = self.client.batches.get(name=batch_id)
+        return batch_job.state.name
 
-    def retrieve_results(self, batch_id: str, output_directory: Optional[str]=None) -> List[BatchResult]:
-        """
-        Retrieve and transform Gemini batch results to our format.
-        """
-        try:
-            batch_job = self.client.batches.get(name=batch_id)
-            if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
-                from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError('Batch job is not completed', context={'batch_id': batch_id, 'status': batch_job.state.name, 'vendor': 'gemini'})
-            result_file_name = batch_job.dest.file_name
-            if not result_file_name:
-                from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError('Batch job has no output file', context={'batch_id': batch_id, 'vendor': 'gemini'})
-            print(f'Results are in file: {result_file_name}')
-            max_retries = 3
-            retry_delay = 2
-            last_error = None
-            result_content = None
-            for attempt in range(max_retries):
-                try:
-                    print(f'Downloading result file content (attempt {attempt + 1}/{max_retries})...')
-                    file_content_bytes = self.client.files.download(file=result_file_name)
-                    result_content = file_content_bytes.decode('utf-8')
-                    if not result_content or len(result_content) == 0:
-                        from agent_actions.shared.exceptions import VendorAPIError
-                        raise VendorAPIError(vendor='gemini', endpoint='files.download', context={'message': 'Retrieved empty content from batch results', 'batch_id': batch_id, 'result_file_name': result_file_name})
-                    break
-                except Exception as e:
-                    last_error = e
-                    if attempt < max_retries - 1:
-                        print(f'Retry {attempt + 1}/{max_retries}: Failed to retrieve batch results: {e}')
-                        time.sleep(retry_delay)
-                    else:
-                        from agent_actions.shared.exceptions import VendorAPIError
-                        raise VendorAPIError(vendor='gemini', endpoint='files.download', context={'message': 'Failed to retrieve batch results after retries', 'batch_id': batch_id, 'max_retries': max_retries, 'last_error': str(last_error)}, cause=last_error)
-            if output_directory:
-                batch_dir = Path(output_directory) / 'batch'
-                ensure_directory_exists(batch_dir)
-                result_file_path = batch_dir / f"{batch_id.replace('/', '_')}_results.jsonl"
-                with open(result_file_path, 'w') as f:
-                    f.write(result_content)
-                print(f'Saved raw results to: {result_file_path}')
-            batch_results = []
-            lines = result_content.strip().split('\n')
-            for line_num, line in enumerate(lines, 1):
-                if line.strip():
-                    try:
-                        raw_result = json.loads(line)
-                        batch_result = self.parse_provider_response(raw_result)
-                        batch_results.append(batch_result)
-                    except json.JSONDecodeError as e:
-                        print(f'[ERROR] JSON parsing error on line {line_num}: {e}')
-                        batch_results.append(BatchResult(custom_id=f'error_line_{line_num}', content=None, success=False, error=f'JSON parsing error: {e}', metadata={'line_number': line_num, 'raw_line': line[:500]}))
-            return batch_results
-        except Exception as e:
-            from agent_actions.shared.exceptions import VendorAPIError
-            raise VendorAPIError(vendor='gemini', endpoint='retrieve_results', context={'message': 'Failed to retrieve Gemini batch results', 'batch_id': batch_id}, cause=e)
+    def _normalize_status(self, raw_status: str) -> str:
+        """Normalize Gemini status to standard format."""
+        status_mapping = {
+            'JOB_STATE_PENDING': 'in_progress',
+            'JOB_STATE_RUNNING': 'in_progress',
+            'JOB_STATE_SUCCEEDED': 'completed',
+            'JOB_STATE_FAILED': 'failed',
+            'JOB_STATE_CANCELLED': 'cancelled'
+        }
+        return status_mapping.get(raw_status, raw_status.lower())
 
-    def validate_config(self, agent_config: Dict[str, Any]) -> tuple[bool, Optional[str]]:
-        """
-        Validate that the agent configuration is compatible with Gemini.
-        
-        Also store the model name for later use in submit_batch.
-        """
-        model_name = agent_config.get('model_name')
-        if model_name:
-            self._last_model_name = model_name
-        return (True, None)
+    def _get_result_file_name(self, batch_id: str) -> str:
+        """Get result filename for Gemini."""
+        return f"{batch_id.replace('/', '_')}_results.jsonl"
+
+    def _fetch_raw_results(self, batch_id: str) -> bytes:
+        """Fetch raw results from Gemini API."""
+        batch_job = self.client.batches.get(name=batch_id)
+        if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
+            from agent_actions.shared.exceptions import ValidationError
+            raise ValidationError('Batch job is not completed', context={'batch_id': batch_id, 'status': batch_job.state.name, 'vendor': 'gemini'})
+
+        result_file_name = batch_job.dest.file_name
+        if not result_file_name:
+            from agent_actions.shared.exceptions import ValidationError
+            raise ValidationError('Batch job has no output file', context={'batch_id': batch_id, 'vendor': 'gemini'})
+
+        print(f'Results are in file: {result_file_name}')
+        print(f'Downloading result file content...')
+        file_content_bytes = self.client.files.download(file=result_file_name)
+
+        if not file_content_bytes or len(file_content_bytes) == 0:
+            from agent_actions.shared.exceptions import VendorAPIError
+            raise VendorAPIError(vendor='gemini', endpoint='files.download', context={'message': 'Retrieved empty content from batch results', 'batch_id': batch_id, 'result_file_name': result_file_name})
+
+        return file_content_bytes
+
