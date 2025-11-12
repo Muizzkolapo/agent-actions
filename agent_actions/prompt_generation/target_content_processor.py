@@ -185,10 +185,38 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             model_vendor = (self._get_config_value('model_vendor') or '').lower()
             granularity = (self._get_config_value('granularity') or 'record').lower()
             if model_vendor == 'tool' and granularity == 'file':
-                if isinstance(generated_data, list):
-                    return generated_data
-                else:
-                    return [generated_data]
+                # File-level tools need lineage tracking too (issue #529)
+                data_list = generated_data if isinstance(generated_data, list) else [generated_data]
+
+                # Get the first item from input data for lineage inheritance
+                source_item = data[0] if data else {}
+
+                # Add lineage tracking to each item with unique node_ids
+                base_node_id = IDGenerator.generate_node_id(self.idx)
+                tracked_data = []
+
+                # Create FieldManager once outside loop for better performance
+                field_manager = FieldManager()
+
+                for i, item in enumerate(data_list):
+                    if isinstance(item, dict):
+                        # Explicitly copy to prevent mutation of original data
+                        item_copy = item.copy()
+
+                        # Ensure required fields on the copy
+                        item_copy = field_manager.ensure_required_fields(item_copy, source_guid, self.idx)
+
+                        # Generate unique node_id per item (always append index for consistency)
+                        node_id = f"{base_node_id}_{i}"
+
+                        # Add lineage tracking to the copy
+                        item_copy = LineageBuilder.add_lineage_tracking(item_copy, source_item, node_id)
+
+                        tracked_data.append(item_copy)
+                    else:
+                        tracked_data.append(item)
+
+                return tracked_data
             contents = data[0]['content'] if data else {}
             return self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
         except Exception as e:

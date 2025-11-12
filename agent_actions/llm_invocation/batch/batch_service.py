@@ -1,12 +1,13 @@
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.llm_invocation.realtime.file_writer import FileWriter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory
+from agent_actions.utilities.source_data_utils import deduplicate_by_source_guid
 from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.realtime.providers.base import BatchProvider, BatchResult
@@ -236,33 +237,78 @@ class BatchService:
             raise ProcessingError('No batch results were successfully processed', context={'output_directory': output_directory})
         return processed_files
 
-    def _save_task_source(self, src_text, file_path, base_directory, output_directory):
-        """Save task source data to source directory (used by staging_loader)."""
+    def _save_task_source(
+        self,
+        src_text: Union[Dict[str, Any], List[Dict[str, Any]]],
+        file_path,
+        base_directory,
+        output_directory
+    ):
+        """Save task source data to source directory (used by staging_loader).
+
+        Uses file locking to prevent race conditions in parallel processing.
+
+        Args:
+            src_text: Single item (Dict) or list of items (List[Dict]) in flat format
+                     with 'source_guid' field. Accepts both for convenience.
+            file_path: Path to the file being processed
+            base_directory: Base directory for input files
+            output_directory: Output directory for processed files
+        """
         from pathlib import Path
         import json
+        import portalocker
+
         relative_path = Path(file_path).relative_to(base_directory)
         base_path = Path(base_directory).parent
         source_path = base_path / 'source'
         output_src_path = source_path / relative_path.with_suffix('.json')
         ensure_directory_exists(output_src_path, is_file=True)
-        if output_src_path.exists():
-            with open(output_src_path, 'r') as existing_file:
-                try:
-                    existing_source = json.load(existing_file)
-                except json.JSONDecodeError as e:
-                    logger.warning("Corrupted source file %s: %s. Starting fresh.", output_src_path, e)
+
+        # Ensure src_text is a list
+        if not isinstance(src_text, list):
+            src_text = [src_text]
+
+        # Use file locking for atomic read-modify-write (prevents race conditions)
+        # Open in r+ mode if exists, w mode if new file
+        file_exists = output_src_path.exists()
+        mode = 'r+' if file_exists else 'w'
+
+        with open(output_src_path, mode) as f:
+            # Acquire exclusive lock - blocks until available (cross-platform)
+            portalocker.lock(f, portalocker.LOCK_EX)
+
+            try:
+                # Read existing data if file exists
+                if file_exists:
+                    try:
+                        f.seek(0)
+                        existing_source = json.load(f)
+                    except json.JSONDecodeError as e:
+                        logger.warning("Corrupted source file %s: %s. Starting fresh.", output_src_path, e)
+                        existing_source = []
+                    except Exception as e:
+                        logger.error("Unexpected error reading source file %s: %s", output_src_path, e)
+                        existing_source = []
+                else:
                     existing_source = []
-                except Exception as e:
-                    logger.error("Unexpected error reading source file %s: %s", output_src_path, e)
-                    existing_source = []
-            task_guid = list(src_text.keys())[0]
-            if task_guid not in [list(item.keys())[0] for item in existing_source]:
-                existing_source.append(src_text)
-                with open(output_src_path, 'w') as f:
+
+                # Deduplicate by source_guid using flat format
+                new_items = deduplicate_by_source_guid(existing_source, src_text)
+
+                # Write back if we have new items or creating new file
+                if new_items or not file_exists:
+                    if new_items:
+                        existing_source.extend(new_items)
+
+                    # Clear file and write from beginning
+                    f.seek(0)
+                    f.truncate()
                     json.dump(existing_source, f, indent=2)
-        else:
-            with open(output_src_path, 'w') as f:
-                json.dump([src_text], f, indent=2)
+            finally:
+                # Unlock automatically when exiting context manager
+                # portalocker handles this, but explicit unlock is also fine
+                pass
 
     def _are_all_batch_jobs_completed(self, output_directory: str) -> bool:
         """Check if all batch jobs in the registry are completed."""
