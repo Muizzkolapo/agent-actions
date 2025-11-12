@@ -129,13 +129,8 @@ class DataTransformer:
         """
         Retrieve content by source_guid without side effects.
 
-        Supports multiple source data formats:
-        1. New format: {'source_guid': 'xxx', ...}
-        2. Legacy format with GUID as key: {'xxx': {...}}
-        3. Target ID lookup: {'original_guid': {'target_id': 'xxx', ...}}
-
         Args:
-            data: List of dictionaries with 'source_guid' field or GUIDs as keys
+            data: List of dictionaries with 'source_guid' field
             source_guid: The source_guid to search for
 
         Returns:
@@ -143,15 +138,7 @@ class DataTransformer:
         """
         for item in data:
             if isinstance(item, dict):
-                # Check if source_guid is a field (new format)
+                # Check if source_guid matches
                 if item.get('source_guid') == source_guid:
                     return item
-                # Check if source_guid is a key (legacy format)
-                if source_guid in item:
-                    return item[source_guid]
-                # Check if source_guid matches a target_id in nested structure
-                # This handles the case where pipeline uses target_id as the new source_guid
-                for key, value in item.items():
-                    if isinstance(value, dict) and value.get('target_id') == source_guid:
-                        return value
         return None

@@ -5,6 +5,7 @@ from .staging_content import StagingContentLoader
 from agent_actions.input_loading.file_reader import FileReader
 from agent_actions.llm_invocation.realtime.file_writer import FileWriter
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
+from agent_actions.utilities.source_data_utils import deduplicate_by_source_guid
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.shared.exceptions import AgentActionsException
 import json
@@ -81,8 +82,10 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
             for row in data_chunk:
                 source_guid = row.get('source_guid')
                 if source_guid:
-                    src_text = {source_guid: row}
-                    batch_service._save_task_source(src_text, file_path, base_directory, output_directory)
+                    # Use flat format instead of nested format
+                    src_text = row.copy()
+                    # source_guid already in row, therefore in copy - no need to check
+                    batch_service._save_task_source([src_text], file_path, base_directory, output_directory)
             placeholder = {'batch_job_id': local_batch_id, 'vendor_batch_id': result, 'status': 'submitted', 'agent': agent_name}
             with open(output_file_path, 'w') as f:
                 json.dump(placeholder, f)
@@ -113,14 +116,37 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
     source_path = base_path / 'source'
     output_src_path = source_path / relative_path.with_suffix('.json')
     output_src_path.parent.mkdir(parents=True, exist_ok=True)
-    if output_src_path.exists():
-        with open(output_src_path, 'r') as existing_file:
-            existing_source = json.load(existing_file)
-        new_source_guids = [list(item.keys())[0] for item in src_text if list(item.keys())[0] not in [list(existing_item.keys())[0] for existing_item in existing_source]]
-        if new_source_guids:
-            existing_source.extend([item for item in src_text if list(item.keys())[0] in new_source_guids])
-            source_file_writer = FileWriter(str(output_src_path))
-            source_file_writer.write_source(existing_source)
-    else:
-        source_file_writer = FileWriter(str(output_src_path))
-        source_file_writer.write_source(src_text)
+
+    # Use file locking for atomic read-modify-write (prevents race conditions)
+    import portalocker
+
+    file_exists = output_src_path.exists()
+    mode = 'r+' if file_exists else 'w'
+
+    with open(output_src_path, mode) as f:
+        # Acquire exclusive lock - blocks until available (cross-platform)
+        portalocker.lock(f, portalocker.LOCK_EX)
+
+        try:
+            # Read existing data if file exists
+            if file_exists:
+                f.seek(0)
+                existing_source = json.load(f)
+            else:
+                existing_source = []
+
+            # Deduplicate by source_guid using flat format
+            new_items = deduplicate_by_source_guid(existing_source, src_text)
+
+            # Write back if we have new items or creating new file
+            if new_items or not file_exists:
+                if new_items:
+                    existing_source.extend(new_items)
+
+                # Clear file and write from beginning
+                f.seek(0)
+                f.truncate()
+                json.dump(existing_source, f, indent=2)
+        finally:
+            # Unlock automatically when exiting context manager
+            pass
