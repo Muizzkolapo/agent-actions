@@ -2,11 +2,11 @@ import re
 import json
 import random
 import logging
+import os
 from collections import Counter
 from pathlib import Path
 from typing import Any, List
 logger = logging.getLogger(__name__)
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
 
 class PromptLoader:
     """
@@ -85,6 +85,9 @@ class PromptLoader:
         """
         Retrieve and generate a prompt based on the prompt name provided.
 
+        Searches for .md files anywhere within the project tree.
+        No specific directory structure required.
+
         Parameters:
             prompt_name (str): The name of the prompt to load, in the format 'filename.prompt_key'.
 
@@ -92,18 +95,28 @@ class PromptLoader:
             str: The loaded prompt.
 
         Raises:
-            ValueError: If the prompt directory, file, or prompt format is invalid.
+            ValueError: If the prompt file or prompt format is invalid.
         """
-        current_dir = Path.cwd()
-        prompt_dir = current_dir / 'prompt_store'
-        if not prompt_dir.exists():
-            raise ValueError('Prompt directory not found.')
         if '.' not in prompt_name:
             raise ValueError("Invalid prompt format. Expected 'filename.prompt_key'.")
+
         prompt_file_name, prompt_key = prompt_name.split('.', 1)
-        prompt_file_str = FileHandler.find_file_in_directory(str(prompt_dir), f'{prompt_file_name}.md')
+        target_filename = f'{prompt_file_name}.md'
+
+        # Search for the .md file anywhere in the project tree
+        # No requirement for a specific directory structure
+        # Import here to avoid circular import
+        from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+        prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
+
         if not prompt_file_str:
-            raise ValueError(f"Prompt file '{prompt_file_name}.md' not found.")
+            raise ValueError(
+                f"Prompt file '{target_filename}' not found. "
+                f"Searched recursively from {Path.cwd()}. "
+                f"Ensure the .md file exists anywhere in your project tree."
+            )
+
+        logger.debug(f"Found prompt file at: {prompt_file_str}")
         prompt_file_path = Path(prompt_file_str)
         content = prompt_file_path.read_text(encoding='utf-8')
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)

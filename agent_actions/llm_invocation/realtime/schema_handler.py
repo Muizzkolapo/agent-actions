@@ -27,7 +27,9 @@ class SchemaLoader:
     def load_schema(schema_name: str) -> dict:
         """
         Retrieve and generate a JSON schema based on the schema name provided.
-        Searches recursively through all directories for the schema file.
+
+        Searches for .yml/.yaml files anywhere within the project tree.
+        No specific directory structure required.
 
         Parameters:
             schema_name (str): The name of the schema to load.
@@ -37,27 +39,30 @@ class SchemaLoader:
         """
         try:
             current_dir = Path.cwd()
-            schema_paths = [Path(root) / file for root, _, files in os.walk(current_dir) for file in files if file in {f'{schema_name}.yml', f'{schema_name}.yaml'}]
-            if not schema_paths:
-                print(f"Schema '{schema_name}' not found.")
-            selected_path = None
-            shortest_path_length = float('inf')
-            for path in schema_paths:
-                path_parts = list(path.parts)
-                if 'schema' in path_parts:
-                    schema_index = len(path_parts) - path_parts[::-1].index('schema')
-                    if schema_index < shortest_path_length:
-                        shortest_path_length = schema_index
-                        selected_path = path
-            if not selected_path and schema_paths:
-                selected_path = schema_paths[0]
-            if not selected_path:
-                print(f"Schema '{schema_name}' not found.")
-            with selected_path.open('r', encoding='utf-8') as file:
+
+            # Try .yml first, then .yaml
+            schema_path = None
+            for extension in ['yml', 'yaml']:
+                target_filename = f'{schema_name}.{extension}'
+                schema_path_str = FileHandler.find_file_in_directory(str(current_dir), target_filename)
+                if schema_path_str:
+                    schema_path = Path(schema_path_str)
+                    break
+
+            if not schema_path:
+                raise FileNotFoundError(
+                    f"Schema file '{schema_name}.yml' or '{schema_name}.yaml' not found. "
+                    f"Searched recursively from {current_dir}. "
+                    f"Ensure the schema file exists anywhere in your project tree."
+                )
+
+            print(f"Loading schema from: {schema_path}")
+            with schema_path.open('r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
             return documents
         except Exception as e:
             print(f"Error loading schema '{schema_name}': {str(e)}")
+            raise
 
     @staticmethod
     def validate_schemas_exist(agent_name: str, directory: str) -> None:
