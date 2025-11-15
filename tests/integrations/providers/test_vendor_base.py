@@ -1,7 +1,7 @@
 """Tests for BaseVendorHandler API key validation."""
 import pytest
 import os
-from agent_actions.llm_invocation.realtime.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.shared.exceptions import ConfigurationError
 
 class TestVendorBaseAPIKeyValidation:

@@ -7,7 +7,7 @@ to the legacy _convert_batch_results_to_workflow_format implementation.
 import pytest
 from unittest.mock import patch
 from agent_actions.llm_invocation.batch.batch_service import BatchService
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.base import BatchResult
 
 
 class TestBatchProcessorParity:

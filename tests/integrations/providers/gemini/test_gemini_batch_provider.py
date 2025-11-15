@@ -10,7 +10,7 @@ Total tests for Gemini:
 """
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.base import BatchResult
 from tests.integrations.providers.base_batch_provider_tests import BaseBatchProviderTests
 
 class TestGeminiBatchProvider(BaseBatchProviderTests):
@@ -45,10 +45,10 @@ class TestGeminiBatchProvider(BaseBatchProviderTests):
         mock_client.files.upload.return_value = mock_file
         mock_client.files.download.return_value = b'{"key": "test-1", "response": {"candidates": [{"content": {"parts": [{"text": "test"}]}}]}}\n'
         with patch.dict('sys.modules', {'google': Mock(), 'google.genai': mock_genai_module, 'google.genai.types': mock_types_module}):
-            with patch('agent_actions.llm_invocation.realtime.providers.gemini.provider.GEMINI_AVAILABLE', True):
-                with patch('agent_actions.llm_invocation.realtime.providers.gemini.provider.genai', mock_genai_module):
-                    with patch('agent_actions.llm_invocation.realtime.providers.gemini.provider.types', mock_types_module):
-                        from agent_actions.llm_invocation.realtime.providers.gemini.provider import GeminiBatchProvider
+            with patch('agent_actions.llm_invocation.providers.gemini.provider.GEMINI_AVAILABLE', True):
+                with patch('agent_actions.llm_invocation.providers.gemini.provider.genai', mock_genai_module):
+                    with patch('agent_actions.llm_invocation.providers.gemini.provider.types', mock_types_module):
+                        from agent_actions.llm_invocation.providers.gemini.provider import GeminiBatchProvider
                         provider = GeminiBatchProvider(api_key='test-gemini-key')
                         provider.client = mock_client
                         yield provider

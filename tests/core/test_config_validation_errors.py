@@ -2,7 +2,7 @@
 import pytest
 import os
 from agent_actions.response_processing.action_expander import ActionExpander
-from agent_actions.llm_invocation.realtime.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.shared.exceptions import ConfigValidationError, ConfigurationError
 
 class TestConfigValidationErrorMessages:

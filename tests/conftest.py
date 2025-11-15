@@ -200,7 +200,7 @@ def mock_batch_provider():
     Returns:
         MagicMock: A mock provider configured with submit_batch, check_status, and retrieve_results
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+    from agent_actions.llm_invocation.providers.base import BatchResult
     mock_provider = MagicMock()
     mock_provider.submit_batch.return_value = 'batch_test_id_001'
     mock_provider.check_status.return_value = 'completed'
@@ -218,7 +218,7 @@ def mock_batch_provider_with_transitions():
     Returns:
         MagicMock: A mock provider with dynamic status changes
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+    from agent_actions.llm_invocation.providers.base import BatchResult
     from itertools import cycle
     mock_provider = MagicMock()
     mock_provider.submit_batch.return_value = 'batch_test_id_002'
@@ -237,7 +237,7 @@ def mock_batch_provider_with_failure():
     Returns:
         MagicMock: A mock provider configured to simulate failures
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+    from agent_actions.llm_invocation.providers.base import BatchResult
     mock_provider = MagicMock()
     mock_provider.submit_batch.return_value = 'batch_test_id_003'
     mock_provider.check_status.return_value = 'failed'
@@ -252,7 +252,7 @@ def mock_batch_results():
     Returns:
         List[BatchResult]: Sample batch results with test data
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+    from agent_actions.llm_invocation.providers.base import BatchResult
     return [BatchResult(custom_id='1', content={'target_id': '1', 'result': 'processed_1'}, success=True, metadata={'source_guid': 'input_1'}), BatchResult(custom_id='2', content={'target_id': '2', 'result': 'processed_2'}, success=True, metadata={'source_guid': 'input_2'}), BatchResult(custom_id='3', content={'target_id': '3', 'result': 'processed_3'}, success=True, metadata={'source_guid': 'input_3'})]
 
 @pytest.fixture
@@ -263,7 +263,7 @@ def sample_batch_task():
     Includes all common fields that every provider should handle correctly.
     Used for basic format_task_for_provider() testing.
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchTask
+    from agent_actions.llm_invocation.providers.base import BatchTask
     return BatchTask(custom_id='test-123', prompt='You are a helpful assistant', user_content='{"question": "What is 2+2?"}', model_config={'model_name': 'test-model', 'temperature': 0.7, 'max_tokens': 100})
 
 @pytest.fixture
@@ -274,7 +274,7 @@ def sample_batch_task_no_max_tokens():
     Tests that providers correctly handle missing max_tokens and don't
     add it as null/None to the request body.
     """
-    from agent_actions.llm_invocation.realtime.providers.base import BatchTask
+    from agent_actions.llm_invocation.providers.base import BatchTask
     return BatchTask(custom_id='test-456', prompt='You are helpful', user_content='{"test": "data"}', model_config={'model_name': 'test-model', 'temperature': 0.5})
 
 @pytest.fixture

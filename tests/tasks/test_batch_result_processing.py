@@ -23,7 +23,7 @@ import json
 from pathlib import Path
 from unittest.mock import Mock, patch
 from agent_actions.llm_invocation.batch.batch_service import BatchService
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.base import BatchResult
 
 
 class TestBatchResultProcessing:

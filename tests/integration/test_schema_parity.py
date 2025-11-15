@@ -7,7 +7,7 @@ These tests are critical - they ensure the core principle:
 import pytest
 import logging
 from unittest.mock import patch, Mock
-from agent_actions.llm_invocation.realtime.agent_builder import _prepare_schema as online_prepare_schema
+from agent_actions.llm_invocation.realtime.services import SchemaService
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 
 class TestSchemaParity:
@@ -30,11 +30,11 @@ class TestSchemaParity:
 
     def test_openai_schema_parity(self, agent_config_with_inline_schema):
         """Both modes produce identical schema for OpenAI."""
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
-            with patch('agent_actions.core.parser.schema_change.compile_unified_schema') as mock_compile:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
+            with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_construct.return_value = {'base': 'schema'}
                 mock_compile.return_value = {'name': 'test', 'schema': {'type': 'object'}}
-                online_result = online_prepare_schema(agent_config_with_inline_schema, 'openai')
+                online_result = SchemaService.prepare_schema(agent_config_with_inline_schema, 'openai')
                 batch_service = BatchService()
                 with patch.object(batch_service, 'provider') as mock_provider:
                     batch_result = batch_service._prepare_schema(agent_config_with_inline_schema, mock_provider)
@@ -44,11 +44,11 @@ class TestSchemaParity:
     def test_anthropic_schema_parity(self):
         """Both modes produce identical schema for Anthropic."""
         config = {'model_vendor': 'anthropic', 'schema': {'fields': [{'id': 'output', 'type': 'string'}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
-            with patch('agent_actions.core.parser.schema_change.compile_unified_schema') as mock_compile:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
+            with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_construct.return_value = {'base': 'schema'}
                 mock_compile.return_value = [{'name': 'test', 'input_schema': {}}]
-                online_result = online_prepare_schema(config, 'anthropic')
+                online_result = SchemaService.prepare_schema(config, 'anthropic')
                 batch_service = BatchService()
                 with patch.object(batch_service, 'provider'):
                     batch_result = batch_service._prepare_schema(config)
@@ -57,11 +57,11 @@ class TestSchemaParity:
     def test_gemini_schema_parity(self):
         """Both modes produce identical schema for Gemini."""
         config = {'model_vendor': 'gemini', 'schema': {'fields': [{'id': 'answer', 'type': 'string'}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
-            with patch('agent_actions.core.parser.schema_change.compile_unified_schema') as mock_compile:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
+            with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_construct.return_value = {'base': 'schema'}
                 mock_compile.return_value = {'name': 'test', 'schema': {}}
-                online_result = online_prepare_schema(config, 'gemini')
+                online_result = SchemaService.prepare_schema(config, 'gemini')
                 batch_service = BatchService()
                 with patch.object(batch_service, 'provider'):
                     batch_result = batch_service._prepare_schema(config)
@@ -70,7 +70,7 @@ class TestSchemaParity:
     def test_no_schema_parity(self):
         """Both modes return None when no schema provided."""
         config = {'model_vendor': 'openai'}
-        online_result = online_prepare_schema(config, 'openai')
+        online_result = SchemaService.prepare_schema(config, 'openai')
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
             batch_result = batch_service._prepare_schema(config)
@@ -81,7 +81,7 @@ class TestSchemaParity:
     def test_tool_vendor_parity(self):
         """Both modes return None for tool vendor."""
         config = {'model_vendor': 'tool', 'schema': {'fields': [{'id': 'test', 'type': 'string'}]}}
-        online_result = online_prepare_schema(config, 'tool')
+        online_result = SchemaService.prepare_schema(config, 'tool')
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
             batch_result = batch_service._prepare_schema(config)
@@ -91,14 +91,14 @@ class TestSchemaParity:
     def test_unsupported_vendor_parity_cohere(self, caplog):
         """Both modes warn and return None for cohere."""
         config = {'model_vendor': 'cohere', 'schema': {'fields': [{'id': 'test', 'type': 'string'}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
             with caplog.at_level(logging.WARNING):
-                online_result = online_prepare_schema(config, 'cohere')
+                online_result = SchemaService.prepare_schema(config, 'cohere')
         online_warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
         caplog.clear()
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
-            with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+            with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
                 with caplog.at_level(logging.WARNING):
                     batch_result = batch_service._prepare_schema(config)
         batch_warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
@@ -111,14 +111,14 @@ class TestSchemaParity:
     def test_unsupported_vendor_parity_groq(self, caplog):
         """Both modes warn and return None for groq."""
         config = {'model_vendor': 'groq', 'schema': {'fields': [{'id': 'test', 'type': 'string'}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
             with caplog.at_level(logging.WARNING):
-                online_result = online_prepare_schema(config, 'groq')
+                online_result = SchemaService.prepare_schema(config, 'groq')
         online_warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
         caplog.clear()
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
-            with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+            with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
                 with caplog.at_level(logging.WARNING):
                     batch_result = batch_service._prepare_schema(config)
         batch_warnings = [r.message for r in caplog.records if r.levelname == 'WARNING']
@@ -132,14 +132,14 @@ class TestWarningParity:
     def test_warning_message_identical(self, caplog):
         """Warning text is identical for both modes."""
         config = {'model_vendor': 'mistral', 'schema': {'fields': []}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
             with caplog.at_level(logging.WARNING):
-                online_prepare_schema(config, 'mistral')
+                SchemaService.prepare_schema(config, 'mistral')
         online_msg = caplog.records[0].message
         caplog.clear()
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
-            with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+            with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
                 with caplog.at_level(logging.WARNING):
                     batch_service._prepare_schema(config)
         batch_msg = caplog.records[0].message
@@ -148,14 +148,14 @@ class TestWarningParity:
     def test_warning_log_level_identical(self, caplog):
         """Warning log level is identical for both modes."""
         config = {'model_vendor': 'deepseek', 'schema': {'fields': []}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
             with caplog.at_level(logging.WARNING):
-                online_prepare_schema(config, 'deepseek')
+                SchemaService.prepare_schema(config, 'deepseek')
         online_level = caplog.records[0].levelname
         caplog.clear()
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
-            with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict'):
+            with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict'):
                 with caplog.at_level(logging.WARNING):
                     batch_service._prepare_schema(config)
         batch_level = caplog.records[0].levelname
@@ -165,7 +165,7 @@ class TestWarningParity:
         """Neither mode warns when no schema is provided."""
         config = {'model_vendor': 'cohere'}
         with caplog.at_level(logging.WARNING):
-            online_result = online_prepare_schema(config, 'cohere')
+            online_result = SchemaService.prepare_schema(config, 'cohere')
         online_warnings = len(caplog.records)
         caplog.clear()
         batch_service = BatchService()
@@ -181,14 +181,14 @@ class TestWarningParity:
     def test_warning_content_format(self, caplog):
         """Warning format is consistent between modes."""
         config = {'model_vendor': 'cohere', 'schema_name': 'my_schema'}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.load_schema'):
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.load_schema'):
             with caplog.at_level(logging.WARNING):
-                online_prepare_schema(config, 'cohere')
+                SchemaService.prepare_schema(config, 'cohere')
         online_warning = caplog.records[0].message
         caplog.clear()
         batch_service = BatchService()
         with patch.object(batch_service, 'provider'):
-            with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.load_schema'):
+            with patch('agent_actions.response_processing.schema_loader.SchemaLoader.load_schema'):
                 with caplog.at_level(logging.WARNING):
                     batch_service._prepare_schema(config)
         batch_warning = caplog.records[0].message
@@ -203,9 +203,9 @@ class TestSchemaCompilation:
     def test_compiled_format_openai(self):
         """Verify OpenAI compiled schema format."""
         config = {'model_vendor': 'openai', 'schema': {'fields': [{'id': 'output', 'type': 'string', 'required': True}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             mock_construct.return_value = {'fields': [{'id': 'output', 'type': 'string', 'required': True}]}
-            online_result = online_prepare_schema(config, 'openai')
+            online_result = SchemaService.prepare_schema(config, 'openai')
             batch_service = BatchService()
             with patch.object(batch_service, 'provider'):
                 batch_result = batch_service._prepare_schema(config)
@@ -216,9 +216,9 @@ class TestSchemaCompilation:
     def test_compiled_format_anthropic(self):
         """Verify Anthropic compiled schema format."""
         config = {'model_vendor': 'anthropic', 'schema': {'fields': [{'id': 'result', 'type': 'string', 'required': True}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             mock_construct.return_value = {'fields': [{'id': 'result', 'type': 'string', 'required': True}]}
-            online_result = online_prepare_schema(config, 'anthropic')
+            online_result = SchemaService.prepare_schema(config, 'anthropic')
             batch_service = BatchService()
             with patch.object(batch_service, 'provider'):
                 batch_result = batch_service._prepare_schema(config)
@@ -229,9 +229,9 @@ class TestSchemaCompilation:
     def test_compiled_format_gemini(self):
         """Verify Gemini compiled schema format."""
         config = {'model_vendor': 'gemini', 'schema': {'fields': [{'id': 'answer', 'type': 'string', 'required': True}]}}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             mock_construct.return_value = {'fields': [{'id': 'answer', 'type': 'string', 'required': True}]}
-            online_result = online_prepare_schema(config, 'gemini')
+            online_result = SchemaService.prepare_schema(config, 'gemini')
             batch_service = BatchService()
             with patch.object(batch_service, 'provider'):
                 batch_result = batch_service._prepare_schema(config)

@@ -8,7 +8,6 @@ dispatch_task() now has a simple design:
 import json
 import pytest
 from agent_actions.preprocessing.prompt_utils import PromptUtils
-from agent_actions.llm_invocation.realtime.agent_builder import _build_field_context_from_context_data
 
 class TestDispatchTaskSimpleDesign:
     """Test the simplified dispatch_task() design with no arguments."""
