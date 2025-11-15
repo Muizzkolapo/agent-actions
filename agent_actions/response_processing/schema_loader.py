@@ -1,3 +1,9 @@
+"""
+Schema loading utilities.
+
+This module provides schema loading functionality used by both batch and realtime modes.
+Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
+"""
 import os
 from pathlib import Path
 from agent_actions.llm_invocation.realtime.file_handler import FileHandler
@@ -68,11 +74,11 @@ class SchemaLoader:
     def validate_schemas_exist(agent_name: str, directory: str) -> None:
         """
         Validates that each schema file exists anywhere in the project.
-        
+
         Args:
             agent_name (str): The name of the agent.
             directory (str): The base directory to start searching from.
-        
+
         Raises:
             SingleSchemaMissingError: If one schema file is missing.
             MultipleSchemaMissingError: If multiple schema files are missing.
@@ -95,11 +101,11 @@ class SchemaLoader:
     def construct_schema_from_dict(schema_dict: dict) -> dict:
         """
         Construct a unified schema from a simple key-value dictionary.
-        
+
         Args:
-            schema_dict (dict): Simple dictionary where keys are field names 
+            schema_dict (dict): Simple dictionary where keys are field names
                                and values are data types (e.g., {"name": "string", "age": "number"})
-        
+
         Returns:
             dict: A unified schema in the standard format
         """
@@ -128,10 +134,10 @@ class SchemaLoader:
     def _parse_object_properties(properties_str: str) -> dict:
         """
         Parse object properties from string notation like "{'prop': 'type'}"
-        
+
         Args:
             properties_str (str): String representation of object properties
-            
+
         Returns:
             dict: Object schema with type and properties
         """
