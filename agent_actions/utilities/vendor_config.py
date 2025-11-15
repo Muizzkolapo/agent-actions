@@ -1,4 +1,11 @@
-"""Vendor configuration models for LLM providers."""
+"""
+Vendor configuration models for LLM providers.
+
+This module provides vendor configuration classes and enums used across the agent-actions framework
+by both batch and realtime modes, as well as response processing.
+
+Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
+"""
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List, Literal, Union
 from enum import Enum

@@ -1,4 +1,11 @@
-"""Module for staging data loading and processing."""
+"""
+Shared file and directory operations utilities.
+
+This module provides file handling utilities used across the agent-actions framework
+by both batch and realtime modes, as well as CLI, orchestration, and preprocessing.
+
+Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
+"""
 import logging
 import os
 from pathlib import Path

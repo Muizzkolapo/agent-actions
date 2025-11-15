@@ -47,7 +47,7 @@ class ActionExpander:
         """
         if not vendor:
             return
-        from agent_actions.llm_invocation.realtime.vendor_config import VendorType
+        from agent_actions.utilities.vendor_config import VendorType
         from agent_actions.shared.exceptions import ConfigValidationError
         valid_vendors = [v.value for v in VendorType]
         if vendor not in valid_vendors:

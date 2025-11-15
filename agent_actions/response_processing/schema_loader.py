@@ -6,7 +6,7 @@ Moved from llm_invocation/realtime/ to response_processing/ to reflect its share
 """
 import os
 from pathlib import Path
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+from agent_actions.utilities.file_handler import FileHandler
 import yaml
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 
@@ -62,7 +62,6 @@ class SchemaLoader:
                     f"Ensure the schema file exists anywhere in your project tree."
                 )
 
-            print(f"Loading schema from: {schema_path}")
             with schema_path.open('r', encoding='utf-8') as file:
                 documents = yaml.safe_load(file)
             return documents

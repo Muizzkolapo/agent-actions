@@ -1,7 +1,7 @@
 """Module for handling output data saving operations."""
 import json
 from pathlib import Path
-from agent_actions.llm_invocation.realtime.file_writer import FileWriter
+from agent_actions.utilities.file_writer import FileWriter
 from agent_actions.shared.exceptions import AgentActionsException
 
 class OutputHandler:
