@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 import asyncio
 from agent_actions.preprocessing.staging_loader import generate_staging
-from agent_actions.postprocessing.target_generator import TargetGenerator
+from agent_actions.orchestration.target_generator import TargetGenerator
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 class AgentStrategy(ABC):
