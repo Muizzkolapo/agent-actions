@@ -10,8 +10,8 @@ Total tests for OpenAI:
 """
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from agent_actions.llm_invocation.realtime.providers.openai.provider import OpenAIBatchProvider
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.openai.provider import OpenAIBatchProvider
+from agent_actions.llm_invocation.providers.base import BatchResult
 from tests.integrations.providers.base_batch_provider_tests import BaseBatchProviderTests
 
 class TestOpenAIBatchProvider(BaseBatchProviderTests):

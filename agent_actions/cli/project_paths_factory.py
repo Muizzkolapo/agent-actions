@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Tuple
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+from agent_actions.utilities.file_handler import FileHandler
 from agent_actions.shared.exceptions import DirectoryError, ValidationError, FileLoadError
 from agent_actions.validation.path_validator import PathValidator
 from agent_actions.state_management.path_manager import PathManager, PathType

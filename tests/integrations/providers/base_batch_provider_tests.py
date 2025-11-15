@@ -39,7 +39,7 @@ import pytest
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Dict, Any
-from agent_actions.llm_invocation.realtime.providers.base import BatchProvider, BatchTask, BatchResult
+from agent_actions.llm_invocation.providers.base import BatchProvider, BatchTask, BatchResult
 
 class BaseBatchProviderTests(ABC):
     """

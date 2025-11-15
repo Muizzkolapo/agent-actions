@@ -12,7 +12,7 @@ A mirror of OpenAIHandler that supports:
 import json
 import os
 from ollama import Client
-from agent_actions.llm_invocation.realtime.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 class OllamaHandler(BaseVendorHandler):

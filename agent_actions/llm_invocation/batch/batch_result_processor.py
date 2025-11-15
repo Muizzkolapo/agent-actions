@@ -17,7 +17,7 @@ from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
 from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.base import BatchResult
 
 logger = logging.getLogger(__name__)
 

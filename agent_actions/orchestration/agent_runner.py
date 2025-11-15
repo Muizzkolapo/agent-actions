@@ -1,7 +1,7 @@
 """Module for managing and executing agents with different strategies in a workflow."""
 from pathlib import Path
 from typing import Tuple, Dict, Optional
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+from agent_actions.utilities.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import InitialStrategy, TerminalStrategy, IntermediateStrategy, AgentStrategy
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 

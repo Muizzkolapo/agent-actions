@@ -9,7 +9,7 @@ from unittest.mock import patch, Mock
 from agent_actions.llm_invocation.batch.batch_result_processor import (
     BatchResultProcessor, BatchProcessingContext
 )
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.base import BatchResult
 
 
 class TestBatchResultProcessor:

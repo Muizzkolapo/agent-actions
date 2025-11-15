@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional, Union
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
 from agent_actions.preprocessing.string_transformer import StringProcessor
-from agent_actions.llm_invocation.realtime.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 class OpenAIHandler(BaseVendorHandler):

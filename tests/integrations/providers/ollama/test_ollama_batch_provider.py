@@ -10,8 +10,8 @@ Total tests for Ollama:
 = 13 total tests
 """
 import pytest
-from agent_actions.llm_invocation.realtime.providers.ollama.provider import OllamaLocalBatchProvider
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.ollama.provider import OllamaLocalBatchProvider
+from agent_actions.llm_invocation.providers.base import BatchResult
 from tests.integrations.providers.base_batch_provider_tests import BaseBatchProviderTests
 
 class TestOllamaBatchProvider(BaseBatchProviderTests):

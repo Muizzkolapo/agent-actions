@@ -7,8 +7,8 @@ Extracted from BatchService for better separation of concerns.
 
 from typing import Dict, Optional, Any
 
-from agent_actions.llm_invocation.realtime.providers.base import BatchProvider
-from agent_actions.llm_invocation.realtime.providers.factory import BatchProviderFactory
+from agent_actions.llm_invocation.providers.base import BatchProvider
+from agent_actions.llm_invocation.providers.factory import BatchProviderFactory
 from agent_actions.shared.exceptions import ConfigurationError, ConfigValidationError
 
 

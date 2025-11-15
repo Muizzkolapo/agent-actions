@@ -1,7 +1,7 @@
 import json
 import shutil
 from typing import Callable, Optional, Dict, Any
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+from agent_actions.utilities.file_handler import FileHandler
 from pathlib import Path
 from agent_actions.shared.exceptions import AgentNotFoundError
 import logging

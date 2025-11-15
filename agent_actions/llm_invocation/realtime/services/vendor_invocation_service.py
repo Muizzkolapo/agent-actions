@@ -1,15 +1,15 @@
 """Vendor invocation service for agent builder."""
 
 from typing import Dict, Any, Optional, List, Union
-from agent_actions.llm_invocation.realtime.providers.openai.vendor import OpenAIHandler
-from agent_actions.llm_invocation.realtime.providers.ollama.vendor import OllamaHandler
-from agent_actions.llm_invocation.realtime.providers.gemini.vendor import GeminiHandler
-from agent_actions.llm_invocation.realtime.providers.cohere.vendor import CohereHandler
-from agent_actions.llm_invocation.realtime.providers.mistral.vendor import MistralHandler
-from agent_actions.llm_invocation.realtime.providers.anthropic.vendor import ClaudeHandler
-from agent_actions.llm_invocation.realtime.providers.groq.vendor import GroqLlama3Handler
-from agent_actions.llm_invocation.realtime.providers.deepseek.vendor import DeepSeekHandler
-from agent_actions.llm_invocation.realtime.providers.tools.vendor import ToolHandler
+from agent_actions.llm_invocation.providers.openai.vendor import OpenAIHandler
+from agent_actions.llm_invocation.providers.ollama.vendor import OllamaHandler
+from agent_actions.llm_invocation.providers.gemini.vendor import GeminiHandler
+from agent_actions.llm_invocation.providers.cohere.vendor import CohereHandler
+from agent_actions.llm_invocation.providers.mistral.vendor import MistralHandler
+from agent_actions.llm_invocation.providers.anthropic.vendor import ClaudeHandler
+from agent_actions.llm_invocation.providers.groq.vendor import GroqLlama3Handler
+from agent_actions.llm_invocation.providers.deepseek.vendor import DeepSeekHandler
+from agent_actions.llm_invocation.providers.tools.vendor import ToolHandler
 
 
 # Vendor handler registry

@@ -177,7 +177,7 @@ def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optiona
         Logs a WARNING if schema is requested but vendor doesn't support it
     """
     from agent_actions.utilities.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
-    from agent_actions.llm_invocation.realtime.schema_handler import SchemaLoader
+    from agent_actions.response_processing.schema_loader import SchemaLoader
     from agent_actions.shared.exceptions import ConfigValidationError
     if vendor == 'tool':
         return None

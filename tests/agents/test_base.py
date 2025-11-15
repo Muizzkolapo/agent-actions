@@ -148,9 +148,9 @@ class TestAgentBuilder:
     def test_prepare_schema_success(self):
         """Test _prepare_schema with valid schema configuration."""
         config = {'schema': {'type': 'object', 'properties': {'field': {'type': 'string'}}}, 'schema_name': 'test_schema'}
-        with patch('agent_actions.agents.handlers.schema_handler.SchemaLoader.construct_schema_from_dict') as mock_construct:
+        with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             mock_construct.return_value = {'base': 'schema'}
-            with patch('agent_actions.core.parser.schema_change.compile_unified_schema') as mock_compile:
+            with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_compile.return_value = {'compiled': 'schema'}
                 result = _prepare_schema(config, 'openai')
                 assert result == {'compiled': 'schema'}

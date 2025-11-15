@@ -1,7 +1,7 @@
 """Module for enriching prompts with few-shot samples."""
 import json
 import logging
-from agent_actions.llm_invocation.realtime.file_handler import FileHandler
+from agent_actions.utilities.file_handler import FileHandler
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 logger = logging.getLogger(__name__)
 

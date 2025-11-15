@@ -10,8 +10,8 @@ Total tests for Anthropic:
 """
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.llm_invocation.realtime.providers.anthropic.provider import AnthropicBatchProvider
-from agent_actions.llm_invocation.realtime.providers.base import BatchResult
+from agent_actions.llm_invocation.providers.anthropic.provider import AnthropicBatchProvider
+from agent_actions.llm_invocation.providers.base import BatchResult
 from tests.integrations.providers.base_batch_provider_tests import BaseBatchProviderTests
 
 class TestAnthropicBatchProvider(BaseBatchProviderTests):

@@ -4,7 +4,7 @@ from agent_actions.preprocessing.string_transformer import StringProcessor
 from textwrap import dedent
 from agent_actions.shared.exceptions import VendorAPIError
 from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.llm_invocation.realtime.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 class GroqLlama3Handler(BaseVendorHandler):
