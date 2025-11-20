@@ -198,15 +198,15 @@ class ContextScopeProcessor:
             # Add to llm_context (for LLM visibility)
             llm_context.update(static_data)
 
-            # Add under 'static' namespace in prompt_context (for field reference replacement)
-            # This allows references like {static.exam_syllabus} in prompts
-            if 'static' in prompt_context:
+            # Add under 'seed' namespace in prompt_context (for field reference replacement)
+            # This allows references like {seed.exam_syllabus} in prompts
+            if 'seed' in prompt_context:
                 logger.warning(
-                    "Static data namespace 'static' conflicts with existing action. "
-                    "Static data will overwrite it."
+                    "Seed data namespace 'seed' conflicts with existing action. "
+                    "Seed data will overwrite it."
                 )
-            prompt_context['static'] = static_data
-            logger.info(f"[STATIC_DATA] Added to prompt_context under 'static' namespace")
+            prompt_context['seed'] = static_data
+            logger.info(f"[SEED_DATA] Added to prompt_context under 'seed' namespace")
 
         # Process DROP: Remove from prompt_context (security)
         for field_ref in context_scope.get('drop', []):

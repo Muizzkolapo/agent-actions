@@ -92,6 +92,15 @@ class BatchTaskPreparator:
         Raises:
             ConfigurationError: If configuration is invalid
         """
+        # 0. Validate agent_config is not None
+        if agent_config is None:
+            raise ConfigurationError(
+                "agent_config is None in batch task preparation. "
+                "This usually means the agent is not defined in the workflow configuration or "
+                "the configuration failed to load properly. Please check your workflow YAML file.",
+                context={'batch_name': batch_name, 'output_directory': output_directory}
+            )
+
         # 1. Validate configuration
         self._validate_config(agent_config, provider)
 

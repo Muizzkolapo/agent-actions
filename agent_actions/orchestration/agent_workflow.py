@@ -168,6 +168,9 @@ class AgentWorkflow:
 
         # Add idx and workflow_config_path fields to each agent config
         for agent_name, agent_config in self.agent_configs.items():
+            # Skip None configs (defensive check for malformed config dictionaries)
+            if agent_config is None:
+                continue
             if agent_name in self.agent_indices:
                 agent_config['idx'] = self.agent_indices[agent_name]
             # Add workflow config path for static data loading

@@ -77,6 +77,63 @@ class ActionExpander:
             raise ConfigValidationError(config_key=', '.join(missing_fields), reason=f'Required configuration fields are missing after hierarchy resolution', context={'action_name': action_name, 'missing_fields': missing_fields, 'missing_display': missing_display, 'operation': 'expand_actions_to_agents', 'hint': 'Add missing fields to agent_actions.yml (project-level), workflow defaults, or action config'})
 
     @staticmethod
+    def _deep_merge_context_scope(
+        defaults_scope: Optional[Dict[str, Any]],
+        action_scope: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Deep merge context_scope directives from defaults and action levels.
+
+        Action-level directives are merged with (not replace) defaults directives.
+        This allows actions to define drop/observe while inheriting seed_data from defaults.
+
+        Args:
+            defaults_scope: context_scope from defaults (may be None)
+            action_scope: context_scope from action config (may be None)
+
+        Returns:
+            Merged context_scope dict
+
+        Examples:
+            >>> defaults = {'seed_data': {'exam': 'file.json'}}
+            >>> action = {'drop': ['source.api_key']}
+            >>> _deep_merge_context_scope(defaults, action)
+            {'seed_data': {'exam': 'file.json'}, 'drop': ['source.api_key']}
+
+            >>> defaults = {'observe': ['agent1.field1']}
+            >>> action = {'observe': ['agent2.field2'], 'drop': ['source.id']}
+            >>> _deep_merge_context_scope(defaults, action)
+            {'observe': ['agent1.field1', 'agent2.field2'], 'drop': ['source.id']}
+        """
+        if not defaults_scope:
+            return action_scope or {}
+        if not action_scope:
+            return defaults_scope or {}
+
+        # Start with defaults
+        merged = {**defaults_scope}
+
+        # Merge action-level directives
+        for key, value in action_scope.items():
+            if key in merged:
+                # Both defaults and action have this directive
+                if isinstance(merged[key], dict) and isinstance(value, dict):
+                    # Deep merge for dict directives (e.g., seed_data)
+                    merged[key] = {**merged[key], **value}
+                elif isinstance(merged[key], list) and isinstance(value, list):
+                    # Combine lists and preserve order while removing duplicates
+                    # Action values come after defaults values
+                    merged[key] = list(dict.fromkeys(merged[key] + value))
+                else:
+                    # For scalar values, action overrides defaults
+                    merged[key] = value
+            else:
+                # New directive from action
+                merged[key] = value
+
+        return merged
+
+    @staticmethod
     def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer, is_operational: bool=True) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
@@ -150,9 +207,14 @@ class ActionExpander:
             agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
         current_granularity = agent.get('granularity', 'Record')
         # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
-        context_scope = action.get('context_scope')
-        if context_scope:
-            agent['context_scope'] = context_scope
+        # Deep merge: action directives merge with defaults (not replace)
+        context_scope_defaults = defaults.get('context_scope')
+        context_scope_action = action.get('context_scope')
+        if context_scope_defaults or context_scope_action:
+            agent['context_scope'] = ActionExpander._deep_merge_context_scope(
+                context_scope_defaults,
+                context_scope_action
+            )
 
         agent['dependencies'] = []
         chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
