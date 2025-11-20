@@ -3,15 +3,19 @@
 This module provides utilities for processing context_scope configuration directives
 that control how upstream action fields flow through the current action.
 
-Supports three directives:
+Supports four directives:
+- static_data: Load external reference files, available in both prompt and LLM context
 - observe: Fields sent to LLM context only (not in prompt, not in output)
 - drop: Fields blocked from LLM entirely (security/privacy)
 - passthrough: Fields merged to output only (LLM never sees them)
 """
 
 import json
+import logging
 from typing import Dict, List, Tuple, Any, Optional
 from copy import deepcopy
+
+logger = logging.getLogger(__name__)
 
 
 class ContextScopeProcessor:
@@ -131,12 +135,14 @@ class ContextScopeProcessor:
     @staticmethod
     def apply_context_scope(
         field_context: Dict,
-        context_scope: Dict
+        context_scope: Dict,
+        static_data: Optional[Dict] = None
     ) -> Tuple[Dict, Dict, Dict]:
         """
         Apply context_scope rules to split field_context into 3 streams.
 
         This is the core method that implements the context_scope feature by:
+        0. Processing static_data: Merge into prompt_context and llm_context
         1. Processing drop: Removes fields from prompt_context
         2. Processing observe: Extracts to llm_context, removes from prompt_context
         3. Processing passthrough: Extracts to passthrough_fields, removes from prompt_context
@@ -146,15 +152,18 @@ class ContextScopeProcessor:
                           Structure: {action_name: {field: value, ...}, ...}
             context_scope: Context scope configuration with directives
                           Structure: {
+                              'static_data': {'field_name': '$file:path', ...},
                               'observe': ['action.field', ...],
                               'drop': ['action.field', ...],
                               'passthrough': ['action.field', ...]
                           }
+            static_data: Optional pre-loaded static data from files
+                        Structure: {field_name: loaded_value, ...}
 
         Returns:
             Tuple of (prompt_context, llm_context, passthrough_fields):
-            - prompt_context: Field context for {action.field} rendering (dropped fields removed)
-            - llm_context: Fields for LLM additional context (flat dict)
+            - prompt_context: Field context for {field_name} rendering (includes static data)
+            - llm_context: Fields for LLM additional context (includes static data)
             - passthrough_fields: Fields to merge into output (flat dict)
 
         Examples:
@@ -163,21 +172,41 @@ class ContextScopeProcessor:
             ...     'extractor': {'facts': [...], 'id': '123', 'meta': {...}}
             ... }
             >>> context_scope = {
+            ...     'static_data': {'syllabus': '$file:syllabus.json'},
             ...     'observe': ['extractor.meta'],
             ...     'drop': ['source.api_key'],
             ...     'passthrough': ['extractor.id']
             ... }
+            >>> static_data = {'syllabus': {'content': '...'}}
             >>> prompt_ctx, llm_ctx, passthrough = apply_context_scope(
-            ...     field_context, context_scope
+            ...     field_context, context_scope, static_data
             ... )
-            >>> # prompt_ctx: {source: {text: 'data'}, extractor: {facts: [...]}}
-            >>> # llm_ctx: {meta: {...}}
+            >>> # prompt_ctx: {source: {text: 'data'}, extractor: {facts: [...]}, syllabus: {...}}
+            >>> # llm_ctx: {syllabus: {...}, meta: {...}}
             >>> # passthrough: {id: '123'}
         """
         # Deep copy to avoid mutating original field_context
         prompt_context = deepcopy(field_context)
         llm_context = {}
         passthrough_fields = {}
+
+        # Process STATIC_DATA: Add to both prompt_context and llm_context
+        if static_data:
+            logger.info(f"[STATIC_DATA] Merging {len(static_data)} static data fields into context")
+            logger.info(f"[STATIC_DATA] Fields: {list(static_data.keys())}")
+
+            # Add to llm_context (for LLM visibility)
+            llm_context.update(static_data)
+
+            # Add under 'static' namespace in prompt_context (for field reference replacement)
+            # This allows references like {static.exam_syllabus} in prompts
+            if 'static' in prompt_context:
+                logger.warning(
+                    "Static data namespace 'static' conflicts with existing action. "
+                    "Static data will overwrite it."
+                )
+            prompt_context['static'] = static_data
+            logger.info(f"[STATIC_DATA] Added to prompt_context under 'static' namespace")
 
         # Process DROP: Remove from prompt_context (security)
         for field_ref in context_scope.get('drop', []):

@@ -5,8 +5,6 @@ from agent_actions.shared.exceptions import ProcessingError
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.preprocessing.pp_sample_enricher import SampleEnricher
-from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.pp_response_transformer import ResponseTransformer
 from agent_actions.preprocessing.pp_context_preprocessor import ContextPreprocessor
 from .source_path_manager import SourcePathManager
@@ -32,12 +30,31 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             tuple: Transformed response and source text.
         """
         try:
-            raw_prompt = PromptFormatter.get_raw_prompt(self.agent_config)
-            source_content = SourcePathManager.load_source_content(source_path, context_data) if source_path else None
-            if not formatted_prompt:
-                formatted_prompt = PromptFormatter.format_prompt(raw_prompt, source_content, context_data)
-            formatted_prompt = SampleEnricher.append_few_shot_samples(formatted_prompt, self.agent_config, self.agent_name)
+            # Extract GUID and content first
             source_guid, enriched_data = ContextPreprocessor.extract_guid_and_content(context_data)
+
+            # Load source content if path provided
+            # For first agent (staging), source_content should be the enriched_data itself
+            if source_path:
+                source_content = SourcePathManager.load_source_content(source_path, context_data)
+            else:
+                # For staging processor, enriched_data IS the source content
+                source_content = enriched_data
+
+            # Use PromptPreparationService for consistent prompt preparation (Issue #490)
+            # This ensures static data loading, context_scope, and field references work correctly
+            if not formatted_prompt:
+                from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+
+                prep_result = PromptPreparationService.prepare_prompt_with_context(
+                    agent_config=self.agent_config,
+                    agent_name=self.agent_name,
+                    contents={},  # Empty for first agent (no previous outputs)
+                    mode='realtime',
+                    source_content=source_content  # This becomes {source.*} references
+                )
+                formatted_prompt = prep_result.formatted_prompt
+
             response, executed = run_dynamic_agent(self.agent_config, self.agent_name, enriched_data, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'))
             if not source_guid:
                 source_guid = IDGenerator.generate_deterministic_source_guid(enriched_data or context_data)

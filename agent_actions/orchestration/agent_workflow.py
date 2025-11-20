@@ -166,10 +166,12 @@ class AgentWorkflow:
         self.agent_indices = {agent: i for i, agent in enumerate(self.execution_order)}
         self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
 
-        # Add idx field to each agent config
+        # Add idx and workflow_config_path fields to each agent config
         for agent_name, agent_config in self.agent_configs.items():
             if agent_name in self.agent_indices:
                 agent_config['idx'] = self.agent_indices[agent_name]
+            # Add workflow config path for static data loading
+            agent_config['workflow_config_path'] = self.constructor_path
 
         self.child_pipeline = self.config_manager.child_pipeline
 
