@@ -30,7 +30,16 @@ class TargetGenerator:
 
         Raises:
             DependencyError: If processor_factory is not provided
+            ConfigurationError: If agent_config is None or invalid
         """
+        if agent_config is None:
+            raise ConfigurationError(
+                f"agent_config is None for agent '{agent_name}'. "
+                f"This usually means the agent is not defined in the workflow configuration or "
+                f"the configuration failed to load properly. Please check your workflow YAML file.",
+                context={'agent_name': agent_name, 'idx': idx}
+            )
+
         self.agent_config = agent_config
         self.agent_name = agent_name
         self.idx = idx
@@ -71,7 +80,7 @@ class TargetGenerator:
             # Build agent_indices from agent_configs if available
             agent_indices = None
             if agent_configs:
-                agent_indices = {name: config.get('idx', 999) for name, config in agent_configs.items() if 'idx' in config}
+                agent_indices = {name: config.get('idx', 999) for name, config in agent_configs.items() if config is not None and 'idx' in config}
 
             batch_service = BatchService(
                 agent_indices=agent_indices,
@@ -131,7 +140,7 @@ class TargetGenerator:
             # Build agent_indices from agent_configs if available
             agent_indices = None
             if self.agent_configs:
-                agent_indices = {name: config.get('idx', 999) for name, config in self.agent_configs.items() if 'idx' in config}
+                agent_indices = {name: config.get('idx', 999) for name, config in self.agent_configs.items() if config is not None and 'idx' in config}
 
             batch_service = BatchService(
                 agent_indices=agent_indices,

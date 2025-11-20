@@ -71,8 +71,22 @@ def create_dynamic_agent(
         )
 
     # Standard (non-interceptor) agent execution
-    # Prepare prompt
-    prompt_config_base = PromptService.prepare_prompt(agent_config, formatted_prompt)
+    # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
+    # before calling create_dynamic_agent(). This ensures:
+    # - Static data loading (context_scope.static_data)
+    # - Field reference replacement ({action.field}, {static.field})
+    # - Context scope transformations (observe/drop/passthrough)
+    # - Few-shot sample injection
+    # - Consistent behavior across batch and realtime modes
+    if formatted_prompt is None:
+        raise ValueError(
+            "formatted_prompt is required. "
+            "Please use PromptPreparationService.prepare_prompt_with_context() "
+            "to prepare the prompt before calling create_dynamic_agent(). "
+            "See agent_actions/prompt_generation/data_generator.py for an example."
+        )
+
+    prompt_config_base = formatted_prompt
 
     # Setup tools_path
     if not tools_path:
@@ -90,18 +104,6 @@ def create_dynamic_agent(
         original_context,
         is_tool
     )
-
-    # Process field references if prompt wasn't pre-formatted
-    if formatted_prompt is None:
-        field_context = ContextService.build_field_context(
-            context_data_str,
-            agent_config
-        )
-        if field_context:
-            prompt_config_base = PromptUtils.replace_field_references(
-                prompt_config_base,
-                field_context
-            )
 
     # Prepare tool context for injection
     tool_context_json = ContextService.prepare_tool_context(

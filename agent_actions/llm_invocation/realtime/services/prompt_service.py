@@ -15,8 +15,12 @@ class PromptService:
         """
         Return an actual prompt string.
 
-        Either returns the pre-formatted prompt or loads the prompt from disk
-        using the unified formatter.
+        **DEPRECATED**: This method is deprecated and should not be used directly.
+        Use PromptPreparationService.prepare_prompt_with_context() instead to ensure
+        consistent prompt preparation with static data loading, context_scope transformations,
+        and field reference replacement.
+
+        See: agent_actions.prompt_generation.prompt_preparation_service.PromptPreparationService
 
         Args:
             agent_config: Agent configuration containing prompt settings
@@ -25,6 +29,14 @@ class PromptService:
         Returns:
             Prepared prompt string
         """
+        import warnings
+        warnings.warn(
+            "PromptService.prepare_prompt() is deprecated. "
+            "Use PromptPreparationService.prepare_prompt_with_context() instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+
         if formatted_prompt is not None:
             return formatted_prompt
 

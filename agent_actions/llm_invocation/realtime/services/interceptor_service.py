@@ -149,12 +149,6 @@ class InterceptorService:
             # Get current prompt from execution context
             current_prompt = execution_context.get('prompt')
 
-            # Prepare prompt
-            prompt_config_base = PromptService.prepare_prompt(
-                agent_config,
-                current_prompt
-            )
-
             # Setup tools_path
             if not tools_path:
                 tools_path = agent_config.get('tools', {}).get('path')
@@ -172,17 +166,16 @@ class InterceptorService:
                 is_tool
             )
 
-            # Process field references if prompt wasn't pre-formatted
+            # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
+            # The fallback field reference replacement was removed to enforce single point of change.
+            # All callers must use PromptPreparationService.prepare_prompt_with_context() first.
             if formatted_prompt is None:
-                field_context = ContextService.build_field_context(
-                    context_data_str,
-                    agent_config
+                raise ValueError(
+                    "formatted_prompt is required. "
+                    "Please use PromptPreparationService.prepare_prompt_with_context() "
+                    "to prepare the prompt before calling execute_with_interceptors(). "
+                    "See agent_actions/prompt_generation/data_generator.py for an example."
                 )
-                if field_context:
-                    prompt_config_base = PromptUtils.replace_field_references(
-                        prompt_config_base,
-                        field_context
-                    )
 
             # Prepare tool context for injection
             tool_context_json = ContextService.prepare_tool_context(
@@ -193,7 +186,7 @@ class InterceptorService:
             # Inject tool outputs into prompt
             prompt_config, captured_results = (
                 PromptUtils.inject_function_outputs_into_prompt(
-                    prompt_config_base,
+                    current_prompt,
                     tools_path,
                     tool_context_json,
                     agent_config=agent_config

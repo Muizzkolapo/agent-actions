@@ -93,6 +93,7 @@ task = {
 
 import json
 import logging
+from pathlib import Path
 from typing import Dict, Any, Optional, Literal
 from dataclasses import dataclass
 
@@ -101,6 +102,7 @@ from agent_actions.preprocessing.prompt_utils import PromptUtils
 from agent_actions.preprocessing.sample_enricher import SampleEnricher
 from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
 from agent_actions.utilities.llm_context_builder import LLMContextBuilder
+from agent_actions.utilities.static_data_loader import StaticDataLoader, StaticDataLoadError
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +212,13 @@ class PromptPreparationService:
             ...     tools_path='/path/to/tools'
             ... )
         """
+        # Validate required parameters
+        if agent_config is None:
+            raise ValueError(
+                "agent_config is required and cannot be None. "
+                "Ensure agent configuration is properly loaded before calling prepare_prompt_with_context()."
+            )
+
         logger.info(f"Preparing prompt for agent '{agent_name}' in {mode} mode")
 
         # Initialize defaults
@@ -235,15 +244,58 @@ class PromptPreparationService:
         )
         logger.debug(f"Built field context with {len(field_context)} top-level keys")
 
-        # Step 3: Apply context_scope transformations (observe/drop/passthrough)
+        # Step 2.5: Load seed data files if configured
         context_scope = agent_config.get('context_scope', {})
+        static_data = {}
+
+        if context_scope and context_scope.get('seed_data'):
+            try:
+                logger.info(f"[SEED_DATA_LOAD] Starting seed data loading...")
+                # Determine seed_data directory from workflow config path
+                static_data_dir = PromptPreparationService._determine_static_data_dir(
+                    agent_config.get('workflow_config_path')
+                )
+                logger.info(f"[SEED_DATA_LOAD] Seed data directory: {static_data_dir}")
+
+                # Load seed data
+                static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
+                static_data = static_data_loader.load_static_data(
+                    context_scope.get('seed_data', {})
+                )
+
+                logger.info(
+                    f"[SEED_DATA_LOAD] Loaded {len(static_data)} seed data files: "
+                    f"{list(static_data.keys())}"
+                )
+                logger.info(f"[SEED_DATA_LOAD] Seed data keys: {list(static_data.keys())}")
+            except StaticDataLoadError as e:
+                logger.error(f"Failed to load static data: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error loading static data: {e}")
+                raise StaticDataLoadError(
+                    f"Failed to load static data: {str(e)}",
+                    context={
+                        'agent_name': agent_name,
+                        'error': str(e),
+                        'error_type': 'unexpected_static_data_error'
+                    },
+                    cause=e
+                )
+
+        # Step 3: Apply context_scope transformations (observe/drop/passthrough)
         if context_scope:
             prompt_context, llm_additional_context, passthrough_fields = \
-                ContextScopeProcessor.apply_context_scope(field_context, context_scope)
+                ContextScopeProcessor.apply_context_scope(
+                    field_context,
+                    context_scope,
+                    static_data=static_data  # Pass static data to processor
+                )
             logger.debug(
                 f"Applied context_scope: "
                 f"observe={len(llm_additional_context)}, "
-                f"passthrough={len(passthrough_fields)}"
+                f"passthrough={len(passthrough_fields)}, "
+                f"static_data={len(static_data)}"
             )
         else:
             # No context_scope: use field_context as-is for backward compatibility
@@ -357,6 +409,63 @@ class PromptPreparationService:
             return result if isinstance(result, dict) else {}
         else:
             raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
+
+    @staticmethod
+    def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:
+        """
+        Determine seed_data/ directory for loading static data files.
+
+        Args:
+            workflow_config_path: Path to workflow config file (from agent_config['workflow_config_path'])
+
+        Returns:
+            Path to seed_data/ directory
+
+        Raises:
+            StaticDataLoadError: If seed_data/ folder doesn't exist
+        """
+        # Determine workflow root directory
+        if not workflow_config_path:
+            base_dir = Path.cwd()
+        else:
+            file_path_obj = Path(workflow_config_path).resolve()
+
+            # Traverse up to find the directory containing agent_config/
+            # This ensures we're at workflow root regardless of nesting
+            current = file_path_obj.parent
+            while current != current.parent:  # Stop at filesystem root
+                if (current / 'agent_config').exists():
+                    base_dir = current
+                    break
+                # Also check if current directory name is 'agent_config'
+                if current.name == 'agent_config' and current.parent != current:
+                    base_dir = current.parent
+                    break
+                current = current.parent
+            else:
+                # Fallback: use parent directory of config file
+                base_dir = file_path_obj.parent
+
+        logger.debug(f"Determined workflow base directory: {base_dir}")
+
+        # Check for seed_data/ folder at workflow root
+        seed_data_dir = base_dir / 'seed_data'
+        if seed_data_dir.exists() and seed_data_dir.is_dir():
+            logger.debug(f"Found seed_data/ folder: {seed_data_dir}")
+            return seed_data_dir
+
+        # Not found - raise error
+        logger.error(f"Seed data directory not found. Checked: {seed_data_dir}")
+        raise StaticDataLoadError(
+            f"Seed data directory not found. Create '{seed_data_dir}' folder "
+            f"at workflow root (same level as agent_config/, schema/, prompt_store/) "
+            f"to store static reference data files.",
+            context={
+                'workflow_dir': str(base_dir),
+                'checked_path': str(seed_data_dir),
+                'error_type': 'missing_seed_data_directory'
+            }
+        )
 
 
 # Global instance for convenience (optional - service is stateless)
