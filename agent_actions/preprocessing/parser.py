@@ -238,8 +238,12 @@ class WhereClauseParser:
             # Map operator name to enum
             try:
                 operator_enum = ComparisonOperator(self.registry.get_operator_info(operator_name).symbol)
-            except (ValueError, AttributeError):
+            except (ValueError, AttributeError) as e:
                 # Handle special cases or custom operators
+                logger.warning(
+                    f"Failed to map operator '{operator_name}' from registry, using fallback mapping: {e}",
+                    extra={'operator_name': operator_name}
+                )
                 operator_enum = self._map_operator_name(operator_name)
             
             if i + 1 < len(tokens[0]):
@@ -376,7 +380,7 @@ class WhereClauseParser:
                 )
             )
         except Exception as e:
-            logger.error(f"Unexpected error parsing WHERE clause: {e}")
+            logger.error(f"Unexpected error parsing WHERE clause: {e}", exc_info=True)
             return ParseResult(
                 success=False,
                 error=ParseError(

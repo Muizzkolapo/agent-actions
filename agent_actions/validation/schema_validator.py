@@ -54,6 +54,15 @@ class SchemaValidator(BaseValidator):
             context_msg = f" (at path: '{error_path}')" if e.path else ''
             self.add_error(f'{display_name} (file: {file_path.name}) is not a valid JSON Schema: {e.message}{context_msg}.')
         except Exception as e:
+            logger.error(
+                f'Unexpected error during meta-schema validation for {display_name}',
+                exc_info=True,
+                extra={
+                    'file_path': str(file_path),
+                    'schema_name': schema_name,
+                    'agent_name': agent_name
+                }
+            )
             self.add_error(f'Unexpected error during meta-schema validation for {display_name} (file: {file_path.name}): {e}')
         common_issues = self._check_common_schema_issues_static(schema_data, schema_name)
         for issue in common_issues:
