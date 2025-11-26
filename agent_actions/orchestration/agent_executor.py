@@ -6,10 +6,13 @@ Extracted from agent_workflow.py to reduce run() method complexity.
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class AgentExecutionResult:
@@ -329,6 +332,19 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
+            logger.error(
+                "Agent execution failed",
+                extra={
+                    'operation': 'execute_agent_run',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'is_last_agent': is_last_agent,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self.state_manager.update_status(agent_name, 'failed')
 
             return AgentExecutionResult(
@@ -341,7 +357,17 @@ class AgentExecutor:
         finally:
             # Restore original setup
             if original_setup:
-                self.agent_runner.setup_directories = original_setup
+                try:
+                    self.agent_runner.setup_directories = original_setup
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to restore original setup_directories",
+                        extra={
+                            'operation': 'agent_cleanup',
+                            'agent_name': agent_name,
+                            'error': str(cleanup_error)
+                        }
+                    )
 
     async def _execute_agent_run_async(
         self,
@@ -394,6 +420,19 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
+            logger.error(
+                "Async agent execution failed",
+                extra={
+                    'operation': 'execute_agent_run_async',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'is_last_agent': is_last_agent,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self.console.print(f'  [red]✗ {agent_name} failed: {e}[/red]')
             self.state_manager.update_status(agent_name, 'failed')
 
@@ -407,7 +446,17 @@ class AgentExecutor:
         finally:
             # Restore original setup
             if original_setup:
-                self.agent_runner.setup_directories = original_setup
+                try:
+                    self.agent_runner.setup_directories = original_setup
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to restore original setup_directories",
+                        extra={
+                            'operation': 'agent_cleanup_async',
+                            'agent_name': agent_name,
+                            'error': str(cleanup_error)
+                        }
+                    )
 
     def _setup_correlation(self, agent_idx: int) -> Optional[callable]:
         """Setup loop correlation if needed, return original setup function."""
