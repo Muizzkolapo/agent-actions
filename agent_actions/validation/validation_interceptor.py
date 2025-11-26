@@ -3,8 +3,6 @@ from __future__ import annotations
 from typing import Any, Dict
 from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
 from agent_actions.utilities.tooling import load_user_defined_function, _split_udf_name
-from agent_actions.state_management.context import context as artifact_context
-from agent_actions.configuration.base import SecurityError
 from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
 
 class ValidationInterceptor(ResponseInterceptor):
@@ -57,7 +55,6 @@ class ValidationInterceptor(ResponseInterceptor):
             print(f'   📊 VALIDATION RESULT: success={success}')
             if error_message:
                 print(f'      Error: {error_message}')
-        self._record_validation_attempt(context, success, error_message, str(response)[:500])
         if success:
             if self.prompt_debug:
                 print(f'   ✅ VALIDATION PASSED - continuing with response')
@@ -75,25 +72,3 @@ class ValidationInterceptor(ResponseInterceptor):
         if self.prompt_debug:
             print(f'   ⚠️ VALIDATION FAILED - continuing with warning')
         return InterceptorResult(continue_processing=True, metadata={'validation_warning': error_message})
-
-    def _record_validation_attempt(self, context: Dict, success: bool, error_message: str | None, response_content: str) -> None:
-        """Record validation attempt in artifact system if available."""
-        artifact_manager = artifact_context.get_artifact_manager()
-        if not artifact_manager:
-            return
-        try:
-            agent_name = context.get('agent_name', 'unknown_agent')
-            if not agent_name or agent_name == 'unknown_agent':
-                agent_config = context.get('agent_config', {})
-                agent_name = agent_config.get('agent_type', 'unknown_agent')
-            attempt = context.get('attempt', 1) + 1
-            status = 'success' if success else 'error'
-            artifact_manager.record_validation_attempt(agent_id=agent_name, validator_type=self.validator_function or 'unknown_validator', attempt=attempt, status=status, error=error_message if not success else None, response=response_content[:500] if response_content else None)
-            if self.prompt_debug:
-                print(f'   📊 Recorded validation attempt: {agent_name} -> {self.validator_function} -> {status}')
-        except SecurityError as e:
-            if self.prompt_debug:
-                print(f'   ⚠️ Could not record validation attempt: {e}')
-        except Exception as e:
-            if self.prompt_debug:
-                print(f'   ⚠️ Error recording validation attempt: {e}')

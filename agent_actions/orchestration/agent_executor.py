@@ -1,7 +1,7 @@
 """
 Single agent execution module.
 
-Handles individual agent execution with batch support and artifact recording.
+Handles individual agent execution with batch support.
 Extracted from agent_workflow.py to reduce run() method complexity.
 """
 
@@ -10,8 +10,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
-
-from agent_actions.configuration.base import SecurityError as ArtifactSecurityError
 
 
 class AgentExecutionResult:
@@ -39,7 +37,6 @@ class AgentExecutor:
     Responsibilities:
     - Execute single agent (sync or async)
     - Handle batch mode detection and submission
-    - Record artifact events (start, success, error)
     - Manage correlation setup
     """
 
@@ -50,7 +47,6 @@ class AgentExecutor:
         skip_evaluator,
         batch_manager,
         output_manager,
-        artifact_manager=None,
         console: Optional[Console] = None
     ):
         """
@@ -62,7 +58,6 @@ class AgentExecutor:
             skip_evaluator: SkipEvaluator instance
             batch_manager: BatchLifecycleManager instance
             output_manager: AgentOutputManager instance
-            artifact_manager: Optional ArtifactManager instance
             console: Rich console for output
         """
         self.agent_runner = agent_runner
@@ -70,7 +65,6 @@ class AgentExecutor:
         self.skip_evaluator = skip_evaluator
         self.batch_manager = batch_manager
         self.output_manager = output_manager
-        self.artifact_manager = artifact_manager
         self.console = console or Console()
 
     def execute_agent_sync(
@@ -290,11 +284,6 @@ class AgentExecutor:
         """Execute agent run (synchronous)."""
         self.state_manager.update_status(agent_name, 'running')
 
-        # Record artifact start
-        agent_result = None
-        if self.artifact_manager:
-            agent_result = self._record_artifact_start(agent_name)
-
         # Setup correlation if needed
         original_setup = self._setup_correlation(agent_idx)
 
@@ -314,8 +303,6 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(agent_name, agent_idx)
             if batch_status == 'batch_submitted':
                 self.state_manager.update_status(agent_name, 'batch_submitted')
-                if self.artifact_manager and agent_result:
-                    self._record_artifact_success(agent_result, output_folder, duration)
                 return AgentExecutionResult(
                     success=True,
                     status='batch_submitted',
@@ -323,8 +310,6 @@ class AgentExecutor:
                 )
             elif batch_status == 'passthrough':
                 self.state_manager.update_status(agent_name, 'completed')
-                if self.artifact_manager and agent_result:
-                    self._record_artifact_success(agent_result, output_folder, duration)
                 return AgentExecutionResult(
                     success=True,
                     output_folder=output_folder,
@@ -334,8 +319,6 @@ class AgentExecutor:
 
             # Normal completion
             self.state_manager.update_status(agent_name, 'completed')
-            if self.artifact_manager and agent_result:
-                self._record_artifact_success(agent_result, output_folder, duration)
 
             return AgentExecutionResult(
                 success=True,
@@ -347,9 +330,6 @@ class AgentExecutor:
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
             self.state_manager.update_status(agent_name, 'failed')
-
-            if self.artifact_manager and agent_result:
-                self._record_artifact_error(agent_result, e, agent_config, agent_idx, duration)
 
             return AgentExecutionResult(
                 success=False,
@@ -447,34 +427,3 @@ class AgentExecutor:
         """Check if batch jobs were submitted."""
         agent_io_path = Path(self.agent_runner.get_agent_folder(self.agent_runner.workflow_name))
         return self.batch_manager.check_batch_submission(agent_name, agent_idx, agent_io_path)
-
-    def _record_artifact_start(self, agent_name: str):
-        """Record artifact start event."""
-        try:
-            return self.artifact_manager.record_agent_start(agent_name)
-        except ArtifactSecurityError as e:
-            self.console.print(f'[yellow]Warning: Could not record agent start: {e}[/yellow]')
-            return None
-
-    def _record_artifact_success(self, agent_result, output_folder: str, duration: float):
-        """Record artifact success event."""
-        try:
-            self.artifact_manager.record_agent_success(
-                agent_result,
-                response={'output_folder': output_folder},
-                execution_time=duration
-            )
-        except ArtifactSecurityError as e:
-            self.console.print(f'[yellow]Warning: Could not record agent success: {e}[/yellow]')
-
-    def _record_artifact_error(self, agent_result, error: Exception, agent_config: Dict, idx: int, duration: float):
-        """Record artifact error event."""
-        try:
-            self.artifact_manager.record_agent_error(
-                agent_result,
-                error,
-                duration,
-                context={'agent_config': agent_config, 'idx': idx}
-            )
-        except ArtifactSecurityError as e:
-            self.console.print(f'[yellow]Warning: Could not record agent error: {e}[/yellow]')

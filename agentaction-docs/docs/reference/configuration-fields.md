@@ -742,7 +742,7 @@ observe:
   ```
 - **Notes**:
   - Keys are pattern matchers for error messages
-  - Values are template strings with {variable} placeholders
+  - Values are template strings with `{variable}` placeholders
   - Variables come from validation_criteria/context
 
 ## Filtering and Conditional Fields
