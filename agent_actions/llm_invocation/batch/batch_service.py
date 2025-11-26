@@ -310,7 +310,17 @@ class BatchService:
                         logger.warning("Corrupted source file %s: %s. Starting fresh.", output_src_path, e)
                         existing_source = []
                     except Exception as e:
-                        logger.error("Unexpected error reading source file %s: %s", output_src_path, e)
+                        logger.error(
+                            "Unexpected error reading source file %s: %s",
+                            output_src_path, e,
+                            exc_info=True,
+                            extra={
+                                'source_file': str(output_src_path),
+                                'file_path': file_path,
+                                'operation': 'source_file_read',
+                                'file_exists': file_exists
+                            }
+                        )
                         existing_source = []
                 else:
                     existing_source = []
@@ -400,7 +410,16 @@ class BatchService:
                         failed_count += 1
                     else:
                         in_progress_count += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug(
+                        "Could not check status for batch %s, treating as in_progress: %s",
+                        batch_id, e,
+                        extra={
+                            'batch_id': batch_id,
+                            'file_name': file_name,
+                            'operation': 'status_aggregation'
+                        }
+                    )
                     in_progress_count += 1
             total_jobs = len(registry)
             if completed_count == total_jobs:
