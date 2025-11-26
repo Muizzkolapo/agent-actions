@@ -1,11 +1,14 @@
 """Module for loading source data."""
 from pathlib import Path
 import json
+import logging
 from typing import List, Dict, Any, Optional
 from agent_actions.configuration.interfaces import ISourceDataLoader, ProcessingMode
 from agent_actions.state_management.path_manager import PathManager, PathManagerError
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.shared.exceptions import DependencyError
+
+logger = logging.getLogger(__name__)
 
 @registry.register_loader('source_data')
 class SourceDataLoader(ISourceDataLoader):
@@ -132,5 +135,16 @@ class SourceDataLoader(ISourceDataLoader):
                 if item.get('source_guid') == source_guid:
                     return item.get('content')
             return None
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                "Failed to load source content for source_guid %s from %s: %s",
+                context_data.get('source_guid'), file_path, e,
+                exc_info=True,
+                extra={
+                    'source_guid': context_data.get('source_guid'),
+                    'file_path': file_path,
+                    'agent_name': self.agent_name,
+                    'operation': 'load_source_content'
+                }
+            )
             return None

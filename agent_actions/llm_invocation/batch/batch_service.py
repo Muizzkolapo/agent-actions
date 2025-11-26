@@ -203,7 +203,17 @@ class BatchService:
             try:
                 if self.check_status(batch_id, output_directory) != 'completed':
                     continue
-            except Exception:
+            except Exception as e:
+                logger.error(
+                    "Failed to check batch status for %s (%s): %s",
+                    batch_id, file_name, e,
+                    exc_info=True,
+                    extra={
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'operation': 'batch_status_check'
+                    }
+                )
                 continue
 
             # Process batch
@@ -230,7 +240,19 @@ class BatchService:
 
                 processed_files.append(str(output_file))
             except Exception as e:
-                logger.error('Could not process batch %s (%s): %s', batch_id, file_name, e)
+                logger.error(
+                    "Failed to process batch %s (%s): %s",
+                    batch_id, file_name, e,
+                    exc_info=True,
+                    extra={
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'output_directory': output_directory,
+                        'operation': 'batch_result_processing',
+                        'total_processed': len(processed_files),
+                        'registry_size': len(registry)
+                    }
+                )
                 continue
 
         if not processed_files:
@@ -332,7 +354,18 @@ class BatchService:
                         entry['status'] = actual_status
                     if actual_status not in ['completed', 'failed', 'cancelled']:
                         return False
-                except Exception:
+                except Exception as e:
+                    logger.warning(
+                        "Failed to check status for batch %s in registry: %s",
+                        batch_id, e,
+                        exc_info=True,
+                        extra={
+                            'batch_id': batch_id,
+                            'file_name': file_name,
+                            'output_directory': output_directory,
+                            'operation': 'registry_status_check'
+                        }
+                    )
                     return False
             with open(registry_file, 'w') as f:
                 json.dump(registry, f, indent=2)
