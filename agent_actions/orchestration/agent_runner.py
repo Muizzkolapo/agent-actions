@@ -1,9 +1,12 @@
 """Module for managing and executing agents with different strategies in a workflow."""
+import logging
 from pathlib import Path
 from typing import Tuple, Dict, Optional
 from agent_actions.utilities.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import InitialStrategy, TerminalStrategy, IntermediateStrategy, AgentStrategy
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
+
+logger = logging.getLogger(__name__)
 
 class AgentRunner:
     """
@@ -120,9 +123,25 @@ class AgentRunner:
                 files_processed_count += 1
         if files_processed_count == 0:
             if not any(input_path.iterdir()):
-                print(f'Warning: No files found in directory: {input_directory}, and the directory itself is empty. Processing continues.')
+                logger.warning(
+                    'No files found in empty directory: %s. Processing continues.',
+                    input_directory,
+                    extra={
+                        'input_directory': input_directory,
+                        'agent_name': agent_name,
+                        'operation': 'directory_processing'
+                    }
+                )
             else:
-                print(f'Info: No files found to process in {input_directory}, but directory structure was mirrored. Processing continues.')
+                logger.info(
+                    'No files to process in %s, but directory structure was mirrored. Processing continues.',
+                    input_directory,
+                    extra={
+                        'input_directory': input_directory,
+                        'agent_name': agent_name,
+                        'operation': 'directory_processing'
+                    }
+                )
 
     def process_and_generate_for_agent(self, agent_config: Dict, agent_name: str, previous_agent_type: Optional[str], strategy: AgentStrategy, idx: int) -> str:
         """
