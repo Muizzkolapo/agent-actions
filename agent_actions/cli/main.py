@@ -7,8 +7,10 @@ handling command registration, initialization, and execution.
 import sys
 import logging
 import signal
-from typing import Optional, Sequence, List, Any
+from typing import Optional, Sequence, List
 import click
+
+from agent_actions.logging import LoggerFactory, LoggingConfig
 from agent_actions.cli.test import clean_cli as clean
 from agent_actions.cli.init import init
 from agent_actions.cli.compile import render
@@ -25,10 +27,25 @@ class CLI:
 
     def __init__(self) -> None:
         """Initialize the CLI application."""
+        # Use standard logger initially; will be replaced with LoggerFactory logger
+        # after _configure_logging is called
         self.logger = logging.getLogger(__name__)
-        self.click_group = click.Group(name='agent-actions')
+        self.click_group = self._create_click_group()
         self._register_commands()
         self._register_signal_handlers()
+
+    def _create_click_group(self) -> click.Group:
+        """Create the main click group with global options."""
+
+        @click.group(name='agent-actions')
+        @click.version_option(version=__version__)
+        @click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging')
+        @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
+        def group(debug: bool, verbose: bool) -> None:
+            """Agent Actions CLI tool for managing and running agent workflows."""
+            pass
+
+        return group
 
     def _register_commands(self) -> None:
         """Register all available commands with the CLI."""
@@ -70,22 +87,34 @@ class CLI:
         """
         Configure logging based on command-line arguments.
 
+        Uses LoggerFactory for centralized logging configuration with
+        correlation context, structured formatting, and credential redaction.
+
         Args:
             argv: Command-line arguments
         """
         debug_mode = '--debug' in argv
         verbose_mode = '--verbose' in argv or '-v' in argv
+
+        # Determine log level
         if debug_mode:
-            level = logging.DEBUG
-            log_format = '%(levelname)s - %(name)s - %(message)s'
+            level = 'DEBUG'
         elif verbose_mode:
-            level = logging.INFO
-            log_format = '%(levelname)s - %(message)s'
+            level = 'INFO'
         else:
-            level = logging.CRITICAL
-            log_format = '%(message)s'
-        logging.basicConfig(level=level, format=log_format)
-        self.logger.setLevel(level)
+            level = 'INFO'  # Default to INFO (not CRITICAL)
+
+        # Initialize LoggerFactory with configuration
+        # This respects AGENT_ACTIONS_LOG_LEVEL env var if set
+        config = LoggingConfig.from_environment()
+        if debug_mode or verbose_mode:
+            # CLI flags override environment - update both default and handler levels
+            config.default_level = level
+            for handler in config.handlers:
+                handler.level = level
+
+        LoggerFactory.initialize(config=config, force=True)
+        self.logger = LoggerFactory.get_logger('cli')
 
     def _show_version_and_exit(self) -> int:
         """Display version information and return exit code."""
@@ -108,7 +137,7 @@ class CLI:
             if '--version' in argv or '-V' in argv:
                 return self._show_version_and_exit()
             self._configure_logging(argv)
-            self.logger.info('Starting agent-actions CLI', extra={'version': __version__, 'args': argv})
+            self.logger.info('Starting agent-actions CLI', extra={'version': __version__, 'cli_args': argv})
             self.click_group.main(argv, standalone_mode=False)
             self.logger.info('CLI execution completed successfully')
             return 0
