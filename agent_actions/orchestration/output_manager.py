@@ -6,11 +6,14 @@ Extracted from agent_workflow.py to consolidate output handling.
 """
 
 import json
+import logging
 import os
 import shutil
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class AgentOutputManager:
@@ -110,7 +113,29 @@ class AgentOutputManager:
                         try:
                             with open(passthrough_marker, 'r') as f:
                                 agent_output['passthrough_reason'] = f.read().strip()
-                        except:
+                        except (OSError, IOError, PermissionError) as e:
+                            logger.warning(
+                                "Could not read passthrough marker, using 'Unknown'",
+                                extra={
+                                    'operation': 'read_passthrough_marker',
+                                    'file': str(passthrough_marker),
+                                    'agent': prev_agent_name,
+                                    'error': str(e)
+                                }
+                            )
+                            agent_output['passthrough_reason'] = 'Unknown'
+                        except Exception as e:
+                            logger.error(
+                                "Unexpected error reading passthrough marker",
+                                extra={
+                                    'operation': 'read_passthrough_marker',
+                                    'file': str(passthrough_marker),
+                                    'agent': prev_agent_name,
+                                    'error': str(e),
+                                    'error_type': type(e).__name__
+                                },
+                                exc_info=True
+                            )
                             agent_output['passthrough_reason'] = 'Unknown'
 
                     # Check for skip marker
@@ -120,7 +145,29 @@ class AgentOutputManager:
                         try:
                             with open(skip_marker, 'r') as f:
                                 agent_output['skip_reason'] = f.read().strip()
-                        except:
+                        except (OSError, IOError, PermissionError) as e:
+                            logger.warning(
+                                "Could not read skip marker, using 'Unknown'",
+                                extra={
+                                    'operation': 'read_skip_marker',
+                                    'file': str(skip_marker),
+                                    'agent': prev_agent_name,
+                                    'error': str(e)
+                                }
+                            )
+                            agent_output['skip_reason'] = 'Unknown'
+                        except Exception as e:
+                            logger.error(
+                                "Unexpected error reading skip marker",
+                                extra={
+                                    'operation': 'read_skip_marker',
+                                    'file': str(skip_marker),
+                                    'agent': prev_agent_name,
+                                    'error': str(e),
+                                    'error_type': type(e).__name__
+                                },
+                                exc_info=True
+                            )
                             agent_output['skip_reason'] = 'Unknown'
 
                 previous_outputs[prev_agent_name] = agent_output['data']
