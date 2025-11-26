@@ -153,24 +153,42 @@
     - _Commit: e3004a6_
     - _Requirements: 1.1, 5.1, 5.2_
 
-- [ ] 6. Fix silent exception handlers (Phase 2: Supporting Modules)
-  - [ ] 6.1 Audit and fix agent_actions/core/ modules
-    - Review parser.py exception handlers
-    - Review loader.py exception handlers
-    - Review schema_validator.py exception handlers
-    - _Requirements: 1.1, 1.3_
+- [x] 6. Fix silent exception handlers (Phase 2: Supporting Modules) - **P0 COMPLETE** ✅
+  - **Comprehensive audit completed via 3 parallel exploration agents**
+  - **Fixed all 8 P0 (Critical) issues causing silent data loss**
+  - **Total issues identified: 8 P0, 17 P1, 12 P2 across 37 exception handlers**
 
-  - [ ] 6.2 Audit and fix agent_actions/configuration/ modules
-    - Review base.py exception handlers
-    - Review env_resolver.py exception handlers
-    - Review hierarchy.py exception handlers
-    - _Requirements: 1.1, 1.3_
+  - [x] **Phase 1 P0: Critical Batch Processing** (Commit: 3355635) ✅
+    - Fixed batch_service.py line 206: Silent batch status check failure
+    - Fixed batch_service.py line 232: Missing exc_info and batch context in processing failures
+    - Fixed batch_service.py line 335: Silent batch registry validation failure
+    - Fixed extractors_source_data_loader.py line 135: Silent source content load failure
+    - Fixed staging_loader.py line 46: Silent JSON parsing failure in batch mode
+    - All handlers now include exc_info=True, structured logging with batch_id/file_name/operation
 
-  - [ ] 6.3 Audit and fix agent_actions/tasks/ modules
-    - Review services/batch_service.py exception handlers
-    - Review file operations exception handlers
-    - Add correlation context to batch operations
-    - _Requirements: 1.1, 2.4_
+  - [x] **Phase 2 P0: Critical File Operations** (Commit: 6bcfba7) ✅
+    - Fixed template_yaml_loader.py lines 14-23: Added comprehensive exception handling (previously ZERO)
+      - File I/O errors: FileNotFoundError, PermissionError, UnicodeDecodeError
+      - Template preprocessing errors with full context
+      - YAML parsing errors with YAMLError handling
+    - Fixed base.py line 28: Silent version retrieval now logs with exc_info=True
+    - Fixed config_handler.py line 108: Silent project defaults loading now logs warnings
+
+  - [ ] **Phase 3 P1: Core & Configuration Modules** (9 issues remaining)
+    - [ ] parser.py lines 378, 239: Missing exc_info, silent operator fallback
+    - [ ] schema_validator.py line 56: Missing exc_info in meta-schema validation
+    - [ ] base_async_processor.py lines 104, 125: Missing ImportError fallback logging
+    - [ ] config_validator.py lines 38, 58: Missing exc_info in validation errors
+    - [ ] bootstrap_bootstrap.py line 68: Silent startup validation failure
+
+  - [ ] **Phase 4 P1: Tasks Modules** (8 issues remaining)
+    - [ ] batch_service.py lines 370, 290: Silent status aggregation, missing exc_info in file read
+    - [ ] batch_side_output_handler.py line 64: Silent JSON decode error
+    - [ ] extractors_source_data_loader.py line 75: Silent path validation failure
+    - [ ] where_parser.py lines 188, 209: Silent where clause evaluation failures
+    - [ ] utils_processor_helpers.py lines 100, 119: Silent where clause check failures
+    - [ ] utils_path_utils.py line 143: Silent path validation failure
+    - [ ] operator_registry.py line 46: Silent operator instantiation failure
 
   - [ ] 6.4 Write integration tests for exception logging
     - Test exception chain preservation
