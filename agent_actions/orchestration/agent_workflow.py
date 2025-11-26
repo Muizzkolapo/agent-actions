@@ -16,12 +16,16 @@ import sys
 import os
 import asyncio
 import hashlib
+import logging
 import time
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
+from agent_actions.logging import CorrelationContext
+
+logger = logging.getLogger(__name__)
 from agent_actions.prompt_generation.output_processor import OutputProcessor
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
@@ -224,12 +228,31 @@ class AgentWorkflow:
         Args:
             concurrency_limit: Maximum concurrent agents within a level (default 5)
         """
+        # Initialize correlation context
+        CorrelationContext.start_workflow(self.agent_name)
+        workflow_start = datetime.now()
+
+        logger.info(
+            "Workflow started (async)",
+            extra={
+                'operation': 'workflow_start_async',
+                'workflow_name': self.agent_name,
+                'agent_count': len(self.execution_order),
+                'concurrency_limit': concurrency_limit
+            }
+        )
+
         try:
             levels = self.action_level_orchestrator.compute_execution_levels()
             self.action_level_orchestrator.log_execution_levels(levels, self.agent_indices)
 
             # Execute each level
             for level_idx, level_agents in enumerate(levels):
+                # Set agent context for each agent in the level
+                for agent_name in level_agents:
+                    if agent_name in self.agent_indices:
+                        CorrelationContext.set_agent(agent_name, self.agent_indices[agent_name])
+
                 level_complete = await self.action_level_orchestrator.execute_level_async(
                     level_idx,
                     level_agents,
@@ -246,17 +269,62 @@ class AgentWorkflow:
             # Workflow complete
             self._finalize_workflow()
 
+            # Log successful completion
+            duration = (datetime.now() - workflow_start).total_seconds()
+            logger.info(
+                "Workflow completed successfully (async)",
+                extra={
+                    'operation': 'workflow_complete_async',
+                    'workflow_name': self.agent_name,
+                    'duration': duration,
+                    'agent_count': len(self.execution_order),
+                    'success': True
+                }
+            )
+
         except Exception as e:
+            duration = (datetime.now() - workflow_start).total_seconds()
+            logger.error(
+                "Workflow failed (async)",
+                extra={
+                    'operation': 'workflow_failed_async',
+                    'workflow_name': self.agent_name,
+                    'duration': duration,
+                    'agent_count': len(self.execution_order),
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self._handle_workflow_error(e)
             raise
+        finally:
+            # Clear correlation context
+            CorrelationContext.clear_context()
 
     def run(self):
         """Execute workflow sequentially."""
+        # Initialize correlation context
+        CorrelationContext.start_workflow(self.agent_name)
+        workflow_start = datetime.now()
+
+        logger.info(
+            "Workflow started",
+            extra={
+                'operation': 'workflow_start',
+                'workflow_name': self.agent_name,
+                'agent_count': len(self.execution_order)
+            }
+        )
+
         try:
             total_agents = len(self.execution_order)
             self.console.print(f'Found {total_agents} agents to run.')
 
             for idx, agent_name in enumerate(self.execution_order):
+                # Set agent context for correlation
+                CorrelationContext.set_agent(agent_name, idx)
+
                 should_stop = self._run_single_agent(idx, agent_name, total_agents)
                 if should_stop:
                     # Batch submitted or workflow needs to stop
@@ -266,9 +334,38 @@ class AgentWorkflow:
             if self.state_manager.is_workflow_complete():
                 self._finalize_workflow()
 
+                # Log successful completion
+                duration = (datetime.now() - workflow_start).total_seconds()
+                logger.info(
+                    "Workflow completed successfully",
+                    extra={
+                        'operation': 'workflow_complete',
+                        'workflow_name': self.agent_name,
+                        'duration': duration,
+                        'agent_count': len(self.execution_order),
+                        'success': True
+                    }
+                )
+
         except Exception as e:
+            duration = (datetime.now() - workflow_start).total_seconds()
+            logger.error(
+                "Workflow failed",
+                extra={
+                    'operation': 'workflow_failed',
+                    'workflow_name': self.agent_name,
+                    'duration': duration,
+                    'agent_count': len(self.execution_order),
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self._handle_workflow_error(e)
             raise
+        finally:
+            # Clear correlation context
+            CorrelationContext.clear_context()
 
     def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
         """
