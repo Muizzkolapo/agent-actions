@@ -1,5 +1,6 @@
 """Module for Configuration Validation Functions."""
 import yaml
+import logging
 from pathlib import Path
 from pydantic import ValidationError
 from agent_actions.utilities.core_utils import Utils
@@ -13,6 +14,8 @@ from agent_actions.response_processing.pipeline_config import WorkflowConfig, Pi
 from agent_actions.state_management.path_config import load_project_config
 from agent_actions.state_management.path_manager import PathManager
 from agent_actions.response_processing.action_expander import ActionExpander
+
+logger = logging.getLogger(__name__)
 
 class ConfigManager:
 
@@ -105,7 +108,12 @@ class ConfigManager:
                 project_root = path_manager.get_project_root()
                 project_config = load_project_config(project_root)
                 project_defaults = project_config.get('default_agent_config', {})
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load project defaults, using empty defaults: {e}",
+                    exc_info=True,
+                    extra={'operation': 'load_project_defaults'}
+                )
                 project_defaults = {}
             workflow_defaults = self.user_config.get('defaults', {})
             merged_defaults = {**project_defaults, **workflow_defaults}

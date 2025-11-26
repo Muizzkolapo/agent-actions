@@ -2,7 +2,10 @@
 
 import yaml
 import re
+import logging
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 class TemplateYamlLoader:
@@ -13,14 +16,40 @@ class TemplateYamlLoader:
 
     def load_template_yaml(self, file_path: str) -> Dict[str, Any]:
         """Load YAML file with template syntax preprocessing."""
-        with open(file_path, 'r') as f:
-            content = f.read()
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except FileNotFoundError as e:
+            logger.error(f"Template YAML file not found: {file_path}", exc_info=True)
+            raise
+        except PermissionError as e:
+            logger.error(f"Permission denied reading template YAML: {file_path}", exc_info=True)
+            raise
+        except (UnicodeDecodeError, IOError) as e:
+            logger.error(f"Error reading template YAML: {file_path}", exc_info=True)
+            raise
 
         # Preprocess the content to handle templates
-        processed_content = self._preprocess_templates(content)
+        try:
+            processed_content = self._preprocess_templates(content)
+        except Exception as e:
+            logger.error(
+                f"Error preprocessing template syntax in {file_path}: {e}",
+                exc_info=True,
+                extra={'file_path': file_path}
+            )
+            raise
 
         # Load as standard YAML
-        return yaml.safe_load(processed_content)
+        try:
+            return yaml.safe_load(processed_content)
+        except yaml.YAMLError as e:
+            logger.error(
+                f"YAML parsing error in {file_path} after template preprocessing: {e}",
+                exc_info=True,
+                extra={'file_path': file_path}
+            )
+            raise
 
     def _preprocess_templates(self, content: str) -> str:
         """Preprocess content to convert templates to parseable YAML."""

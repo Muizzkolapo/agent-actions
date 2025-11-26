@@ -11,6 +11,8 @@ import uuid
 import re
 import logging
 
+logger = logging.getLogger(__name__)
+
 
 class ArtifactMetadata:
     """Standard metadata for all artifacts."""
@@ -25,7 +27,12 @@ class ArtifactMetadata:
         try:
             import agent_actions  # type: ignore
             return getattr(agent_actions, "__version__")
-        except Exception:
+        except Exception as e:
+            logger.warning(
+                f"Failed to retrieve agent_actions version, using fallback: {e}",
+                exc_info=True,
+                extra={'operation': 'version_retrieval'}
+            )
             return "1.2.0"
 
     def to_dict(self) -> Dict[str, Any]:
