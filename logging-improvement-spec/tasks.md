@@ -153,10 +153,12 @@
     - _Commit: e3004a6_
     - _Requirements: 1.1, 5.1, 5.2_
 
-- [x] 6. Fix silent exception handlers (Phase 2: Supporting Modules) - **P0 COMPLETE** ✅
+- [x] 6. Fix silent exception handlers (Phase 2: Supporting Modules) - **ALL P0 & P1 COMPLETE** ✅
   - **Comprehensive audit completed via 3 parallel exploration agents**
   - **Fixed all 8 P0 (Critical) issues causing silent data loss**
+  - **Fixed all 17 P1 (High Priority) issues improving debuggability**
   - **Total issues identified: 8 P0, 17 P1, 12 P2 across 37 exception handlers**
+  - **Remaining: 12 P2 (Medium Priority) minor debug logging enhancements**
 
   - [x] **Phase 1 P0: Critical Batch Processing** (Commit: 3355635) ✅
     - Fixed batch_service.py line 206: Silent batch status check failure
@@ -174,21 +176,21 @@
     - Fixed base.py line 28: Silent version retrieval now logs with exc_info=True
     - Fixed config_handler.py line 108: Silent project defaults loading now logs warnings
 
-  - [ ] **Phase 3 P1: Core & Configuration Modules** (9 issues remaining)
-    - [ ] parser.py lines 378, 239: Missing exc_info, silent operator fallback
-    - [ ] schema_validator.py line 56: Missing exc_info in meta-schema validation
-    - [ ] base_async_processor.py lines 104, 125: Missing ImportError fallback logging
-    - [ ] config_validator.py lines 38, 58: Missing exc_info in validation errors
-    - [ ] bootstrap_bootstrap.py line 68: Silent startup validation failure
+  - [x] **Phase 3 P1: Core & Configuration Modules** (Commit: 00deeaa) ✅
+    - Fixed parser.py lines 378, 239: Added exc_info=True, logging for silent operator fallback
+    - Fixed schema_validator.py line 56: Added exc_info and structured context for meta-schema validation
+    - Fixed base_async_processor.py lines 104, 125: Added INFO logging for aiofiles ImportError fallback
+    - Fixed config_validator.py lines 38, 58: Added exc_info=True for validation errors
+    - Fixed bootstrap_bootstrap.py line 68: Added exc_info and error details for startup validation failure
 
-  - [ ] **Phase 4 P1: Tasks Modules** (8 issues remaining)
-    - [ ] batch_service.py lines 370, 290: Silent status aggregation, missing exc_info in file read
-    - [ ] batch_side_output_handler.py line 64: Silent JSON decode error
-    - [ ] extractors_source_data_loader.py line 75: Silent path validation failure
-    - [ ] where_parser.py lines 188, 209: Silent where clause evaluation failures
-    - [ ] utils_processor_helpers.py lines 100, 119: Silent where clause check failures
-    - [ ] utils_path_utils.py line 143: Silent path validation failure
-    - [ ] operator_registry.py line 46: Silent operator instantiation failure
+  - [x] **Phase 4 P1: Tasks Modules** (Commits: 5f3e699, 8099dec) ✅
+    - Fixed batch_service.py lines 403, 312: Added debug logging for status aggregation, exc_info for file read
+    - Fixed batch_side_output_handler.py line 64: Added warning logging for JSON decode with error position
+    - Fixed extractors_source_data_loader.py line 75: Added debug logging for path validation failure
+    - Fixed where_parser.py lines 188, 209: Added debug logging for where clause evaluation failures
+    - Fixed utils_processor_helpers.py lines 100, 119: Added debug logging for where clause check failures
+    - Fixed utils_path_utils.py line 143: Added debug logging for path permission validation
+    - Fixed operator_registry/registry.py line 46: Added debug logging for operator instantiation during discovery
 
   - [ ] 6.4 Write integration tests for exception logging
     - Test exception chain preservation
