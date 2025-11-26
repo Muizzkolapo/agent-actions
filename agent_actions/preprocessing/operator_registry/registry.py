@@ -7,9 +7,12 @@ with automatic discovery and registration of built-in operators.
 
 from typing import Any, Dict, List, Optional
 import inspect
+import logging
 
 from .base import BaseOperator, OperatorInfo, OperatorType
 from . import comparison, logical, functions
+
+logger = logging.getLogger(__name__)
 
 
 class OperatorRegistry:
@@ -43,7 +46,16 @@ class OperatorRegistry:
                         # Instantiate and register the operator
                         operator_instance = obj()
                         self.register_operator(operator_instance)
-                    except Exception:
+                    except Exception as e:
+                        logger.debug(
+                            "Skipping operator %s that can't be instantiated: %s",
+                            name, e,
+                            extra={
+                                'operator_class': name,
+                                'module': module.__name__ if hasattr(module, '__name__') else 'unknown',
+                                'operation': 'operator_discovery'
+                            }
+                        )
                         # Skip operators that can't be instantiated
                         pass
 

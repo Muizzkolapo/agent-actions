@@ -75,7 +75,16 @@ class SourceDataLoader(ISourceDataLoader):
                 raise FileNotFoundError(f'Source file not found: {source_file_to_load}')
             try:
                 within_project = self.path_manager.is_within_project(source_file_to_load)
-            except Exception:
+            except Exception as e:
+                logger.debug(
+                    "Could not verify if source file is within project bounds, assuming valid: %s",
+                    e,
+                    extra={
+                        'source_file': str(source_file_to_load),
+                        'agent_name': self.agent_name,
+                        'operation': 'path_validation'
+                    }
+                )
                 within_project = True
             if not within_project:
                 from agent_actions.shared.exceptions import FileSystemError

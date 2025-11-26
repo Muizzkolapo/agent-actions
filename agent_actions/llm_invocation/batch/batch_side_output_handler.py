@@ -6,10 +6,13 @@ Extracted from BatchService for better separation of concerns.
 """
 
 import json
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+
+logger = logging.getLogger(__name__)
 
 
 class BatchSideOutputHandler:
@@ -61,7 +64,16 @@ class BatchSideOutputHandler:
             with open(file_path, 'r', encoding='utf-8') as f:
                 try:
                     existing = json.load(f)
-                except json.JSONDecodeError:
+                except json.JSONDecodeError as e:
+                    logger.warning(
+                        "Corrupted side output file %s, starting fresh: %s",
+                        file_path, e,
+                        extra={
+                            'file_path': str(file_path),
+                            'operation': 'side_output_load',
+                            'error_position': f'line {e.lineno}, col {e.colno}'
+                        }
+                    )
                     existing = []
         if not isinstance(existing, list):
             existing = [existing]

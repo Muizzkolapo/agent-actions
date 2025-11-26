@@ -1,7 +1,10 @@
 import re
 import json
+import logging
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -185,7 +188,15 @@ class SimpleWhereFilter:
             if not conditions:  # No valid conditions parsed
                 return True  # Default to including item on parse failure
             return self.parser.evaluate(data, conditions)
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Where clause evaluation failed, defaulting to including item: %s",
+                e,
+                extra={
+                    'where_clause': where_clause,
+                    'operation': 'where_clause_evaluation'
+                }
+            )
             return True  # Default to including item on error
 
     def evaluate_safe_skip_condition(self, condition_config: Dict[str, Any], context: Dict[str, Any]) -> bool:
@@ -206,7 +217,15 @@ class SimpleWhereFilter:
                 conditions = self.parser.parse(where_clause)
                 return not self.parser.evaluate(context, conditions)
             return False
-        except Exception:
+        except Exception as e:
+            logger.debug(
+                "Skip condition evaluation failed, defaulting to not skipping: %s",
+                e,
+                extra={
+                    'condition_config': condition_config,
+                    'operation': 'skip_condition_evaluation'
+                }
+            )
             # Default to not skipping on error
             return False
 
