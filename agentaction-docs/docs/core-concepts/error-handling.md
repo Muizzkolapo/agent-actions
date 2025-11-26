@@ -565,7 +565,6 @@ See the full test suite for more examples:
 - `tests/core/test_exceptions.py` - Exception formatting tests (16 tests)
 - `tests/core/test_safe_format.py` - Safe formatting utilities (21 tests)
 - `tests/core/test_context_preservation.py` - Exception chaining tests (19 tests)
-- `tests/integration/test_error_handling_integration.py` - Real-world scenarios (21 tests)
 
 ## Quick Reference
 

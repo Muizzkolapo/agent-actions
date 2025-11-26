@@ -24,10 +24,6 @@ from typing import Dict, Any, List, Optional
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.prompt_generation.output_processor import OutputProcessor
 from agent_actions.llm_invocation.batch.batch_service import BatchService
-from agent_actions.state_management.manager import ArtifactManager
-from agent_actions.state_management.manifest import ManifestArtifact
-from agent_actions.configuration.base import SecurityError as ArtifactSecurityError
-from agent_actions.state_management.context import context as artifact_context
 from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
 from agent_actions.response_processing.where_parser import WhereClauseParser  # For test compatibility
 from rich.console import Console
@@ -126,9 +122,6 @@ class AgentWorkflow:
             self.console
         )
 
-        # Initialize artifact system
-        self.artifact_manager = self._initialize_artifact_system(agent_folder)
-
         # Initialize agent executor
         self.agent_executor = AgentExecutor(
             self.agent_runner,
@@ -136,7 +129,6 @@ class AgentWorkflow:
             self.skip_evaluator,
             self.batch_manager,
             self.output_manager,
-            self.artifact_manager,
             self.console
         )
 
@@ -212,39 +204,6 @@ class AgentWorkflow:
             return len(registry)
 
         return 0
-
-    def _initialize_artifact_system(self, agent_folder: Path) -> Optional[ArtifactManager]:
-        """Initialize artifact tracking system."""
-        enable_artifacts = os.getenv('AGENT_ACTIONS_ENABLE_ARTIFACTS', 'true').lower() == 'true'
-
-        if not enable_artifacts:
-            self.console.print('[yellow]Artifact system disabled (AGENT_ACTIONS_ENABLE_ARTIFACTS=false)[/yellow]')
-            return None
-
-        try:
-            artifact_manager = ArtifactManager(agent_folder)
-            self._initialize_manifest(artifact_manager)
-            artifact_context.set_artifact_manager(artifact_manager)
-            self.console.print('[green]Artifact system initialized[/green]')
-            return artifact_manager
-        except Exception as e:
-            self.console.print(f'[yellow]Warning: Could not initialize artifact system: {e}[/yellow]')
-            return None
-
-    def _initialize_manifest(self, artifact_manager: ArtifactManager):
-        """Initialize the manifest artifact with project information."""
-        try:
-            project_name = self.agent_name
-            project_path = str(Path(self.constructor_path).parent)
-            manifest = ManifestArtifact(project_name, project_path)
-
-            for agent_name in self.execution_order:
-                agent_config = self.agent_configs[agent_name]
-                manifest.add_agent(agent_name, agent_config)
-
-            artifact_manager.set_manifest(manifest)
-        except Exception as e:
-            self.console.print(f'[yellow]Warning: Could not initialize manifest: {e}[/yellow]')
 
     def _generate_workflow_session_id(self) -> str:
         """Generate a deterministic yet unique workflow session ID."""
@@ -404,25 +363,8 @@ class AgentWorkflow:
         # Process final output
         self.output_processor.process_final_output(self.ephemeral_directories)
 
-        # Save artifacts
-        if self.artifact_manager:
-            self._save_artifacts()
-
         self.console.print('\n🎉 [bold green]Workflow Complete[/bold green]')
         self.console.print('Done.')
-        artifact_context.clear_artifact_manager()
-
-    def _save_artifacts(self):
-        """Save workflow artifacts."""
-        try:
-            self.artifact_manager.save_artifacts(force=True)
-            artifacts_dir = self.artifact_manager.artifacts_dir
-            self.console.print(f'\n📊 [bold blue]Artifacts saved to:[/bold blue] {artifacts_dir}')
-            self.console.print('   - manifest.json')
-            self.console.print('   - run_results.json')
-            self.console.print('   - validation_results.json')
-        except Exception as e:
-            self.console.print(f'[yellow]Warning: Could not save artifacts: {e}[/yellow]')
 
     def _handle_workflow_error(self, error: Exception):
         """Handle workflow execution error."""
@@ -431,27 +373,6 @@ class AgentWorkflow:
 
         # Mark running agent as failed
         failed_agent = self.state_manager.mark_running_as_failed()
-
-        # Record error artifact
-        if self.artifact_manager:
-            try:
-                self.artifact_manager.record_error(
-                    error_type='workflow_failure',
-                    operation='run_workflow',
-                    target=self.agent_name,
-                    error=error,
-                    context={
-                        'execution_order': self.execution_order,
-                        'agent_status': self.state_manager.agent_status
-                    },
-                    user_message='Workflow execution failed. Check the error details and agent configurations.'
-                )
-                self.artifact_manager.save_artifacts(force=True)
-                self.console.print(f'[blue]Error artifacts saved to:[/blue] {self.artifact_manager.artifacts_dir}')
-            except Exception as artifact_error:
-                self.console.print(f'[yellow]Warning: Could not save error artifacts: {artifact_error}[/yellow]')
-
-        artifact_context.clear_artifact_manager()
 
     # Backward compatibility properties and methods
     @property
