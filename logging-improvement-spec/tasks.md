@@ -1,101 +1,106 @@
 # Implementation Plan
 
-- [ ] 1. Create logging infrastructure module
-  - [ ] 1.1 Create `agent_actions/logging/` package structure
+- [x] 1. Create logging infrastructure module ✅
+  - [x] 1.1 Create `agent_actions/logging/` package structure
     - Create __init__.py with public exports
     - Create config.py with LoggingConfig dataclass
     - Create context.py with CorrelationContext class
     - _Requirements: 2.1, 3.1, 7.1_
 
-  - [ ] 1.2 Implement context management with contextvars
+  - [x] 1.2 Implement context management with contextvars
     - Create ExecutionContext dataclass
     - Implement ContextVar storage for thread-safety
     - Add start_workflow, set_agent, clear_context methods
     - _Requirements: 2.1, 2.2, 2.3_
 
-  - [ ] 1.3 Create custom log filter for context injection
+  - [x] 1.3 Create custom log filter for context injection
     - Implement ContextInjectingFilter class
     - Inject correlation_id, workflow_name, agent_name, agent_index
     - Add fallback values when context not available
     - _Requirements: 2.2, 2.3, 2.4_
 
-  - [ ] 1.4 Write unit tests for context management
+  - [x] 1.4 Write unit tests for context management
     - Test context creation and retrieval
     - Test context propagation across function calls
     - Test context isolation between executions
     - _Requirements: 2.1, 2.2_
 
-- [ ] 2. Implement log formatters
-  - [ ] 2.1 Create JSONFormatter class
+- [x] 2. Implement log formatters ✅
+  - [x] 2.1 Create JSONFormatter class
     - Format log records as single-line JSON
     - Include all standard fields (timestamp, level, message, source)
     - Include context fields (correlation_id, agent_name, etc.)
     - Handle exception info serialization
     - _Requirements: 3.1, 3.3, 3.4_
 
-  - [ ] 2.2 Create HumanFormatter class
+  - [x] 2.2 Create HumanFormatter class
     - Format for console readability with colors
     - Include abbreviated context (correlation_id, agent)
     - Format timestamps as HH:MM:SS.mmm
     - Handle multiline exception output
     - _Requirements: 3.2, 3.4_
 
-  - [ ] 2.3 Write unit tests for formatters
+  - [x] 2.3 Write unit tests for formatters
     - Test JSON output is valid and complete
     - Test human format readability
     - Test exception formatting in both modes
     - _Requirements: 3.1, 3.2_
 
-- [ ] 3. Implement LoggerFactory
-  - [ ] 3.1 Create LoggerFactory singleton
+- [x] 3. Implement LoggerFactory ✅
+  - [x] 3.1 Create LoggerFactory singleton
     - Implement initialize() with configuration loading
     - Create get_logger() method for consistent logger creation
     - Ensure all loggers under agent_actions namespace
     - _Requirements: 7.1, 7.2_
 
-  - [ ] 3.2 Add handler configuration
+  - [x] 3.2 Add handler configuration
     - Support console, file, and JSON handlers
     - Implement RotatingFileHandler for file output
     - Add handler-specific log levels
     - _Requirements: 7.4_
 
-  - [ ] 3.3 Add module-specific level configuration
+  - [x] 3.3 Add module-specific level configuration
     - Allow per-module log level overrides
     - Control third-party library verbosity
     - Support runtime level changes
     - _Requirements: 4.3, 7.3, 7.5_
 
-  - [ ] 3.4 Write integration tests for LoggerFactory
+  - [x] 3.4 Write integration tests for LoggerFactory
     - Test initialization with various configs
     - Test handler creation and output
     - Test module-level configuration
     - _Requirements: 7.1, 7.4_
 
-- [ ] 4. Create configuration integration
-  - [ ] 4.1 Add logging schema to project configuration
+- [x] 4. Create configuration integration ✅
+  - [x] 4.1 Add logging schema to project configuration
     - Define log_level field in project.yaml schema
     - Add handlers configuration section
     - Add module_levels for fine-grained control
     - _Requirements: 4.1, 4.2, 4.3_
 
-  - [ ] 4.2 Implement environment variable support
+  - [x] 4.2 Implement environment variable support
     - Support AGENT_ACTIONS_LOG_LEVEL env var
     - Support AGENT_ACTIONS_LOG_FORMAT env var
     - Document environment configuration
     - _Requirements: 4.5_
 
-  - [ ] 4.3 Add --debug CLI flag support
+  - [x] 4.3 Add --debug CLI flag support
     - Wire --debug flag to set DEBUG level
     - Override config and env settings when flag present
     - _Requirements: 4.4_
 
-  - [ ] 4.4 Update default log level from CRITICAL to INFO
+  - [x] 4.4 Update default log level from CRITICAL to INFO
     - Change default in LoggingConfig
     - Update any hardcoded CRITICAL references
     - Test default behavior
     - _Requirements: 4.2_
 
-- [ ] 5. Fix silent exception handlers (Phase 1: Critical Paths)
+- [ ] 5. Fix silent exception handlers (Phase 1: Critical Paths) 🔄 IN PROGRESS
+  - **Additional fixes completed (not in original spec):**
+    - [x] Fixed 2 bare `except:` statements in `output_manager.py` (lines 113, 123)
+    - [x] Fixed 2 silent JSON failures in `loop_correlator.py` (lines 120, 140)
+    - [x] Added DI fallback logging in `application_container.py` (lines 99-117)
+    - _Commit: f405088_
   - [ ] 5.1 Fix agent_executor.py exception handling
     - Add logging to _execute_agent_run exception handler (line 347)
     - Add logging to _execute_agent_run_async exception handler (line 415)
