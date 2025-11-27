@@ -230,10 +230,12 @@
     - _Requirements: 3.5_
 
 - [ ] 8. Add performance and debug logging
-  - [ ] 8.1 Add execution timing logs
-    - Log agent start/complete with duration
-    - Log workflow total duration
-    - Log API call durations at DEBUG level
+  - [x] 8.1 Add execution timing logs ✅
+    - Added agent start DEBUG logging with initial status
+    - Added agent completion INFO logging with duration (success/batch/passthrough)
+    - Workflow timing already implemented (start/complete/failed with duration)
+    - API call durations: Deferred (would require vendor file changes)
+    - _Commit: f6844a4_
     - _Requirements: 6.1, 6.2, 6.5_
 
   - [ ] 8.2 Add batch processing metrics
