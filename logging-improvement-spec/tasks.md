@@ -198,7 +198,7 @@
     - Test log output format for exceptions
     - _Requirements: 1.1, 1.2, 1.5_
 
-- [ ] 7. Replace print statements with logging
+- [x] 7. Replace print statements with logging ✅
   - [x] 7.1 Convert validation_interceptor.py print statements ✅
     - Replaced 19 print statements with structured logging
     - Used DEBUG level for diagnostic logs, INFO/WARNING/ERROR for results
@@ -221,10 +221,12 @@
     - _Commits: f044b1d (main.py), 390de44 (skip_evaluator.py), 37320d9 (output_manager.py), 51cdf13 (batch_manager.py)_
     - _Requirements: 3.5_
 
-  - [ ] 7.4 Create migration test to catch new print statements
-    - Add test that greps for print() in source
-    - Allowlist legitimate print uses (CLI output)
-    - Fail CI on new unauthorized prints
+  - [x] 7.4 Create migration test to catch new print statements ✅
+    - Created comprehensive test suite in tests/test_logging/test_print_migration.py
+    - 4 test cases: diagnostic patterns, allowlist validation, informational reporting, strict enforcement
+    - Allowlisted 16 files with legitimate user-facing output
+    - Enforces zero prints in 9 fully migrated modules
+    - _Commit: 99339c8_
     - _Requirements: 3.5_
 
 - [ ] 8. Add performance and debug logging
