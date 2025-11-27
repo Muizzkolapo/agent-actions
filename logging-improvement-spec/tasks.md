@@ -283,16 +283,18 @@
     - _All 21 RedactingFilter tests passing_
     - _Requirements: 5.5_
 
-- [ ] 10. Add helpful error messages
-  - [ ] 10.1 Add fix suggestions to ConfigurationError logs
-    - Include valid alternatives for invalid values
-    - Link to documentation for complex configs
-    - Show example of correct format
+- [x] 10. Add helpful error messages ✅
+  - [x] 10.1 Add fix suggestions to ConfigurationError logs ✅
+    - Added suggestions to reprompt_interceptor.py (unknown strategy)
+    - Added suggestions to response_processing/factory.py (unknown interceptor)
+    - Added suggestions to llm_invocation/providers/factory.py (unknown provider)
+    - All include valid alternatives and helpful guidance
     - _Requirements: 8.1_
 
-  - [ ] 10.2 Add context to FileLoadError logs
-    - Log attempted path and alternatives found
-    - Suggest common file location issues
+  - [x] 10.2 Add context to FileLoadError logs ✅
+    - Enhanced cli/run.py to check alternative file locations
+    - Added alternatives_checked and found_alternatives to context
+    - Added suggestions to extractors_source_data_loader.py
     - _Requirements: 8.2_
 
   - [x] 10.3 Implement NetworkError class ✅
@@ -308,9 +310,12 @@
     - Sets HTTP status 429 automatically
     - _Requirements: 8.3_
 
-  - [ ] 10.4 Add field details to ValidationError logs
-    - Log specific field that failed
-    - Log constraint and actual value
+  - [x] 10.5 Add field details to ValidationError logs ✅
+    - Enhanced tabular_loader.py with failed_fields, expected, actual_values
+    - Enhanced json_loader.py with field-specific validation details
+    - Enhanced guard_parser.py with 5 ValidationError sites (guard, udf_expression, format, dangerous patterns)
+    - Enhanced config_schema.py with 3 ValidationError sites (where clause, skip condition)
+    - All include failed_field, expected, actual_value, and helpful suggestions
     - _Requirements: 8.4_
 
 - [x] 11. Integration and documentation ✅

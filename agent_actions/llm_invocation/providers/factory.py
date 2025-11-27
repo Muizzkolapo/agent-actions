@@ -65,7 +65,15 @@ class BatchProviderFactory:
                 raise DependencyError('AnthropicBatchProvider', 'anthropic', context={'provider_type': provider_type, 'install_command': 'pip install anthropic'}, cause=e)
         else:
             from agent_actions.shared.exceptions import ConfigurationError
-            raise ConfigurationError('Unknown provider type', context={'provider_type': provider_type, 'supported_providers': BatchProviderFactory.get_supported_providers()})
+            supported = BatchProviderFactory.get_supported_providers()
+            raise ConfigurationError(
+                'Unknown provider type',
+                context={
+                    'provider_type': provider_type,
+                    'supported_providers': supported,
+                    'suggestion': f"Set model_vendor to one of: {', '.join(supported)}. Check your agent configuration."
+                }
+            )
 
     @staticmethod
     def get_supported_providers() -> list[str]:

@@ -39,7 +39,14 @@ class RepromptInterceptor(ResponseInterceptor):
             self.strategy = TemplateRepromptStrategy(config.get('templates', {}), prompt_debug=self.prompt_debug)
         else:
             from agent_actions.shared.exceptions import ConfigurationError
-            raise ConfigurationError('Unknown reprompt strategy', context={'strategy_type': strategy_type, 'supported_strategies': ['llm', 'simple', 'template']})
+            raise ConfigurationError(
+                'Unknown reprompt strategy',
+                context={
+                    'strategy_type': strategy_type,
+                    'supported_strategies': ['llm', 'simple', 'template'],
+                    'suggestion': f"Use one of the supported strategies: 'llm', 'simple', or 'template'. Got '{strategy_type}'"
+                }
+            )
         if self.prompt_debug:
             print(f'   Created strategy: {type(self.strategy).__name__}')
 

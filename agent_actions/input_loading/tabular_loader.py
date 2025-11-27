@@ -36,7 +36,17 @@ class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
                 content_str = content
             else:
                 from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError('Either file_path or content must be provided for tabular processing', context={'agent_name': self.agent_name, 'loader_type': 'tabular'})
+                raise ValidationError(
+                    'Either file_path or content must be provided for tabular processing',
+                    context={
+                        'agent_name': self.agent_name,
+                        'loader_type': 'tabular',
+                        'failed_fields': ['file_path', 'content'],
+                        'expected': 'At least one of file_path or content must be provided',
+                        'actual_values': {'file_path': file_path, 'content': content},
+                        'suggestion': 'Provide either the file_path parameter (path to tabular file) or the content parameter (string content) for tabular data processing.'
+                    }
+                )
             rows = list(csv.DictReader(content_str.splitlines()))
             return rows
         except csv.Error as e:

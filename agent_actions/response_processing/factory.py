@@ -14,7 +14,15 @@ class InterceptorFactory:
         interceptor_type = config.get('type')
         if interceptor_type not in cls._interceptor_types:
             from agent_actions.shared.exceptions import ConfigurationError
-            raise ConfigurationError('Unknown interceptor type', context={'interceptor_type': interceptor_type, 'supported_types': list(cls._interceptor_types.keys())})
+            supported = list(cls._interceptor_types.keys())
+            raise ConfigurationError(
+                'Unknown interceptor type',
+                context={
+                    'interceptor_type': interceptor_type,
+                    'supported_types': supported,
+                    'suggestion': f"Use one of: {', '.join(supported)}. Check your interceptor configuration."
+                }
+            )
         interceptor_class = cls._interceptor_types[interceptor_type]
         interceptor = interceptor_class()
         config_copy = config.copy()

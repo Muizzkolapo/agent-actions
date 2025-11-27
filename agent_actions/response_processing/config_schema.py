@@ -27,12 +27,33 @@ class WhereClauseConfig(BaseModel):
         """Validate the WHERE clause syntax."""
         from agent_actions.shared.exceptions import ValidationError
         if v is not None and (not v or not v.strip()):
-            raise ValidationError('WHERE clause cannot be empty', context={'clause': v, 'operation': 'validate_where_clause'})
+            raise ValidationError(
+                'WHERE clause cannot be empty',
+                context={
+                    'clause': v,
+                    'operation': 'validate_where_clause',
+                    'failed_field': 'where_clause',
+                    'expected': 'Non-empty WHERE clause (e.g., "column = value")',
+                    'actual_value': v,
+                    'suggestion': 'Provide a valid WHERE clause with a condition, or remove the where parameter if filtering is not needed.'
+                }
+            )
         dangerous_patterns = ['__import__', 'exec', 'eval', 'compile', 'open', 'file', 'input', 'raw_input', 'reload', 'vars', 'globals', 'locals', 'dir', 'hasattr', 'getattr', 'setattr', 'delattr']
         clause_lower = v.lower()
         for pattern in dangerous_patterns:
             if pattern in clause_lower:
-                raise ValidationError(f'WHERE clause contains potentially dangerous operation: {pattern}', context={'clause': v, 'dangerous_pattern': pattern, 'operation': 'validate_where_clause'})
+                raise ValidationError(
+                    f'WHERE clause contains potentially dangerous operation: {pattern}',
+                    context={
+                        'clause': v,
+                        'dangerous_pattern': pattern,
+                        'operation': 'validate_where_clause',
+                        'failed_field': 'where_clause',
+                        'expected': 'WHERE clause without dangerous patterns like exec, eval, __import__, etc.',
+                        'actual_value': v,
+                        'suggestion': f'Remove the dangerous pattern "{pattern}" from your WHERE clause. Use safe comparison operators and column references only.'
+                    }
+                )
         return v
     model_config = ConfigDict(extra='forbid')
 
@@ -56,7 +77,18 @@ class SkipConditionConfig(BaseModel):
             expr_lower = v.lower()
             for pattern in dangerous_patterns:
                 if pattern in expr_lower:
-                    raise ValidationError(f'Expression contains potentially dangerous operation: {pattern}', context={'expression': v, 'dangerous_pattern': pattern, 'operation': 'validate_skip_condition'})
+                    raise ValidationError(
+                        f'Expression contains potentially dangerous operation: {pattern}',
+                        context={
+                            'expression': v,
+                            'dangerous_pattern': pattern,
+                            'operation': 'validate_skip_condition',
+                            'failed_field': 'expression',
+                            'expected': 'Safe custom expression without dangerous patterns like exec, eval, __import__, etc.',
+                            'actual_value': v,
+                            'suggestion': f'Remove the dangerous pattern "{pattern}" from your skip condition expression. Use safe comparison operators only.'
+                        }
+                    )
         return v
     model_config = ConfigDict(extra='forbid')
 

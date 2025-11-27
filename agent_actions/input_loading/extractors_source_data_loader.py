@@ -96,7 +96,17 @@ class SourceDataLoader(ISourceDataLoader):
             raise FileSystemError('Path structure error when deriving source', context={'file_path': file_path, 'agent_name': self.agent_name, 'operation': 'load_source_data'}, cause=e)
         except Exception as e:
             from agent_actions.shared.exceptions import FileLoadError
-            raise FileLoadError('Failed to load source data', context={'source_file': str(source_file_to_load) if source_file_to_load else 'unknown', 'input_file_path': file_path, 'agent_name': self.agent_name, 'operation': 'load_source_data'}, cause=e)
+            raise FileLoadError(
+                'Failed to load source data',
+                context={
+                    'source_file': str(source_file_to_load) if source_file_to_load else 'unknown',
+                    'input_file_path': file_path,
+                    'agent_name': self.agent_name,
+                    'operation': 'load_source_data',
+                    'suggestion': 'Check if the source file exists and has valid JSON/YAML format. Verify file permissions.'
+                },
+                cause=e
+            )
 
     def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
         """
