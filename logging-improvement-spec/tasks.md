@@ -213,10 +213,12 @@
     - _Commit: e8e668c_
     - _Requirements: 3.5_
 
-  - [ ] 7.3 Convert CLI output print statements
-    - Distinguish user-facing output from diagnostic logs
-    - Keep Rich console for user output
-    - Route diagnostic messages to logging
+  - [x] 7.3 Convert CLI output print statements ✅
+    - Converted 16 diagnostic print statements to structured logging
+    - Preserved 43 user-facing console.print statements unchanged
+    - Applied appropriate log levels: DEBUG (verbose details), WARNING (errors), ERROR (critical)
+    - Added structured context via extra={} dict
+    - _Commits: f044b1d (main.py), 390de44 (skip_evaluator.py), 37320d9 (output_manager.py), 51cdf13 (batch_manager.py)_
     - _Requirements: 3.5_
 
   - [ ] 7.4 Create migration test to catch new print statements
