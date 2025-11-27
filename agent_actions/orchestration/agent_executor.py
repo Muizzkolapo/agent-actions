@@ -92,6 +92,17 @@ class AgentExecutor:
         start_time = datetime.now()
         current_status = self.state_manager.get_status(agent_name)
 
+        logger.debug(
+            "Agent execution starting",
+            extra={
+                'operation': 'execute_agent_start',
+                'agent_name': agent_name,
+                'agent_idx': agent_idx,
+                'current_status': current_status,
+                'is_last_agent': is_last_agent
+            }
+        )
+
         # Check 1: Already completed
         if current_status == 'completed':
             return AgentExecutionResult(
@@ -146,6 +157,17 @@ class AgentExecutor:
         """
         start_time = datetime.now()
         current_status = self.state_manager.get_status(agent_name)
+
+        logger.debug(
+            "Agent execution starting",
+            extra={
+                'operation': 'execute_agent_start',
+                'agent_name': agent_name,
+                'agent_idx': agent_idx,
+                'current_status': current_status,
+                'is_last_agent': is_last_agent
+            }
+        )
 
         # Check 1: Already completed
         if current_status == 'completed':
@@ -306,6 +328,17 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(agent_name, agent_idx)
             if batch_status == 'batch_submitted':
                 self.state_manager.update_status(agent_name, 'batch_submitted')
+                logger.info(
+                    "Agent batch submitted",
+                    extra={
+                        'operation': 'execute_agent_run',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'batch_submitted',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     status='batch_submitted',
@@ -313,6 +346,17 @@ class AgentExecutor:
                 )
             elif batch_status == 'passthrough':
                 self.state_manager.update_status(agent_name, 'completed')
+                logger.info(
+                    "Agent completed (passthrough)",
+                    extra={
+                        'operation': 'execute_agent_run',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'passthrough',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     output_folder=output_folder,
@@ -322,6 +366,17 @@ class AgentExecutor:
 
             # Normal completion
             self.state_manager.update_status(agent_name, 'completed')
+            logger.info(
+                "Agent completed successfully",
+                extra={
+                    'operation': 'execute_agent_run',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'status': 'completed',
+                    'is_last_agent': is_last_agent
+                }
+            )
 
             return AgentExecutionResult(
                 success=True,
@@ -401,6 +456,17 @@ class AgentExecutor:
             if batch_status == 'batch_submitted':
                 self.state_manager.update_status(agent_name, 'batch_submitted')
                 self.console.print(f'  [yellow]→ {agent_name}: batch submitted[/yellow]')
+                logger.info(
+                    "Agent batch submitted (async)",
+                    extra={
+                        'operation': 'execute_agent_run_async',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'batch_submitted',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     status='batch_submitted',
@@ -410,6 +476,17 @@ class AgentExecutor:
             # Normal completion
             self.state_manager.update_status(agent_name, 'completed')
             self.console.print(f'  [green]✓ {agent_name} ({duration:.2f}s)[/green]')
+            logger.info(
+                "Agent completed successfully (async)",
+                extra={
+                    'operation': 'execute_agent_run_async',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'status': 'completed',
+                    'is_last_agent': is_last_agent
+                }
+            )
 
             return AgentExecutionResult(
                 success=True,
