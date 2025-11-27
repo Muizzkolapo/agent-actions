@@ -119,7 +119,7 @@ class RedactingFilter(logging.Filter):
                 pass
 
     def filter(self, record: logging.LogRecord) -> bool:
-        """Redact sensitive patterns from message.
+        """Redact sensitive patterns from message and extra fields.
 
         Args:
             record: The log record to modify.
@@ -130,7 +130,7 @@ class RedactingFilter(logging.Filter):
         # Get the formatted message
         msg = record.getMessage()
 
-        # Apply redaction patterns
+        # Apply redaction patterns to message
         for pattern, replacement in self._compiled_patterns:
             msg = pattern.sub(replacement, msg)
 
@@ -138,4 +138,60 @@ class RedactingFilter(logging.Filter):
         record.msg = msg
         record.args = ()
 
+        # Redact sensitive data in extra fields
+        self._redact_extra_fields(record)
+
         return True
+
+    def _redact_extra_fields(self, record: logging.LogRecord) -> None:
+        """Redact sensitive data from extra fields in log record.
+
+        Args:
+            record: The log record to modify.
+        """
+        # Sensitive key patterns to check in attribute names
+        sensitive_keys = ['api_key', 'key', 'token', 'password', 'secret', 'authorization']
+
+        # Standard LogRecord attributes that should not be redacted
+        standard_attrs = {
+            'name', 'msg', 'args', 'created', 'filename', 'funcName', 'levelname',
+            'levelno', 'lineno', 'module', 'msecs', 'message', 'pathname', 'process',
+            'processName', 'relativeCreated', 'thread', 'threadName', 'exc_info',
+            'exc_text', 'stack_info', 'getMessage', 'correlation_id', 'workflow_name',
+            'agent_name', 'agent_index', 'batch_id', 'item_id'
+        }
+
+        # Iterate through record attributes (extra fields are added as attributes)
+        for attr in list(record.__dict__.keys()):
+            if attr in standard_attrs:
+                continue
+
+            value = getattr(record, attr, None)
+
+            # Check if attribute name contains sensitive keywords
+            if any(key in attr.lower() for key in sensitive_keys):
+                setattr(record, attr, '[REDACTED]')
+            # Recursively redact nested structures (dicts, lists)
+            elif isinstance(value, (dict, list)):
+                setattr(record, attr, self._redact_nested(value))
+            # Redact string values that match patterns
+            elif isinstance(value, str):
+                redacted_value = value
+                for pattern, replacement in self._compiled_patterns:
+                    redacted_value = pattern.sub(replacement, redacted_value)
+                if redacted_value != value:
+                    setattr(record, attr, redacted_value)
+
+    def _redact_nested(self, data):
+        """Redact sensitive data from nested structures.
+
+        Uses the redaction utility from BaseVendorHandler for consistent redaction.
+
+        Args:
+            data: Nested dict or list to redact.
+
+        Returns:
+            Redacted copy of the data.
+        """
+        from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+        return BaseVendorHandler.redact_sensitive_data(data)

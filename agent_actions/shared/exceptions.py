@@ -548,6 +548,77 @@ class AnthropicError(VendorAPIError):
         super().__init__("Anthropic", endpoint, status_code=status_code, context=context, cause=cause)
 
 
+class NetworkError(ExternalServiceError):
+    """Raised when network-related errors occur (timeout, connection, etc).
+
+    This exception is used for network issues like connection timeouts,
+    DNS resolution failures, or other network-level problems.
+    """
+
+    def __init__(
+        self,
+        operation: str,
+        reason: str,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None,
+        suggestion: Optional[str] = None
+    ) -> None:
+        """Initialize NetworkError with helpful suggestion.
+
+        Args:
+            operation: The network operation that failed (e.g., 'API request', 'file download')
+            reason: Why the operation failed (e.g., 'connection timeout', 'DNS resolution failed')
+            context: Additional context dict (merged with operation/reason)
+            cause: The underlying exception that caused this error
+            suggestion: Helpful fix suggestion for the user
+        """
+        ctx = context or {}
+        ctx.update({'operation': operation, 'reason': reason})
+        if suggestion:
+            ctx['suggestion'] = suggestion
+        else:
+            # Provide default suggestion based on common network issues
+            ctx['suggestion'] = 'Check your internet connection and try again. If the problem persists, check firewall settings or VPN configuration.'
+        super().__init__('network', reason, context=ctx, cause=cause)
+
+
+class RateLimitError(VendorAPIError):
+    """Raised when API rate limits are exceeded.
+
+    This exception indicates that the API request was rejected due to
+    rate limiting. The caller should implement exponential backoff retry logic.
+    """
+
+    def __init__(
+        self,
+        vendor: str,
+        endpoint: str = 'unknown',
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None,
+        retry_after: Optional[int] = None
+    ) -> None:
+        """Initialize RateLimitError with retry guidance.
+
+        Args:
+            vendor: Name of the vendor/service (e.g., 'OpenAI', 'Anthropic')
+            endpoint: API endpoint that was rate-limited
+            context: Additional context dict
+            cause: The underlying exception that caused this error
+            retry_after: Number of seconds to wait before retrying (if provided by API)
+        """
+        ctx = context or {}
+        if retry_after:
+            ctx['retry_after_seconds'] = retry_after
+            ctx['suggestion'] = f"Wait {retry_after} seconds before retrying, or upgrade your API plan for higher rate limits."
+        else:
+            ctx['suggestion'] = "Wait a few minutes before retrying, or upgrade your API plan for higher rate limits. Consider implementing exponential backoff."
+
+        # Set status code to 429 (standard HTTP rate limit status)
+        super().__init__(vendor, endpoint, status_code=429, context=ctx, cause=cause)
+
+
 # Resource-related exceptions
 class ResourceError(AgentActionsException):
     """Base exception for resource-related errors."""
