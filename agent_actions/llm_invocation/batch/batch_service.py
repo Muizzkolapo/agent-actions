@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
+from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.utilities.file_writer import FileWriter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory
@@ -98,6 +99,22 @@ class BatchService:
 
             # Providers now return (batch_id, initial_status)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+
+            # Set batch_id in correlation context for tracking
+            CorrelationContext.set_batch(batch_id)
+
+            # Log batch submission with metrics
+            logger.info(
+                "Batch job submitted",
+                extra={
+                    'operation': 'submit_batch_job',
+                    'batch_id': batch_id,
+                    'batch_name': batch_name,
+                    'batch_size': len(tasks),
+                    'provider': provider_type,
+                    'initial_status': initial_status
+                }
+            )
 
             # Save batch job to registry with initial status from provider
             if output_directory:
@@ -237,6 +254,20 @@ class BatchService:
                     side_output_dir = create_side_output_directory(output_directory)
                     side_output_file = side_output_dir / (f'{Path(file_name).stem}.json' if file_name and file_name != 'default' else f'{batch_id}_processed_output.json')
                     BatchSideOutputHandler.save(side_output_data, side_output_file)
+
+                # Log batch completion with throughput metrics
+                logger.info(
+                    "Batch job completed and processed",
+                    extra={
+                        'operation': 'process_batch_results',
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'results_count': len(batch_results),
+                        'main_output_count': len(main_output) if isinstance(main_output, list) else 1,
+                        'side_output_count': len(side_output_data) if side_output_data else 0,
+                        'output_file': str(output_file)
+                    }
+                )
 
                 processed_files.append(str(output_file))
             except Exception as e:

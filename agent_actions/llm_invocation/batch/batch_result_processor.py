@@ -191,6 +191,17 @@ class BatchResultProcessor:
                     ctx.success_count += len(items)
                     ctx.reconciler.mark_processed(custom_id)
 
+                    # Log individual item processing at DEBUG level
+                    logger.debug(
+                        "Processed batch result item",
+                        extra={
+                            'operation': 'process_batch_item',
+                            'custom_id': custom_id,
+                            'items_generated': len(items),
+                            'success': True
+                        }
+                    )
+
                 except Exception as e:
                     # Processing exception - create error item
                     error_item = self._create_error_item(
@@ -200,6 +211,17 @@ class BatchResultProcessor:
                     ctx.processed_data.append(error_item)
                     ctx.error_count += 1
                     ctx.reconciler.mark_processed(custom_id)
+
+                    # Log processing exception at DEBUG level
+                    logger.debug(
+                        "Batch result item processing failed",
+                        extra={
+                            'operation': 'process_batch_item',
+                            'custom_id': custom_id,
+                            'success': False,
+                            'error': str(e)
+                        }
+                    )
 
             else:
                 # Stage 4: Process error result
@@ -211,6 +233,17 @@ class BatchResultProcessor:
                 ctx.processed_data.append(error_item)
                 ctx.error_count += 1
                 ctx.reconciler.mark_processed(custom_id)
+
+                # Log error result at DEBUG level
+                logger.debug(
+                    "Batch result item had error",
+                    extra={
+                        'operation': 'process_batch_item',
+                        'custom_id': custom_id,
+                        'success': False,
+                        'error': batch_result.error or 'Batch processing failed'
+                    }
+                )
 
         return ctx
 
