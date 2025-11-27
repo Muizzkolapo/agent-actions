@@ -175,7 +175,15 @@ class AgentOutputManager:
 
             except Exception as e:
                 error_msg = f'Could not load outputs for {prev_agent_name}: {e}'
-                self.console.print(f'[yellow]Warning: {error_msg}[/yellow]')
+                logger.warning(
+                    "Could not load output data: %s",
+                    error_msg,
+                    extra={
+                        'prev_agent_name': prev_agent_name,
+                        'output_file': str(output_file),
+                        'operation': 'load_previous_outputs'
+                    }
+                )
                 agent_output['errors'].append(error_msg)
                 previous_outputs[prev_agent_name] = []
                 previous_outputs[f'{prev_agent_name}_meta'] = agent_output
@@ -204,7 +212,16 @@ class AgentOutputManager:
                 try:
                     shutil.copy2(src, dst)
                 except Exception as e:
-                    self.console.print(f'[yellow]Warning: Could not copy {item}: {e}[/yellow]')
+                    logger.warning(
+                        "Could not copy %s to %s: %s",
+                        item, dst, e,
+                        exc_info=True,
+                        extra={
+                            'source': src,
+                            'destination': str(dst),
+                            'operation': 'passthrough_file_copy'
+                        }
+                    )
 
         # Create skip marker
         skip_marker = output_dir / '.agent_skipped'
