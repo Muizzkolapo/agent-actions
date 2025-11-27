@@ -5,9 +5,12 @@ Handles batch job status checking, registry management, and result processing.
 Extracted from agent_workflow.py to consolidate batch handling logic.
 """
 
+import logging
 from pathlib import Path
 from typing import Tuple, Optional, Dict, Any
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class BatchLifecycleManager:
@@ -164,4 +167,12 @@ class BatchLifecycleManager:
         except FileNotFoundError:
             pass  # Already removed
         except Exception as e:
-            self.console.print(f'[yellow]Warning: Could not remove passthrough marker: {e}[/yellow]')
+            logger.warning(
+                "Could not remove passthrough file %s: %s",
+                passthrough_marker, e,
+                exc_info=True,
+                extra={
+                    'passthrough_marker': str(passthrough_marker),
+                    'operation': 'cleanup_passthrough_marker'
+                }
+            )
