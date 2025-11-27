@@ -165,13 +165,11 @@ class CLI:
             error_message = format_user_error(e, context)
             print(f'Error: {error_message}', file=sys.stderr)
             if '--debug' in (argv or []):
-                print('\n--- Debug Information ---', file=sys.stderr)
-                import traceback
                 from agent_actions.utilities.safe_format import format_exception_chain_for_debug
-                print('\nException Chain:', file=sys.stderr)
-                print(format_exception_chain_for_debug(e), file=sys.stderr)
-                print('\nFull Traceback:', file=sys.stderr)
-                traceback.print_exc()
+                self.logger.debug("Debug Information:")
+                self.logger.debug("Exception Chain:")
+                self.logger.debug("%s", format_exception_chain_for_debug(e))
+                self.logger.debug("Full Traceback:", exc_info=True)
             return 1
 
 def _print_help_callback(ctx, param, value):
