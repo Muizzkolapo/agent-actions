@@ -102,7 +102,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
             Any exception from render_pipeline_with_templates or ErrorHandler.
         """
         try:
-            ServiceLogger.log_operation_start(logger, 'render template', config_path=config_path, template_dir=template_dir, output_path=output_path)
+            ServiceLogger.log_operation_start(logger, 'render template', user_facing=True, config_path=config_path, template_dir=template_dir, output_path=output_path)
             path_validator = PathValidator()
             all_validations_passed = True
             error_messages: list[str] = []
@@ -135,7 +135,7 @@ class JinjaTemplateRenderer(TemplateRenderer):
                 with open(output_file_to_write, 'w', encoding='utf-8') as f:
                     f.write(rendered_template)
                 logger.info(f'Rendered template saved to: {output_file_to_write}')
-            ServiceLogger.log_operation_success(logger, 'render template', config_path=config_path)
+            ServiceLogger.log_operation_success(logger, 'render template', user_facing=True, config_path=config_path)
             return rendered_template
         except Exception as e:
             ErrorHandler.handle_template_error(e, 'render', config_path, context={'template_dir': template_dir, 'output_path': output_path})

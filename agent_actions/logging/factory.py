@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import sys
 from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Optional
 
 from agent_actions.logging.config import HandlerConfig, LoggingConfig
@@ -50,7 +52,20 @@ class LoggerFactory:
 
         # Get root logger for agent_actions
         root_logger = logging.getLogger(cls._root_logger_name)
-        root_logger.setLevel(getattr(logging, cls._config.default_level))
+
+        # Set root logger level to most permissive of console and file
+        # This ensures handlers can filter independently
+        min_level = cls._config.default_level
+        if cls._config.file_handler_enabled and cls._config.file_log_level:
+            # Convert level names to numbers for comparison
+            console_level_num = getattr(logging, cls._config.default_level)
+            file_level_num = getattr(logging, cls._config.file_log_level)
+            # Lower number = more permissive (DEBUG=10, INFO=20, etc.)
+            min_level_num = min(console_level_num, file_level_num)
+            # Convert back to name
+            min_level = logging.getLevelName(min_level_num)
+
+        root_logger.setLevel(getattr(logging, min_level))
 
         # Clear existing handlers to avoid duplicates
         root_logger.handlers.clear()
@@ -72,6 +87,13 @@ class LoggerFactory:
             handler = cls._create_default_handler()
             cls._add_filters_to_handler(handler)
             root_logger.addHandler(handler)
+
+        # Add file handler if enabled (independent of config.handlers)
+        if cls._config.file_handler_enabled:
+            file_handler = cls._create_file_handler()
+            if file_handler:
+                cls._add_filters_to_handler(file_handler)
+                root_logger.addHandler(file_handler)
 
         # Configure module-specific levels
         for module, level in cls._config.module_levels.items():
@@ -117,7 +139,7 @@ class LoggerFactory:
             formatter = JSONFormatter(
                 include_source_location=cls._config.include_source_location
                 if cls._config
-                else True,
+                else False,
             )
         elif config.type == 'file':
             # Use simple formatter for file output (no colors)
@@ -125,6 +147,7 @@ class LoggerFactory:
                 include_timestamp=cls._config.include_timestamps if cls._config else True,
             )
         else:
+            # Console handler - use config setting for source location
             formatter = HumanFormatter(
                 use_colors=True,
                 include_source_location=cls._config.include_source_location
@@ -153,6 +176,124 @@ class LoggerFactory:
         handler.setFormatter(formatter)
 
         return handler
+
+    @classmethod
+    def _get_project_root(cls) -> Optional[Path]:
+        """Find the project config directory.
+
+        Walks up the directory tree looking for agent_actions.yml.
+        Returns the directory containing the config file (where logs should go).
+
+        Returns:
+            Path to directory containing agent_actions.yml, or None if not found.
+        """
+        # Start from current working directory
+        current = Path.cwd()
+
+        # Walk up the directory tree looking for agent_actions.yml
+        for parent in [current] + list(current.parents):
+            if (parent / 'agent_actions.yml').exists():
+                return parent
+
+        return None
+
+    @classmethod
+    def _get_log_file_path(cls) -> Optional[Path]:
+        """Determine the log file path based on configuration and environment.
+
+        Priority order:
+        1. config.log_file_path (if set)
+        2. <agent_actions.yml_dir>/logs/agent_actions.log (if in project)
+        3. ~/.agent-actions/logs/agent_actions.log (fallback)
+
+        The logs folder is placed at the same level as agent_actions.yml.
+
+        Returns:
+            Path to log file, or None if file logging is disabled.
+        """
+        if not cls._config or not cls._config.file_handler_enabled:
+            return None
+
+        # Check if path is explicitly configured
+        if cls._config.log_file_path:
+            path = Path(cls._config.log_file_path)
+            # If relative path, resolve relative to project root (or cwd)
+            if not path.is_absolute():
+                project_root = cls._get_project_root()
+                if project_root:
+                    path = project_root / path
+                else:
+                    path = Path.cwd() / path
+            return path
+
+        # Try to use project root
+        project_root = cls._get_project_root()
+        if project_root:
+            return project_root / 'logs' / 'agent_actions.log'
+
+        # Fallback to home directory
+        return Path.home() / '.agent-actions' / 'logs' / 'agent_actions.log'
+
+    @classmethod
+    def _create_file_handler(cls) -> Optional[RotatingFileHandler]:
+        """Create a rotating file handler for logging.
+
+        Creates log directory if needed and configures rotation based on
+        config.file_max_bytes and config.file_backup_count.
+
+        Returns:
+            RotatingFileHandler instance, or None if creation failed.
+        """
+        if not cls._config or not cls._config.file_handler_enabled:
+            return None
+
+        try:
+            log_file_path = cls._get_log_file_path()
+            if not log_file_path:
+                return None
+
+            # Create log directory if it doesn't exist
+            log_file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Create rotating file handler
+            handler = RotatingFileHandler(
+                filename=str(log_file_path),
+                maxBytes=cls._config.file_max_bytes,
+                backupCount=cls._config.file_backup_count,
+                encoding='utf-8',
+            )
+
+            # Set handler level
+            handler.setLevel(getattr(logging, cls._config.file_log_level))
+
+            # Set formatter (no colors for file output)
+            # Use config setting for source location
+            if cls._config.file_format == 'json':
+                formatter = JSONFormatter(
+                    include_source_location=cls._config.include_source_location
+                )
+            else:
+                formatter = HumanFormatter(
+                    use_colors=False,
+                    include_source_location=cls._config.include_source_location,
+                )
+
+            handler.setFormatter(formatter)
+
+            # Log success to stderr only in DEBUG mode (not to the logging system to avoid recursion)
+            if cls._config and cls._config.default_level == 'DEBUG':
+                print(f'Logging to file: {log_file_path}', file=sys.stderr)
+
+            return handler
+
+        except Exception as e:
+            # Log warning to stderr and continue without file handler
+            print(
+                f'Warning: Failed to create file handler: {e}. '
+                'Continuing with console logging only.',
+                file=sys.stderr,
+            )
+            return None
 
     @classmethod
     def _add_filters_to_handler(cls, handler: logging.Handler) -> None:

@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **File-Based Logging**: Persistent log files with session separators (dbt-style)
+  - Automatic log file creation at `logs/agent_actions.log` (same level as `agent_actions.yml`) or `~/.agent-actions/logs/agent_actions.log` (fallback)
+  - Dual output: Console (INFO+, colored) and File (DEBUG+, no colors)
+  - Session separators: `====== HH:MM:SS.mmm | CORRELATION_ID ======` between workflow runs
+  - Log rotation: 10MB file size, 5 backup files by default
+  - Configuration via environment variables or `project.yaml`:
+    - `AGENT_ACTIONS_NO_LOG_FILE=1` - Disable file logging
+    - `AGENT_ACTIONS_LOG_FILE=/path/to/log` - Custom log file path
+    - `AGENT_ACTIONS_LOG_DIR=/dir` - Custom log directory
+    - `AGENT_ACTIONS_FILE_LOG_LEVEL=DEBUG` - File log level
+  - Graceful degradation: Continues with console-only logging if file handler fails
+  - Silent operation: File logging confirmation message only shown in DEBUG mode
+  - New config fields: `file_handler_enabled`, `log_file_path`, `file_log_level`, `file_max_bytes`, `file_backup_count`, `file_format`
+  - 47 new tests (28 config tests, 14 file handler tests, 5 session separator tests)
+
 ### Changed
+
+- **Developer Mode**: Three-tier logging output system for clean user-facing logs with optional verbose debugging
+  - **Normal mode** (default): Clean, dbt-style output without source file references
+    - Console: INFO level, no `(file.py:line)` references
+    - File: DEBUG level, no `(file.py:line)` references
+    - User-friendly output for production workflows
+  - **Debug mode**: Full developer output with source file/line references
+    - Enable via `--debug` CLI flag or `AGENT_ACTIONS_DEBUG=1` environment variable
+    - Console: DEBUG level, with `(file.py:line)` references
+    - File: DEBUG level, with `(file.py:line)` references
+    - Useful for developers debugging agent-actions codebase itself
+  - **Breaking change**: `include_source_location` now defaults to `False` (was `True`)
+    - Rationale: Cleaner user-facing output, matches industry patterns (dbt, pytest)
+    - Migration: Use `--debug` flag or `AGENT_ACTIONS_DEBUG=1` to restore old behavior
+  - New environment variable: `AGENT_ACTIONS_DEBUG=1` (convenience shortcut for debug mode)
+  - 7 new tests (4 config tests, 3 factory tests)
+
+- **Cleaner Console Output**: Reduced verbose INFO-level logging for better user experience
+  - Moved internal operations to DEBUG level (validation, data loading, preparation, DI container)
+  - Console output now ~50% less verbose in normal mode (from ~25-30 INFO logs to ~12-15)
+  - All details still available with `--debug` flag or `AGENT_ACTIONS_DEBUG=1`
+  - Enhanced `ServiceLogger` with `user_facing` parameter to distinguish user-facing vs internal operations
+  - Affected files: 12 files updated with 36 log level adjustments
+  - Principle: INFO = "What is happening?", DEBUG = "How is it happening?"
+  - New logging decision framework in `DEVELOPER_LOGGING_GUIDE.md`
+  - 7 new ServiceLogger tests
 
 - **Improved Maintainability**: Refactored batch and realtime modes to eliminate code duplication ([#492](https://github.com/Muizzkolapo/agent-actions/issues/492))
   - **Phase 1**: Extracted WHERE clause and conditional filtering logic into `FilterService`

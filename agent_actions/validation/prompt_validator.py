@@ -148,7 +148,7 @@ class PromptValidator(BaseValidator):
             self.add_error('Validation data must be a Path object pointing to the prompt directory.')
             return False
         prompt_dir: Path = data
-        logger.info('Starting prompt validation for directory: %s', prompt_dir)
+        logger.debug('Starting prompt validation for directory: %s', prompt_dir)
         if not self._ensure_path_exists(prompt_dir):
             self.add_error(f'Prompt directory not found: {prompt_dir}.')
             return False
@@ -168,5 +168,5 @@ class PromptValidator(BaseValidator):
             if len(self.get_errors()) > errors_before_file:
                 stats['files_with_errors'] += 1
             stats['total_prompts_validated'] += prompts_in_file
-        logger.info('Prompt validation complete for directory: %s. Stats: %s', prompt_dir, stats)
+        logger.debug('Prompt validation complete for directory: %s. Stats: %s', prompt_dir, stats)
         return not self.has_errors()

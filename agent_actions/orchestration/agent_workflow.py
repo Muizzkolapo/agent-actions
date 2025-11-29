@@ -232,6 +232,11 @@ class AgentWorkflow:
         CorrelationContext.start_workflow(self.agent_name)
         workflow_start = datetime.now()
 
+        # Log session separator for file-based logging
+        correlation_id = CorrelationContext.get_correlation_id()
+        separator = f"====== {workflow_start.strftime('%H:%M:%S.%f')[:-3]} | {correlation_id[:8] if correlation_id else 'unknown'} ======"
+        logger.info(separator)
+
         logger.info(
             "Workflow started (async)",
             extra={
@@ -307,6 +312,11 @@ class AgentWorkflow:
         # Initialize correlation context
         CorrelationContext.start_workflow(self.agent_name)
         workflow_start = datetime.now()
+
+        # Log session separator for file-based logging
+        correlation_id = CorrelationContext.get_correlation_id()
+        separator = f"====== {workflow_start.strftime('%H:%M:%S.%f')[:-3]} | {correlation_id[:8] if correlation_id else 'unknown'} ======"
+        logger.info(separator)
 
         logger.info(
             "Workflow started",

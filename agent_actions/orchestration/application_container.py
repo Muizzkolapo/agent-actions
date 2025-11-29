@@ -120,7 +120,7 @@ class ApplicationContainer:
                     extra={'agent_name': agent_name, 'idx': idx}
                 )
             except Exception as e2:
-                logger.info(
+                logger.debug(
                     "Creating source_loader via processor_factory (final fallback)",
                     extra={
                         'agent_name': agent_name,
@@ -142,7 +142,7 @@ class ApplicationContainer:
                 extra={'agent_name': agent_name, 'idx': idx}
             )
         except Exception as e:
-            logger.info(
+            logger.debug(
                 "IGenerator not in container, creating DataGenerator manually",
                 extra={
                     'agent_name': agent_name,
@@ -161,7 +161,7 @@ class ApplicationContainer:
                 extra={'agent_name': agent_name, 'idx': idx}
             )
         except Exception as e:
-            logger.info(
+            logger.debug(
                 "IDataProcessor not in container, creating DataProcessor manually",
                 extra={
                     'agent_name': agent_name,
