@@ -5,9 +5,12 @@ Implements strategy pattern for different skip condition types.
 Extracted from agent_workflow.py to reduce _should_skip_agent() complexity (CC 20 → <5).
 """
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class SkipStrategy(ABC):
@@ -68,7 +71,12 @@ class SkipConditionStrategy(SkipStrategy):
             return should_skip
 
         except Exception as e:
-            self.console.print(f'[red]⚠️ Agent {agent_name}: Error evaluating skip condition: {e}[/red]')
+            logger.warning(
+                "Error evaluating skip condition for %s: %s",
+                agent_name, e,
+                exc_info=True,
+                extra={'agent_name': agent_name, 'operation': 'skip_condition_evaluation'}
+            )
             return False  # Don't skip on error
 
 
@@ -105,7 +113,15 @@ class WhereClauseStrategy(SkipStrategy):
                 }
             }
 
-            self.console.print(f'[blue]🔍 Evaluating agent-level WHERE clause for {agent_name}: {where_clause}[/blue]')
+            logger.debug(
+                "Evaluating agent-level WHERE clause for %s",
+                agent_name,
+                extra={
+                    'agent_name': agent_name,
+                    'where_clause': where_clause,
+                    'operation': 'where_clause_evaluation'
+                }
+            )
 
             filter_result = filter_service.filter_item(
                 context_data,
@@ -116,10 +132,23 @@ class WhereClauseStrategy(SkipStrategy):
             # Handle filter execution errors
             if not filter_result.success:
                 error_msg = filter_result.error or 'Unknown filter error'
-                self.console.print(f'[red]⚠️ Agent {agent_name}: WHERE clause evaluation failed: {error_msg}[/red]')
+                logger.warning(
+                    "WHERE clause evaluation failed for %s: %s",
+                    agent_name, error_msg,
+                    exc_info=True,
+                    extra={
+                        'agent_name': agent_name,
+                        'where_clause': where_clause,
+                        'operation': 'where_clause_evaluation'
+                    }
+                )
 
                 if passthrough_on_error:
-                    self.console.print(f'[yellow]→ Agent {agent_name} proceeding due to passthrough_on_error=True[/yellow]')
+                    logger.debug(
+                        "Agent %s proceeding despite WHERE clause error (passthrough_on_error=True)",
+                        agent_name,
+                        extra={'agent_name': agent_name, 'passthrough_on_error': True}
+                    )
                     return False
                 else:
                     self.console.print(f'[red]→ Agent {agent_name} SKIPPED due to passthrough_on_error=False[/red]')
@@ -128,18 +157,39 @@ class WhereClauseStrategy(SkipStrategy):
             # Handle filter result
             if not filter_result.matched:
                 self.console.print(f'[yellow]🚫 Agent {agent_name} SKIPPED: WHERE clause condition not met[/yellow]')
-                self.console.print(f'[yellow]   Clause: {where_clause}[/yellow]')
-                self.console.print(f'[yellow]   Context: {context_data}[/yellow]')
+                logger.debug(
+                    "WHERE clause details: %s",
+                    where_clause,
+                    extra={
+                        'agent_name': agent_name,
+                        'where_clause': where_clause,
+                        'context_data': context_data,
+                        'operation': 'where_clause_evaluation'
+                    }
+                )
                 return True
             else:
                 self.console.print(f'[green]✓ Agent {agent_name} passed WHERE clause check (execution time: {filter_result.execution_time:.3f}s)[/green]')
                 return False
 
         except Exception as e:
-            self.console.print(f'[red]⚠️ Agent {agent_name}: Error evaluating agent WHERE clause: {e}[/red]')
+            logger.warning(
+                "Error evaluating WHERE clause for %s: %s",
+                agent_name, e,
+                exc_info=True,
+                extra={
+                    'agent_name': agent_name,
+                    'where_clause': where_clause,
+                    'operation': 'where_clause_evaluation'
+                }
+            )
 
             if passthrough_on_error:
-                self.console.print(f'[yellow]→ Agent {agent_name} proceeding due to error and passthrough_on_error=True[/yellow]')
+                logger.debug(
+                    "Agent %s proceeding despite error (passthrough_on_error=True)",
+                    agent_name,
+                    extra={'agent_name': agent_name, 'passthrough_on_error': True}
+                )
                 return False
             else:
                 self.console.print(f'[red]→ Agent {agent_name} SKIPPED due to error and passthrough_on_error=False[/red]')
@@ -178,7 +228,16 @@ class LegacySkipIfStrategy(SkipStrategy):
             return should_skip
 
         except Exception as e:
-            self.console.print(f'[red]⚠️ Agent {agent_name}: Error evaluating legacy skip_if condition: {e}[/red]')
+            logger.warning(
+                "Error evaluating legacy skip_if condition for %s: %s",
+                agent_name, e,
+                exc_info=True,
+                extra={
+                    'agent_name': agent_name,
+                    'skip_if': skip_if,
+                    'operation': 'legacy_skip_if_evaluation'
+                }
+            )
             return False  # Don't skip on error
 
 
@@ -227,8 +286,15 @@ class SkipEvaluator:
                     return True
             except Exception as e:
                 agent_name = agent_config.get('agent_type', 'unknown')
-                self.console.print(
-                    f'[red]⚠️ Agent {agent_name}: Unexpected error in {strategy.get_strategy_name()}: {e}[/red]'
+                logger.error(
+                    "Unexpected error in skip strategy %s for %s: %s",
+                    strategy.get_strategy_name(), agent_name, e,
+                    exc_info=True,
+                    extra={
+                        'agent_name': agent_name,
+                        'strategy_name': strategy.get_strategy_name(),
+                        'operation': 'skip_strategy_evaluation'
+                    }
                 )
                 # Continue to next strategy on error
 

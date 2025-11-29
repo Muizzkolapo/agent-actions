@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List, Union
 from datetime import datetime
 
+from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.utilities.file_writer import FileWriter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory
@@ -98,6 +99,22 @@ class BatchService:
 
             # Providers now return (batch_id, initial_status)
             batch_id, initial_status = provider.submit_batch(tasks, batch_name, output_directory)
+
+            # Set batch_id in correlation context for tracking
+            CorrelationContext.set_batch(batch_id)
+
+            # Log batch submission with metrics
+            logger.info(
+                "Batch job submitted",
+                extra={
+                    'operation': 'submit_batch_job',
+                    'batch_id': batch_id,
+                    'batch_name': batch_name,
+                    'batch_size': len(tasks),
+                    'provider': provider_type,
+                    'initial_status': initial_status
+                }
+            )
 
             # Save batch job to registry with initial status from provider
             if output_directory:
@@ -203,7 +220,17 @@ class BatchService:
             try:
                 if self.check_status(batch_id, output_directory) != 'completed':
                     continue
-            except Exception:
+            except Exception as e:
+                logger.error(
+                    "Failed to check batch status for %s (%s): %s",
+                    batch_id, file_name, e,
+                    exc_info=True,
+                    extra={
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'operation': 'batch_status_check'
+                    }
+                )
                 continue
 
             # Process batch
@@ -228,9 +255,35 @@ class BatchService:
                     side_output_file = side_output_dir / (f'{Path(file_name).stem}.json' if file_name and file_name != 'default' else f'{batch_id}_processed_output.json')
                     BatchSideOutputHandler.save(side_output_data, side_output_file)
 
+                # Log batch completion with throughput metrics
+                logger.info(
+                    "Batch job completed and processed",
+                    extra={
+                        'operation': 'process_batch_results',
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'results_count': len(batch_results),
+                        'main_output_count': len(main_output) if isinstance(main_output, list) else 1,
+                        'side_output_count': len(side_output_data) if side_output_data else 0,
+                        'output_file': str(output_file)
+                    }
+                )
+
                 processed_files.append(str(output_file))
             except Exception as e:
-                logger.error('Could not process batch %s (%s): %s', batch_id, file_name, e)
+                logger.error(
+                    "Failed to process batch %s (%s): %s",
+                    batch_id, file_name, e,
+                    exc_info=True,
+                    extra={
+                        'batch_id': batch_id,
+                        'file_name': file_name,
+                        'output_directory': output_directory,
+                        'operation': 'batch_result_processing',
+                        'total_processed': len(processed_files),
+                        'registry_size': len(registry)
+                    }
+                )
                 continue
 
         if not processed_files:
@@ -288,7 +341,17 @@ class BatchService:
                         logger.warning("Corrupted source file %s: %s. Starting fresh.", output_src_path, e)
                         existing_source = []
                     except Exception as e:
-                        logger.error("Unexpected error reading source file %s: %s", output_src_path, e)
+                        logger.error(
+                            "Unexpected error reading source file %s: %s",
+                            output_src_path, e,
+                            exc_info=True,
+                            extra={
+                                'source_file': str(output_src_path),
+                                'file_path': file_path,
+                                'operation': 'source_file_read',
+                                'file_exists': file_exists
+                            }
+                        )
                         existing_source = []
                 else:
                     existing_source = []
@@ -332,7 +395,18 @@ class BatchService:
                         entry['status'] = actual_status
                     if actual_status not in ['completed', 'failed', 'cancelled']:
                         return False
-                except Exception:
+                except Exception as e:
+                    logger.warning(
+                        "Failed to check status for batch %s in registry: %s",
+                        batch_id, e,
+                        exc_info=True,
+                        extra={
+                            'batch_id': batch_id,
+                            'file_name': file_name,
+                            'output_directory': output_directory,
+                            'operation': 'registry_status_check'
+                        }
+                    )
                     return False
             with open(registry_file, 'w') as f:
                 json.dump(registry, f, indent=2)
@@ -367,7 +441,16 @@ class BatchService:
                         failed_count += 1
                     else:
                         in_progress_count += 1
-                except Exception:
+                except Exception as e:
+                    logger.debug(
+                        "Could not check status for batch %s, treating as in_progress: %s",
+                        batch_id, e,
+                        extra={
+                            'batch_id': batch_id,
+                            'file_name': file_name,
+                            'operation': 'status_aggregation'
+                        }
+                    )
                     in_progress_count += 1
             total_jobs = len(registry)
             if completed_count == total_jobs:

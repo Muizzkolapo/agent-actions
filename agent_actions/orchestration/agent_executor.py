@@ -6,10 +6,13 @@ Extracted from agent_workflow.py to reduce run() method complexity.
 """
 
 import asyncio
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
+
+logger = logging.getLogger(__name__)
 
 
 class AgentExecutionResult:
@@ -89,6 +92,17 @@ class AgentExecutor:
         start_time = datetime.now()
         current_status = self.state_manager.get_status(agent_name)
 
+        logger.debug(
+            "Agent execution starting",
+            extra={
+                'operation': 'execute_agent_start',
+                'agent_name': agent_name,
+                'agent_idx': agent_idx,
+                'current_status': current_status,
+                'is_last_agent': is_last_agent
+            }
+        )
+
         # Check 1: Already completed
         if current_status == 'completed':
             return AgentExecutionResult(
@@ -143,6 +157,17 @@ class AgentExecutor:
         """
         start_time = datetime.now()
         current_status = self.state_manager.get_status(agent_name)
+
+        logger.debug(
+            "Agent execution starting",
+            extra={
+                'operation': 'execute_agent_start',
+                'agent_name': agent_name,
+                'agent_idx': agent_idx,
+                'current_status': current_status,
+                'is_last_agent': is_last_agent
+            }
+        )
 
         # Check 1: Already completed
         if current_status == 'completed':
@@ -303,6 +328,17 @@ class AgentExecutor:
             batch_status = self._check_batch_submission(agent_name, agent_idx)
             if batch_status == 'batch_submitted':
                 self.state_manager.update_status(agent_name, 'batch_submitted')
+                logger.info(
+                    "Agent batch submitted",
+                    extra={
+                        'operation': 'execute_agent_run',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'batch_submitted',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     status='batch_submitted',
@@ -310,6 +346,17 @@ class AgentExecutor:
                 )
             elif batch_status == 'passthrough':
                 self.state_manager.update_status(agent_name, 'completed')
+                logger.info(
+                    "Agent completed (passthrough)",
+                    extra={
+                        'operation': 'execute_agent_run',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'passthrough',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     output_folder=output_folder,
@@ -319,6 +366,17 @@ class AgentExecutor:
 
             # Normal completion
             self.state_manager.update_status(agent_name, 'completed')
+            logger.info(
+                "Agent completed successfully",
+                extra={
+                    'operation': 'execute_agent_run',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'status': 'completed',
+                    'is_last_agent': is_last_agent
+                }
+            )
 
             return AgentExecutionResult(
                 success=True,
@@ -329,6 +387,19 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
+            logger.error(
+                "Agent execution failed",
+                extra={
+                    'operation': 'execute_agent_run',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'is_last_agent': is_last_agent,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self.state_manager.update_status(agent_name, 'failed')
 
             return AgentExecutionResult(
@@ -341,7 +412,17 @@ class AgentExecutor:
         finally:
             # Restore original setup
             if original_setup:
-                self.agent_runner.setup_directories = original_setup
+                try:
+                    self.agent_runner.setup_directories = original_setup
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to restore original setup_directories",
+                        extra={
+                            'operation': 'agent_cleanup',
+                            'agent_name': agent_name,
+                            'error': str(cleanup_error)
+                        }
+                    )
 
     async def _execute_agent_run_async(
         self,
@@ -375,6 +456,17 @@ class AgentExecutor:
             if batch_status == 'batch_submitted':
                 self.state_manager.update_status(agent_name, 'batch_submitted')
                 self.console.print(f'  [yellow]→ {agent_name}: batch submitted[/yellow]')
+                logger.info(
+                    "Agent batch submitted (async)",
+                    extra={
+                        'operation': 'execute_agent_run_async',
+                        'agent_name': agent_name,
+                        'agent_idx': agent_idx,
+                        'duration': duration,
+                        'status': 'batch_submitted',
+                        'is_last_agent': is_last_agent
+                    }
+                )
                 return AgentExecutionResult(
                     success=True,
                     status='batch_submitted',
@@ -384,6 +476,17 @@ class AgentExecutor:
             # Normal completion
             self.state_manager.update_status(agent_name, 'completed')
             self.console.print(f'  [green]✓ {agent_name} ({duration:.2f}s)[/green]')
+            logger.info(
+                "Agent completed successfully (async)",
+                extra={
+                    'operation': 'execute_agent_run_async',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'status': 'completed',
+                    'is_last_agent': is_last_agent
+                }
+            )
 
             return AgentExecutionResult(
                 success=True,
@@ -394,6 +497,19 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
+            logger.error(
+                "Async agent execution failed",
+                extra={
+                    'operation': 'execute_agent_run_async',
+                    'agent_name': agent_name,
+                    'agent_idx': agent_idx,
+                    'duration': duration,
+                    'is_last_agent': is_last_agent,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                },
+                exc_info=True
+            )
             self.console.print(f'  [red]✗ {agent_name} failed: {e}[/red]')
             self.state_manager.update_status(agent_name, 'failed')
 
@@ -407,7 +523,17 @@ class AgentExecutor:
         finally:
             # Restore original setup
             if original_setup:
-                self.agent_runner.setup_directories = original_setup
+                try:
+                    self.agent_runner.setup_directories = original_setup
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "Failed to restore original setup_directories",
+                        extra={
+                            'operation': 'agent_cleanup_async',
+                            'agent_name': agent_name,
+                            'error': str(cleanup_error)
+                        }
+                    )
 
     def _setup_correlation(self, agent_idx: int) -> Optional[callable]:
         """Setup loop correlation if needed, return original setup function."""

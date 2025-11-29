@@ -1,8 +1,11 @@
 """Base async processor implementation with proper async patterns."""
 import asyncio
+import logging
 from abc import abstractmethod
 from typing import List, Optional, Any
 from .interfaces import ProcessingMode, IAsyncCapable
+
+logger = logging.getLogger(__name__)
 
 
 class BaseAsyncProcessor(IAsyncCapable):
@@ -103,6 +106,7 @@ class BaseAsyncProcessor(IAsyncCapable):
                 return await f.read()
         except ImportError:
             # Fallback to asyncio.to_thread if aiofiles not available
+            logger.info("aiofiles not available, using asyncio.to_thread fallback for file reading")
             import asyncio
             def _read_file():
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -124,6 +128,7 @@ class BaseAsyncProcessor(IAsyncCapable):
                 await f.write(content)
         except ImportError:
             # Fallback to asyncio.to_thread if aiofiles not available
+            logger.info("aiofiles not available, using asyncio.to_thread fallback for file writing")
             import asyncio
             def _write_file():
                 with open(file_path, 'w', encoding='utf-8') as f:

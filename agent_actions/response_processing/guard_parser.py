@@ -39,14 +39,35 @@ class GuardParser:
         """
         if not guard or not isinstance(guard, str):
             from agent_actions.shared.exceptions import ValidationError
-            raise ValidationError('Guard expression must be a non-empty string', context={'guard': guard, 'guard_type': str(type(guard)), 'operation': 'parse_guard'})
+            raise ValidationError(
+                'Guard expression must be a non-empty string',
+                context={
+                    'guard': guard,
+                    'guard_type': str(type(guard)),
+                    'operation': 'parse_guard',
+                    'failed_field': 'guard',
+                    'expected': 'Non-empty string (e.g., "udf:module.function" or SQL expression)',
+                    'actual_value': guard,
+                    'suggestion': 'Provide a valid guard expression as a non-empty string. Use "udf:module.function" for UDF guards or SQL-like expressions for SQL guards.'
+                }
+            )
         original_guard = guard
         guard = guard.strip()
         if guard.startswith(cls.UDF_PREFIX):
             udf_expression = guard[len(cls.UDF_PREFIX):].strip()
             if not udf_expression:
                 from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError("UDF guard expression cannot be empty after 'udf:' prefix", context={'guard': original_guard, 'operation': 'parse_udf_guard'})
+                raise ValidationError(
+                    "UDF guard expression cannot be empty after 'udf:' prefix",
+                    context={
+                        'guard': original_guard,
+                        'operation': 'parse_udf_guard',
+                        'failed_field': 'udf_expression',
+                        'expected': 'Non-empty UDF expression after "udf:" prefix (e.g., "udf:module.function")',
+                        'actual_value': udf_expression,
+                        'suggestion': 'Provide a valid UDF expression in the format "udf:module.function" or "udf:module.submodule.function".'
+                    }
+                )
             cls._validate_udf_expression(udf_expression)
             return GuardExpression(guard_type=GuardType.UDF, expression=udf_expression, original=original_guard)
         else:
@@ -67,13 +88,35 @@ class GuardParser:
         pattern = '^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$'
         if not re.match(pattern, expression):
             from agent_actions.shared.exceptions import ValidationError
-            raise ValidationError(f"Invalid UDF expression format: '{expression}'. Expected format: 'module.function' or 'module.submodule.function'", context={'expression': expression, 'expected_pattern': pattern, 'operation': 'validate_udf_expression'})
+            raise ValidationError(
+                f"Invalid UDF expression format: '{expression}'. Expected format: 'module.function' or 'module.submodule.function'",
+                context={
+                    'expression': expression,
+                    'expected_pattern': pattern,
+                    'operation': 'validate_udf_expression',
+                    'failed_field': 'udf_expression',
+                    'expected': 'Valid Python module path (e.g., "module.function" or "module.submodule.function")',
+                    'actual_value': expression,
+                    'suggestion': 'Ensure the UDF expression follows Python module naming conventions: starts with letter/underscore, contains only alphanumeric characters and underscores, separated by dots.'
+                }
+            )
         dangerous_patterns = ['__import__', 'exec', 'eval', 'compile', 'open', 'file', 'input', 'raw_input', 'reload', 'vars', 'globals', 'locals', 'dir', 'hasattr', 'getattr', 'setattr', 'delattr', '__']
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
                 from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError(f'UDF expression contains potentially dangerous pattern: {pattern}', context={'expression': expression, 'dangerous_pattern': pattern, 'operation': 'validate_udf_expression'})
+                raise ValidationError(
+                    f'UDF expression contains potentially dangerous pattern: {pattern}',
+                    context={
+                        'expression': expression,
+                        'dangerous_pattern': pattern,
+                        'operation': 'validate_udf_expression',
+                        'failed_field': 'udf_expression',
+                        'expected': 'UDF expression without dangerous patterns like exec, eval, __import__, etc.',
+                        'actual_value': expression,
+                        'suggestion': f'Remove the dangerous pattern "{pattern}" from your UDF expression. Use safe function calls only.'
+                    }
+                )
 
     @classmethod
     def _validate_sql_expression(cls, expression: str) -> None:
@@ -91,7 +134,18 @@ class GuardParser:
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
                 from agent_actions.shared.exceptions import ValidationError
-                raise ValidationError(f'SQL expression contains potentially dangerous pattern: {pattern}', context={'expression': expression, 'dangerous_pattern': pattern, 'operation': 'validate_sql_expression'})
+                raise ValidationError(
+                    f'SQL expression contains potentially dangerous pattern: {pattern}',
+                    context={
+                        'expression': expression,
+                        'dangerous_pattern': pattern,
+                        'operation': 'validate_sql_expression',
+                        'failed_field': 'sql_expression',
+                        'expected': 'SQL expression without dangerous patterns like exec, eval, __import__, etc.',
+                        'actual_value': expression,
+                        'suggestion': f'Remove the dangerous pattern "{pattern}" from your SQL guard expression. Use safe SQL operators and column references only.'
+                    }
+                )
 
     @classmethod
     def is_udf_guard(cls, guard: str) -> bool:

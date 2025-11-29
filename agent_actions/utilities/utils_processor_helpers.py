@@ -1,10 +1,13 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
+import logging
 from typing import Any, Dict, Optional
 from agent_actions.utilities.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
 from agent_actions.utilities.transformation import PassthroughTransformer
+
+logger = logging.getLogger(__name__)
 
 def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_context: Optional[Any]=None) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
@@ -97,7 +100,15 @@ def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
         filter_service = get_global_filter()
         filter_matched = filter_service.filter_item(context, where_clause_config['clause'])
         return not filter_matched
-    except Exception:
+    except Exception as e:
+        logger.debug(
+            "Where clause skip check failed, using passthrough_on_error setting: %s",
+            e,
+            extra={
+                'where_clause': where_clause_config.get('clause'),
+                'operation': 'where_clause_skip_check'
+            }
+        )
         passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
         return passthrough_on_error
 
@@ -116,7 +127,15 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
             return not filter_result.matched
         else:
             return not filter_result
-    except Exception:
+    except Exception as e:
+        logger.debug(
+            "Where clause filter check failed, using passthrough_on_error setting: %s",
+            e,
+            extra={
+                'where_clause': where_clause_config.get('clause'),
+                'operation': 'where_clause_filter_check'
+            }
+        )
         passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
         return not passthrough_on_error
 

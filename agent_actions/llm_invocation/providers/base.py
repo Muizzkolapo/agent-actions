@@ -624,9 +624,34 @@ class BatchProvider(ABC):
                 return operation()
             except Exception as e:
                 if attempt == max_attempts - 1:
+                    # Log final failure after all retries exhausted
+                    logger.error(
+                        "All retry attempts exhausted",
+                        extra={
+                            'operation': 'retry_exhausted',
+                            'total_attempts': max_attempts,
+                            'final_error': str(e),
+                            'error_type': type(e).__name__
+                        }
+                    )
                     raise
+
                 delay = initial_delay * (2 ** attempt)
-                logger.warning(f"Attempt {attempt + 1}/{max_attempts} failed, retrying in {delay}s...")
+
+                # Log retry attempt with configuration and wait time
+                logger.warning(
+                    f"Retry attempt {attempt + 1}/{max_attempts} after failure",
+                    extra={
+                        'operation': 'retry_attempt',
+                        'attempt': attempt + 1,
+                        'max_attempts': max_attempts,
+                        'wait_time': delay,
+                        'initial_delay': initial_delay,
+                        'backoff_base': 2,
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    }
+                )
                 time.sleep(delay)
 
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:

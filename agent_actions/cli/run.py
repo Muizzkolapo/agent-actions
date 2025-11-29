@@ -32,7 +32,28 @@ class RunCommand:
         """Find the configuration file."""
         full_path = config_dir / filename
         if not full_path.exists():
-            raise FileLoadError('Configuration file not found', context={'file_path': str(full_path), 'config_dir': str(config_dir), 'filename': filename, 'agent_name': self.agent_name})
+            # Check for alternative locations
+            parent_dir = config_dir.parent
+            alternatives_checked = [
+                parent_dir / filename,
+                Path.cwd() / filename,
+                Path.cwd() / 'config' / filename
+            ]
+            existing_alternatives = [str(p) for p in alternatives_checked if p.exists()]
+
+            raise FileLoadError(
+                'Configuration file not found',
+                context={
+                    'file_path': str(full_path),
+                    'config_dir': str(config_dir),
+                    'filename': filename,
+                    'agent_name': self.agent_name,
+                    'alternatives_checked': [str(p) for p in alternatives_checked],
+                    'found_alternatives': existing_alternatives if existing_alternatives else None,
+                    'suggestion': f"File not found at {full_path}. Check if the file exists or use an absolute path." +
+                                 (f" Found similar file at: {existing_alternatives[0]}" if existing_alternatives else "")
+                }
+            )
         return full_path
 
     def execute(self) -> None:

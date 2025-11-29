@@ -183,11 +183,35 @@ class ProcessorErrorHandlerMixin:
                     except exceptions as e:
                         last_exception = e
                         if attempt < max_attempts - 1:
-                            self.log_warning(f'Attempt {attempt + 1} failed, retrying in {current_delay}s', f'{func.__name__} (retry)', attempt=attempt + 1, max_attempts=max_attempts, error=str(e))
+                            # Log retry attempt with configuration and wait time
+                            self.logger.warning(
+                                f"Retry attempt {attempt + 1}/{max_attempts} after failure",
+                                extra={
+                                    'operation': 'retry_attempt',
+                                    'function': func.__name__,
+                                    'attempt': attempt + 1,
+                                    'max_attempts': max_attempts,
+                                    'wait_time': current_delay,
+                                    'backoff_multiplier': backoff,
+                                    'max_delay': max_delay,
+                                    'error': str(e),
+                                    'error_type': type(e).__name__
+                                }
+                            )
                             time.sleep(current_delay)
                             current_delay = min(current_delay * backoff, max_delay)
                         else:
-                            self.log_warning(f'All {max_attempts} attempts failed', f'{func.__name__} (retry)', max_attempts=max_attempts, final_error=str(e))
+                            # Log final failure after all retries exhausted
+                            self.logger.error(
+                                f"All retry attempts exhausted for {func.__name__}",
+                                extra={
+                                    'operation': 'retry_exhausted',
+                                    'function': func.__name__,
+                                    'total_attempts': max_attempts,
+                                    'final_error': str(e),
+                                    'error_type': type(e).__name__
+                                }
+                            )
                 if last_exception:
                     raise last_exception
             return wrapper

@@ -4,11 +4,14 @@ Application Container for managing all DI configuration and bootstrapping.
 This module provides the main application container that sets up all dependencies
 and provides factory methods for creating key application components.
 """
+import logging
 from typing import Dict, Any, Optional
 from agent_actions.orchestration.dependency_injection import DependencyContainer, ProcessorFactory, registry
 from agent_actions.configuration.di_configurator import DIConfigurator, ConfigurationProfile
 from .agent_runner import AgentRunner
 from agent_actions.configuration.interfaces import IDataLoader, IDataProcessor, IGenerator, ISourceDataLoader
+
+logger = logging.getLogger(__name__)
 
 class ApplicationContainer:
     """Main application container that manages all dependencies."""
@@ -96,10 +99,37 @@ class ApplicationContainer:
 
         try:
             source_loader = self.container.get(ISourceDataLoader)
-        except Exception:
+            logger.debug(
+                "Retrieved ISourceDataLoader from DI container",
+                extra={'agent_name': agent_name, 'idx': idx}
+            )
+        except Exception as e:
+            logger.debug(
+                "ISourceDataLoader not in container, trying IDataLoader fallback",
+                extra={
+                    'agent_name': agent_name,
+                    'idx': idx,
+                    'error': str(e),
+                    'fallback_attempt': 'IDataLoader'
+                }
+            )
             try:
                 source_loader = self.container.get(IDataLoader)
-            except Exception:
+                logger.info(
+                    "Using IDataLoader as fallback for ISourceDataLoader",
+                    extra={'agent_name': agent_name, 'idx': idx}
+                )
+            except Exception as e2:
+                logger.info(
+                    "Creating source_loader via processor_factory (final fallback)",
+                    extra={
+                        'agent_name': agent_name,
+                        'idx': idx,
+                        'first_error': str(e),
+                        'second_error': str(e2),
+                        'fallback': 'processor_factory'
+                    }
+                )
                 source_loader = self.processor_factory.create_source_data_loader(agent_name)
 
         # Build agent indices mapping for historical node data loading
@@ -107,13 +137,39 @@ class ApplicationContainer:
 
         try:
             data_generator = self.container.get(IGenerator)
-        except Exception:
+            logger.debug(
+                "Retrieved IGenerator from DI container",
+                extra={'agent_name': agent_name, 'idx': idx}
+            )
+        except Exception as e:
+            logger.info(
+                "IGenerator not in container, creating DataGenerator manually",
+                extra={
+                    'agent_name': agent_name,
+                    'idx': idx,
+                    'error': str(e),
+                    'fallback': 'DataGenerator'
+                }
+            )
             dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
             data_generator = DataGenerator(agent_config, agent_name, dependency_configs, agent_indices)
 
         try:
             data_processor = self.container.get(IDataProcessor)
-        except Exception:
+            logger.debug(
+                "Retrieved IDataProcessor from DI container",
+                extra={'agent_name': agent_name, 'idx': idx}
+            )
+        except Exception as e:
+            logger.info(
+                "IDataProcessor not in container, creating DataProcessor manually",
+                extra={
+                    'agent_name': agent_name,
+                    'idx': idx,
+                    'error': str(e),
+                    'fallback': 'DataProcessor'
+                }
+            )
             data_processor = DataProcessor(agent_config)
 
         # Create BatchService with agent_indices and dependency_configs for historical node loading

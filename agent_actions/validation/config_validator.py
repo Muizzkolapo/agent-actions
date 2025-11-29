@@ -36,6 +36,10 @@ class ConfigValidator(BaseValidator):
             if all_agent_paths.count(resolved_full_path) > 1:
                 self.add_error(f'Duplicate agent configuration file: {resolved_full_path} (found {all_agent_paths.count(resolved_full_path)} times).')
         except Exception as e:
+            logger.error(
+                f"Error checking agent file uniqueness for {full_path_str}: {e}",
+                exc_info=True
+            )
             self.add_error(f'Error checking agent file uniqueness for {full_path_str}: {e}')
 
     def _check_agent_name_unique_logic(self, agent_name_to_check: str, project_dir_str: str, current_file_path_str: Optional[str]=None) -> None:
@@ -56,6 +60,10 @@ class ConfigValidator(BaseValidator):
             if conflicts:
                 self.add_error(f"Agent name '{agent_name_to_check}' is not unique. Also defined in: {', '.join(conflicts)}.")
         except Exception as e:
+            logger.error(
+                f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}",
+                exc_info=True
+            )
             self.add_error(f"Error checking agent name uniqueness for '{agent_name_to_check}': {e}")
 
     def _validate_single_agent_entry_logic(self, entry: Dict[str, Any], cfg_ctx_name: str, proj_root: Optional[Path]=None) -> None:

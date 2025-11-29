@@ -65,8 +65,12 @@ def application_container_context(config: Optional[Dict[str, Any]]=None, validat
     if validate_startup_config and config is None:
         try:
             initialize_application(constructor_path, default_path)
-        except StartupValidationError:
-            logger.warning('Startup validation failed, continuing with default configuration')
+        except StartupValidationError as e:
+            logger.warning(
+                f'Startup validation failed, continuing with default configuration: {e}',
+                exc_info=True
+            )
+            logger.debug(f'Validation errors: {e.errors if hasattr(e, "errors") else "unknown"}')
     if config is None:
         container = ApplicationContainer.create_for_environment('development')
     else:

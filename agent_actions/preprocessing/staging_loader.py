@@ -9,7 +9,10 @@ from agent_actions.utilities.source_data_utils import deduplicate_by_source_guid
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.shared.exceptions import AgentActionsException
 import json
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 def generate_staging(agent_config, agent_name, file_path, base_directory, output_directory, idx):
     """
@@ -43,7 +46,18 @@ def generate_staging(agent_config, agent_name, file_path, base_directory, output
         elif file_type == '.json':
             try:
                 parsed = json.loads(content)
-            except Exception:
+            except Exception as e:
+                logger.warning(
+                    "Failed to parse JSON content from %s, using raw content: %s",
+                    file_path, e,
+                    extra={
+                        'file_path': file_path,
+                        'file_type': file_type,
+                        'agent_name': agent_name,
+                        'operation': 'json_parse',
+                        'content_length': len(content) if content else 0
+                    }
+                )
                 parsed = content
             if isinstance(parsed, list):
                 data_chunk = [{**row, 'batch_id': local_batch_id, 'batch_uuid': f'{local_batch_id}_{idx}', 'source_guid': str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))), 'target_id': str(uuid.uuid4()), 'node_id': node_id} for idx, row in enumerate(parsed)]

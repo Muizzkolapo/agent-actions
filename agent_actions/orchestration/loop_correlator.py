@@ -5,9 +5,12 @@ Handles correlation of loop iteration outputs for downstream agents
 without breaking existing sequential execution.
 """
 import json
+import logging
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
 
 class LoopOutputCorrelator:
     """Correlates outputs from parallel loop executions for downstream consumption."""
@@ -109,6 +112,8 @@ class LoopOutputCorrelator:
     def _load_agent_outputs(self, output_dir: Path) -> List[Dict[str, Any]]:
         """Load all JSON outputs from an agent's output directory."""
         outputs = []
+        corrupted_files = []
+
         for json_file in output_dir.glob('*.json'):
             try:
                 with open(json_file, 'r') as f:
@@ -117,14 +122,66 @@ class LoopOutputCorrelator:
                         outputs.extend(data)
                     else:
                         outputs.append(data)
-            except Exception:
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "Skipping corrupted JSON file in loop output",
+                    extra={
+                        'operation': 'load_loop_outputs',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e),
+                        'line': e.lineno if hasattr(e, 'lineno') else None
+                    }
+                )
+                corrupted_files.append(str(json_file.name))
                 continue
+            except (OSError, IOError) as e:
+                logger.error(
+                    "Failed to read loop output file",
+                    extra={
+                        'operation': 'load_loop_outputs',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e)
+                    }
+                )
+                corrupted_files.append(str(json_file.name))
+                continue
+            except Exception as e:
+                logger.error(
+                    "Unexpected error loading loop output file",
+                    extra={
+                        'operation': 'load_loop_outputs',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    },
+                    exc_info=True
+                )
+                corrupted_files.append(str(json_file.name))
+                continue
+
+        if corrupted_files:
+            logger.warning(
+                f"Skipped {len(corrupted_files)} corrupted files in loop output",
+                extra={
+                    'operation': 'load_loop_outputs',
+                    'output_dir': str(output_dir),
+                    'corrupted_count': len(corrupted_files),
+                    'corrupted_files': corrupted_files,
+                    'loaded_count': len(outputs)
+                }
+            )
+
         return outputs
 
     def _load_agent_outputs_with_filenames(self, output_dir: Path) -> Tuple[List[Dict[str, Any]], set]:
         """Load all JSON outputs from an agent's output directory with their filenames."""
         outputs = []
         filenames = set()
+        corrupted_files = []
+
         for json_file in output_dir.glob('*.json'):
             try:
                 with open(json_file, 'r') as f:
@@ -137,8 +194,58 @@ class LoopOutputCorrelator:
                         data['_source_file'] = json_file.name
                         outputs.append(data)
                     filenames.add(json_file.name)
-            except Exception:
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "Skipping corrupted JSON file in loop output",
+                    extra={
+                        'operation': 'load_loop_outputs_with_filenames',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e),
+                        'line': e.lineno if hasattr(e, 'lineno') else None
+                    }
+                )
+                corrupted_files.append(str(json_file.name))
                 continue
+            except (OSError, IOError) as e:
+                logger.error(
+                    "Failed to read loop output file",
+                    extra={
+                        'operation': 'load_loop_outputs_with_filenames',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e)
+                    }
+                )
+                corrupted_files.append(str(json_file.name))
+                continue
+            except Exception as e:
+                logger.error(
+                    "Unexpected error loading loop output file",
+                    extra={
+                        'operation': 'load_loop_outputs_with_filenames',
+                        'file': str(json_file),
+                        'output_dir': str(output_dir),
+                        'error': str(e),
+                        'error_type': type(e).__name__
+                    },
+                    exc_info=True
+                )
+                corrupted_files.append(str(json_file.name))
+                continue
+
+        if corrupted_files:
+            logger.warning(
+                f"Skipped {len(corrupted_files)} corrupted files in loop output",
+                extra={
+                    'operation': 'load_loop_outputs_with_filenames',
+                    'output_dir': str(output_dir),
+                    'corrupted_count': len(corrupted_files),
+                    'corrupted_files': corrupted_files,
+                    'loaded_count': len(outputs)
+                }
+            )
+
         return (outputs, filenames)
 
     def _correlate_by_source_record(self, loop_outputs: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:

@@ -1,9 +1,42 @@
 import os
+import re
 from typing import Any, Dict, Optional, Union
 from agent_actions.utilities.constants import API_KEY_KEY, JSON_MODE_KEY
 
 class BaseVendorHandler:
     """Common functionality shared by vendor handlers."""
+
+    @staticmethod
+    def redact_sensitive_data(data: Any, redact_keys: tuple = ('api_key', 'key', 'token', 'password', 'secret', 'authorization')) -> Any:
+        """
+        Redact sensitive data from request/response for logging.
+
+        Args:
+            data: Data to redact (dict, list, or primitive)
+            redact_keys: Tuple of key names to redact
+
+        Returns:
+            Redacted copy of data
+        """
+        if isinstance(data, dict):
+            return {
+                k: '[REDACTED]' if any(key in k.lower() for key in redact_keys) else BaseVendorHandler.redact_sensitive_data(v, redact_keys)
+                for k, v in data.items()
+            }
+        elif isinstance(data, list):
+            return [BaseVendorHandler.redact_sensitive_data(item, redact_keys) for item in data]
+        elif isinstance(data, str):
+            # Redact API key patterns (sk-*, anthropic-*, etc.)
+            patterns = [
+                (r'sk-[a-zA-Z0-9]{20,}', 'sk-[REDACTED]'),
+                (r'anthropic-[a-zA-Z0-9-]{20,}', 'anthropic-[REDACTED]'),
+                (r'AIza[a-zA-Z0-9_-]{35}', 'AIza[REDACTED]'),  # Google API keys
+            ]
+            result = data
+            for pattern, replacement in patterns:
+                result = re.sub(pattern, replacement, result)
+            return result
+        return data
 
     @staticmethod
     def get_api_key(agent_config: Dict[str, Any]) -> Optional[str]:

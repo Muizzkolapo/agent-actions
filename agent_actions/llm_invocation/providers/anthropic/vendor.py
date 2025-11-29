@@ -1,9 +1,13 @@
 import anthropic
+import logging
+from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
 from agent_actions.preprocessing.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
+
+logger = logging.getLogger(__name__)
 
 class ClaudeHandler(BaseVendorHandler):
 
@@ -17,7 +21,37 @@ class ClaudeHandler(BaseVendorHandler):
         api_args = {'model': model_name, 'max_tokens': 1024, 'messages': [{'role': 'user', 'content': prompt_dedent}]}
         if schema is not None:
             api_args['tools'] = schema
+
+        # Log API request at DEBUG level
+        logger.debug(
+            "Anthropic API request",
+            extra={
+                'operation': 'anthropic_api_request',
+                'model': model_name,
+                'mode': 'json',
+                'max_tokens': 1024,
+                'has_tools': schema is not None
+            }
+        )
+
+        start_time = datetime.now()
         response = client.messages.create(**api_args)
+        duration = (datetime.now() - start_time).total_seconds()
+
+        # Log API response at DEBUG level
+        logger.debug(
+            "Anthropic API response",
+            extra={
+                'operation': 'anthropic_api_response',
+                'model': model_name,
+                'duration': duration,
+                'stop_reason': response.stop_reason,
+                'usage': {
+                    'input_tokens': response.usage.input_tokens if response.usage else None,
+                    'output_tokens': response.usage.output_tokens if response.usage else None
+                }
+            }
+        )
         response_content: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = next((block.input for block in response.content if hasattr(block, 'input')), None)
         if response_content is None:
             text_content = next((block.text for block in response.content if hasattr(block, 'text')), 'No text content available')

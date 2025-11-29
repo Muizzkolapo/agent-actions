@@ -140,7 +140,17 @@ def validate_path_permissions(path: Union[str, Path], readable: bool=False, writ
         requirements['must_be_writable'] = True
     try:
         return get_path_manager().validate_path(Path(path), requirements)
-    except Exception:
+    except Exception as e:
+        logger.debug(
+            "Path validation failed, returning False: %s",
+            e,
+            extra={
+                'path': str(path),
+                'readable': readable,
+                'writable': writable,
+                'operation': 'path_permission_validation'
+            }
+        )
         return False
 
 def clean_directory(directory: Union[str, Path], recursive: bool=False) -> bool:
