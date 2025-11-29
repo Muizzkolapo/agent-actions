@@ -39,7 +39,7 @@ class CLI:
 
         @click.group(name='agent-actions')
         @click.version_option(version=__version__)
-        @click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging')
+        @click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging and source file/line references (for developers)')
         @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
         def group(debug: bool, verbose: bool) -> None:
             """Agent Actions CLI tool for managing and running agent workflows."""
@@ -104,6 +104,9 @@ class CLI:
         else:
             level = 'INFO'  # Default to INFO (not CRITICAL)
 
+        # Determine source location setting (only in debug mode)
+        include_source = debug_mode
+
         # Initialize LoggerFactory with configuration
         # This respects AGENT_ACTIONS_LOG_LEVEL env var if set
         config = LoggingConfig.from_environment()
@@ -112,6 +115,11 @@ class CLI:
             config.default_level = level
             for handler in config.handlers:
                 handler.level = level
+
+        # Set source location based on debug mode
+        if debug_mode:
+            config.include_source_location = include_source
+            config.file_log_level = 'DEBUG'
 
         LoggerFactory.initialize(config=config, force=True)
         self.logger = LoggerFactory.get_logger('cli')
@@ -180,7 +188,7 @@ def _print_help_callback(ctx, param, value):
 
 @click.group()
 @click.version_option(version=__version__)
-@click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging')
+@click.option('--debug', is_flag=True, help='Enable debug mode with verbose logging and source file/line references (for developers)')
 @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
 @click.option('-h', is_flag=True, expose_value=False, is_eager=True, callback=_print_help_callback, help='Show this message and exit.')
 def cli(debug: bool, verbose: bool) -> None:

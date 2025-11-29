@@ -177,7 +177,7 @@ class SchemaValidator(BaseValidator):
         if not self._is_directory(schema_dir):
             self.add_error(f'Schema path is not a directory: {schema_dir}')
             return False
-        logger.info(f"Starting schema validation for agent '{agent_name}' in directory: {schema_dir}")
+        logger.debug(f"Starting schema validation for agent '{agent_name}' in directory: {schema_dir}")
         if schema_files_to_validate:
             files_to_process = [schema_dir / fname for fname in schema_files_to_validate]
         else:
@@ -187,7 +187,7 @@ class SchemaValidator(BaseValidator):
                 return True
         for file_path in files_to_process:
             self._process_schema_file(file_path, file_path.name, agent_name)
-        logger.info(f"Schema validation complete for agent '{agent_name}'.")
+        logger.debug(f"Schema validation complete for agent '{agent_name}'.")
         return not self.has_errors()
 
     def check_schema_compatibility(self, schema1_data: Dict[str, Any], schema2_data: Dict[str, Any], schema1_name: str='Schema 1', schema2_name: str='Schema 2') -> bool:
@@ -197,7 +197,7 @@ class SchemaValidator(BaseValidator):
         It CLEARS existing errors on the instance before running.
         """
         self.clear_errors()
-        logger.info(f"Checking schema compatibility between '{schema1_name}' and '{schema2_name}'.")
+        logger.debug(f"Checking schema compatibility between '{schema1_name}' and '{schema2_name}'.")
         issues = []
         s1_type = schema1_data.get('type')
         s2_type = schema2_data.get('type')

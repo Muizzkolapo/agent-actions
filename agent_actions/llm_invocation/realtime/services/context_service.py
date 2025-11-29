@@ -65,7 +65,7 @@ class ContextService:
                 static_data_dir = ContextService._determine_static_data_dir(
                     agent_config.get('workflow_config_path')
                 )
-                logger.info(f"[SEED_DATA] Seed data directory: {static_data_dir}")
+                logger.debug(f"[SEED_DATA] Seed data directory: {static_data_dir}")
 
                 # Load seed data
                 static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)

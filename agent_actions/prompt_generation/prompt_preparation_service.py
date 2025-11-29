@@ -219,7 +219,7 @@ class PromptPreparationService:
                 "Ensure agent configuration is properly loaded before calling prepare_prompt_with_context()."
             )
 
-        logger.info(f"Preparing prompt for agent '{agent_name}' in {mode} mode")
+        logger.debug(f"Preparing prompt for agent '{agent_name}' in {mode} mode")
 
         # Initialize defaults
         agent_indices = agent_indices or {}
@@ -250,12 +250,12 @@ class PromptPreparationService:
 
         if context_scope and context_scope.get('seed_data'):
             try:
-                logger.info(f"[SEED_DATA_LOAD] Starting seed data loading...")
+                logger.debug(f"[SEED_DATA_LOAD] Starting seed data loading...")
                 # Determine seed_data directory from workflow config path
                 static_data_dir = PromptPreparationService._determine_static_data_dir(
                     agent_config.get('workflow_config_path')
                 )
-                logger.info(f"[SEED_DATA_LOAD] Seed data directory: {static_data_dir}")
+                logger.debug(f"[SEED_DATA_LOAD] Seed data directory: {static_data_dir}")
 
                 # Load seed data
                 static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
@@ -263,11 +263,11 @@ class PromptPreparationService:
                     context_scope.get('seed_data', {})
                 )
 
-                logger.info(
+                logger.debug(
                     f"[SEED_DATA_LOAD] Loaded {len(static_data)} seed data files: "
                     f"{list(static_data.keys())}"
                 )
-                logger.info(f"[SEED_DATA_LOAD] Seed data keys: {list(static_data.keys())}")
+                logger.debug(f"[SEED_DATA_LOAD] Seed data keys: {list(static_data.keys())}")
             except StaticDataLoadError as e:
                 logger.error(f"Failed to load static data: {e}")
                 raise
@@ -351,7 +351,7 @@ class PromptPreparationService:
             'llm_context_keys': list(llm_context.keys()) if isinstance(llm_context, dict) else []
         }
 
-        logger.info(
+        logger.debug(
             f"Prompt preparation complete for '{agent_name}': "
             f"prompt_length={metadata['prompt_length']}, "
             f"llm_context_keys={len(metadata['llm_context_keys'])}"

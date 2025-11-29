@@ -13,31 +13,35 @@ class ServiceLogger:
     """Utility class for service logging."""
     
     @staticmethod
-    def log_operation_start(logger: logging.Logger, operation: str, **context: Any) -> None:
+    def log_operation_start(logger: logging.Logger, operation: str, user_facing: bool = False, **context: Any) -> None:
         """
         Log the start of an operation.
-        
+
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
+            user_facing: Whether this is a user-facing operation (INFO) or internal (DEBUG). Default False.
             **context: Additional context to log.
         """
-        logger.info(f"Starting {operation}", extra={
+        log_func = logger.info if user_facing else logger.debug
+        log_func(f"Starting {operation}", extra={
             'operation': operation,
             **context
         })
     
     @staticmethod
-    def log_operation_success(logger: logging.Logger, operation: str, **context: Any) -> None:
+    def log_operation_success(logger: logging.Logger, operation: str, user_facing: bool = False, **context: Any) -> None:
         """
         Log the successful completion of an operation.
-        
+
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
+            user_facing: Whether this is a user-facing operation (INFO) or internal (DEBUG). Default False.
             **context: Additional context to log.
         """
-        logger.info(f"Successfully completed {operation}", extra={
+        log_func = logger.info if user_facing else logger.debug
+        log_func(f"Successfully completed {operation}", extra={
             'operation': operation,
             **context
         })

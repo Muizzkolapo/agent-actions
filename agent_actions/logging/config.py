@@ -30,7 +30,7 @@ class LoggingConfig:
     handlers: List[HandlerConfig] = field(default_factory=list)
     module_levels: Dict[str, LogLevel] = field(default_factory=dict)
     include_timestamps: bool = True
-    include_source_location: bool = True
+    include_source_location: bool = False  # Off by default for clean user-facing output
     redact_patterns: List[str] = field(
         default_factory=lambda: [
             r'api[_-]?key',
@@ -40,6 +40,14 @@ class LoggingConfig:
             r'credential',
         ]
     )
+
+    # File handler configuration
+    file_handler_enabled: bool = True
+    log_file_path: Optional[str] = None
+    file_log_level: LogLevel = 'DEBUG'
+    file_max_bytes: int = 10_485_760  # 10MB
+    file_backup_count: int = 5
+    file_format: Literal['human', 'json'] = 'human'
 
     @classmethod
     def from_project_config(cls, config: dict) -> LoggingConfig:
@@ -67,6 +75,15 @@ class LoggingConfig:
                 )
             )
 
+        # Parse file handler configuration from YAML
+        file_config = logging_config.get('file', {})
+        file_handler_enabled = file_config.get('enabled', True)
+        log_file_path = file_config.get('path')
+        file_log_level = file_config.get('level', 'DEBUG')
+        file_max_bytes = file_config.get('max_bytes', 10_485_760)
+        file_backup_count = file_config.get('backup_count', 5)
+        file_format = file_config.get('format', 'human')
+
         return cls(
             default_level=logging_config.get('level', 'INFO'),
             handlers=handlers,
@@ -83,6 +100,12 @@ class LoggingConfig:
                     r'credential',
                 ],
             ),
+            file_handler_enabled=file_handler_enabled,
+            log_file_path=log_file_path,
+            file_log_level=file_log_level,
+            file_max_bytes=file_max_bytes,
+            file_backup_count=file_backup_count,
+            file_format=file_format,
         )
 
     @classmethod
@@ -90,15 +113,28 @@ class LoggingConfig:
         """Create LoggingConfig from environment variables.
 
         Supported environment variables:
+            AGENT_ACTIONS_DEBUG: Set to '1' to enable debug mode (DEBUG level + source location)
             AGENT_ACTIONS_LOG_LEVEL: Default log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
             AGENT_ACTIONS_LOG_FORMAT: Output format ('human' or 'json')
+            AGENT_ACTIONS_NO_LOG_FILE: Set to '1' to disable file logging
+            AGENT_ACTIONS_LOG_FILE: Custom log file path (absolute or relative)
+            AGENT_ACTIONS_LOG_DIR: Custom log directory (will use 'agent_actions.log' as filename)
+            AGENT_ACTIONS_FILE_LOG_LEVEL: File log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
         Returns:
             LoggingConfig instance with values from environment or defaults.
         """
-        level = os.environ.get('AGENT_ACTIONS_LOG_LEVEL', 'INFO').upper()
-        if level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
-            level = 'INFO'
+        # Check for debug mode first (overrides other settings)
+        debug_mode = os.environ.get('AGENT_ACTIONS_DEBUG', '0') == '1'
+
+        if debug_mode:
+            level = 'DEBUG'
+            include_source = True
+        else:
+            level = os.environ.get('AGENT_ACTIONS_LOG_LEVEL', 'INFO').upper()
+            if level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
+                level = 'INFO'
+            include_source = False
 
         log_format = os.environ.get('AGENT_ACTIONS_LOG_FORMAT', 'human').lower()
         if log_format not in ('human', 'json'):
@@ -112,7 +148,24 @@ class LoggingConfig:
             )
         ]
 
+        # File handler configuration from environment
+        file_handler_enabled = os.environ.get('AGENT_ACTIONS_NO_LOG_FILE', '0') != '1'
+
+        log_file_path = os.environ.get('AGENT_ACTIONS_LOG_FILE') or None
+        if not log_file_path:
+            log_dir = os.environ.get('AGENT_ACTIONS_LOG_DIR')
+            if log_dir:
+                log_file_path = str(Path(log_dir) / 'agent_actions.log')
+
+        file_log_level = os.environ.get('AGENT_ACTIONS_FILE_LOG_LEVEL', 'DEBUG').upper()
+        if file_log_level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
+            file_log_level = 'DEBUG'
+
         return cls(
             default_level=level,
             handlers=handlers,
+            include_source_location=include_source,
+            file_handler_enabled=file_handler_enabled,
+            log_file_path=log_file_path,
+            file_log_level=file_log_level,
         )

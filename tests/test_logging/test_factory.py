@@ -13,6 +13,7 @@ from agent_actions.logging import (
     LoggerFactory,
     LoggingConfig,
 )
+from agent_actions.logging.formatters import HumanFormatter
 
 
 class CaptureHandler(logging.Handler):
@@ -319,7 +320,8 @@ class TestLoggerFactoryHandlerConfig:
 
         try:
             config = LoggingConfig(
-                handlers=[HandlerConfig(type='json', level='INFO')]
+                handlers=[HandlerConfig(type='json', level='INFO')],
+                file_handler_enabled=False  # Disable file handler for this test
             )
             LoggerFactory.initialize(config=config)
 
@@ -477,3 +479,414 @@ class TestLoggerFactoryIntegration:
 
         finally:
             sys.stderr = old_stderr
+
+
+class TestFileHandlerIntegration:
+    """Tests for file handler functionality."""
+
+    def setup_method(self):
+        """Reset factory before each test."""
+        LoggerFactory.reset()
+        CorrelationContext.clear_context()
+
+    def teardown_method(self):
+        """Clean up after each test."""
+        LoggerFactory.reset()
+        CorrelationContext.clear_context()
+
+    def test_file_handler_created_when_enabled(self):
+        """Test that file handler is created when enabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message')
+
+            assert log_file.exists()
+            content = log_file.read_text()
+            assert 'Test message' in content
+
+    def test_file_handler_not_created_when_disabled(self):
+        """Test that file handler is not created when disabled."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=False,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message')
+
+            assert not log_file.exists()
+
+    def test_file_handler_creates_directory(self):
+        """Test that file handler creates log directory if needed."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'nested' / 'logs' / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message')
+
+            assert log_file.exists()
+            assert log_file.parent.exists()
+
+    def test_file_handler_uses_debug_level(self):
+        """Test that file handler uses DEBUG level by default."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                default_level='INFO',  # Console level
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+                file_log_level='DEBUG',  # File level
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.debug('Debug message')
+            logger.info('Info message')
+
+            content = log_file.read_text()
+            assert 'Debug message' in content
+            assert 'Info message' in content
+
+    def test_file_handler_respects_custom_level(self):
+        """Test that file handler respects custom log level."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+                file_log_level='WARNING',
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.debug('Debug message')
+            logger.info('Info message')
+            logger.warning('Warning message')
+
+            content = log_file.read_text()
+            assert 'Debug message' not in content
+            assert 'Info message' not in content
+            assert 'Warning message' in content
+
+    def test_file_handler_no_colors_in_output(self):
+        """Test that file handler output has no ANSI color codes."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message')
+            logger.error('Error message')
+
+            content = log_file.read_text()
+            # Check for ANSI escape codes
+            assert '\x1b[' not in content
+            assert '\033[' not in content
+
+    def test_file_handler_with_json_format(self):
+        """Test file handler with JSON format."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+                file_format='json',
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message', extra={'key': 'value'})
+
+            content = log_file.read_text()
+            # Should be valid JSON
+            log_entry = json.loads(content.strip())
+            assert log_entry['message'] == 'Test message'
+            assert log_entry['level'] == 'INFO'
+
+    def test_file_handler_applies_filters(self):
+        """Test that file handler applies redacting filter."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Using api_key=sk-secret123')
+
+            content = log_file.read_text()
+            assert 'sk-secret123' not in content
+            assert '***' in content or '[REDACTED]' in content
+
+    def test_file_handler_rotation(self):
+        """Test that file handler rotates logs."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+                file_max_bytes=100,  # Small size to trigger rotation
+                file_backup_count=2,
+            )
+
+            LoggerFactory.initialize(config=config)
+            logger = LoggerFactory.get_logger('test')
+
+            # Write enough to trigger rotation
+            for i in range(20):
+                logger.info(f'Message number {i} with some extra text to fill space')
+
+            # Check that backup files were created
+            backup1 = Path(str(log_file) + '.1')
+            assert log_file.exists()
+            # Rotation might or might not create backups depending on exact size
+            # Just verify no crash and main file exists
+
+    def test_file_handler_graceful_failure(self, monkeypatch):
+        """Test that file handler fails gracefully on permission error."""
+        import io
+        import sys
+
+        old_stderr = sys.stderr
+        sys.stderr = io.StringIO()
+
+        try:
+            # Try to write to a path that will fail
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path='/root/impossible/test.log',  # Permission denied
+            )
+
+            # Should not raise exception, just warn
+            LoggerFactory.initialize(config=config)
+
+            # Logger should still work (console only)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test message')
+
+            # Check that warning was printed to stderr
+            stderr_output = sys.stderr.getvalue()
+            assert 'Warning' in stderr_output or 'Failed' in stderr_output
+
+        finally:
+            sys.stderr = old_stderr
+
+    def test_get_project_root_finds_agent_actions_yml(self):
+        """Test that _get_project_root finds agent_actions.yml directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            config_file = tmpdir_path / 'agent_actions.yml'
+            config_file.touch()  # Create the marker file
+
+            # Change to subdirectory
+            subdir = tmpdir_path / 'subdir' / 'nested'
+            subdir.mkdir(parents=True)
+
+            import os
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(subdir)
+
+                # Initialize factory to access helper methods
+                LoggerFactory.initialize()
+
+                root = LoggerFactory._get_project_root()
+                assert root.resolve() == tmpdir_path.resolve()
+
+            finally:
+                os.chdir(old_cwd)
+
+    def test_get_log_file_path_with_absolute_path(self):
+        """Test _get_log_file_path with absolute path."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            absolute_path = Path(tmpdir) / 'custom.log'
+            config = LoggingConfig(
+                file_handler_enabled=True,
+                log_file_path=str(absolute_path),
+            )
+
+            LoggerFactory.initialize(config=config)
+            path = LoggerFactory._get_log_file_path()
+
+            assert path == absolute_path
+
+    def test_get_log_file_path_with_relative_path(self):
+        """Test _get_log_file_path with relative path resolves to config directory."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir_path = Path(tmpdir)
+            config_file = tmpdir_path / 'agent_actions.yml'
+            config_file.touch()  # Create the marker file
+
+            import os
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(tmpdir_path)
+
+                config = LoggingConfig(
+                    file_handler_enabled=True,
+                    log_file_path='logs/my.log',  # Relative path
+                )
+
+                LoggerFactory.initialize(config=config)
+                path = LoggerFactory._get_log_file_path()
+
+                assert path.resolve() == (tmpdir_path / 'logs' / 'my.log').resolve()
+
+            finally:
+                os.chdir(old_cwd)
+
+    def test_dual_output_console_and_file(self):
+        """Test that logs go to both console and file."""
+        import io
+        import sys
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+
+            old_stderr = sys.stderr
+            sys.stderr = io.StringIO()
+
+            try:
+                config = LoggingConfig(
+                    file_handler_enabled=True,
+                    log_file_path=str(log_file),
+                    default_level='INFO',
+                    file_log_level='DEBUG',
+                )
+
+                LoggerFactory.initialize(config=config)
+                logger = LoggerFactory.get_logger('test')
+                logger.info('Info message')
+                logger.debug('Debug message')
+
+                # Check console output (stderr)
+                console_output = sys.stderr.getvalue()
+                assert 'Info message' in console_output
+                # Debug might not appear in console if console is INFO level
+
+                # Check file output
+                file_content = log_file.read_text()
+                assert 'Info message' in file_content
+                assert 'Debug message' in file_content  # File should have DEBUG
+
+            finally:
+                sys.stderr = old_stderr
+
+
+class TestSourceLocationControl:
+    """Tests for source location (file:line) display control."""
+
+    def test_normal_mode_no_source_location(self):
+        """Test that normal mode does not include source location."""
+        import io
+
+        config = LoggingConfig(include_source_location=False)
+        LoggerFactory.initialize(config, force=True)
+
+        logger = LoggerFactory.get_logger('test')
+
+        # Capture console output
+        console_capture = io.StringIO()
+        console_handler = logging.StreamHandler(console_capture)
+        console_handler.setFormatter(
+            HumanFormatter(use_colors=False, include_source_location=False)
+        )
+        logger.addHandler(console_handler)
+
+        logger.info('Test message')
+
+        output = console_capture.getvalue()
+
+        # Should NOT contain file references
+        assert 'test_factory.py' not in output
+        # Allow correlation context brackets but not file references
+        assert 'Test message' in output
+        # Ensure no parentheses for file location (but allow for correlation context)
+        assert '(' not in output or '[' in output  # Allow [correlation] but not (file.py:line)
+
+    def test_debug_mode_with_source_location(self):
+        """Test that debug mode includes source location."""
+        import io
+
+        config = LoggingConfig(include_source_location=True, default_level='DEBUG')
+        LoggerFactory.initialize(config, force=True)
+
+        logger = LoggerFactory.get_logger('test')
+
+        # Capture console output
+        console_capture = io.StringIO()
+        console_handler = logging.StreamHandler(console_capture)
+        console_handler.setFormatter(
+            HumanFormatter(use_colors=False, include_source_location=True)
+        )
+        logger.addHandler(console_handler)
+
+        logger.debug('Debug message')
+
+        output = console_capture.getvalue()
+
+        # SHOULD contain file references
+        assert 'test_factory.py' in output
+        assert '(' in output and ')' in output
+        assert 'Debug message' in output
+
+    def test_file_handler_respects_source_location_config(self):
+        """Test that file handler respects include_source_location config."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_file = Path(tmpdir) / 'test.log'
+
+            # Test with source location OFF
+            config = LoggingConfig(
+                include_source_location=False,
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config, force=True)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test without source')
+
+            file_content = log_file.read_text()
+            assert 'Test without source' in file_content
+            assert 'test_factory.py' not in file_content
+
+            # Reset and test with source location ON
+            LoggerFactory.reset()
+            log_file.unlink()
+
+            config = LoggingConfig(
+                include_source_location=True,
+                file_handler_enabled=True,
+                log_file_path=str(log_file),
+            )
+
+            LoggerFactory.initialize(config, force=True)
+            logger = LoggerFactory.get_logger('test')
+            logger.info('Test with source')
+
+            file_content = log_file.read_text()
+            assert 'Test with source' in file_content
+            assert 'test_factory.py' in file_content

@@ -128,7 +128,7 @@ class StaticDataLoader:
                     data = self._load_file(resolved_path, field_name)
                     self._cache[cache_key] = data
                     loaded_data[field_name] = data
-                    logger.info(f"Loaded static data field '{field_name}' from {resolved_path.name}")
+                    logger.debug(f"Loaded static data field '{field_name}' from {resolved_path.name}")
 
             except StaticDataLoadError:
                 # Re-raise StaticDataLoadError as-is
@@ -146,7 +146,7 @@ class StaticDataLoader:
                     cause=e
                 )
 
-        logger.info(f"Loaded {len(loaded_data)} static data fields: {list(loaded_data.keys())}")
+        logger.debug(f"Loaded {len(loaded_data)} static data fields: {list(loaded_data.keys())}")
         return loaded_data
 
     def _parse_file_path(self, file_spec: str, field_name: str) -> str:

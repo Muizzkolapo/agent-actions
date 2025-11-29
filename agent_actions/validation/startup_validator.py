@@ -26,10 +26,10 @@ class StartupValidator:
 
     def validate_environment_variables(self, constructor_path: Optional[str]=None) -> bool:
         """Validate required environment variables are present."""
-        logger.info('Validating environment variables...')
+        logger.debug('Validating environment variables...')
         try:
             self.environment_config = EnvironmentConfig()
-            logger.info(f'Environment configuration loaded successfully. Environment: {self.environment_config.agent_actions_env}')
+            logger.debug(f'Environment configuration loaded successfully. Environment: {self.environment_config.agent_actions_env}')
         except ValidationError as e:
             for error in e.errors():
                 field_name = error.get('loc', ('unknown',))[0]
@@ -107,7 +107,7 @@ class StartupValidator:
 
     def validate_file_system_access(self) -> bool:
         """Validate file system access permissions."""
-        logger.info('Validating file system access...')
+        logger.debug('Validating file system access...')
         current_dir = Path.cwd()
         if not current_dir.exists() or not os.access(current_dir, os.R_OK):
             self.errors.append(f'Cannot read from current directory: {current_dir}')
@@ -127,9 +127,9 @@ class StartupValidator:
 
     def validate_configuration_files(self, constructor_path: Optional[str]=None, default_path: Optional[str]=None) -> bool:
         """Validate configuration files can be loaded and parsed."""
-        logger.info('Validating configuration files...')
+        logger.debug('Validating configuration files...')
         if not constructor_path or not default_path:
-            logger.info('Configuration file paths not provided, skipping validation')
+            logger.debug('Configuration file paths not provided, skipping validation')
             return True
         try:
             config_manager = ConfigManager(constructor_path, default_path)
@@ -140,7 +140,7 @@ class StartupValidator:
             if config_manager.default_config is None:
                 self.errors.append(f'Failed to load default configuration from: {default_path}')
                 return False
-            logger.info('Configuration files validated successfully')
+            logger.debug('Configuration files validated successfully')
             return True
         except ConfigurationError as e:
             self.errors.append(f'Configuration file validation failed: {e}')
@@ -151,7 +151,7 @@ class StartupValidator:
 
     def validate_dependencies(self) -> bool:
         """Validate that required dependencies are available."""
-        logger.info('Validating dependencies...')
+        logger.debug('Validating dependencies...')
         required_packages = ['yaml', 'pydantic', 'openai', 'anthropic', 'tiktoken', 'flask', 'networkx', 'pandas']
         missing_packages = []
         for package in required_packages:
@@ -168,7 +168,7 @@ class StartupValidator:
         """Validate performance-related settings."""
         if not self.environment_config:
             return True
-        logger.info('Validating performance settings...')
+        logger.debug('Validating performance settings...')
         if self.environment_config.is_production():
             if not self.environment_config.enable_parallel_processing:
                 self.warnings.append('Parallel processing is disabled in production - this may impact performance')
@@ -178,7 +178,7 @@ class StartupValidator:
 
     def run_full_validation(self, constructor_path: Optional[str]=None, default_path: Optional[str]=None) -> bool:
         """Run complete startup validation."""
-        logger.info('Starting full startup validation...')
+        logger.debug('Starting full startup validation...')
         self.errors.clear()
         self.warnings.clear()
         validations = [self.validate_dependencies(), self.validate_environment_variables(constructor_path), self.validate_file_system_access(), self.validate_configuration_files(constructor_path, default_path), self.validate_performance_settings()]

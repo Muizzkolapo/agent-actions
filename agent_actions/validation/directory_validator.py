@@ -20,7 +20,7 @@ class DirectoryValidator(BaseValidator):
         """
         Checks if required directories exist and are accessible. Adds errors if not.
         """
-        logger.info('Checking required directories: %s', [str(d) for d in required_dirs])
+        logger.debug('Checking required directories: %s', [str(d) for d in required_dirs])
         missing_dirs = []
         permission_dirs = []
         not_dirs = []
@@ -49,7 +49,7 @@ class DirectoryValidator(BaseValidator):
         """
         Checks if a directory has the required structure. Adds errors if not.
         """
-        logger.info('Checking directory structure for: %s', base_dir)
+        logger.debug('Checking directory structure for: %s', base_dir)
         if not self._ensure_path_exists(base_dir):
             self.add_error(f'Base directory for structure check does not exist: {base_dir}')
             return
@@ -70,14 +70,14 @@ class DirectoryValidator(BaseValidator):
                     self.add_error(f"Required file '{req_file_name}' missing from '{subdir_name}' in {base_dir}.")
                 elif not self._is_file(file_path):
                     self.add_error(f"Path '{req_file_name}' in '{subdir_name}' ({base_dir}) exists but is not a file.")
-        logger.info('Directory structure check complete for: %s', base_dir)
+        logger.debug('Directory structure check complete for: %s', base_dir)
 
     def _ensure_directories_exist_logic(self, directories: List[Path], create_if_missing: bool=True) -> None:
         """
         Ensures directories exist, optionally creating them. Adds errors on failure.
         Returns a list of created directory paths (though this return is not part of BaseValidator's contract).
         """
-        logger.info('Ensuring directories exist: %s (create_if_missing=%s)', [str(d) for d in directories], create_if_missing)
+        logger.debug('Ensuring directories exist: %s (create_if_missing=%s)', [str(d) for d in directories], create_if_missing)
         created_dirs_log: List[Path] = []
         for directory in directories:
             if not self._ensure_path_exists(directory):
@@ -93,13 +93,13 @@ class DirectoryValidator(BaseValidator):
             elif not self._is_directory(directory):
                 self.add_error(f'Path exists but is not a directory: {directory}')
         if created_dirs_log:
-            logger.info('Successfully created directories: %s', [str(d) for d in created_dirs_log])
+            logger.debug('Successfully created directories: %s', [str(d) for d in created_dirs_log])
 
     def _check_write_permissions_logic(self, directories: List[Path]) -> None:
         """
         Checks if directories are writable. Adds errors if not.
         """
-        logger.info('Checking write permissions for: %s', [str(d) for d in directories])
+        logger.debug('Checking write permissions for: %s', [str(d) for d in directories])
         not_writable = []
         for directory in directories:
             if not self._ensure_path_exists(directory):

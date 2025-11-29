@@ -192,8 +192,8 @@ class ContextScopeProcessor:
 
         # Process STATIC_DATA: Add to both prompt_context and llm_context
         if static_data:
-            logger.info(f"[STATIC_DATA] Merging {len(static_data)} static data fields into context")
-            logger.info(f"[STATIC_DATA] Fields: {list(static_data.keys())}")
+            logger.debug(f"[STATIC_DATA] Merging {len(static_data)} static data fields into context")
+            logger.debug(f"[STATIC_DATA] Fields: {list(static_data.keys())}")
 
             # Add to llm_context (for LLM visibility)
             llm_context.update(static_data)
@@ -206,7 +206,7 @@ class ContextScopeProcessor:
                     "Seed data will overwrite it."
                 )
             prompt_context['seed'] = static_data
-            logger.info(f"[SEED_DATA] Added to prompt_context under 'seed' namespace")
+            logger.debug(f"[SEED_DATA] Added to prompt_context under 'seed' namespace")
 
         # Process DROP: Remove from prompt_context (security)
         for field_ref in context_scope.get('drop', []):

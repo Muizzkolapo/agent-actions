@@ -64,7 +64,7 @@ class BatchService:
         """Prepare batch tasks from data (delegates to BatchTaskPreparator)."""
         provider = self._provider_resolver.get_for_config(agent_config)
         prepared = self._task_preparator.prepare_tasks(agent_config=agent_config, data=data, provider=provider, output_directory=output_directory, batch_name=batch_name)
-        logger.info("Task preparation complete: %d tasks, %d filtered, %d skipped", prepared.task_count, prepared.stats.filtered_items, prepared.stats.skipped_items)
+        logger.debug("Task preparation complete: %d tasks, %d filtered, %d skipped", prepared.task_count, prepared.stats.filtered_items, prepared.stats.skipped_items)
         return prepared.tasks, prepared.context_map
 
     def submit_batch_job(self, agent_config, batch_name, data, output_directory=None, force=False):
