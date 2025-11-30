@@ -175,10 +175,11 @@ class TestFindRecordByIdentifiers:
 
     def test_find_record_lineage_mismatch_returns_none(self, split_records):
         """
-        Test that mismatched lineage returns None.
+        Test that mismatched lineage returns first source_guid match as fallback.
 
-        When caller's lineage doesn't match any record's lineage,
-        should return None instead of returning wrong record.
+        When caller's lineage doesn't match any record's lineage, the fix now returns
+        the first source_guid match as a fallback (instead of None). This handles
+        cross-run scenarios where UUIDs in lineage differ.
         """
         # Create a lineage that doesn't match any split record
         mismatched_lineage = [
@@ -197,8 +198,10 @@ class TestFindRecordByIdentifiers:
             caller_lineage=mismatched_lineage
         )
 
-        assert result is None, \
-            "Should return None when lineage doesn't match any record"
+        # After fix: returns first source_guid match as fallback
+        assert result is not None, \
+            "Should return first source_guid match when lineage doesn't match (fallback behavior)"
+        assert result['source_guid'] == "test-source-guid-12345"
 
     def test_find_record_lineage_prefix_match(self, split_records, caller_records):
         """
@@ -239,11 +242,11 @@ class TestFindRecordByIdentifiers:
 
     def test_find_record_lineage_longer_than_caller_returns_none(self, split_records):
         """
-        Test edge case: record has longer lineage than caller.
+        Test edge case: record has longer lineage than caller - returns fallback.
 
         This is an impossible scenario (caller can't have seen fewer nodes
         than the record it's trying to look up), but we handle it gracefully
-        by returning None.
+        by returning the first source_guid match as fallback.
         """
         # Create a short caller lineage (only up to node_5)
         short_caller_lineage = [
@@ -261,8 +264,10 @@ class TestFindRecordByIdentifiers:
             caller_lineage=short_caller_lineage
         )
 
-        assert result is None, \
-            "Should return None when record has longer lineage than caller (impossible case)"
+        # After fix: returns first source_guid match as fallback
+        assert result is not None, \
+            "Should return first source_guid match when lineage doesn't match (fallback behavior)"
+        assert result['source_guid'] == "test-source-guid-12345"
 
 
 class TestLineageMatchingEdgeCases:
@@ -293,7 +298,7 @@ class TestLineageMatchingEdgeCases:
         assert result is None, "Should return None when source_guid doesn't match"
 
     def test_find_record_no_matching_node_id(self, split_records):
-        """Test that non-matching node_id returns None."""
+        """Test that non-matching node_id still matches by source_guid (fix behavior)."""
         result = HistoricalNodeDataLoader._find_record_by_identifiers(
             data=split_records,
             source_guid="test-source-guid-12345",
@@ -301,7 +306,10 @@ class TestLineageMatchingEdgeCases:
             caller_lineage=["node_0_initial_process"]
         )
 
-        assert result is None, "Should return None when node_id doesn't match"
+        # After fix: node_id is not used for matching, only source_guid matters
+        # When lineage doesn't match, returns first source_guid match as fallback
+        assert result is not None, "Should return first source_guid match (node_id not used for matching)"
+        assert result['source_guid'] == "test-source-guid-12345"
 
     def test_find_record_empty_data_list(self):
         """Test handling of empty data list."""

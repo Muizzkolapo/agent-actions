@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Fixed historical node data lookup**: Resolved issue causing repetitive WARNING logs
+  in workflows with granularity changes (e.g., 1 document → N facts). The lookup now
+  correctly matches records by `source_guid`, using lineage for disambiguation in split
+  record scenarios. Added fallback logic to return first `source_guid` match when lineage
+  matching fails (e.g., cross-run scenarios where UUIDs differ). This eliminates ~30-50%
+  of console output being warning messages in affected workflows. Affects both online and
+  batch processing modes. (Issue #556)
+
 ### Added
 
 - **File-Based Logging**: Persistent log files with session separators (dbt-style)

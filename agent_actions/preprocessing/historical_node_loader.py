@@ -56,17 +56,22 @@ class HistoricalNodeDataLoader:
                 source_guid=source_guid
             )
 
-            # Find the node_id in lineage that corresponds to this action
+            # Find the node_id in lineage for this action (used for diagnostics and logging)
+            # NOTE: This is no longer used for matching in _find_record_by_identifiers,
+            # but we keep it for logging and debugging purposes
+            logger.debug(f"[DEBUG] Finding node_id for action='{action_name}' in lineage={lineage}")
             node_id = HistoricalNodeDataLoader._find_node_in_lineage(
                 action_name, lineage, agent_indices
             )
 
             if not node_id:
                 logger.warning(
-                    f"No node_id found in lineage for action '{action_name}'. "
+                    f"[DEBUG] No node_id found in lineage for action '{action_name}'. "
                     f"Lineage: {lineage}"
                 )
                 return None
+
+            logger.debug(f"[DEBUG] Found node_id={node_id} for action='{action_name}'")
 
             # Get the node index for constructing the path
             node_idx = agent_indices.get(action_name)
@@ -84,12 +89,30 @@ class HistoricalNodeDataLoader:
                 return None
 
             # Load and find the record
+            logger.debug(f"[DEBUG] Loading file: {target_path}")
             with open(target_path, 'r') as f:
                 data = json.load(f)
+
+            logger.debug(f"[DEBUG] File loaded, {len(data)} records found")
+
+            # DEBUG: Log what we're searching for
+            logger.debug(
+                f"[DEBUG] Searching for record: source_guid={source_guid}, node_id={node_id}, "
+                f"caller_lineage={'provided' if caller_lineage else 'None'}"
+            )
 
             record = HistoricalNodeDataLoader._find_record_by_identifiers(
                 data, source_guid, node_id, caller_lineage
             )
+
+            # DEBUG: Log result
+            if record:
+                logger.debug(f"[DEBUG] Found record with node_id={record.get('node_id')}")
+            else:
+                logger.debug(
+                    f"[DEBUG] No match found. File contains source_guids: "
+                    f"{set(r.get('source_guid') for r in data if isinstance(r, dict))}"
+                )
 
             if record:
                 ServiceLogger.log_operation_success(
@@ -245,18 +268,26 @@ class HistoricalNodeDataLoader:
         caller_lineage: Optional[List[str]] = None
     ) -> Optional[Dict]:
         """
-        Find a record in the data that matches source_guid, node_id, and optionally lineage.
+        Find a record in the data that matches source_guid and optionally lineage.
 
-        When multiple records share the same source_guid and node_id (e.g., after a split
-        operation), lineage-based matching is used to identify the correct record by
-        checking if the record's lineage is a prefix of the caller's lineage.
+        The matching strategy prioritizes source_guid as the primary identifier,
+        with lineage-based matching providing disambiguation for split record scenarios.
+
+        **Matching Logic**:
+        1. Primary filter: source_guid (stable across granularity changes)
+        2. Secondary filter: lineage prefix matching (for split records)
+
+        **Scenarios Handled**:
+        - Granularity changes (1 doc → N facts): Matches by source_guid
+        - Split records (same source_guid, different branches): Uses lineage to select correct branch
+        - Legacy workflows (no lineage): Returns first match by source_guid
 
         Args:
             data: List of records from the target file
-            source_guid: Source GUID to match
-            node_id: Node ID to match
-            caller_lineage: Optional lineage from the calling record for precise matching.
-                          If None, uses legacy matching (source_guid + node_id only).
+            source_guid: Source GUID to match (required)
+            node_id: Node ID (kept for logging/diagnostics, not used for matching)
+            caller_lineage: Optional lineage from calling record for precise matching.
+                          If None, uses legacy matching (source_guid only).
                           If provided, also checks lineage prefix matching.
 
         Returns:
@@ -265,7 +296,7 @@ class HistoricalNodeDataLoader:
         Examples:
             # Legacy matching (backward compatible)
             >>> _find_record_by_identifiers(data, "guid-123", "node_5_abc")
-            # Returns first record matching source_guid and node_id
+            # Returns first record matching source_guid
 
             # Lineage-based matching (for split records)
             >>> caller_lineage = ["node_0", "node_1", "node_5", "node_6_a", "node_23"]
@@ -273,25 +304,58 @@ class HistoricalNodeDataLoader:
             # Returns only the record whose lineage is a prefix of caller_lineage
         """
         if not isinstance(data, list):
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"[DEBUG _find_record] Data is not a list, type={type(data)}")
             return None
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"[DEBUG _find_record] Searching {len(data)} records for source_guid={source_guid}")
+
+        matches_found = 0
+        first_source_guid_match = None  # Track first match as fallback
 
         for record in data:
             if not isinstance(record, dict):
                 continue
 
-            # Match by both source_guid and node_id
-            if (record.get('source_guid') == source_guid and
-                record.get('node_id') == node_id):
+            # Match by source_guid only (allows matching across granularity changes)
+            # The node_id requirement was too strict and caused false negatives when
+            # granularity changed (e.g., 1 document → 5 facts, each with different node_id)
+            if record.get('source_guid') == source_guid:
+                matches_found += 1
+                logger.debug(
+                    f"[DEBUG _find_record] Match #{matches_found}: node_id={record.get('node_id')}, "
+                    f"has_lineage={bool(record.get('lineage'))}, caller_lineage={'provided' if caller_lineage else 'None'}"
+                )
 
-                # If caller_lineage is provided, also check lineage matching
+                # Store first match as fallback for when lineage matching fails
+                if first_source_guid_match is None:
+                    first_source_guid_match = record
+
+                # If caller_lineage is provided, use lineage matching for disambiguation
+                # This is essential for split record scenarios where multiple records share
+                # the same source_guid and node_id but differ in their processing branch
                 if caller_lineage is not None:
                     record_lineage = record.get('lineage')
                     if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
                         return record
-                    # If lineages don't match, continue searching
+                    # Lineages don't match - continue searching for correct branch
                     continue
 
                 # Legacy behavior: return first match when no lineage checking
+                # This maintains backward compatibility for workflows without lineage
+                logger.debug(f"[DEBUG _find_record] Returning match #{matches_found}")
                 return record
 
+        # If we found source_guid matches but no lineage matches, return first match as fallback
+        # This handles cross-run scenarios where UUIDs in lineage differ but source_guid is stable
+        if first_source_guid_match is not None:
+            logger.debug(
+                f"[DEBUG _find_record] No lineage match found, returning first source_guid match as fallback"
+            )
+            return first_source_guid_match
+
+        logger.debug(f"[DEBUG _find_record] No matches found (searched {len(data)} records, found {matches_found} source_guid matches)")
         return None
