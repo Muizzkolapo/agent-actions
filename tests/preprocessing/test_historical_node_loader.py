@@ -114,7 +114,7 @@ class TestHistoricalNodeDataLoader:
         assert result["content"]["fact"] == "test fact 1"
 
     def test_find_record_by_identifiers_not_found(self):
-        """Test when record is not found."""
+        """Test when record is not found (different source_guid)."""
         data = [
             {
                 "source_guid": "guid-1",
@@ -123,8 +123,9 @@ class TestHistoricalNodeDataLoader:
             }
         ]
 
+        # After fix: only source_guid matters for matching
         result = HistoricalNodeDataLoader._find_record_by_identifiers(
-            data, "guid-2", "node_0_def456"
+            data, "guid-NONEXISTENT", "node_0_def456"
         )
 
         assert result is None
@@ -252,3 +253,68 @@ class TestHistoricalNodeDataLoader:
         )
 
         assert result is None
+
+    def test_find_record_by_identifiers_granularity_change(self):
+        """Test finding record when node_id differs (granularity change scenario).
+
+        When granularity changes (e.g., 1 doc → 5 facts), each output has a different
+        node_id but the same source_guid. The lookup should succeed by matching
+        source_guid only.
+        """
+        data = [
+            {
+                "source_guid": "doc-guid-123",
+                "node_id": "node_1_fact_0",
+                "content": {"fact": "Fact 1"}
+            },
+            {
+                "source_guid": "doc-guid-123",
+                "node_id": "node_1_fact_1",
+                "content": {"fact": "Fact 2"}
+            },
+            {
+                "source_guid": "doc-guid-123",
+                "node_id": "node_1_fact_2",
+                "content": {"fact": "Fact 3"}
+            }
+        ]
+
+        # Looking for a different node_id than what's in the data
+        # Should match by source_guid and return first record
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data, "doc-guid-123", "node_1_different_id"
+        )
+
+        assert result is not None
+        assert result["content"]["fact"] == "Fact 1"
+
+    def test_find_record_by_identifiers_granularity_change_with_lineage(self):
+        """Test granularity change with lineage matching.
+
+        When lineage is provided, should use lineage to disambiguate even when
+        node_id doesn't match.
+        """
+        data = [
+            {
+                "source_guid": "doc-guid-123",
+                "node_id": "node_1_fact_0",
+                "lineage": ["node_0_abc", "node_1_fact_0", "node_2_branch_a"],
+                "content": {"branch": "A"}
+            },
+            {
+                "source_guid": "doc-guid-123",
+                "node_id": "node_1_fact_1",
+                "lineage": ["node_0_abc", "node_1_fact_1", "node_2_branch_b"],
+                "content": {"branch": "B"}
+            }
+        ]
+
+        # Caller from branch B with different node_id
+        caller_lineage = ["node_0_abc", "node_1_fact_1", "node_2_branch_b", "node_5_xyz"]
+
+        result = HistoricalNodeDataLoader._find_record_by_identifiers(
+            data, "doc-guid-123", "node_1_different_id", caller_lineage
+        )
+
+        assert result is not None
+        assert result["content"]["branch"] == "B"
