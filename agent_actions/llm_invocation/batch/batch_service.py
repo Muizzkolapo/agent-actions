@@ -80,7 +80,7 @@ class BatchService:
 
         tasks, context_map = self.prepare_batch_tasks(agent_config, data, output_directory, batch_name)
         if not tasks:
-            where_config = agent_config.get('where_clause', {})
+            where_config = agent_config.get('where_clause') or {}
             behavior = where_config.get('behavior', 'filter')
             if behavior == 'filter':
                 return {'type': 'passthrough', 'data': [], 'output_directory': output_directory}
