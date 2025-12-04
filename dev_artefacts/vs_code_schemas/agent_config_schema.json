@@ -1,0 +1,477 @@
+{
+  "$defs": {
+    "FilterScope": {
+      "description": "Scope for WHERE clause filtering.",
+      "enum": [
+        "item",
+        "agent"
+      ],
+      "title": "FilterScope",
+      "type": "string"
+    },
+    "SkipConditionConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for agent skip conditions (safe replacement for eval-based skip_if).",
+      "properties": {
+        "condition_type": {
+          "description": "Type of skip condition",
+          "enum": [
+            "previous_outputs_empty",
+            "previous_outputs_count",
+            "field_condition",
+            "custom"
+          ],
+          "title": "Condition Type",
+          "type": "string"
+        },
+        "agent_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Name of the agent to check outputs for",
+          "title": "Agent Name"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Threshold for count-based conditions",
+          "title": "Threshold"
+        },
+        "comparison": {
+          "anyOf": [
+            {
+              "enum": [
+                "==",
+                "!=",
+                "<",
+                "<=",
+                ">",
+                ">="
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "==",
+          "description": "Comparison operator for threshold",
+          "title": "Comparison"
+        },
+        "field_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Path to field in previous outputs (dot notation)",
+          "title": "Field Path"
+        },
+        "expected_value": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Expected value for field condition",
+          "title": "Expected Value"
+        },
+        "expression": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Safe expression for custom conditions (no eval())",
+          "title": "Expression"
+        }
+      },
+      "required": [
+        "condition_type"
+      ],
+      "title": "SkipConditionConfig",
+      "type": "object"
+    },
+    "WhereClauseBehavior": {
+      "description": "Behavior when WHERE clause condition fails.",
+      "enum": [
+        "skip",
+        "filter"
+      ],
+      "title": "WhereClauseBehavior",
+      "type": "string"
+    },
+    "WhereClauseConfig": {
+      "additionalProperties": false,
+      "description": "Configuration for WHERE clause filtering.",
+      "properties": {
+        "clause": {
+          "description": "SQL-like WHERE clause for filtering",
+          "maxLength": 10000,
+          "title": "Clause",
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/FilterScope",
+          "default": "item",
+          "description": "Filtering scope: 'item' for individual items, 'agent' for entire agent execution"
+        },
+        "passthrough_on_empty": {
+          "default": true,
+          "description": "Pass data through if no matches found",
+          "title": "Passthrough On Empty",
+          "type": "boolean"
+        },
+        "passthrough_on_error": {
+          "default": true,
+          "description": "Pass data through if evaluation error occurs",
+          "title": "Passthrough On Error",
+          "type": "boolean"
+        },
+        "cache_enabled": {
+          "default": true,
+          "description": "Enable caching of parsed WHERE clauses for performance",
+          "title": "Cache Enabled",
+          "type": "boolean"
+        },
+        "behavior": {
+          "$ref": "#/$defs/WhereClauseBehavior",
+          "default": "filter",
+          "description": "Behavior when condition fails: 'skip' (passthrough) or 'filter' (remove)"
+        }
+      },
+      "required": [
+        "clause"
+      ],
+      "title": "WhereClauseConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "description": "JSON Schema for Agent Actions agent configuration (agent_actions.yml)",
+  "properties": {
+    "agent_type": {
+      "title": "Agent Type",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "model_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Model Name"
+    },
+    "model_vendor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Model vendor/provider: 'openai', 'gemini', 'anthropic', 'groq', or 'tool'",
+      "title": "Model Vendor"
+    },
+    "api_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Api Key"
+    },
+    "code_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Code Path"
+    },
+    "dependencies": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "parent": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Parent",
+      "type": "array"
+    },
+    "prompt": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prompt"
+    },
+    "schema_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Schema Name"
+    },
+    "chunk_config": {
+      "additionalProperties": true,
+      "title": "Chunk Config",
+      "type": "object"
+    },
+    "side_collection": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Side Collection",
+      "type": "array"
+    },
+    "is_operational": {
+      "default": true,
+      "title": "Is Operational",
+      "type": "boolean"
+    },
+    "few_shot": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Few Shot",
+      "type": "integer"
+    },
+    "ephemeral": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ephemeral"
+    },
+    "add_dispatch": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Add Dispatch"
+    },
+    "run_mode": {
+      "default": "online",
+      "title": "Run Mode",
+      "type": "string"
+    },
+    "data_source": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Data Source"
+    },
+    "anthropic_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "API version header for Anthropic requests (e.g., '2023-06-01')",
+      "title": "Anthropic Version"
+    },
+    "enable_prompt_caching": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Enable Anthropic's prompt caching feature for improved performance",
+      "title": "Enable Prompt Caching"
+    },
+    "conditional_clause": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Legacy conditional clause (deprecated, use where_clause instead)",
+      "title": "Conditional Clause"
+    },
+    "skip_if": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Legacy skip condition (deprecated, use skip_condition instead)",
+      "title": "Skip If"
+    },
+    "where_clause": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WhereClauseConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "WHERE clause configuration for advanced filtering"
+    },
+    "skip_condition": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SkipConditionConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Safe skip condition configuration"
+    },
+    "max_execution_time": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": 300,
+      "description": "Maximum execution time in seconds",
+      "title": "Max Execution Time"
+    },
+    "enable_caching": {
+      "default": true,
+      "description": "Enable caching for performance",
+      "title": "Enable Caching",
+      "type": "boolean"
+    },
+    "context_scope": {
+      "additionalProperties": false,
+      "description": "Control which fields from upstream actions are available in different contexts",
+      "properties": {
+        "include": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Include",
+          "type": "array",
+          "description": "Fields to include in LLM additional context (merged as JSON, not in prompt text)"
+        },
+        "exclude": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Exclude",
+          "type": "array",
+          "description": "Fields to exclude from LLM context (not sent to LLM at all)"
+        },
+        "passthrough": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Passthrough",
+          "type": "array",
+          "description": "Fields from upstream actions to merge into this action's output (e.g., 'upstream_action.field_name')"
+        }
+      },
+      "title": "Context Scope",
+      "type": "object"
+    }
+  },
+  "required": [
+    "agent_type"
+  ],
+  "title": "AgentConfig",
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
