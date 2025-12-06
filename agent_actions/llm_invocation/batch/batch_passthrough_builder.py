@@ -3,14 +3,14 @@ Passthrough Data Builder.
 
 Centralized logic for building passthrough data structures for filtered/skipped items.
 Eliminates code duplication between different passthrough creation scenarios.
+
+This builder now delegates to PassthroughItemBuilder for item construction,
+providing a high-level interface for batch mode passthrough operations.
 """
 
 import re
 from typing import Dict, List, Optional, Any
-from agent_actions.utilities.id_generation import IDGenerator
-from agent_actions.utilities.field_management import FieldManager
-from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
+from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 
 # Import the constant from batch_service (or define here if needed)
 NODE_DIRECTORY_PATTERN = r'node_(\d+)_(\w+)'
@@ -122,10 +122,10 @@ class BatchPassthroughBuilder:
     def _build_item(self, row: Dict[str, Any], reason: str,
                     custom_id: Optional[str] = None) -> Dict[str, Any]:
         """
-        Build a single passthrough item with proper metadata.
+        Build a single passthrough item using unified PassthroughItemBuilder.
 
-        This is the single source of truth for passthrough item construction.
-        All passthrough creation logic flows through this method.
+        This method now delegates to the unified PassthroughItemBuilder to eliminate
+        code duplication with online mode.
 
         Args:
             row: Original data row
@@ -135,55 +135,12 @@ class BatchPassthroughBuilder:
         Returns:
             Passthrough item dict with target_id, source_guid, node_id, lineage, metadata
         """
-        # 1. Determine target_id (generate if missing)
-        target_id = row.get('target_id')
-        if not target_id:
-            target_id = custom_id or IDGenerator.generate_target_id()
-            row['target_id'] = target_id
-
-        # 2. Determine source_guid (defaults to target_id)
-        original_source_guid = row.get('source_guid', target_id)
-
-        # 3. Create passthrough item (copy of original)
-        passthrough_item = row.copy()
-
-        # 4. Ensure required fields are set
-        if 'target_id' not in passthrough_item or not passthrough_item['target_id']:
-            passthrough_item['target_id'] = target_id
-        if 'source_guid' not in passthrough_item or not passthrough_item['source_guid']:
-            passthrough_item['source_guid'] = original_source_guid
-
-        # 5. Add node tracking if node_idx is available
-        if self.node_idx is not None:
-            item_node_id = IDGenerator.generate_node_id(self.node_idx)
-            passthrough_item['node_id'] = item_node_id
-            passthrough_item['lineage'] = LineageBuilder.build_lineage(row, item_node_id)
-
-        # 6. Add metadata with passthrough reason
-        # Determine the legacy flag based on reason for backward compatibility
-        legacy_flag = self._get_legacy_flag(reason)
-        passthrough_item['metadata'] = {
-            legacy_flag: True,  # For backward compatibility
-            'agent_type': 'passthrough'
-            # Note: 'reason' field omitted to match legacy behavior
-        }
-
-        return passthrough_item
-
-    @staticmethod
-    def _get_legacy_flag(reason: str) -> str:
-        """
-        Map reason to legacy metadata flag for backward compatibility.
-
-        Args:
-            reason: Passthrough reason string
-
-        Returns:
-            Legacy flag name (e.g., 'skipped_by_conditional')
-        """
-        # Map common reasons to their legacy flag names
-        reason_to_flag = {
-            'conditional_clause_failed': 'skipped_by_conditional',
-            'where_clause_not_matched': 'skipped_by_where_clause',
-        }
-        return reason_to_flag.get(reason, 'skipped_by_conditional')
+        # Delegate to unified PassthroughItemBuilder
+        return PassthroughItemBuilder.build_item(
+            row=row,
+            reason=reason,
+            idx=self.node_idx if self.node_idx is not None else 0,
+            source_guid=row.get('source_guid'),
+            custom_id=custom_id,
+            mode='batch'
+        )

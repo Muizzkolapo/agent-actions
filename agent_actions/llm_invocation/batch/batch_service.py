@@ -297,9 +297,11 @@ class BatchService:
         base_directory,
         output_directory
     ):
-        """Save task source data to source directory (used by staging_loader).
+        """
+        Save task source data using unified source saver.
 
-        Uses file locking to prevent race conditions in parallel processing.
+        This method now delegates to UnifiedSourceDataSaver for file locking,
+        deduplication, and source saving.
 
         Args:
             src_text: Single item (Dict) or list of items (List[Dict]) in flat format
@@ -309,69 +311,26 @@ class BatchService:
             output_directory: Output directory for processed files
         """
         from pathlib import Path
-        import json
-        import portalocker
+        from agent_actions.utilities.unified_source_data_saver import (
+            UnifiedSourceDataSaver, SourceSaveMode
+        )
 
+        # Calculate relative path for source file
         relative_path = Path(file_path).relative_to(base_directory)
         base_path = Path(base_directory).parent
-        source_path = base_path / 'source'
-        output_src_path = source_path / relative_path.with_suffix('.json')
-        ensure_directory_exists(output_src_path, is_file=True)
 
-        # Ensure src_text is a list
-        if not isinstance(src_text, list):
-            src_text = [src_text]
+        # Use unified saver with batch mode settings (locking + deduplication)
+        saver = UnifiedSourceDataSaver(
+            base_directory=str(base_path),
+            enable_deduplication=True,
+            enable_locking=True
+        )
 
-        # Use file locking for atomic read-modify-write (prevents race conditions)
-        # Open in r+ mode if exists, w mode if new file
-        file_exists = output_src_path.exists()
-        mode = 'r+' if file_exists else 'w'
-
-        with open(output_src_path, mode) as f:
-            # Acquire exclusive lock - blocks until available (cross-platform)
-            portalocker.lock(f, portalocker.LOCK_EX)
-
-            try:
-                # Read existing data if file exists
-                if file_exists:
-                    try:
-                        f.seek(0)
-                        existing_source = json.load(f)
-                    except json.JSONDecodeError as e:
-                        logger.warning("Corrupted source file %s: %s. Starting fresh.", output_src_path, e)
-                        existing_source = []
-                    except Exception as e:
-                        logger.error(
-                            "Unexpected error reading source file %s: %s",
-                            output_src_path, e,
-                            exc_info=True,
-                            extra={
-                                'source_file': str(output_src_path),
-                                'file_path': file_path,
-                                'operation': 'source_file_read',
-                                'file_exists': file_exists
-                            }
-                        )
-                        existing_source = []
-                else:
-                    existing_source = []
-
-                # Deduplicate by source_guid using flat format
-                new_items = deduplicate_by_source_guid(existing_source, src_text)
-
-                # Write back if we have new items or creating new file
-                if new_items or not file_exists:
-                    if new_items:
-                        existing_source.extend(new_items)
-
-                    # Clear file and write from beginning
-                    f.seek(0)
-                    f.truncate()
-                    json.dump(existing_source, f, indent=2)
-            finally:
-                # Unlock automatically when exiting context manager
-                # portalocker handles this, but explicit unlock is also fine
-                pass
+        # Save source items (relative_path without extension for consistency)
+        saver.save_source_items(
+            items=src_text,
+            relative_path=str(relative_path.with_suffix(''))
+        )
 
     def _are_all_batch_jobs_completed(self, output_directory: str) -> bool:
         """Check if all batch jobs in the registry are completed."""

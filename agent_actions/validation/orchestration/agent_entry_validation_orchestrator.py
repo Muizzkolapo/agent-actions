@@ -13,7 +13,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import BaseA
 from agent_actions.validation.agent_validators.agent_entry_structure_validator import AgentEntryStructureValidator
 from agent_actions.validation.agent_validators.agent_required_fields_validator import AgentRequiredFieldsValidator
 from agent_actions.validation.agent_validators.agent_type_specific_validator import AgentTypeSpecificValidator
-from agent_actions.validation.agent_validators.batch_mode_compatibility_validator import BatchModeCompatibilityValidator
+from agent_actions.validation.agent_validators.vendor_compatibility_validator import VendorCompatibilityValidator
 from agent_actions.validation.agent_validators.optional_field_type_validator import OptionalFieldTypeValidator
 from agent_actions.validation.agent_validators.granularity_output_field_validator import GranularityAndOutputFieldValidator
 from agent_actions.validation.agent_validators.inline_schema_validator import InlineSchemaValidator
@@ -72,7 +72,7 @@ class AgentEntryValidationOrchestrator:
             AgentEntryStructureValidator(),           # Must run first - checks if dict
             AgentRequiredFieldsValidator(),            # Check required keys present
             AgentTypeSpecificValidator(),              # Type-specific requirements
-            BatchModeCompatibilityValidator(),         # Batch vendor compatibility
+            VendorCompatibilityValidator(),            # Vendor compatibility (batch/online)
             OptionalFieldTypeValidator(),              # Optional field type checks
             GranularityAndOutputFieldValidator(),      # Granularity enum + output_field
             InlineSchemaValidator(),                   # Complex schema validation
