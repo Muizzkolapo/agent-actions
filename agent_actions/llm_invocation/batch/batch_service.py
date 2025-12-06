@@ -187,7 +187,6 @@ class BatchService:
             main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
             # Save source data before writing output
-            logger.info(f"[BATCH_RESULTS] Saving source data for batch results")
             self._save_task_source(main_output, file_path, base_directory, output_directory)
 
             # Write output files
@@ -314,8 +313,6 @@ class BatchService:
             base_directory: Base directory for input files
             output_directory: Output directory for processed files
         """
-        logger.info(f"[SOURCE_SAVE] _save_task_source CALLED")
-
         from pathlib import Path
         from agent_actions.utilities.unified_source_data_saver import (
             UnifiedSourceDataSaver, SourceSaveMode
@@ -346,13 +343,6 @@ class BatchService:
             # Fallback to going up 3 levels
             workflow_root = base_path.parent.parent.parent
 
-        logger.info(f"[SOURCE_SAVE] Saving source data:")
-        logger.info(f"[SOURCE_SAVE]   file_path: {file_path}")
-        logger.info(f"[SOURCE_SAVE]   base_directory: {base_directory}")
-        logger.info(f"[SOURCE_SAVE]   relative_path: {relative_path}")
-        logger.info(f"[SOURCE_SAVE]   workflow_root: {workflow_root}")
-        logger.info(f"[SOURCE_SAVE]   items count: {len(src_text) if isinstance(src_text, list) else 1}")
-
         # Use unified saver with batch mode settings (locking + deduplication)
         saver = UnifiedSourceDataSaver(
             base_directory=str(workflow_root),
@@ -366,8 +356,6 @@ class BatchService:
             items=src_text,
             relative_path=str(relative_path.with_suffix(''))
         )
-
-        logger.info(f"[SOURCE_SAVE] Successfully saved source data to: {workflow_root}/agent_io/source/{relative_path.with_suffix('')}.json")
 
     def _are_all_batch_jobs_completed(self, output_directory: str) -> bool:
         """Check if all batch jobs in the registry are completed."""
