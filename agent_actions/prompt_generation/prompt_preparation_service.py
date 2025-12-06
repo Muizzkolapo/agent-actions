@@ -96,6 +96,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Literal
 from dataclasses import dataclass
+from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 
 from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.prompt_utils import PromptUtils
@@ -313,10 +314,35 @@ class PromptPreparationService:
         )
         logger.debug(f"Built LLM context for {mode} mode with {len(llm_context)} keys")
 
-        # Step 5: Replace field references ({action.field})
+        # Step 5: Render template with Jinja2 ({{ action.field }})
         if prompt_context:
-            formatted_prompt = PromptUtils.replace_field_references(raw_prompt, prompt_context)
-            logger.debug("Replaced field references in prompt")
+            try:
+                # Create Jinja2 environment with strict undefined checking
+                jinja_env = Environment(
+                    undefined=StrictUndefined,
+                    trim_blocks=True,
+                    lstrip_blocks=True,
+                    keep_trailing_newline=True
+                )
+
+                # Parse and render template
+                template = jinja_env.from_string(raw_prompt)
+                formatted_prompt = template.render(**prompt_context)
+                logger.debug("Rendered prompt template with Jinja2")
+
+            except TemplateSyntaxError as e:
+                logger.error(f"Jinja2 template syntax error: {e}")
+                raise ValueError(
+                    f"Invalid Jinja2 syntax in prompt template: {e}\n"
+                    f"Line {e.lineno}: {e.message}"
+                ) from e
+            except Exception as e:
+                logger.error(f"Error rendering prompt template: {e}")
+                available_refs = list(prompt_context.keys())
+                raise ValueError(
+                    f"Error rendering prompt template: {e}\n"
+                    f"Available context references: {', '.join(available_refs)}"
+                ) from e
         else:
             formatted_prompt = raw_prompt
             logger.debug("No prompt_context, using raw prompt")

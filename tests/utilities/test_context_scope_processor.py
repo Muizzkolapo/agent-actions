@@ -51,7 +51,7 @@ class TestContextScopeProcessor:
         # Validate PASSTHROUGH directive
         assert 'document_id' in passthrough_fields
         assert passthrough_fields['document_id'] == 'doc-123'
-        assert 'document_id' not in prompt_context.get('fact_extractor', {})
+        assert prompt_context.get('fact_extractor', {}).get('document_id') == 'doc-123'  # Now available in prompt_context!
         assert 'document_id' not in llm_context
 
         # Validate fields NOT in any directive remain in prompt_context
