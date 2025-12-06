@@ -150,6 +150,10 @@ class TestContextScopeEndToEnd:
         assert 'document_id' not in llm_context
         assert 'source_filename' not in llm_context
 
+        # Validate: passthrough fields ARE in prompt_context (new behavior after fix)
+        assert prompt_context.get('fact_extractor', {}).get('document_id') == 'doc-123'
+        assert prompt_context.get('source', {}).get('source_filename') == 'report.pdf'
+
         # Validate: facts still available for prompt
         assert 'Classify:' in formatted_prompt
 

@@ -7,7 +7,7 @@ Supports four directives:
 - static_data: Load external reference files, available in both prompt and LLM context
 - observe: Fields sent to LLM context only (not in prompt, not in output)
 - drop: Fields blocked from LLM entirely (security/privacy)
-- passthrough: Fields merged to output only (LLM never sees them)
+- passthrough: Fields guaranteed in output (also available in templates)
 """
 
 import json
@@ -145,7 +145,7 @@ class ContextScopeProcessor:
         0. Processing static_data: Merge into prompt_context and llm_context
         1. Processing drop: Removes fields from prompt_context
         2. Processing observe: Extracts to llm_context, removes from prompt_context
-        3. Processing passthrough: Extracts to passthrough_fields, removes from prompt_context
+        3. Processing passthrough: Extracts to passthrough_fields, keeps in prompt_context for template access
 
         Args:
             field_context: Complete field context with all upstream action data
@@ -162,9 +162,9 @@ class ContextScopeProcessor:
 
         Returns:
             Tuple of (prompt_context, llm_context, passthrough_fields):
-            - prompt_context: Field context for {field_name} rendering (includes static data)
+            - prompt_context: Field context for {{ reference.field }} rendering (includes passthrough and static data)
             - llm_context: Fields for LLM additional context (includes static data)
-            - passthrough_fields: Fields to merge into output (flat dict)
+            - passthrough_fields: Fields guaranteed in output, also available in prompt_context (flat dict)
 
         Examples:
             >>> field_context = {
@@ -256,10 +256,6 @@ class ContextScopeProcessor:
                 if value is not None:
                     # Add to passthrough_fields (flat dict with field names as keys)
                     passthrough_fields[field_name] = value
-
-                    # Remove from prompt_context
-                    if action_name in prompt_context and isinstance(prompt_context[action_name], dict):
-                        prompt_context[action_name].pop(field_name, None)
 
             except ValueError:
                 # Invalid reference, skip silently
