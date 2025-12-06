@@ -315,18 +315,21 @@ class BatchService:
             UnifiedSourceDataSaver, SourceSaveMode
         )
 
-        # Calculate relative path for source file
+        # Calculate paths for source saving
+        # base_directory is like: .../qanalabs_quiz_gen/agent_io/target/node_0_fact_extractor
+        # We need workflow root: .../qanalabs_quiz_gen
         relative_path = Path(file_path).relative_to(base_directory)
-        base_path = Path(base_directory).parent
+        workflow_root = Path(base_directory).parent.parent.parent
 
         # Use unified saver with batch mode settings (locking + deduplication)
         saver = UnifiedSourceDataSaver(
-            base_directory=str(base_path),
+            base_directory=str(workflow_root),
             enable_deduplication=True,
             enable_locking=True
         )
 
         # Save source items (relative_path without extension for consistency)
+        # UnifiedSourceDataSaver will create: workflow_root/agent_io/source/{relative_path}.json
         saver.save_source_items(
             items=src_text,
             relative_path=str(relative_path.with_suffix(''))
