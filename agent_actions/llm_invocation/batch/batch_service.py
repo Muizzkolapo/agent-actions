@@ -322,10 +322,29 @@ class BatchService:
         )
 
         # Calculate paths for source saving
-        # base_directory is like: .../qanalabs_quiz_gen/agent_io/target/node_0_fact_extractor
-        # We need workflow root: .../qanalabs_quiz_gen
+        # Find workflow root by looking for 'agent_io' in the path and going up one level
+        # base_directory could be:
+        #   - .../qanalabs_quiz_gen/agent_io/staging (2 levels to root)
+        #   - .../qanalabs_quiz_gen/agent_io/target/node_X (3 levels to root)
         relative_path = Path(file_path).relative_to(base_directory)
-        workflow_root = Path(base_directory).parent.parent.parent
+
+        # Find workflow root by traversing up until we find the parent of 'agent_io'
+        base_path = Path(base_directory)
+        workflow_root = base_path
+        for parent in base_path.parents:
+            if (parent / 'agent_io').exists() or parent.name != 'agent_io':
+                if (parent / 'agent_io') == base_path or (parent / 'agent_io') in base_path.parents:
+                    workflow_root = parent
+                    break
+
+        # Simpler approach: find 'agent_io' in path parts and get its parent
+        parts = base_path.parts
+        if 'agent_io' in parts:
+            agent_io_idx = parts.index('agent_io')
+            workflow_root = Path(*parts[:agent_io_idx])
+        else:
+            # Fallback to going up 3 levels
+            workflow_root = base_path.parent.parent.parent
 
         logger.info(f"[SOURCE_SAVE] Saving source data:")
         logger.info(f"[SOURCE_SAVE]   file_path: {file_path}")
