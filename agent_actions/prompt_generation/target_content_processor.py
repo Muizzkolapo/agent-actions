@@ -2,6 +2,7 @@
 from typing import Dict, List, Tuple, Optional
 import asyncio
 from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.preprocessing.where_clause_handler import get_where_clause_handler
 from agent_actions.configuration.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import registry
@@ -11,7 +12,6 @@ from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
 from agent_actions.shared.exceptions import DependencyError
-from agent_actions.preprocessing.filter_service import get_filter_service
 
 @registry.register_processor('target_content')
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
@@ -291,9 +291,16 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # Filtered out entirely (behavior: 'filter')
                     return []
                 # Skipped but passed through (behavior: 'skip')
-                node_id = IDGenerator.generate_node_id(self.idx)
-                lineage = LineageBuilder.build_lineage(item, node_id)
-                processed_item = FieldManager().create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
+
+                # Build passthrough item using unified builder
+                processed_item = PassthroughItemBuilder.build_item(
+                    row={**item, 'content': generated_data, 'source_guid': source_guid},
+                    reason='where_clause_not_matched',
+                    idx=self.idx,
+                    source_guid=source_guid,
+                    mode='online'
+                )
 
                 # CRITICAL: Merge passthrough fields into skipped item
                 # This ensures fields from context_scope.passthrough are carried forward
@@ -303,12 +310,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     else:
                         processed_item.update(passthrough_fields)
 
-                # Add metadata indicating this item was skipped (parity with batch mode)
-                if 'metadata' not in processed_item:
-                    processed_item['metadata'] = {}
-                processed_item['metadata']['skipped_by_where_clause'] = True
-                processed_item['metadata']['agent_type'] = 'passthrough'
-                processed_item['metadata']['reason'] = 'where_clause_not_matched'
                 processed = [processed_item]
             return processed
         except Exception as e:
@@ -342,7 +343,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
     def _apply_where_clause_filtering(self, data: List[Dict]) -> List[Dict]:
         """
-        Apply WHERE clause filtering at item level if configured.
+        Apply WHERE clause filtering at item level if configured using WhereClauseHandler.
 
         IMPORTANT: This method only applies 'filter' behavior (items that don't match
         are removed entirely). For 'skip' behavior, items are handled in _process_single_item
@@ -358,27 +359,26 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         if not where_clause_config:
             return data
 
-        scope = where_clause_config.scope if hasattr(where_clause_config, 'scope') else where_clause_config.get('scope')
-        if scope != 'item':
-            return data
-
-        # Get behavior - default to 'filter' for backward compatibility
-        behavior = where_clause_config.behavior if hasattr(where_clause_config, 'behavior') else where_clause_config.get('behavior', 'filter')
-
-        # Skip behavior is handled in _process_single_item via run_dynamic_agent
-        # Only apply filtering here for 'filter' behavior
-        if behavior == 'skip':
-            return data
-
-        # Use centralized filter service
-        filter_service = get_filter_service()
+        # Use unified WhereClauseHandler for online mode filtering
+        where_clause_handler = get_where_clause_handler()
 
         # Convert where_clause_config to dict if it's a model object
-        where_config_dict = where_clause_config if hasattr(where_clause_config, '__dict__') else where_clause_config
+        where_config_dict = where_clause_config if isinstance(where_clause_config, dict) else (
+            where_clause_config.__dict__ if hasattr(where_clause_config, '__dict__') else where_clause_config
+        )
 
-        filtered_data, _ = filter_service.apply_where_clause_filtering(
+        filtered_data, filtering_context = where_clause_handler.filter_items_online_mode(
             data,
             where_config_dict
+        )
+
+        # Log filtering summary
+        import logging
+        logger = logging.getLogger(__name__)
+        summary = filtering_context.get_summary()
+        logger.info(
+            f"WHERE clause filtering complete: {summary['included_items']} included, "
+            f"{summary['filtered_items']} filtered (success rate: {summary['success_rate']:.2%})"
         )
 
         return filtered_data
@@ -424,25 +424,25 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # Filtered out entirely (behavior: 'filter')
                     return []
                 # Skipped but passed through (behavior: 'skip')
-                node_id = IDGenerator.generate_node_id(self.idx)
-                lineage = LineageBuilder.build_lineage(item, node_id)
-                processed_item = FieldManager().create_processed_item(source_guid=source_guid, content=generated_data, node_id=node_id, lineage=lineage)
+                from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
+
+                # Build passthrough item using unified builder
+                processed_item = PassthroughItemBuilder.build_item(
+                    row={**item, 'content': generated_data, 'source_guid': source_guid},
+                    reason='where_clause_not_matched',
+                    idx=self.idx,
+                    source_guid=source_guid,
+                    mode='online'
+                )
 
                 # CRITICAL: Merge passthrough fields into skipped item
                 # This ensures fields from context_scope.passthrough are carried forward
                 if passthrough_fields:
-                    from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
                     if 'content' in processed_item and isinstance(processed_item['content'], dict):
                         processed_item['content'].update(passthrough_fields)
                     else:
                         processed_item.update(passthrough_fields)
 
-                # Add metadata indicating this item was skipped (parity with batch mode)
-                if 'metadata' not in processed_item:
-                    processed_item['metadata'] = {}
-                processed_item['metadata']['skipped_by_where_clause'] = True
-                processed_item['metadata']['agent_type'] = 'passthrough'
-                processed_item['metadata']['reason'] = 'where_clause_not_matched'
                 processed_item = LoopCorrelator.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
                 processed = [processed_item]
             return processed

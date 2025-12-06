@@ -11,6 +11,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 from agent_actions.preprocessing.prompt_formatter import PromptFormatter
+from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
@@ -51,17 +52,20 @@ class BatchTaskPreparator:
         self,
         filter_service=None,
         agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None
+        dependency_configs: Optional[Dict[str, Dict]] = None,
+        where_clause_handler: Optional[WhereClauseHandler] = None
     ):
         """
         Initialize task preparator.
 
         Args:
-            filter_service: Optional filter service (defaults to global)
+            filter_service: Optional filter service (defaults to global) - DEPRECATED, use where_clause_handler
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
+            where_clause_handler: Optional WHERE clause handler (defaults to global)
         """
         self.filter_service = filter_service
+        self.where_clause_handler = where_clause_handler
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
@@ -109,8 +113,8 @@ class BatchTaskPreparator:
         tools_path = self._resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
-        # 3. Get filter service
-        filter_service = self._get_filter_service()
+        # 3. Get WHERE clause handler
+        where_clause_handler = self._get_where_clause_handler()
 
         # 4. Extract filter configuration
         conditional_clause = agent_config.get('conditional_clause', '')
@@ -130,7 +134,7 @@ class BatchTaskPreparator:
                 result = self._process_single_item(
                     row=row,
                     agent_config=agent_config,
-                    filter_service=filter_service,
+                    where_clause_handler=where_clause_handler,
                     conditional_clause=conditional_clause,
                     where_clause_config=where_clause_config,
                     output_directory=output_directory,
@@ -165,7 +169,7 @@ class BatchTaskPreparator:
         self,
         row: Dict[str, Any],
         agent_config: Dict[str, Any],
-        filter_service,
+        where_clause_handler: WhereClauseHandler,
         conditional_clause: str,
         where_clause_config: Optional[Dict[str, Any]],
         output_directory: Optional[str],
@@ -197,25 +201,24 @@ class BatchTaskPreparator:
         else:
             row_content = row
 
-        # 4. Apply filtering
-        filter_result = self._apply_filters(
-            row_content=row_content,
-            where_clause_config=where_clause_config,
-            conditional_clause=conditional_clause,
-            filter_service=filter_service
+        # 4. Apply filtering using unified WhereClauseHandler
+        should_include, status = where_clause_handler.filter_single_item(
+            {'content': row_content} if 'content' in row else row,
+            where_clause_config,
+            conditional_clause if conditional_clause else None
         )
 
         # 5. Update context map with filter status
-        context_map_builder[custom_id]['_batch_filter_status'] = filter_result.status
+        context_map_builder[custom_id]['_batch_filter_status'] = status
 
         # 6. Update stats based on filter result
-        if filter_result.status == 'filtered':
+        if status == 'filtered':
             stats.filtered_items += 1
-        elif filter_result.status == 'skipped':
+        elif status == 'skipped':
             stats.skipped_items += 1
 
         # 7. Skip if not included
-        if not filter_result.should_include:
+        if not should_include:
             return None
 
         # 8. Prepare prompt for this item
@@ -276,30 +279,19 @@ class BatchTaskPreparator:
             'prompt': prep_result.formatted_prompt
         }
 
-    def _apply_filters(
-        self,
-        row_content: Any,
-        where_clause_config: Optional[Dict[str, Any]],
-        conditional_clause: str,
-        filter_service
-    ) -> BatchFilterResult:
+    def _get_where_clause_handler(self) -> WhereClauseHandler:
         """
-        Apply WHERE clause and conditional filtering to a single item.
+        Get WHERE clause handler instance.
 
-        Returns BatchFilterResult with status and should_include flag.
+        Returns:
+            WhereClauseHandler instance for filtering coordination
         """
-        filter_status_result = filter_service.filter_single_item(
-            row_content,
-            where_clause_config if where_clause_config and where_clause_config.get('scope') == 'item' else None,
-            conditional_clause if conditional_clause else None
-        )
+        if self.where_clause_handler is not None:
+            return self.where_clause_handler
 
-        return BatchFilterResult(
-            status=filter_status_result.status,
-            should_include=filter_status_result.should_include,
-            reason=getattr(filter_status_result, 'reason', None),
-            metadata=getattr(filter_status_result, 'metadata', {})
-        )
+        # Create handler with filter service
+        from agent_actions.preprocessing.where_clause_handler import get_where_clause_handler
+        return get_where_clause_handler()
 
     def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
         """Validate agent configuration."""

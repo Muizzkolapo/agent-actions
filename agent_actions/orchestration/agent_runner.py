@@ -96,8 +96,11 @@ class AgentRunner:
     def process_files(self, agent_config: Dict, agent_name: str, strategy: AgentStrategy, input_directory: str, output_directory: str, idx: int) -> None:
         """
         Walks through the input directory, processing each file with the given strategy,
-        explicitly excluding any directory named 'batch'.
-        
+        explicitly excluding:
+        - Any directory named 'batch'
+        - Hidden files (starting with '.')
+        - Marker files (e.g., .passthrough_processed)
+
         Args:
             agent_config (dict): Configuration for the agent.
             agent_name (str): Name of the agent.
@@ -105,7 +108,7 @@ class AgentRunner:
             input_directory (str): Path to the input directory.
             output_directory (str): Path to the output directory.
             idx (int): Index of the config being processed.
-        
+
         Raises:
             ValueError: If no files are found in the input directory.
         """
@@ -116,6 +119,11 @@ class AgentRunner:
             if 'batch' in item.parts:
                 continue
             if item.is_file():
+                # Skip hidden files and marker files (e.g., .passthrough_processed)
+                if item.name.startswith('.'):
+                    logger.debug(f"Skipping hidden/marker file: {item.name}")
+                    continue
+
                 relative_path = item.relative_to(input_path)
                 output_file_path = output_path / relative_path
                 output_file_path.parent.mkdir(parents=True, exist_ok=True)
