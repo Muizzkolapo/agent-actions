@@ -30,7 +30,7 @@ class GeminiBatchProvider(BatchProvider):
     def __init__(self, api_key: Optional[str]=None):
         """Initialize Gemini client."""
         if not GEMINI_AVAILABLE:
-            from agent_actions.shared.exceptions import DependencyError
+            from agent_actions.errors import DependencyError  # New modular pattern!
             raise DependencyError('GeminiBatchProvider', 'google-genai', context={'install_command': 'pip install google-genai', 'vendor': 'gemini'})
         self.client = genai.Client(api_key=api_key, http_options={'api_version': 'v1alpha'})
 
@@ -146,7 +146,7 @@ class GeminiBatchProvider(BatchProvider):
             status = batch_job.state.name if hasattr(batch_job.state, 'name') else str(batch_job.state)
             return (batch_job.name, status)
         except Exception as e:
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError(vendor='gemini', endpoint='batches.create', context={'message': 'Failed to submit Gemini batch job', 'batch_name': batch_name}, cause=e)
 
     def _fetch_status(self, batch_id: str) -> str:
@@ -173,12 +173,12 @@ class GeminiBatchProvider(BatchProvider):
         """Fetch raw results from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
         if batch_job.state.name != 'JOB_STATE_SUCCEEDED':
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError('Batch job is not completed', context={'batch_id': batch_id, 'status': batch_job.state.name, 'vendor': 'gemini'})
 
         result_file_name = batch_job.dest.file_name
         if not result_file_name:
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError('Batch job has no output file', context={'batch_id': batch_id, 'vendor': 'gemini'})
 
         print(f'Results are in file: {result_file_name}')
@@ -186,7 +186,7 @@ class GeminiBatchProvider(BatchProvider):
         file_content_bytes = self.client.files.download(file=result_file_name)
 
         if not file_content_bytes or len(file_content_bytes) == 0:
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError(vendor='gemini', endpoint='files.download', context={'message': 'Retrieved empty content from batch results', 'batch_id': batch_id, 'result_file_name': result_file_name})
 
         return file_content_bytes

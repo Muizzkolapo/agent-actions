@@ -7,7 +7,7 @@ agent_actions.yml marker file in the current directory and parent directories.
 from pathlib import Path
 import os
 from typing import Optional
-from agent_actions.shared.exceptions import ProjectNotFoundError
+from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 PROJECT_MARKER_FILE = 'agent_actions.yml'
 MAX_PARENT_LEVELS = 100
 

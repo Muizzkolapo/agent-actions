@@ -3,7 +3,7 @@ import pytest
 import os
 from agent_actions.response_processing.action_expander import ActionExpander
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
-from agent_actions.shared.exceptions import ConfigValidationError, ConfigurationError
+from agent_actions.errors import ConfigValidationError, ConfigurationError  # New modular pattern!
 
 class TestConfigValidationErrorMessages:
     """Verify error messages are helpful and actionable."""

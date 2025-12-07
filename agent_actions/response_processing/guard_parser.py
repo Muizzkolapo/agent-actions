@@ -38,7 +38,7 @@ class GuardParser:
             parse('udf:module.function') -> GuardExpression(UDF, 'module.function')
         """
         if not guard or not isinstance(guard, str):
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError(
                 'Guard expression must be a non-empty string',
                 context={
@@ -56,7 +56,7 @@ class GuardParser:
         if guard.startswith(cls.UDF_PREFIX):
             udf_expression = guard[len(cls.UDF_PREFIX):].strip()
             if not udf_expression:
-                from agent_actions.shared.exceptions import ValidationError
+                from agent_actions.errors import ValidationError  # New modular pattern!
                 raise ValidationError(
                     "UDF guard expression cannot be empty after 'udf:' prefix",
                     context={
@@ -87,7 +87,7 @@ class GuardParser:
         """
         pattern = '^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$'
         if not re.match(pattern, expression):
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError(
                 f"Invalid UDF expression format: '{expression}'. Expected format: 'module.function' or 'module.submodule.function'",
                 context={
@@ -104,7 +104,7 @@ class GuardParser:
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
-                from agent_actions.shared.exceptions import ValidationError
+                from agent_actions.errors import ValidationError  # New modular pattern!
                 raise ValidationError(
                     f'UDF expression contains potentially dangerous pattern: {pattern}',
                     context={
@@ -133,7 +133,7 @@ class GuardParser:
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
-                from agent_actions.shared.exceptions import ValidationError
+                from agent_actions.errors import ValidationError  # New modular pattern!
                 raise ValidationError(
                     f'SQL expression contains potentially dangerous pattern: {pattern}',
                     context={

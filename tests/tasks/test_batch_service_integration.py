@@ -161,7 +161,7 @@ class TestBatchValidationAndRetry:
         """Test that post-processing validation detects missing records."""
         context_map = self.create_test_context_map(count=3, status='included')
         batch_results = self.create_test_batch_results(['rec_0', 'rec_1'])
-        from agent_actions.shared.exceptions import ProcessingError
+        from agent_actions.errors import ProcessingError  # New modular pattern!
         with pytest.raises(ProcessingError) as exc_info:
             batch_service._convert_batch_results_to_workflow_format(batch_results, context_map=context_map, output_directory='/tmp/test')
         error = exc_info.value

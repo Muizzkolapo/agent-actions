@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict
 from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
 from agent_actions.utilities.tooling import load_user_defined_function, _split_udf_name
-from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class ValidationInterceptor(ResponseInterceptor):
         )
 
         if not self.validator_function:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError('validator_function is required', context={'interceptor_type': 'validation', 'config_keys': list(config.keys())})
 
     def intercept(self, response: Any, context: Dict) -> InterceptorResult:
@@ -140,7 +140,7 @@ class ValidationInterceptor(ResponseInterceptor):
                     'validator_function': self.validator_function
                 }
             )
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError('Validation failed', context={'validator_function': self.validator_function, 'error_message': error_message, 'validator_args': self.validator_args})
 
         logger.warning(

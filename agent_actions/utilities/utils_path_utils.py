@@ -214,7 +214,7 @@ def safe_path_join(*parts: Union[str, Path]) -> Path:
     for part in parts:
         joined_path = joined_path / Path(part)
     resolved_path = resolve_absolute_path(joined_path)
-    from agent_actions.shared.exceptions import FileSystemError
+    from agent_actions.errors import FileSystemError  # New modular pattern!
     pm = get_path_manager()
     if not pm.is_within_project(resolved_path):
         raise FileSystemError(f'Path {resolved_path} is outside project bounds', context={'resolved_path': str(resolved_path), 'project_root': str(pm.get_project_root()), 'operation': 'safe_join_paths'})

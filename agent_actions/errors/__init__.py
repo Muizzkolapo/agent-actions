@@ -76,9 +76,17 @@ from agent_actions.errors.operations import (
     TemplateRenderingError,
 )
 
+# Backward compatibility aliases
+AgentActionsException = AgentActionsError
+ProcessorError = ProcessingError
+LoaderError = FileSystemError
+DataParseError = ValidationError
+UnsupportedFormatError = ValidationError
+
 __all__ = [
     # Base
     "AgentActionsError",
+    "AgentActionsException",  # Alias for backward compatibility
     # Common
     "InvalidParameterError",
     # Configuration
@@ -122,4 +130,9 @@ __all__ = [
     "OperationalError",
     "AgentExecutionError",
     "TemplateRenderingError",
+    # Backward compatibility aliases
+    "ProcessorError",
+    "LoaderError",
+    "DataParseError",
+    "UnsupportedFormatError",
 ]

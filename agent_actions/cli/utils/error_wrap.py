@@ -1,6 +1,6 @@
 from functools import wraps
 from typing import Callable, Type
-from agent_actions.shared.exceptions import ConfigurationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
 
 def as_validation_error(exc_cls: Type[ConfigurationError]=ConfigurationError) -> Callable:
     """

@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from agent_actions.response_processing.config_types import AgentEntryDict
 import csv
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException  # New modular pattern!
 logger = logging.getLogger(__name__)
 
 class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
@@ -35,7 +35,7 @@ class TabularLoader(BaseLoader[List[Dict[str, Any]]]):
             elif content:
                 content_str = content
             else:
-                from agent_actions.shared.exceptions import ValidationError
+                from agent_actions.errors import ValidationError  # New modular pattern!
                 raise ValidationError(
                     'Either file_path or content must be provided for tabular processing',
                     context={

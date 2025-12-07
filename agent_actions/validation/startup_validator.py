@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from pydantic import ValidationError
 from agent_actions.state_management.environment_config import EnvironmentConfig
-from agent_actions.shared.exceptions import ConfigurationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 logger = logging.getLogger(__name__)
 

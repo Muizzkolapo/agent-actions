@@ -6,7 +6,7 @@ This module provides utilities for loading project-specific configuration files.
 from typing import Dict, Any
 from pathlib import Path
 import yaml
-from agent_actions.shared.exceptions import ConfigValidationError
+from agent_actions.errors import ConfigValidationError  # New modular pattern!
 
 
 def load_project_config(project_root: Path) -> Dict[str, Any]:

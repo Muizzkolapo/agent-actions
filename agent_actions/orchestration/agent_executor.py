@@ -387,7 +387,7 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            logger.error(
+            logger.debug(
                 "Agent execution failed",
                 extra={
                     'operation': 'execute_agent_run',

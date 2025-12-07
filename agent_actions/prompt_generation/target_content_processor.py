@@ -11,7 +11,7 @@ from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
-from agent_actions.shared.exceptions import DependencyError
+from agent_actions.errors import DependencyError  # New modular pattern!
 
 @registry.register_processor('target_content')
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
@@ -78,7 +78,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_data.extend(result)
             return processed_data
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError(f'Failed to process content: {str(e)}', cause=e)
 
     def process(self, data: List[Dict], file_path: str, output_directory: str=None) -> List[Dict]:
@@ -112,11 +112,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     processed_data.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    from agent_actions.shared.exceptions import ProcessingError
+                    from agent_actions.errors import ProcessingError  # New modular pattern!
                     raise ProcessingError('Failed to process item', context={'source_guid': source_guid, 'agent_name': self.agent_name}, cause=e)
             return processed_data
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError(f'Failed to process content: {str(e)}', cause=e)
 
     def process_for_side_output(self, data: List[Dict], file_path: str, output_directory: str=None) -> Tuple[List[Dict], List[Dict]]:
@@ -149,11 +149,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     all_processed_items.extend(processed_item)
                 except Exception as e:
                     source_guid = item.get('source_guid', 'unknown')
-                    from agent_actions.shared.exceptions import ProcessingError
+                    from agent_actions.errors import ProcessingError  # New modular pattern!
                     raise ProcessingError('Failed to process item', context={'source_guid': source_guid, 'agent_name': self.agent_name}, cause=e)
             return self.data_processor.separate_side_output(all_processed_items)
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError(f'Failed to process for side output: {str(e)}', cause=e)
 
     def process_file_level(self, data: List[Dict], file_path: str=None, output_directory: str=None) -> List[Dict]:
@@ -220,7 +220,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             contents = data[0]['content'] if data else {}
             return self.data_processor.process_item(contents, generated_data, source_guid, passthrough_fields=passthrough_fields)
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError(f'Failed to process at file level: {str(e)}', cause=e)
 
     async def _load_source_data_async(self, file_path: str) -> List[Dict]:
@@ -313,7 +313,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed = [processed_item]
             return processed
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError('Failed to process item', context={'agent_name': self.agent_name, 'item_source_guid': item.get('source_guid', 'unknown')}, cause=e)
 
     def _extract_source_file_info(self, data: List[Dict]) -> Dict:
@@ -447,5 +447,5 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed = [processed_item]
             return processed
         except Exception as e:
-            from agent_actions.shared.exceptions import ProcessingError
+            from agent_actions.errors import ProcessingError  # New modular pattern!
             raise ProcessingError('Failed to process item', context={'agent_name': self.agent_name, 'item_source_guid': item.get('source_guid', 'unknown')}, cause=e)

@@ -197,7 +197,7 @@ class TestCompilationErrorHandling:
     def test_compilation_error_returns_none_online(self, caplog):
         """Online mode handles compilation errors gracefully."""
         config = {'schema': {'fields': [{'id': 'test', 'type': 'string'}]}}
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_construct.return_value = {'base': 'schema'}
@@ -211,7 +211,7 @@ class TestCompilationErrorHandling:
     def test_compilation_error_returns_none_batch(self, caplog):
         """Batch mode handles compilation errors gracefully."""
         config = {'model_vendor': 'unsupported', 'schema': {'fields': [{'id': 'test', 'type': 'string'}]}}
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         with patch('agent_actions.response_processing.schema_loader.SchemaLoader.construct_schema_from_dict') as mock_construct:
             with patch('agent_actions.response_processing.schema_change.compile_unified_schema') as mock_compile:
                 mock_construct.return_value = {'base': 'schema'}

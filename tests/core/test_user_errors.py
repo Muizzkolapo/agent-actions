@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock, patch
 from pathlib import Path
 from agent_actions.shared.user_errors import UserError, ErrorTranslator, format_user_error
-from agent_actions.shared.exceptions import AgentActionsException, ValidationError, FileLoadError, ConfigurationError
+from agent_actions.errors import AgentActionsException, ValidationError, FileLoadError, ConfigurationError  # New modular pattern!
 
 class TestUserError:
     """Test UserError dataclass."""
@@ -83,7 +83,7 @@ class TestErrorTranslator:
     def test_permission_error_handling(self):
         """Test handling permission errors (FileSystemError in our code)."""
         translator = ErrorTranslator()
-        from agent_actions.shared.exceptions import FileSystemError
+        from agent_actions.errors import FileSystemError  # New modular pattern!
         exc = FileSystemError('Permission denied: cannot write to output directory')
         context = {'command': 'init', 'directory': '/protected/dir'}
         result = translator.translate(exc, context)

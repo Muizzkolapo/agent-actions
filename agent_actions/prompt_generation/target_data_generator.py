@@ -77,5 +77,5 @@ class DataGenerator(IGenerator):
             )
             return (response, executed)
         except Exception as e:
-            from agent_actions.shared.exceptions import GenerationError
+            from agent_actions.errors import GenerationError  # New modular pattern!
             raise GenerationError(f'Failed to create agent with data: {str(e)}', cause=e)

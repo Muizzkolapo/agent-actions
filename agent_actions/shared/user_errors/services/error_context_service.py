@@ -12,25 +12,42 @@ class ErrorContextService:
         additional_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
-        Merge exception context with additional context.
+        Merge exception context from entire exception chain.
 
-        Extracts context from exception attributes and merges with
-        any additional context provided. Additional context takes precedence.
+        Traverses the complete exception chain (via __cause__ and __context__)
+        and merges context from all exceptions. Root cause context is merged first,
+        then intermediate exceptions, then the outermost exception. This ensures
+        that more specific (outer) contexts override more general (inner) ones
+        while preserving all available information.
 
         Args:
             exc: The exception to extract context from
             additional_context: Optional additional context dict
 
         Returns:
-            Merged context dictionary
+            Merged context dictionary with context from entire exception chain
         """
         merged_context = {}
 
-        # Extract exception.context if available
-        if hasattr(exc, 'context') and isinstance(exc.context, dict):
-            merged_context.update(exc.context)
+        # Build exception chain from outermost to root
+        chain = []
+        current = exc
+        visited = set()
 
-        # Extract other useful exception attributes
+        while current and id(current) not in visited:
+            visited.add(id(current))
+            chain.append(current)
+            # Check __cause__ first (explicit chaining), then __context__ (implicit)
+            current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
+
+        # Merge contexts: root first, then up the chain
+        # Outer contexts override inner ones for same keys
+        for exception in reversed(chain):
+            if hasattr(exception, 'context') and isinstance(exception.context, dict):
+                merged_context.update(exception.context)
+
+        # Extract other useful exception attributes from outermost exception only
+        # (to avoid attribute conflicts from different exception types in chain)
         for attr_name in dir(exc):
             if not attr_name.startswith('_') and attr_name not in ['args', 'with_traceback', 'context']:
                 try:
@@ -44,7 +61,7 @@ class ErrorContextService:
                 except Exception:
                     pass  # Skip attributes that can't be accessed
 
-        # Additional context takes precedence
+        # Additional context takes final precedence
         if additional_context:
             merged_context.update(additional_context)
 

@@ -46,14 +46,14 @@ class BatchProviderFactory:
             try:
                 return GeminiBatchProvider(api_key=api_key)
             except ImportError as e:
-                from agent_actions.shared.exceptions import DependencyError
+                from agent_actions.errors import DependencyError  # New modular pattern!
                 raise DependencyError('GeminiBatchProvider', 'google-genai', context={'provider_type': provider_type, 'install_command': 'pip install google-genai'}, cause=e)
         elif provider_type == 'ollama':
             base_url = config.get('base_url') or os.getenv('OLLAMA_HOST', 'http://localhost:11434')
             return OllamaLocalBatchProvider(base_url=base_url)
         elif provider_type == 'anthropic':
             if not ANTHROPIC_AVAILABLE:
-                from agent_actions.shared.exceptions import DependencyError
+                from agent_actions.errors import DependencyError  # New modular pattern!
                 raise DependencyError('AnthropicBatchProvider', 'anthropic', context={'provider_type': provider_type, 'install_command': 'pip install anthropic'})
             api_key = config.get('api_key') or os.getenv('CLAUDE_API_KEY')
             anthropic_version = config.get('anthropic_version')
@@ -61,10 +61,10 @@ class BatchProviderFactory:
             try:
                 return AnthropicBatchProvider(api_key=api_key, version=anthropic_version, enable_prompt_caching=enable_prompt_caching)
             except ImportError as e:
-                from agent_actions.shared.exceptions import DependencyError
+                from agent_actions.errors import DependencyError  # New modular pattern!
                 raise DependencyError('AnthropicBatchProvider', 'anthropic', context={'provider_type': provider_type, 'install_command': 'pip install anthropic'}, cause=e)
         else:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             supported = BatchProviderFactory.get_supported_providers()
             raise ConfigurationError(
                 'Unknown provider type',

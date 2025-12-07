@@ -356,7 +356,7 @@ class AgentWorkflow:
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
-            logger.error(
+            logger.debug(
                 "Workflow failed",
                 extra={
                     'operation': 'workflow_failed',
@@ -498,7 +498,7 @@ class AgentWorkflow:
             return self.action_level_orchestrator.compute_execution_levels()
 
         # Fallback implementation for tests/mocks
-        from agent_actions.shared.exceptions import WorkflowError
+        from agent_actions.errors import WorkflowError  # New modular pattern!
 
         deps_map = {
             agent: self.agent_configs[agent].get('dependencies', [])

@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Dict, Tuple
 from agent_actions.utilities.file_handler import FileHandler
-from agent_actions.shared.exceptions import DirectoryError, ValidationError, FileLoadError
+from agent_actions.errors import DirectoryError, ValidationError, FileLoadError  # New modular pattern!
 from agent_actions.validation.path_validator import PathValidator
 from agent_actions.state_management.path_manager import PathManager, PathType
 from agent_actions.utilities.utils_path_utils import resolve_absolute_path

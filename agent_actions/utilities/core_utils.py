@@ -40,7 +40,7 @@ class Utils:
             ValueError: If the dependencies input is invalid or a cyclic dependency is detected.
         """
         if not isinstance(dependencies, dict):
-            from agent_actions.shared.exceptions import DataValidationError
+            from agent_actions.errors import DataValidationError  # New modular pattern!
             raise DataValidationError('dependencies', 'dictionary', str(type(dependencies).__name__), context={'operation': 'topological_sort'})
         all_nodes = set(dependencies.keys())
         for dependent_nodes in dependencies.values():
@@ -60,7 +60,7 @@ class Utils:
                     if in_degree[neighbor] == 0:
                         queue.append(neighbor)
         if len(sorted_nodes) != len(all_nodes):
-            from agent_actions.shared.exceptions import WorkflowError
+            from agent_actions.errors import WorkflowError  # New modular pattern!
             cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
             raise WorkflowError('dependency_resolution', f'Cyclic dependency detected in the workflow', context={'cycle_nodes': list(cycle_nodes), 'sorted_nodes': sorted_nodes, 'all_nodes': list(all_nodes), 'operation': 'topological_sort'})
         return sorted_nodes[::-1]

@@ -55,12 +55,12 @@ class ClaudeHandler(BaseVendorHandler):
         response_content: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = next((block.input for block in response.content if hasattr(block, 'input')), None)
         if response_content is None:
             text_content = next((block.text for block in response.content if hasattr(block, 'text')), 'No text content available')
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError("No valid content with 'input' found in response", context={'model_name': model_name, 'vendor': 'anthropic', 'text_content': text_content[:200], 'api_operation': 'messages.create'})
         return response_content
 
     @staticmethod
     def call_non_json(api_key: Optional[str], agent_config: Dict[str, Any], prompt_config: Dict[str, Any], context_data: Dict[str, Any]) -> List[Dict[str, str]]:
         """Non-JSON mode is not implemented for Claude."""
-        from agent_actions.shared.exceptions import ConfigurationError
+        from agent_actions.errors import ConfigurationError  # New modular pattern!
         raise ConfigurationError('Non-JSON mode not implemented for Claude', context={'vendor': 'anthropic', 'supported_modes': ['json'], 'model_name': agent_config.get(MODEL_NAME_KEY)})

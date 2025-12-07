@@ -7,7 +7,7 @@ from agent_actions.utilities.core_utils import Utils
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 from agent_actions.validation.config_validator import ConfigValidator
 from typing import Dict, Any, Optional, List
-from agent_actions.shared.exceptions import ConfigurationError, TemplateRenderingError
+from agent_actions.errors import ConfigurationError, TemplateRenderingError  # New modular pattern!
 from agent_actions.response_processing.config_schema import AgentConfig, DefaultAgentConfig
 from agent_actions.state_management.environment_config import EnvironmentConfig
 from agent_actions.response_processing.pipeline_config import WorkflowConfig, PipelineConfig

@@ -43,7 +43,7 @@ class EnvironmentConfig(BaseSettings):
     @classmethod
     def validate_api_keys(cls, v):
         """Validate API key format if provided."""
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         if v is not None:
             if len(v.strip()) < 10:
                 raise ConfigValidationError('api_key_length', 'API key must be at least 10 characters long', context={'key_length': len(v.strip()), 'operation': 'validate_api_key'})
@@ -53,7 +53,7 @@ class EnvironmentConfig(BaseSettings):
     @classmethod
     def validate_database_url(cls, v):
         """Validate database URL format if provided."""
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         if v is not None:
             if not v.startswith(('postgresql://', 'mysql://', 'sqlite:///')):
                 raise ConfigValidationError('database_url_format', 'Database URL must start with postgresql://, mysql://, or sqlite:///', context={'database_url': v, 'valid_prefixes': ['postgresql://', 'mysql://', 'sqlite:///'], 'operation': 'validate_database_url'})

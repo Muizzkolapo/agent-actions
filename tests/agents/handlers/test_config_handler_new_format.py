@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from typing import Dict, Any
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
-from agent_actions.shared.exceptions import ConfigurationError, ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError  # New modular pattern!
 
 class TestNewFormatConfigHandlerIntegration:
     """Test ConfigManager with new action-based format."""

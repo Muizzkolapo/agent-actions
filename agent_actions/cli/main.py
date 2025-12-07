@@ -152,6 +152,11 @@ class CLI:
         except click.Abort:
             self.logger.info('Operation aborted by user')
             return 130
+        except click.ClickException as e:
+            # ClickException already has formatted message from decorator
+            # Just print it without re-formatting
+            print(f'Error: {e.format_message()}', file=sys.stderr)
+            return e.exit_code if hasattr(e, 'exit_code') else 1
         except click.UsageError as e:
             self.logger.error(f'Usage error: {str(e)}')
             print(f'Error: {str(e)}', file=sys.stderr)
@@ -162,22 +167,25 @@ class CLI:
             marker_file = context.get('marker_file', 'agent_actions.yml')
             search_path = context.get('search_path', 'unknown')
             solution_1 = context.get('solution_1', 'Navigate to your agent-actions project directory')
-            solution_2 = context.get('solution_2', "Run 'agent-actions init' to create a new project")
+            solution_2 = context.get('solution_2', "Run 'agac init' to create a new project")
             error_msg = f"Not in an agent-actions project\n\nCould not find '{marker_file}' in current directory or any parent directory.\n\nCurrent directory: {search_path}\n\nSolutions:\n  1. {solution_1}\n  2. {solution_2}"
             print(click.style('Error: ', fg='red', bold=True) + error_msg, file=sys.stderr)
             return 1
         except Exception as e:
             from agent_actions.shared.user_errors import format_user_error
-            self.logger.error('CLI execution failed', extra={'error': str(e)}, exc_info=True)
             context = {'command': argv[0] if argv else 'agent-actions', 'operation': 'cli_execution'}
+
+            # Format and print the user-friendly error message
             error_message = format_user_error(e, context)
             print(f'Error: {error_message}', file=sys.stderr)
+
+            # Only log details in debug mode
             if '--debug' in (argv or []):
+                self.logger.error('CLI execution failed', extra={'error': str(e)}, exc_info=True)
                 from agent_actions.utilities.safe_format import format_exception_chain_for_debug
                 self.logger.debug("Debug Information:")
                 self.logger.debug("Exception Chain:")
                 self.logger.debug("%s", format_exception_chain_for_debug(e))
-                self.logger.debug("Full Traceback:", exc_info=True)
             return 1
 
 def _print_help_callback(ctx, param, value):

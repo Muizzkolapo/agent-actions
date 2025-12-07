@@ -191,7 +191,7 @@ class ApplicationContainer:
         Returns:
             ApplicationContainer configured for the environment.
         """
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         if environment == 'development':
             config = ConfigurationProfile.development()
         elif environment == 'production':

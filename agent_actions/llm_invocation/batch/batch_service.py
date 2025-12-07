@@ -11,7 +11,7 @@ from agent_actions.utilities.utils_path_utils import ensure_directory_exists, cr
 from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.providers.base import BatchProvider, BatchResult
-from agent_actions.shared.exceptions import ConfigValidationError, ExternalServiceError, ProcessingError
+from agent_actions.errors import ConfigValidationError, ExternalServiceError, ProcessingError  # New modular pattern!
 from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
 from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder

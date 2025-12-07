@@ -20,7 +20,7 @@ from typing import Any, Dict, Optional
 
 import yaml
 
-from agent_actions.shared.exceptions import FileSystemError
+from agent_actions.errors import FileSystemError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 

@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 from agent_actions.utilities.file_writer import FileWriter
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException  # New modular pattern!
 
 class OutputHandler:
     """Responsible for saving output data to appropriate locations."""

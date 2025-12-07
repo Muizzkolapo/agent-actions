@@ -55,7 +55,7 @@ class OpenAIHandler(BaseVendorHandler):
         response_message = response.choices[0].message
         response_content: Optional[str] = response_message.content
         if response_content is None:
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError('Empty response content from OpenAI API', context={'model_name': model_name, 'vendor': 'openai', 'api_operation': 'chat.completions.create'})
         response_data: Union[Dict[str, Any], List[Dict[str, Any]]] = json.loads(response_content)
         response_list: List[Dict[str, Any]] = response_data if isinstance(response_data, list) else [response_data]
@@ -103,7 +103,7 @@ class OpenAIHandler(BaseVendorHandler):
         output_field: str = agent_config.get('output_field', 'raw_response')
         content: Optional[str] = response_message.content
         if content is None:
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError('Empty response content from OpenAI API', context={'model_name': model_name, 'vendor': 'openai', 'api_operation': 'chat.completions.create', 'output_field': output_field})
         response_content: Dict[str, str] = {output_field: content}
         return [response_content]

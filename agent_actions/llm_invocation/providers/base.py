@@ -541,7 +541,7 @@ class BatchProvider(ABC):
             List of BatchResult objects
         """
         if not file_path.exists():
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError(vendor=self.__class__.__name__, endpoint='retrieve_results', context={'message': 'Batch output file not found', 'expected_path': str(file_path)})
         batch_results = []
         with open(file_path, 'r') as f:

@@ -13,7 +13,7 @@ class InterceptorFactory:
     def create_interceptor(cls, config: Dict) -> ResponseInterceptor:
         interceptor_type = config.get('type')
         if interceptor_type not in cls._interceptor_types:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             supported = list(cls._interceptor_types.keys())
             raise ConfigurationError(
                 'Unknown interceptor type',

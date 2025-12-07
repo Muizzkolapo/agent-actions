@@ -12,7 +12,7 @@ class ToolHandler:
         """
         model_name = agent_config.get(MODEL_NAME_KEY)
         if not model_name:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError("Tool vendor requires 'model_name' (UDF path) in agent config", context={'vendor': 'tool', 'missing_field': 'model_name', 'agent_config_keys': list(agent_config.keys())})
         side_output = agent_config.get('side_output', False)
         udf_kwargs = tool_args if tool_args is not None else {}

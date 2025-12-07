@@ -8,7 +8,7 @@ import pytest
 import logging
 from unittest.mock import patch, Mock, MagicMock
 from agent_actions.response_processing.schema_change import prepare_schema_unified
-from agent_actions.shared.exceptions import ConfigValidationError
+from agent_actions.errors import ConfigValidationError  # New modular pattern!
 
 class TestPrepareSchemaUnified:
     """Test basic functionality of prepare_schema_unified()."""

@@ -14,7 +14,7 @@ from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
-from agent_actions.shared.exceptions import ConfigurationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats
@@ -145,7 +145,7 @@ class BatchTaskPreparator:
                     stats.included_items += 1
 
             except Exception as e:
-                logger.error("Failed to prepare task for row: %s", e, exc_info=True)
+                logger.debug("Failed to prepare task for row: %s", e, exc_info=True)
                 stats.error_items += 1
 
         # 8. Finalize tasks with provider

@@ -48,7 +48,7 @@ class ActionExpander:
         if not vendor:
             return
         from agent_actions.utilities.vendor_config import VendorType
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         valid_vendors = [v.value for v in VendorType]
         if vendor not in valid_vendors:
             raise ConfigValidationError('model_vendor', f"Unknown vendor '{vendor}'", context={'action': action_name, 'vendor': vendor, 'supported_vendors': valid_vendors, 'hint': f"Valid vendors: {', '.join(valid_vendors)}"})
@@ -68,7 +68,7 @@ class ActionExpander:
         Raises:
             ConfigValidationError: If any required field is missing
         """
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         required_fields = {'model_vendor': agent.get('model_vendor'), 'model_name': agent.get('model_name'), 'api_key': agent.get('api_key')}
         missing_fields = [field for field, value in required_fields.items() if not value]
         if missing_fields:
@@ -178,7 +178,7 @@ class ActionExpander:
                 guard_config = parse_guard_config(guard_data)
                 if guard_config.is_udf_condition():
                     if guard_config.on_false == GuardBehavior.FILTER:
-                        from agent_actions.shared.exceptions import ConfigurationError
+                        from agent_actions.errors import ConfigurationError  # New modular pattern!
                         action_name = action.get('name', 'unknown')
                         raise ConfigurationError("UDF conditions cannot use 'filter' behavior. UDF conditions only support 'skip' behavior", context={'action_name': action_name, 'guard_behavior': 'filter', 'operation': 'expand_actions_to_agents'})
                     agent['conditional_clause'] = guard_config.get_condition_expression()
@@ -192,13 +192,13 @@ class ActionExpander:
         action_kind = action.get('kind', 'llm')
         if action_kind == 'tool':
             if not action.get('impl'):
-                from agent_actions.shared.exceptions import ConfigValidationError
+                from agent_actions.errors import ConfigValidationError  # New modular pattern!
                 raise ConfigValidationError('impl', "Tool actions must specify 'impl' field", context={'action': action.get('name', 'unknown'), 'kind': 'tool', 'hint': "Add 'impl: module.function_name' to your tool action"})
             agent['model_vendor'] = 'tool'
             agent['model_name'] = action.get('impl', action.get('name'))
             if run_mode == 'batch':
                 if action.get('run_mode') == 'batch':
-                    from agent_actions.shared.exceptions import ConfigurationError
+                    from agent_actions.errors import ConfigurationError  # New modular pattern!
                     action_name = action.get('name', 'unknown')
                     raise ConfigurationError("Tool actions do not support batch processing. Please set run_mode='online' or remove the run_mode setting to use the default", context={'action_name': action_name, 'kind': 'tool', 'run_mode': 'batch', 'operation': 'expand_actions_to_agents'})
                 agent['run_mode'] = 'online'

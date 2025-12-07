@@ -68,7 +68,7 @@ class DependencyContainer:
                     return self._instances[interface]
             else:
                 return self._create_instance(descriptor.implementation)
-        from agent_actions.shared.exceptions import DependencyError
+        from agent_actions.errors import DependencyError  # New modular pattern!
         raise DependencyError('DependencyContainer', f'Service {interface.__name__}', context={'interface': interface.__name__, 'operation': 'get_service'})
 
     def has(self, interface: Type) -> bool:
@@ -89,7 +89,7 @@ class DependencyContainer:
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                from agent_actions.shared.exceptions import DependencyError
+                from agent_actions.errors import DependencyError  # New modular pattern!
                 raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_instance'})
         return cls(**init_kwargs)
 
@@ -137,28 +137,28 @@ class ProcessorRegistry:
     def get_processor(self, name: str) -> Type:
         """Get a processor class by name."""
         if name not in self._processors:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError(f"Processor '{name}' not registered", context={'processor_name': name, 'operation': 'get_processor'})
         return self._processors[name]
 
     def get_loader(self, name: str) -> Type:
         """Get a loader class by name."""
         if name not in self._loaders:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError(f"Loader '{name}' not registered", context={'loader_name': name, 'operation': 'get_loader'})
         return self._loaders[name]
 
     def get_generator(self, name: str) -> Type:
         """Get a generator class by name."""
         if name not in self._generators:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError(f"Generator '{name}' not registered", context={'generator_name': name, 'operation': 'get_generator'})
         return self._generators[name]
 
     def get_service(self, name: str) -> Type:
         """Get a service class by name."""
         if name not in self._services:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError(f"Service '{name}' not registered", context={'service_name': name, 'operation': 'get_service'})
         return self._services[name]
 
@@ -222,7 +222,7 @@ class ProcessorFactory:
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                from agent_actions.shared.exceptions import DependencyError
+                from agent_actions.errors import DependencyError  # New modular pattern!
                 raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_with_dependencies'})
         return cls(**init_kwargs)
 

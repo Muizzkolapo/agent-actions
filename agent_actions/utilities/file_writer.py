@@ -9,7 +9,7 @@ Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 import json
 import csv
 from pathlib import Path
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException  # New modular pattern!
 from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
 
 class FileWriter(ProcessorErrorHandlerMixin):

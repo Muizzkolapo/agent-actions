@@ -2,7 +2,7 @@
 import re
 import json
 from agent_actions.preprocessing.string_transformer import StringProcessor
-from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 
 class PromptUtils:
     """

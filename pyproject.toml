@@ -39,7 +39,7 @@ dependencies = [
 ]
 
 [project.scripts]
-agent = "agent_actions.cli.main:main"
+agac = "agent_actions.cli.main:main"
 
 [project.optional-dependencies]
 dev = [
