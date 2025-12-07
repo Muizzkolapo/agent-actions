@@ -12,9 +12,6 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult
 )
-from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities
-)
 
 
 class VendorCompatibilityValidator(BaseAgentEntryValidator):

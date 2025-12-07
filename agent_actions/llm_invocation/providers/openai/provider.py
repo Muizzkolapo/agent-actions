@@ -5,12 +5,10 @@ This module implements the BatchProvider interface for OpenAI's Batch API,
 handling the transformation between our standardized format and OpenAI's
 specific requirements.
 """
-import json
-import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
-from ..base import BatchProvider, BatchTask, BatchResult
+from ..base import BatchProvider, BatchTask
 
 class OpenAIBatchProvider(BatchProvider):
     """

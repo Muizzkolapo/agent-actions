@@ -6,7 +6,6 @@ This is the first validator in the chain and performs critical checks:
 - Entry must be accessible
 """
 
-from typing import Dict, Any
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
     AgentEntryValidationResult

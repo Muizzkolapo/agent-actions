@@ -1,0 +1,42 @@
+key areas:
+- prompt rendering service that takes prompt and format it. render any inline insertation
+- schema loading to load the schemas
+- context scope to add extra context
+- It loads the content at the file or record level and perform some action
+- before entering flow, validate all the above context scope, prompt and schema would work
+- Issue: The generate_summary action in qanalabs_quiz_gen workflow fails because context_scope.observe removes source.page_content from prompt_context, but the Summary_Generator template references {{ 
+  source.page_content }}.
+    Fixes:
+      Option 1: Remove source.page_content from the observe list in qanalabs_quiz_gen.yml:112-113 to keep it available for template rendering
+      Option 3: Remove {{ source.page_content }} reference from the Summary_Generator prompt template (line 5) if the field isn't needed there
+-    when we use  guard: condition: 'code_snippets != []' on_false: "skip" this means that action would not process or generate but still append neccessary id based on our flow
+
+
+- if we use {{}} and it does not exists it fails
+- do we need LLM to validate the prompts first
+- we can call the content of seed as such {{ seed.exam_syllabus.platform_name }}
+- When a tool action has a context_scope block, it switches to explicit field control mode where only specified fields are available; passthrough is required to preserve fields from upstream actions that the tool
+  doesn't process but downstream actions need, preventing those fields from being lost when the tool returns its output.
+
+- WHen using workflows referencing (Jinja2 rendering), field references use {{ reference.field }} syntax where reference must be one of the namespaced contexts (source for input data, agent_name for previous agent outputs, seed for
+  static file data, loop for loop context, or workflow for metadata) - plain {{ field }} without a reference prefix is NOT supported because prompt_context is a namespaced dictionary structure.
+
+-   The dispatch_task('handle_quiz_type') call in a prompt template is processed after Jinja2 field rendering where it extracts the function name, calls the Python function with llm_context as a JSON string
+  argument, receives a dynamically selected prompt template based on the quiz_type field value (UNDERSTANDING/APPLICATION/IMPLEMENTATION/ANALYSIS), and replaces the entire dispatch_task() call with the
+  returned template string before sending the final prompt to the LLM.
+
+
+- you can use tool to post porocess output to structrue expected by next llm
+
+
+- The passthrough directive extracts specified fields into a separate passthrough_fields dictionary and removes them from prompt_context (making them unavailable to Jinja2 template rendering), then merges them
+   back into the action's output after the LLM response, which causes the error when the template tries to reference {{ generate_distractor_1.distractor_1 }} because that field was already removed from the
+  rendering context even though generate_distractor_1 still exists as an empty dict.
+
+
+  - contract validating all json populated from llm
+
+
+
+
+  LLm overthinking smaller models might be better

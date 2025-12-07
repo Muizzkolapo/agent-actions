@@ -1,6 +1,6 @@
-"""Batch processing providers."""
+"""Batch processing providers.
 
-from .base import BatchProvider, BatchResult, BatchTask
-from .factory import BatchProviderFactory
-
-__all__ = ['BatchProvider', 'BatchResult', 'BatchTask', 'BatchProviderFactory']
+Import directly from submodules:
+- from agent_actions.llm_invocation.providers.base import BatchProvider, BatchResult, BatchTask
+- from agent_actions.llm_invocation.providers.factory import BatchProviderFactory
+"""

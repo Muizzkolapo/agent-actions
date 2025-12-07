@@ -7,7 +7,7 @@ Extracted from agent_workflow.py to reduce complexity.
 
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from rich.console import Console
 
 

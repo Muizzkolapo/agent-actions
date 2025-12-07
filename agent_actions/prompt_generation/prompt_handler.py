@@ -2,7 +2,6 @@ import re
 import json
 import random
 import logging
-import os
 from collections import Counter
 from pathlib import Path
 from typing import Any, List

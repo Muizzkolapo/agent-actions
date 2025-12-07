@@ -6,7 +6,6 @@ handling the transformation between our standardized format and Gemini's
 specific requirements.
 """
 import json
-import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 try:
@@ -17,8 +16,7 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
     types = None
-from ..base import BatchProvider, BatchTask, BatchResult
-from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+from ..base import BatchProvider, BatchTask
 
 class GeminiBatchProvider(BatchProvider):
     """

@@ -4,7 +4,7 @@ import json
 from typing import Optional
 from agent_actions.input_loading.file_reader import FileReader
 from agent_actions.utilities.file_writer import FileWriter
-from agent_actions.prompt_generation.target_content_processor import TargetContentProcessor
+from agent_actions.prompt_generation.target_content_processor import TargetContentProcessor  # Required for DI registration
 from agent_actions.llm_invocation.realtime.output_handler import OutputHandler
 from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError, DependencyError
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY

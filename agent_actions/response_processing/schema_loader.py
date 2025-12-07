@@ -4,7 +4,6 @@ Schema loading utilities.
 This module provides schema loading functionality used by both batch and realtime modes.
 Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
 """
-import os
 from pathlib import Path
 from agent_actions.utilities.file_handler import FileHandler
 import yaml
