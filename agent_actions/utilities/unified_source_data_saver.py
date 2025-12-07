@@ -73,7 +73,7 @@ Format: JSON array of items with source_guid deduplication
 import json
 import logging
 from enum import Enum
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

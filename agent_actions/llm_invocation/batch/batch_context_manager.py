@@ -8,7 +8,7 @@ Extracted from BatchService as part of Phase 4 refactoring.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists
 from agent_actions.shared.exceptions import ProcessingError

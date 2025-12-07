@@ -7,10 +7,9 @@ import logging
 from pathlib import Path
 from typing import Optional
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
-from agent_actions.shared.exceptions import ValidationError, FileLoadError, TemplateRenderingError
+from agent_actions.shared.exceptions import TemplateRenderingError
 from agent_actions.validation.render_validator import RenderCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
-from pydantic import ValidationError as PydanticValidationError
 logger = logging.getLogger(__name__)
 
 class RenderCommand:

@@ -11,7 +11,7 @@ from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.orchestration.agent_workflow import AgentWorkflow
-from agent_actions.shared.exceptions import ConfigurationError, ValidationError, FileLoadError, AgentExecutionError
+from agent_actions.shared.exceptions import ValidationError, FileLoadError
 from agent_actions.validation.run_validator import RunCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 
@@ -63,11 +63,6 @@ class RunCommand:
         Raises:
             Various exceptions depending on the stage that fails
         """
-        try:
-            from qanalabs.tools import validators
-            click.echo('Loaded qanalabs custom validators')
-        except ImportError:
-            pass
         click.echo(f'Starting agent run for: {self.args.agent}')
         click.echo('Setting up project paths...')
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)

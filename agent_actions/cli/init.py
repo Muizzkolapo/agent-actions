@@ -12,7 +12,6 @@ from agent_actions.validation.project_validator import ProjectValidator
 from agent_actions.shared.exceptions import ValidationError, FileSystemError, ConfigurationError
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors
-from pydantic import ValidationError as PydanticValidationError
 
 class InitCommand:
     """Implementation of the init command."""

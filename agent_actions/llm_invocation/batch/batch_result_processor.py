@@ -12,7 +12,6 @@ from dataclasses import dataclass, field
 
 from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.utilities.id_generation import IDGenerator
-from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler

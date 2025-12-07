@@ -8,11 +8,9 @@ from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.utilities.file_writer import FileWriter
 from agent_actions.utilities.utils_path_utils import ensure_directory_exists, create_side_output_directory
-from agent_actions.utilities.source_data_utils import deduplicate_by_source_guid
 from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.providers.base import BatchProvider, BatchResult
-from agent_actions.llm_invocation.providers.factory import BatchProviderFactory
 from agent_actions.shared.exceptions import ConfigValidationError, ExternalServiceError, ProcessingError
 from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
@@ -314,9 +312,7 @@ class BatchService:
             output_directory: Output directory for processed files
         """
         from pathlib import Path
-        from agent_actions.utilities.unified_source_data_saver import (
-            UnifiedSourceDataSaver, SourceSaveMode
-        )
+        from agent_actions.utilities.unified_source_data_saver import UnifiedSourceDataSaver
 
         # Calculate paths for source saving
         # Find workflow root by looking for 'agent_io' in the path and going up one level

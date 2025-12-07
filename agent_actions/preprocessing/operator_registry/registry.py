@@ -5,7 +5,7 @@ This module provides the central registry that manages all operators,
 with automatic discovery and registration of built-in operators.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 import inspect
 import logging
 

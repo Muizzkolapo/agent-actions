@@ -14,14 +14,10 @@ from agent_actions.preprocessing.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
-from agent_actions.utilities.field_management import FieldManager
-from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
 from agent_actions.shared.exceptions import ConfigurationError
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
-    BatchTaskPreparationStats,
-    BatchFilterResult
+    BatchTaskPreparationStats
 )
 
 logger = logging.getLogger(__name__)

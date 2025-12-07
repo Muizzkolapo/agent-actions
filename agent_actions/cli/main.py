@@ -70,13 +70,13 @@ class CLI:
         except (AttributeError, ValueError) as e:
             self.logger.warning(f'Failed to register signal handlers: {str(e)}')
 
-    def _handle_termination(self, signum: int, frame) -> None:
+    def _handle_termination(self, signum: int, _frame) -> None:
         """
         Handle termination signals gracefully.
 
         Args:
             signum: Signal number
-            frame: Current stack frame (unused but required by signal handler signature)
+            _frame: Current stack frame (unused but required by signal handler signature)
         """
         signal_name = signal.Signals(signum).name
         self.logger.info(f'Received termination signal: {signal_name}')

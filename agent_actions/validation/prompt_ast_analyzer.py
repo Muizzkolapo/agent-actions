@@ -15,7 +15,6 @@ Benefits over regex:
 import logging
 from typing import Set, List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from pathlib import Path
 from jinja2 import Environment, meta, TemplateSyntaxError
 
 logger = logging.getLogger(__name__)
