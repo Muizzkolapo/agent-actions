@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.shared.exceptions import DataParseError, FileLoadError
+from agent_actions.errors import DataParseError, FileLoadError  # New modular pattern!
 logger = logging.getLogger(__name__)
 
 class XmlLoader(BaseLoader[ET.Element]):

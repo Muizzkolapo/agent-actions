@@ -76,7 +76,9 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                     **kwargs  # Include all CLI arguments in error context
                 }
                 error_message = format_user_error(e, context)
-                raise click.ClickException(error_message)
+                # Use 'from None' to suppress exception chaining and prevent
+                # Python traceback from being displayed to users
+                raise click.ClickException(error_message) from None
         return wrapper
     return decorator
 

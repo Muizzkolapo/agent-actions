@@ -9,7 +9,7 @@ from typing import Dict, Optional, Any
 
 from agent_actions.llm_invocation.providers.base import BatchProvider
 from agent_actions.llm_invocation.providers.factory import BatchProviderFactory
-from agent_actions.shared.exceptions import ConfigurationError, ConfigValidationError
+from agent_actions.errors import ConfigurationError, ConfigValidationError  # New modular pattern!
 
 
 class BatchProviderResolver:

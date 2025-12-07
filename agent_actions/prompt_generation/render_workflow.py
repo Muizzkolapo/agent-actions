@@ -3,7 +3,7 @@ import yaml
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
-from agent_actions.shared.exceptions import TemplateRenderingError, ConfigurationError
+from agent_actions.errors import TemplateRenderingError, ConfigurationError  # New modular pattern!
 import jinja2
 from agent_actions.utilities.safe_format import safe_format_error
 
@@ -112,7 +112,7 @@ def render_pipeline_with_templates(yaml_path, templates_folder):
             saved_file_msg = f'\nRendered output saved to: {failed_render_path}\nDebug with: agent-actions render {workflow_name}'
         except Exception:
             saved_file_msg = ''
-        raise ConfigurationError(f'Error parsing YAML after template rendering{saved_file_msg}', context={'yaml_path': yaml_path, 'line': mark.line + 1 if mark else None, 'column': mark.column + 1 if mark else None, 'problem': problem, 'operation': 'parse_yaml'}, cause=e)
+        raise ConfigurationError(f'Error parsing YAML after template rendering{saved_file_msg}', context={'yaml_path': yaml_path, 'line': mark.line + 1 if mark else None, 'column': mark.column + 1 if mark else None, 'problem': problem, 'operation': 'parse_yaml', 'rendered_content': rendered_yaml_content}, cause=e)
     except jinja2.TemplateError as e:
         raise TemplateRenderingError(f"Error rendering YAML template from '{yaml_path}': {safe_format_error(e)}", context={'yaml_path': yaml_path, 'templates_folder': templates_folder}, cause=e) from e
     except Exception as e:

@@ -14,7 +14,7 @@ from typing import Any, Dict, List
 from unittest.mock import Mock, patch
 from agent_actions.response_processing.where_parser import WhereClauseParser, WhereCondition, SimpleWhereFilter, get_global_filter, evaluate_safe_skip_condition, evaluate_safe_expression
 from agent_actions.response_processing.config_schema import WhereClauseConfig, FilterScope
-from agent_actions.shared.exceptions import ValidationError
+from agent_actions.errors import ValidationError  # New modular pattern!
 
 class TestWhereClauseParser:
     """Test WHERE clause parsing functionality."""

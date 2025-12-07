@@ -2,7 +2,7 @@
 import pytest
 from pathlib import Path
 from agent_actions.utilities.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
-from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():

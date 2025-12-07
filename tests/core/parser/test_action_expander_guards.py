@@ -1,7 +1,7 @@
 """Tests for format converter guard handling."""
 import pytest
 from agent_actions.response_processing.action_expander import ActionExpander
-from agent_actions.shared.exceptions import ValidationError
+from agent_actions.errors import ValidationError  # New modular pattern!
 
 class TestFormatConverterGuards:
     """Test guard handling in format converter."""

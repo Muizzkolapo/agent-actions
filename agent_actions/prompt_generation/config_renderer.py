@@ -14,8 +14,8 @@ from agent_actions.prompt_generation.render_workflow import render_pipeline_with
 from agent_actions.validation.path_validator import PathValidator
 from agent_actions.cli.utils.service_logger import ServiceLogger
 from agent_actions.cli.utils.error_handler import ErrorHandler
-from agent_actions.shared.exceptions import ConfigurationError
-from agent_actions.shared.exceptions import ConfigValidationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
+from agent_actions.errors import ConfigValidationError  # New modular pattern!
 from agent_actions.cli.utils.error_wrap import as_validation_error
 from agent_actions.validation.schema_validator import SchemaValidator
 from agent_actions.validation.config_validator import ConfigValidator
@@ -221,7 +221,7 @@ class ConfigRenderingService:
         except YAMLError as exc:
             mark = getattr(exc, 'problem_mark', None)
             problem = getattr(exc, 'problem', 'syntax error')
-            raise ConfigurationError('YAML syntax error', context={'file_path': str(src), 'line': mark.line + 1 if mark else None, 'column': mark.column + 1 if mark else None, 'problem': problem, 'operation': 'parse_yaml'})
+            raise ConfigurationError('YAML syntax error', context={'file_path': str(src), 'line': mark.line + 1 if mark else None, 'column': mark.column + 1 if mark else None, 'problem': problem, 'operation': 'parse_yaml', 'rendered_content': raw})
         if not data:
             raise ConfigurationError('Configuration results in empty data', context={'file_path': str(src), 'operation': 'parse_yaml'})
         return cast(AgentConfigMap, data)
@@ -252,26 +252,26 @@ class ConfigRenderingService:
                     entry_model = AgentConfig.model_validate(agent_entry)
                     validated_entries.append(entry_model.model_dump(exclude_unset=True))
                 except ValidationError as e:
-                    raise ConfigValidationError('Invalid action configuration', context={'action_name': action.get('name', 'unknown'), 'agent_name': agent_name}, cause=e)
+                    raise ConfigValidationError(config_key='action_configuration', reason='Invalid action configuration', context={'action_name': action.get('name', 'unknown'), 'agent_name': agent_name}, cause=e)
             config['_validated_actions'] = validated_entries
         else:
             agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
             if agent_entries_list is None:
-                raise ConfigValidationError('No agent configuration found', context={'agent_name': agent_name, 'operation': 'validate_config'})
+                raise ConfigValidationError(config_key='agent_configuration', reason='No agent configuration found', context={'agent_name': agent_name, 'operation': 'validate_config'})
             validated_entries: List[AgentEntryDict] = []
             for entry in agent_entries_list:
                 try:
                     entry_model = AgentConfig.model_validate(entry)
                     validated_entries.append(entry_model.model_dump(exclude_unset=True))
                 except ValidationError as e:
-                    raise ConfigValidationError('Invalid agent configuration', context={'agent_name': agent_name, 'operation': 'validate_config'}, cause=e)
+                    raise ConfigValidationError(config_key='agent_configuration', reason='Invalid agent configuration', context={'agent_name': agent_name, 'operation': 'validate_config'}, cause=e)
             config[agent_name] = validated_entries
         config_validator_instance = ConfigValidator()
         validation_payload = {'operation': 'validate_agent_entries', 'agent_config_data': validated_entries, 'agent_name_context': agent_name, 'project_dir': str(project_root_path)}
         if not config_validator_instance.validate(validation_payload):
             errors = config_validator_instance.get_errors()
             if errors:
-                raise ConfigValidationError('Agent configuration validation failed', context={'agent_name': agent_name, 'errors': errors, 'operation': 'validate_config'})
+                raise ConfigValidationError(config_key='agent_configuration', reason='Agent configuration validation failed', context={'agent_name': agent_name, 'errors': errors, 'operation': 'validate_config'})
 
     @as_validation_error(ConfigurationError)
     def render_and_load_config(self, agent_name: str, config_path: Union[str, Path], template_dir: Union[str, Path], output_dir: Union[str, Path]) -> AgentConfigMap:
@@ -324,9 +324,9 @@ class ConfigRenderer:
         except yaml.MarkedYAMLError as exc:
             mark = exc.problem_mark
             msg = exc.problem or 'syntax error'
-            raise ConfigValidationError('YAML syntax error', context={'file_name': src.name, 'line': mark.line + 1, 'column': mark.column + 1, 'problem': msg, 'operation': 'parse_yaml'})
+            raise ConfigValidationError(config_key='yaml_syntax', reason='YAML syntax error', context={'file_name': src.name, 'line': mark.line + 1, 'column': mark.column + 1, 'problem': msg, 'operation': 'parse_yaml'})
         except Exception as exc:
-            raise ConfigValidationError('Configuration format error', context={'file_name': src.name, 'operation': 'parse_yaml'}, cause=exc)
+            raise ConfigValidationError(config_key='configuration_format', reason='Configuration format error', context={'file_name': src.name, 'operation': 'parse_yaml'}, cause=exc)
 
     @as_validation_error(ConfigValidationError)
     def render_and_load_config(agent_name: str, config_path: Path, template_dir: Path, output_dir: Path) -> AgentConfigMap:

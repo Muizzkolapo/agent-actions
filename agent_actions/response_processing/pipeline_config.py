@@ -72,7 +72,7 @@ class WorkflowConfig(BaseModel):
     @classmethod
     def validate_execution_order(cls, v, info):
         """Validate that all agents in execution order are defined."""
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         if 'agents' in info.data:
             agents = info.data['agents']
             undefined_agents = [agent for agent in v if agent not in agents]
@@ -100,7 +100,7 @@ class PipelineConfig(BaseModel):
 
     def add_stage(self, stage: StageConfig) -> 'PipelineConfig':
         """Add a stage to the pipeline."""
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         if stage.name in [s.name for s in self.stages]:
             raise ConfigValidationError('stage_name', f"Stage '{stage.name}' already exists", context={'stage_name': stage.name, 'existing_stages': [s.name for s in self.stages], 'operation': 'add_stage'})
         self.stages.append(stage)
@@ -119,7 +119,7 @@ class PipelineConfig(BaseModel):
 
     def validate_dependencies(self) -> bool:
         """Validate stage dependencies are satisfied."""
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         stage_names = {stage.name for stage in self.stages}
         for stage in self.stages:
             for dependency in stage.depends_on:
@@ -134,7 +134,7 @@ class PipelineConfig(BaseModel):
         result = []
 
         def visit(stage_name: str):
-            from agent_actions.shared.exceptions import WorkflowError
+            from agent_actions.errors import WorkflowError  # New modular pattern!
             if stage_name in temp_visited:
                 raise WorkflowError('dependency_resolution', f"Circular dependency detected involving stage '{stage_name}'", context={'stage_name': stage_name, 'temp_visited': list(temp_visited), 'operation': 'get_execution_order'})
             if stage_name in visited:

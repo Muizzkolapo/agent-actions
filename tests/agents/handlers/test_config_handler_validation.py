@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
-from agent_actions.shared.exceptions import ConfigValidationError
+from agent_actions.errors import ConfigValidationError  # New modular pattern!
 from agent_actions.response_processing.config_schema import AgentConfig
 
 class TestConfigManagerInputValidation:

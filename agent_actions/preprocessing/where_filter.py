@@ -133,7 +133,7 @@ class WhereClauseFilter:
         except Exception as e:
             execution_time = time.time() - start_time
             error_msg = f"Error evaluating WHERE clause: {str(e)}"
-            logger.error(error_msg, exc_info=True)
+            logger.debug(error_msg, exc_info=True)
             
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)

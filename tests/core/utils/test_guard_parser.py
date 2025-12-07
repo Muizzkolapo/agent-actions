@@ -1,7 +1,7 @@
 """Tests for guard expression parser."""
 import pytest
 from agent_actions.response_processing.guard_parser import GuardParser, GuardType, GuardExpression, parse_guard
-from agent_actions.shared.exceptions import ValidationError
+from agent_actions.errors import ValidationError  # New modular pattern!
 
 class TestGuardParser:
     """Test suite for GuardParser."""

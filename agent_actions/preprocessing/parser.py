@@ -380,7 +380,7 @@ class WhereClauseParser:
                 )
             )
         except Exception as e:
-            logger.error(f"Unexpected error parsing WHERE clause: {e}", exc_info=True)
+            logger.debug(f"Unexpected error parsing WHERE clause: {e}", exc_info=True)
             return ParseResult(
                 success=False,
                 error=ParseError(

@@ -124,14 +124,14 @@ class OpenAIBatchProvider(BatchProvider):
         """Fetch raw results from OpenAI API."""
         batch_job = self.client.batches.retrieve(batch_id)
         if batch_job.status != 'completed':
-            from agent_actions.shared.exceptions import ValidationError
+            from agent_actions.errors import ValidationError  # New modular pattern!
             raise ValidationError('Batch job is not completed', context={'batch_id': batch_id, 'status': batch_job.status, 'vendor': 'openai'})
 
         result_file_id = batch_job.output_file_id
         result_content = self.client.files.content(result_file_id).content
 
         if not result_content or len(result_content) == 0:
-            from agent_actions.shared.exceptions import VendorAPIError
+            from agent_actions.errors import VendorAPIError  # New modular pattern!
             raise VendorAPIError(vendor='openai', endpoint='files.content', context={'message': 'Retrieved empty content from batch results', 'batch_id': batch_id, 'result_file_id': result_file_id})
 
         return result_content

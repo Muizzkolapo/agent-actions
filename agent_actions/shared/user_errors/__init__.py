@@ -33,13 +33,10 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
     Returns:
         User-friendly error message string
     """
-    # ALWAYS log full error for debugging with complete exception chain
-    logger.error(
-        "Error occurred during operation",
-        exc_info=exc,
-        extra={'context': context or {}}
-    )
-    # Log the detailed exception chain for debugging (not shown to users)
+    # Only log at DEBUG level to avoid duplicate error messages
+    # (The caller should log at ERROR level if needed)
+    logger.debug("Formatting user error: %s", str(exc), extra={'context': context or {}})
+    logger.debug("Error occurred during operation", exc_info=exc, extra={'context': context or {}})
     logger.debug(f"Exception chain details:\n{format_exception_chain_for_debug(exc)}")
 
     try:

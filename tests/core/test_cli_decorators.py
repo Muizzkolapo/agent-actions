@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from click.testing import CliRunner
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
-from agent_actions.shared.exceptions import ProjectNotFoundError, ValidationError
+from agent_actions.errors import ProjectNotFoundError, ValidationError  # New modular pattern!
 
 class TestRequiresProjectDecorator:
     """Tests for @requires_project decorator."""
@@ -305,7 +305,7 @@ class TestHandlesUserErrorsDecorator:
 
     def test_decorator_handles_agent_execution_errors(self):
         """Test decorator handles various AgentActions exception types."""
-        from agent_actions.shared.exceptions import (
+        from agent_actions.errors import (  # New modular pattern!
             ConfigurationError,
             FileLoadError
         )

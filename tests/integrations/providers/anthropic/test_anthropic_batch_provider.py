@@ -134,7 +134,7 @@ class TestAnthropicBatchProvider(BaseBatchProviderTests):
 
     def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
         """Override to test error handling with proper mock."""
-        from agent_actions.shared.exceptions import VendorAPIError
+        from agent_actions.errors import VendorAPIError  # New modular pattern!
         mock_anthropic_module = Mock()
         mock_client = Mock()
         mock_anthropic_module.Anthropic.return_value = mock_client

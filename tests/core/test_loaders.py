@@ -16,7 +16,7 @@ from agent_actions.input_loading.base_base_loader import BaseLoader
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.configuration.interfaces import ProcessingMode
-from agent_actions.shared.exceptions import FileLoadError
+from agent_actions.errors import FileLoadError  # New modular pattern!
 
 class _TestableLoader(BaseLoader[str]):
     """Concrete implementation of BaseLoader for testing."""

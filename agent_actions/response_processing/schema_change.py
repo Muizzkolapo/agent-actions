@@ -151,7 +151,7 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
     elif target == 'ollama':
         compiled = {'title': unified.get('name', ''), 'type': 'object', 'properties': properties, 'required': required, 'additionalProperties': False}
     else:
-        from agent_actions.shared.exceptions import ConfigValidationError
+        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         raise ConfigValidationError('target_system', f'Unknown target system: {target}', context={'target_system': target, 'valid_systems': ['openai', 'anthropic', 'gemini', 'ollama'], 'operation': 'compile_unified_schema'})
     return compiled
 
@@ -178,7 +178,7 @@ def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optiona
     """
     from agent_actions.utilities.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
     from agent_actions.response_processing.schema_loader import SchemaLoader
-    from agent_actions.shared.exceptions import ConfigValidationError
+    from agent_actions.errors import ConfigValidationError  # New modular pattern!
     if vendor == 'tool':
         return None
     inline_schema = agent_config.get(SCHEMA_KEY)

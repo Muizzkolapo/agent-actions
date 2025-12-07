@@ -43,7 +43,7 @@ class AgentRunner:
         Raises:
             ValueError: If the agent folder is not found.
         """
-        from agent_actions.shared.exceptions import FileSystemError
+        from agent_actions.errors import FileSystemError  # New modular pattern!
         current_dir: Path = Path.cwd()
         # Use workflow_name if set (for multi-agent workflows), otherwise use agent_name (for single-agent or legacy)
         folder_name = self.workflow_name if self.workflow_name else agent_name

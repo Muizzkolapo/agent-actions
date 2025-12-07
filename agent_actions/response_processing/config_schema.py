@@ -25,7 +25,7 @@ class WhereClauseConfig(BaseModel):
     @classmethod
     def validate_clause(cls, v):
         """Validate the WHERE clause syntax."""
-        from agent_actions.shared.exceptions import ValidationError
+        from agent_actions.errors import ValidationError  # New modular pattern!
         if v is not None and (not v or not v.strip()):
             raise ValidationError(
                 'WHERE clause cannot be empty',
@@ -71,7 +71,7 @@ class SkipConditionConfig(BaseModel):
     @classmethod
     def validate_expression(cls, v, info):
         """Validate custom expressions for safety."""
-        from agent_actions.shared.exceptions import ValidationError
+        from agent_actions.errors import ValidationError  # New modular pattern!
         if v and info.data.get('condition_type') == 'custom':
             dangerous_patterns = ['__import__', 'exec', 'eval', 'compile', 'open', 'file', 'input', 'raw_input', 'reload', 'vars', 'globals', 'locals']
             expr_lower = v.lower()

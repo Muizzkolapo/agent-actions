@@ -3,7 +3,7 @@ Tests for execution level computation in AgentWorkflow.
 """
 import pytest
 from agent_actions.orchestration.agent_workflow import AgentWorkflow
-from agent_actions.shared.exceptions import WorkflowError
+from agent_actions.errors import WorkflowError  # New modular pattern!
 from pathlib import Path
 from unittest.mock import Mock, MagicMock
 

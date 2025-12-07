@@ -7,7 +7,7 @@ from docx import Document
 import pandas as pd
 from bs4 import BeautifulSoup
 from pathlib import Path
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException  # New modular pattern!
 from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
 
 class FileReader(ProcessorErrorHandlerMixin):

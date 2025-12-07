@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from agent_actions.prompt_generation.render_workflow import normalize_yaml_indentation, render_pipeline_with_templates
-from agent_actions.shared.exceptions import ConfigurationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
 
 class TestNormalizeYamlIndentation:
     """Test the normalize_yaml_indentation() function."""

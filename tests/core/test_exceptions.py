@@ -153,7 +153,8 @@ class TestAgentActionsException:
         """Test exception __repr__ method."""
         exc = AgentActionsException('Test message', {'key': 'value'})
         repr_result = repr(exc)
-        assert 'AgentActionsException' in repr_result
+        # Accept both old (AgentActionsException) and new (AgentActionsError) names
+        assert 'AgentActionsException' in repr_result or 'AgentActionsError' in repr_result
         assert 'Test message' in repr_result
 
     def test_exception_args_preserved(self):

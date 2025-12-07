@@ -4,7 +4,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.shared.exceptions import DataParseError, FileLoadError
+from agent_actions.errors import DataParseError, FileLoadError  # New modular pattern!
 logger = logging.getLogger(__name__)
 
 class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
@@ -38,7 +38,7 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
                 parsed_data = json.loads(content)
                 return parsed_data
             else:
-                from agent_actions.shared.exceptions import ValidationError
+                from agent_actions.errors import ValidationError  # New modular pattern!
                 error = ValidationError(
                     'Either file_path or content must be provided',
                     context={

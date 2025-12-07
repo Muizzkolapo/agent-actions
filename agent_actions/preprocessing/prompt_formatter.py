@@ -112,7 +112,7 @@ class PromptFormatter:
                 raw_prompt = 'Process the following content: {content}'
             return raw_prompt
         except Exception as e:
-            from agent_actions.shared.exceptions import PromptValidationError
+            from agent_actions.errors import PromptValidationError  # New modular pattern!
             raise PromptValidationError('raw_prompt', f'Failed to get raw prompt: {str(e)}', context={'agent_config': str(agent_config), 'operation': 'get_raw_prompt'}, cause=e)
 
     @staticmethod
@@ -137,5 +137,5 @@ class PromptFormatter:
                 return PromptUtils.replace_field_references(raw_prompt, field_context)
             return raw_prompt
         except Exception as e:
-            from agent_actions.shared.exceptions import PromptValidationError
+            from agent_actions.errors import PromptValidationError  # New modular pattern!
             raise PromptValidationError('formatted_prompt', f'Failed to format prompt: {str(e)}', context={'raw_prompt': str(raw_prompt)[:100], 'operation': 'format_prompt'}, cause=e)

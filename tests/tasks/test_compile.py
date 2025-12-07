@@ -14,7 +14,7 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 from click.testing import CliRunner
 from agent_actions.cli.compile import RenderCommand, render
 from agent_actions.validation.render_validator import RenderCommandArgs
-from agent_actions.shared.exceptions import ValidationError, FileLoadError, TemplateRenderingError
+from agent_actions.errors import ValidationError, FileLoadError, TemplateRenderingError  # New modular pattern!
 from pydantic import ValidationError as PydanticValidationError
 
 class TestRenderCommandArgs:

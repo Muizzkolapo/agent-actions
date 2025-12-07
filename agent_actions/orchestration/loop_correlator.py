@@ -265,7 +265,7 @@ class LoopOutputCorrelator:
                 record_copy.pop('_source_file', None)
                 correlation_key = record_copy.get('loop_correlation_id')
                 if not correlation_key:
-                    from agent_actions.shared.exceptions import DataValidationError
+                    from agent_actions.errors import DataValidationError  # New modular pattern!
                     source_guid = record_copy.get('source_guid', 'unknown')
                     raise DataValidationError('loop_correlation_id', 'required', 'missing', context={'source_guid': source_guid, 'loop_agent': loop_agent, 'operation': 'correlate_loop_outputs'})
                 correlation_groups[correlation_key][loop_agent] = record_copy

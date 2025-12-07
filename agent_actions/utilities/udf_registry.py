@@ -23,7 +23,7 @@ Usage:
 """
 import inspect
 from typing import Any, Callable, Dict, List
-from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
 UDF_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 def udf_tool(func: Callable) -> Callable:
@@ -78,7 +78,10 @@ def get_udf(func_name: str) -> Callable:
     func_name_lower = func_name.lower()
     if func_name_lower not in UDF_REGISTRY:
         available = sorted([meta['name'] for meta in UDF_REGISTRY.values()])
-        raise FunctionNotFoundError(function_name=func_name, available_functions=available)
+        raise FunctionNotFoundError(
+            f"Function '{func_name}' not found",
+            context={'function_name': func_name, 'available_functions': available}
+        )
     return UDF_REGISTRY[func_name_lower]['function']
 
 def list_udfs() -> List[Dict[str, Any]]:

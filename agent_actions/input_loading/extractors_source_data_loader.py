@@ -6,7 +6,7 @@ from typing import List, Dict, Any, Optional
 from agent_actions.configuration.interfaces import ISourceDataLoader, ProcessingMode
 from agent_actions.state_management.path_manager import PathManager, PathManagerError
 from agent_actions.orchestration.dependency_injection import registry
-from agent_actions.shared.exceptions import DependencyError
+from agent_actions.errors import DependencyError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
@@ -63,11 +63,11 @@ class SourceDataLoader(ISourceDataLoader):
                 raise PathManagerError(f"'agent_io' not found in path {file_path}")
             node_part = parts[agent_io_index + 2] if len(parts) > agent_io_index + 2 else None
             if node_part is None or Path(node_part).suffix:
-                from agent_actions.shared.exceptions import FileSystemError
+                from agent_actions.errors import FileSystemError  # New modular pattern!
                 raise FileSystemError("Path too short - missing node directory after 'agent_io/target/'", context={'file_path': file_path, 'agent_name': self.agent_name, 'operation': 'load_source_data'})
             file_parts = parts[agent_io_index + 3:]
             if not file_parts:
-                from agent_actions.shared.exceptions import FileSystemError
+                from agent_actions.errors import FileSystemError  # New modular pattern!
                 raise FileSystemError('No filename found after node directory', context={'file_path': file_path, 'agent_name': self.agent_name, 'operation': 'load_source_data'})
             pipeline_parts = parts[:agent_io_index]
             source_file_to_load = Path(*pipeline_parts) / 'agent_io' / 'source' / Path(*file_parts)
@@ -87,15 +87,15 @@ class SourceDataLoader(ISourceDataLoader):
                 )
                 within_project = True
             if not within_project:
-                from agent_actions.shared.exceptions import FileSystemError
+                from agent_actions.errors import FileSystemError  # New modular pattern!
                 raise FileSystemError('Source file is outside project bounds', context={'source_file': str(source_file_to_load), 'agent_name': self.agent_name, 'operation': 'load_source_data'})
             with open(source_file_to_load, 'r', encoding='utf-8') as file:
                 return json.load(file)
         except PathManagerError as e:
-            from agent_actions.shared.exceptions import FileSystemError
+            from agent_actions.errors import FileSystemError  # New modular pattern!
             raise FileSystemError('Path structure error when deriving source', context={'file_path': file_path, 'agent_name': self.agent_name, 'operation': 'load_source_data'}, cause=e)
         except Exception as e:
-            from agent_actions.shared.exceptions import FileLoadError
+            from agent_actions.errors import FileLoadError  # New modular pattern!
             raise FileLoadError(
                 'Failed to load source data',
                 context={
@@ -131,7 +131,7 @@ class SourceDataLoader(ISourceDataLoader):
             with open(source_file, 'w', encoding='utf-8') as f:
                 json.dump(content, f, indent=2)
         except Exception as e:
-            from agent_actions.shared.exceptions import FileLoadError
+            from agent_actions.errors import FileLoadError  # New modular pattern!
             raise FileLoadError('Failed to save source data', context={'source_guid': source_guid, 'file_path': file_path, 'agent_name': self.agent_name, 'operation': 'save_source_data'}, cause=e)
 
     def load_source_content(self, file_path: str, context_data: Dict[str, Any]) -> Optional[Any]:

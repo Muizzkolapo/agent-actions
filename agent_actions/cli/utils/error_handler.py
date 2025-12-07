@@ -7,7 +7,7 @@ import logging
 import traceback
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException  # New modular pattern!
 logger = logging.getLogger(__name__)
 T = TypeVar('T', bound=AgentActionsException)
 
@@ -43,8 +43,11 @@ class ErrorHandler:
         Raises:
             The specified error type or AgentActionsException if not specified.
         """
-        error_details = {'error': str(error), 'traceback': traceback.format_exc(), **(context or {})}
-        logger.error(message, extra=error_details, exc_info=True)
+        error_details = {'error': str(error), **(context or {})}
+        # Only log at DEBUG level (to avoid duplicate error logs)
+        # The top-level error handler (main.py) will log at ERROR level
+        logger.debug(f"{message}: {str(error)}", extra=error_details)
+        logger.debug(f"{message} - Full traceback:", exc_info=True)
         if error_type:
             raise error_type(f'{message}: {str(error)}', context=context, cause=error)
         else:
@@ -63,7 +66,7 @@ class ErrorHandler:
         Raises:
             ValidationError: With appropriate message.
         """
-        from agent_actions.shared.exceptions import ValidationError
+        from agent_actions.errors import ValidationError  # New modular pattern!
         message = f'Validation failed for {target}'
         ErrorHandler.handle_error(error, message, ValidationError, context)
 
@@ -81,7 +84,7 @@ class ErrorHandler:
         Raises:
             FileLoadError or FileSystemError: With appropriate message.
         """
-        from agent_actions.shared.exceptions import FileLoadError, FileSystemError
+        from agent_actions.errors import FileLoadError, FileSystemError  # New modular pattern!
         if isinstance(error, (FileNotFoundError, IOError, OSError)):
             if not error.args or 'No such file' in str(error):
                 error_type = FileLoadError
@@ -106,7 +109,7 @@ class ErrorHandler:
         Raises:
             ConfigurationError: With appropriate message.
         """
-        from agent_actions.shared.exceptions import ConfigurationError
+        from agent_actions.errors import ConfigurationError  # New modular pattern!
         message = f"Configuration operation '{operation}' failed for {config_name}"
         ErrorHandler.handle_error(error, message, ConfigurationError, context)
 
@@ -124,7 +127,7 @@ class ErrorHandler:
         Raises:
             TemplateRenderingError: With appropriate message.
         """
-        from agent_actions.shared.exceptions import TemplateRenderingError
+        from agent_actions.errors import TemplateRenderingError  # New modular pattern!
         message = f"Template operation '{operation}' failed for {template_name}"
         ErrorHandler.handle_error(error, message, TemplateRenderingError, context)
 
@@ -142,6 +145,6 @@ class ErrorHandler:
         Raises:
             AgentExecutionError: With appropriate message.
         """
-        from agent_actions.shared.exceptions import AgentExecutionError
+        from agent_actions.errors import AgentExecutionError  # New modular pattern!
         message = f"Execution of '{operation}' failed for {target}"
         ErrorHandler.handle_error(error, message, AgentExecutionError, context)

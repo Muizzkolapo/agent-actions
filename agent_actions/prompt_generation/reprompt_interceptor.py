@@ -38,7 +38,7 @@ class RepromptInterceptor(ResponseInterceptor):
         elif strategy_type == 'template':
             self.strategy = TemplateRepromptStrategy(config.get('templates', {}), prompt_debug=self.prompt_debug)
         else:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError(
                 'Unknown reprompt strategy',
                 context={
@@ -73,7 +73,7 @@ class RepromptInterceptor(ResponseInterceptor):
                 validation_criteria[key] = value
         reprompt_context = RepromptContext(original_prompt=context.get('original_prompt', context.get('prompt')), validation_error=context['validation_error'], validation_criteria=validation_criteria, attempt_number=attempt + 1, failed_response=context.get('failed_response'), agent_config=context.get('agent_config', {}))
         if not self.strategy:
-            from agent_actions.shared.exceptions import ConfigurationError
+            from agent_actions.errors import ConfigurationError  # New modular pattern!
             raise ConfigurationError('Reprompt strategy not configured', context={'attempt': attempt, 'max_attempts': self.max_attempts})
         improved_prompt = self.strategy.generate_improved_prompt(reprompt_context)
         return InterceptorResult(continue_processing=False, retry_context={'prompt': improved_prompt, 'original_prompt': reprompt_context.original_prompt, 'attempt': attempt + 1, 'history': context.get('history', []) + [{'attempt': attempt, 'prompt': context.get('prompt'), 'error': context['validation_error']}]})

@@ -17,7 +17,7 @@ from unittest.mock import Mock, patch, MagicMock
 from click.testing import CliRunner
 from agent_actions.cli.init import InitCommand, init
 from agent_actions.validation.init_validator import InitCommandArgs
-from agent_actions.shared.exceptions import ValidationError, FileSystemError, ConfigurationError
+from agent_actions.errors import ValidationError, FileSystemError, ConfigurationError  # New modular pattern!
 from pydantic import ValidationError as PydanticValidationError
 
 class TestInitCommandArgs:

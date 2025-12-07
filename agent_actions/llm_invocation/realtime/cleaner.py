@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Iterable
 import click
 from agent_actions.llm_invocation.realtime.agent_handlers import AgentManager
-from agent_actions.shared.exceptions import AgentNotFoundError, FileSystemError as AgentFileSystemError
+from agent_actions.errors import AgentNotFoundError, FileSystemError as AgentFileSystemError  # New modular pattern!
 logger = logging.getLogger(__name__)
 
 @dataclass(slots=True)

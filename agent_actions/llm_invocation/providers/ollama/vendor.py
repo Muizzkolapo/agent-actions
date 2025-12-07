@@ -37,7 +37,7 @@ class OllamaHandler(BaseVendorHandler):
             ConfigurationError: If json_mode is enabled for Ollama
         """
         from agent_actions.utilities.constants import JSON_MODE_KEY
-        from agent_actions.shared.exceptions import ConfigurationError
+        from agent_actions.errors import ConfigurationError  # New modular pattern!
         json_mode = agent_config.get(JSON_MODE_KEY, True)
         if json_mode:
             raise ConfigurationError('Ollama does not support json_mode=true. Structured output is unreliable with Ollama models.', context={'vendor': 'ollama', 'model': agent_config.get('model_name', 'unknown'), 'json_mode': json_mode, 'operation': 'invoke', 'hint': 'Set json_mode: false in your agent configuration or workflow defaults'})

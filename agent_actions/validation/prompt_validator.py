@@ -100,7 +100,7 @@ class PromptValidator(BaseValidator):
             logger.debug('Prompt file validation processed for: %s', prompt_file.name)
         except Exception as e:
             self.add_error(f"Unexpected error validating prompt file '{prompt_file.name}': {e}.")
-            logger.error(f"Unexpected error validating prompt file '{prompt_file.name}': {e}", exc_info=True)
+            logger.debug(f"Unexpected error validating prompt file '{prompt_file.name}': {e}", exc_info=True)
             return 0
         return file_prompts_count if not (duplicate_ids_within_file or cross_file_duplicates) else 0
 

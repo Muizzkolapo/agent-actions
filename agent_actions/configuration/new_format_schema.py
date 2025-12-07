@@ -66,10 +66,10 @@ class ActionConfig(BaseModel):
                     from agent_actions.utilities.consolidated_guard import parse_guard_config
                     parse_guard_config(v)
                 else:
-                    from agent_actions.shared.exceptions import ConfigValidationError as CVE
+                    from agent_actions.errors import ConfigValidationError as CVE  # New modular pattern!
                     raise CVE('guard_type', f'Guard must be string or dict, got {type(v)}', context={'guard_type': str(type(v)), 'operation': 'validate_guard'})
             except ValueError as e:
-                from agent_actions.shared.exceptions import ConfigValidationError as CVE
+                from agent_actions.errors import ConfigValidationError as CVE  # New modular pattern!
                 raise CVE('guard_expression', f'Invalid guard: {e}', context={'guard': v, 'operation': 'validate_guard'}, cause=e)
         return v
 
@@ -110,7 +110,7 @@ class WorkflowConfigV2(BaseModel):
                 else:
                     action_name = plan_item.strip()
                 if action_name not in action_names:
-                    from agent_actions.shared.exceptions import ConfigValidationError
+                    from agent_actions.errors import ConfigValidationError  # New modular pattern!
                     raise ConfigValidationError('workflow_plan', f"Action '{action_name}' in plan not defined in actions", context={'action_name': action_name, 'plan_item': plan_item, 'defined_actions': list(action_names), 'operation': 'validate_plan'})
         return v
 

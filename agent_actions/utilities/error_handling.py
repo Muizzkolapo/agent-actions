@@ -12,7 +12,7 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type, TypeVar, Union
-from agent_actions.shared.exceptions import ProcessingError as ProcessorError
+from agent_actions.errors import ProcessingError as ProcessorError  # New modular pattern!
 T = TypeVar('T', bound=ProcessorError)
 
 class ProcessorErrorHandlerMixin:
@@ -89,7 +89,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             ValidationError with appropriate message
         """
-        from agent_actions.shared.exceptions import ValidationError
+        from agent_actions.errors import ValidationError  # New modular pattern!
         self.handle_processing_error(error, f'Validation of {target}', ValidationError, file_path=file_path, validation_target=target, **context_kwargs)
 
     def handle_file_error(self, error: Exception, operation: str, file_path: Union[str, Path], **context_kwargs) -> None:
@@ -105,7 +105,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             FileLoadError or FileWriteError depending on operation
         """
-        from agent_actions.shared.exceptions import FileLoadError, FileWriteError
+        from agent_actions.errors import FileLoadError, FileWriteError  # New modular pattern!
         if operation.lower() in ['read', 'load', 'open']:
             error_type = FileLoadError
         elif operation.lower() in ['write', 'save', 'create']:
@@ -127,7 +127,7 @@ class ProcessorErrorHandlerMixin:
         Raises:
             TransformationError with appropriate message
         """
-        from agent_actions.shared.exceptions import TransformationError
+        from agent_actions.errors import TransformationError  # New modular pattern!
         self.handle_processing_error(error, f'Transformation from {source_type} to {target_type}', TransformationError, source_type=source_type, target_type=target_type, **context_kwargs)
 
     def log_warning(self, message: str, operation: str, **context_kwargs) -> None:

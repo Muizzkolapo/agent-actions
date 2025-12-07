@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
-from agent_actions.shared.exceptions import TemplateRenderingError
+from agent_actions.errors import TemplateRenderingError  # New modular pattern!
 from agent_actions.validation.render_validator import RenderCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 logger = logging.getLogger(__name__)
@@ -28,7 +28,10 @@ class RenderCommand:
             logger.info('Template rendering completed successfully', extra={'agent_name': self.args.agent_name})
             return rendered_template
         except Exception as e:
-            logger.error(f'Template rendering failed: {str(e)}', extra={'agent_name': self.args.agent_name}, exc_info=True)
+            # Log error without traceback (will be handled by error formatter)
+            logger.error(f'Template rendering failed: {str(e)}', extra={'agent_name': self.args.agent_name})
+            # Log full traceback only at debug level
+            logger.debug(f'Template rendering exception details', exc_info=True)
             raise TemplateRenderingError('Failed to render template', context={'agent_name': self.args.agent_name, 'config_file': str(agent_config_file), 'template_dir': str(self.template_dir), 'operation': '_render_template'}, cause=e) from e
 
     def execute(self) -> None:

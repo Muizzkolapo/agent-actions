@@ -55,7 +55,7 @@ class ActionLevelOrchestrator:
         Raises:
             WorkflowError: If circular dependencies detected
         """
-        from agent_actions.shared.exceptions import WorkflowError
+        from agent_actions.errors import WorkflowError  # New modular pattern!
 
         # Build dependency map
         deps_map = {
@@ -159,7 +159,7 @@ class ActionLevelOrchestrator:
         Raises:
             WorkflowError: If any agent fails during execution
         """
-        from agent_actions.shared.exceptions import WorkflowError
+        from agent_actions.errors import WorkflowError  # New modular pattern!
 
         start_time = datetime.now()
 

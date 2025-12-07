@@ -4,7 +4,7 @@ import importlib.util
 import sys
 from pathlib import Path
 from typing import Any, Callable, Dict, Tuple
-from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 from agent_actions.utilities.safe_format import safe_format_error
 
 def _split_udf_name(udf_name: str) -> Tuple[str, str]:

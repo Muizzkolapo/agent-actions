@@ -3,7 +3,7 @@ import pytest
 from pathlib import Path
 import os
 from agent_actions.utilities.project_root import find_project_root, ensure_in_project, get_project_root_or_cwd, is_in_project
-from agent_actions.shared.exceptions import ProjectNotFoundError
+from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 
 class TestFindProjectRoot:
     """Tests for find_project_root function."""

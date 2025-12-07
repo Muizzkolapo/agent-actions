@@ -60,7 +60,7 @@ class AgentStrategy(ABC):
             Path to the generated output file.
         """
         if self.processor_factory is None:
-            from agent_actions.shared.exceptions import DependencyError
+            from agent_actions.errors import DependencyError  # New modular pattern!
             raise DependencyError('BaseAgentStrategy', 'processor_factory')
         generator = TargetGenerator(agent_config, agent_name, idx, self.processor_factory, agent_configs=agent_configs)
         result = generator.process(file_path, base_directory, output_directory)

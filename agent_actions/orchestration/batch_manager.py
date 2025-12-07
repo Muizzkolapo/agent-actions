@@ -115,7 +115,7 @@ class BatchLifecycleManager:
             )
 
             if not processed_files:
-                from agent_actions.shared.exceptions import ProcessingError
+                from agent_actions.errors import ProcessingError  # New modular pattern!
                 raise ProcessingError('No batch results were successfully processed')
 
         except Exception as e:

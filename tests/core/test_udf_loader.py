@@ -6,7 +6,7 @@ import tempfile
 import shutil
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
 from agent_actions.utilities.udf_registry import udf_tool, clear_registry, UDF_REGISTRY
-from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():

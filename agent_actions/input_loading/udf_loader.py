@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import Dict, Any, List
 from agent_actions.utilities.udf_registry import UDF_REGISTRY, get_udf
-from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!
 
 def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
     """

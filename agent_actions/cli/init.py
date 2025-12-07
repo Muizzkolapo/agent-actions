@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional, List
 from agent_actions.configuration.init import ProjectInitializer
 from agent_actions.validation.project_validator import ProjectValidator
-from agent_actions.shared.exceptions import ValidationError, FileSystemError, ConfigurationError
+from agent_actions.errors import ValidationError, FileSystemError, ConfigurationError  # New modular pattern!
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.cli.cli_decorators import handles_user_errors
 

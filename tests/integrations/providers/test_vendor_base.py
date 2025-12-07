@@ -2,7 +2,7 @@
 import pytest
 import os
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
-from agent_actions.shared.exceptions import ConfigurationError
+from agent_actions.errors import ConfigurationError  # New modular pattern!
 
 class TestVendorBaseAPIKeyValidation:
     """Test API key environment variable validation."""

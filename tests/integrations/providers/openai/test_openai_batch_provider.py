@@ -110,7 +110,7 @@ class TestOpenAIBatchProvider(BaseBatchProviderTests):
         Since we mock the client, we need to configure it to raise an error
         for this specific test.
         """
-        from agent_actions.shared.exceptions import VendorAPIError
+        from agent_actions.errors import VendorAPIError  # New modular pattern!
         provider = OpenAIBatchProvider(api_key='test-key')
         mock_client = Mock()
         provider.client = mock_client

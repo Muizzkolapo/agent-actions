@@ -56,7 +56,7 @@ class BaseVendorHandler:
         Raises:
             ConfigurationError: If api_key is not configured or environment variable doesn't exist
         """
-        from agent_actions.shared.exceptions import ConfigurationError
+        from agent_actions.errors import ConfigurationError  # New modular pattern!
         key_name: Optional[str] = agent_config.get(API_KEY_KEY)
         if not key_name:
             raise ConfigurationError('API key configuration is missing', context={'agent': agent_config.get('agent_type', 'unknown'), 'field': API_KEY_KEY, 'operation': 'get_api_key', 'hint': 'Add api_key to agent_actions.yml, workflow defaults, or action config'})

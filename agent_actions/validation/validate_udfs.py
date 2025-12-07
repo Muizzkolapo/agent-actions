@@ -12,7 +12,7 @@ from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_r
 from agent_actions.utilities.udf_registry import clear_registry, UDF_REGISTRY
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
-from agent_actions.shared.exceptions import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!
 
 class ValidateUDFsCommand:
     """Implementation of the validate-udfs command."""

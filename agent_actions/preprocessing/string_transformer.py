@@ -6,7 +6,7 @@ import sys
 from typing import List
 import tiktoken
 from pathlib import Path
-from agent_actions.shared.exceptions import AgentActionsException, ConfigurationError
+from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 
 class StringProcessor:
     """
