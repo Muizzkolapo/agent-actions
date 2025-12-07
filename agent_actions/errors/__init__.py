@@ -1,0 +1,125 @@
+"""Centralized error exports for agent-actions.
+
+This module provides a clean, organized error hierarchy following the dbt-mcp pattern.
+All errors are organized by domain and exported from a single location for easy imports.
+
+Usage:
+    from agent_actions.errors import ConfigurationError, ValidationError
+    from agent_actions.errors import FileLoadError, AgentExecutionError
+"""
+
+# Base error
+from agent_actions.errors.base import AgentActionsError
+
+# Common errors
+from agent_actions.errors.common import InvalidParameterError
+
+# Configuration errors
+from agent_actions.errors.configuration import (
+    ConfigurationError,
+    ConfigValidationError,
+    DuplicateFunctionError,
+    FunctionNotFoundError,
+    UDFLoadError,
+    AgentNotFoundError,
+    ProjectNotFoundError,
+    EnvironmentConfigError,
+)
+
+# Validation errors
+from agent_actions.errors.validation import (
+    ValidationError,
+    PromptValidationError,
+    DataValidationError,
+    SchemaValidationError,
+)
+
+# Processing errors
+from agent_actions.errors.processing import (
+    ProcessingError,
+    TransformationError,
+    GenerationError,
+    WorkflowError,
+    SerializationError,
+)
+
+# External service errors
+from agent_actions.errors.external_services import (
+    ExternalServiceError,
+    VendorAPIError,
+    OpenAIError,
+    AnthropicError,
+    GeminiError,
+    NetworkError,
+    RateLimitError,
+)
+
+# File system errors
+from agent_actions.errors.filesystem import (
+    FileSystemError,
+    FileLoadError,
+    FileWriteError,
+    DirectoryError,
+)
+
+# Resource errors
+from agent_actions.errors.resources import (
+    ResourceError,
+    MemoryError,
+    DependencyError,
+)
+
+# Operational errors
+from agent_actions.errors.operations import (
+    OperationalError,
+    AgentExecutionError,
+    TemplateRenderingError,
+)
+
+__all__ = [
+    # Base
+    "AgentActionsError",
+    # Common
+    "InvalidParameterError",
+    # Configuration
+    "ConfigurationError",
+    "ConfigValidationError",
+    "DuplicateFunctionError",
+    "FunctionNotFoundError",
+    "UDFLoadError",
+    "AgentNotFoundError",
+    "ProjectNotFoundError",
+    "EnvironmentConfigError",
+    # Validation
+    "ValidationError",
+    "PromptValidationError",
+    "DataValidationError",
+    "SchemaValidationError",
+    # Processing
+    "ProcessingError",
+    "TransformationError",
+    "GenerationError",
+    "WorkflowError",
+    "SerializationError",
+    # External Services
+    "ExternalServiceError",
+    "VendorAPIError",
+    "OpenAIError",
+    "AnthropicError",
+    "GeminiError",
+    "NetworkError",
+    "RateLimitError",
+    # File System
+    "FileSystemError",
+    "FileLoadError",
+    "FileWriteError",
+    "DirectoryError",
+    # Resources
+    "ResourceError",
+    "MemoryError",
+    "DependencyError",
+    # Operations
+    "OperationalError",
+    "AgentExecutionError",
+    "TemplateRenderingError",
+]

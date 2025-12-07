@@ -11,7 +11,7 @@ from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.orchestration.agent_workflow import AgentWorkflow
-from agent_actions.shared.exceptions import ValidationError, FileLoadError
+from agent_actions.errors import FileLoadError  # New modular pattern!
 from agent_actions.validation.run_validator import RunCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 
@@ -120,9 +120,7 @@ def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False
         agent-actions run -a my_agent
         agent-actions run -a my_agent -u ./user_code --use-tools
     """
-    try:
-        args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit)
-        command = RunCommand(args)
-        command.execute()
-    except ValidationError as e:
-        raise click.ClickException(str(e))
+    # Let @handles_user_errors decorator handle all exceptions for consistent error formatting
+    args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit)
+    command = RunCommand(args)
+    command.execute()

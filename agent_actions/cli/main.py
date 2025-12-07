@@ -19,7 +19,7 @@ from agent_actions.llm_invocation.batch.batch_cli import batch  # CLI command gr
 from agent_actions.cli.status import status
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
-from agent_actions.shared.exceptions import ProjectNotFoundError
+from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 __version__ = '1.0.0'
 
 class CLI:
