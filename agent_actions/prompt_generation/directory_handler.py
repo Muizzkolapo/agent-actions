@@ -7,7 +7,7 @@ class DirectoryCombiner:
 
     def __init__(self):
         """Initialize the directory combiner."""
-        self.file_handler = FileHandler()
+        self.file_handler = JsonFileHandler()
 
     def combine_directories(self, dir_1: str, dir_2: str, output_dir: str) -> None:
         """
