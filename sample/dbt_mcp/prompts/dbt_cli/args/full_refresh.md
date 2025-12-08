@@ -1,1 +1,0 @@
-If true, dbt will force a complete rebuild of incremental models (built from scratch) rather than processing new or modifed data.

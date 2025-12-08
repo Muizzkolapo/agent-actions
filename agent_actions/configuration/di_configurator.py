@@ -45,7 +45,7 @@ class DIConfigurator:
         """Register utility services."""
         from agent_actions.preprocessing.data_transformer import DataTransformer
         from agent_actions.prompt_generation.prompt_handler import PromptLoader
-        from agent_actions.preprocessing.sample_enricher import SampleEnricher
+        from agent_actions.prompt_generation.sample_enricher import SampleEnricher
         from agent_actions.utilities.logging import LoggerFactory
         container.register_singleton(DataTransformer, DataTransformer)
         container.register_singleton(PromptLoader, PromptLoader)

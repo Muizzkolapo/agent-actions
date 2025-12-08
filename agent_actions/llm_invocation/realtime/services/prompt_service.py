@@ -1,7 +1,7 @@
 """Prompt preparation service for agent builder."""
 
 from typing import Dict, Any, Optional
-from agent_actions.preprocessing.prompt_formatter import PromptFormatter
+from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 
 
 class PromptService:

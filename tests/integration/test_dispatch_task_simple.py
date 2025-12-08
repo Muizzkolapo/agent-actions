@@ -7,7 +7,7 @@ dispatch_task() now has a simple design:
 """
 import json
 import pytest
-from agent_actions.preprocessing.prompt_utils import PromptUtils
+from agent_actions.prompt_generation.prompt_utils import PromptUtils
 
 class TestDispatchTaskSimpleDesign:
     """Test the simplified dispatch_task() design with no arguments."""

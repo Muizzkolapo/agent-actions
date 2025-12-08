@@ -14,7 +14,7 @@ PromptFormatter handles two key operations:
 
 **All Modes** (batch_service.py, data_generator.py, target_data_generator.py, agent_builder.py):
 ```python
-from agent_actions.preprocessing.prompt_formatter import PromptFormatter
+from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 
 # Load raw prompt (handles $ prefix for external files)
 raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
@@ -85,7 +85,7 @@ agent_config = {}
 """
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 from agent_actions.utilities.constants import PROMPT_KEY
-from agent_actions.preprocessing.prompt_utils import PromptUtils
+from agent_actions.prompt_generation.prompt_utils import PromptUtils
 
 class PromptFormatter:
     """Handles prompt formatting and loading (Single Responsibility)."""

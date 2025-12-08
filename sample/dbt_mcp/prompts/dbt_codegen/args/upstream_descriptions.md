@@ -1,1 +1,0 @@
-Whether to include descriptions from upstream models for matching column names (optional, default false)
