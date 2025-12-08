@@ -1,7 +1,7 @@
 """Tests for processor helper functions."""
 import pytest
 from unittest.mock import patch, MagicMock
-from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent, _should_skip_legacy_conditional, _should_skip_where_clause
+from agent_actions.utilities.processor_helpers import run_dynamic_agent, _should_skip_legacy_conditional, _should_skip_where_clause
 
 class TestShouldSkipLegacyConditional:
     """Test the _should_skip_legacy_conditional helper function."""

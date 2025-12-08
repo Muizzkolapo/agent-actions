@@ -1,1 +1,0 @@
-Whether to use leading commas instead of trailing commas in SQL (optional, default false)

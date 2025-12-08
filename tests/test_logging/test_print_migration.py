@@ -210,8 +210,8 @@ class TestPrintStatementMigration:
             'agent_actions/llm_invocation/batch/batch_service.py',
             'agent_actions/llm_invocation/batch/batch_side_output_handler.py',
             'agent_actions/response_processing/where_parser.py',
-            'agent_actions/utilities/utils_processor_helpers.py',
-            'agent_actions/utilities/utils_path_utils.py',
+            'agent_actions/utilities/processor_helpers.py',
+            'agent_actions/utilities/path_utils.py',
             'agent_actions/preprocessing/operator_registry/registry.py',
         }
 

@@ -30,7 +30,7 @@ def demonstrate_race_condition_fix():
     After the fix, all threads will get the same correlation ID.
     """
     print('=== ProcessorUtils Thread Safety Demonstration ===\n')
-    LoopCorrelator.clear_loop_correlation_registry()
+    LoopIdGenerator.clear_loop_correlation_registry()
     source_guid = 'demo-record-123'
     loop_base_name = 'generate_distractors'
     num_threads = 20
@@ -40,7 +40,7 @@ def demonstrate_race_condition_fix():
     def worker(worker_id: int):
         """Worker function that generates correlation IDs."""
         print(f'  Worker {worker_id} starting...')
-        correlation_id = LoopCorrelator.get_or_create_loop_correlation_id(source_guid, loop_base_name, get_demo_session_id())
+        correlation_id = LoopIdGenerator.get_or_create_loop_correlation_id(source_guid, loop_base_name, get_demo_session_id())
         time.sleep(0.01)
         with correlation_ids_lock:
             correlation_ids.append(correlation_id)
@@ -73,7 +73,7 @@ def demonstrate_race_condition_fix():
 def demonstrate_position_based_consistency():
     """Demonstrate position-based correlation ID consistency."""
     print('=== Position-Based Correlation ID Consistency ===\n')
-    LoopCorrelator.clear_loop_correlation_registry()
+    LoopIdGenerator.clear_loop_correlation_registry()
     record_indices = [0, 1, 2]
     loop_base_name = 'batch_processor'
     file_context = 'demo_file.json'
@@ -83,7 +83,7 @@ def demonstrate_position_based_consistency():
 
     def worker(position: int, worker_id: int):
         """Worker for position-based correlation."""
-        correlation_id = LoopCorrelator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, get_demo_session_id(), file_context)
+        correlation_id = LoopIdGenerator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, get_demo_session_id(), file_context)
         with results_lock:
             if position not in results:
                 results[position] = []
@@ -121,7 +121,7 @@ def demonstrate_position_based_consistency():
 def demonstrate_mixed_usage():
     """Demonstrate mixed usage of both correlation strategies."""
     print('=== Mixed Correlation Strategy Usage ===\n')
-    LoopCorrelator.clear_loop_correlation_registry()
+    LoopIdGenerator.clear_loop_correlation_registry()
     source_guids = ['guid-A', 'guid-B', 'guid-C']
     positions = [0, 1, 2]
     loop_base_name = 'mixed_demo'
@@ -131,14 +131,14 @@ def demonstrate_mixed_usage():
 
     def guid_worker(source_guid: str):
         """Worker using source GUID strategy."""
-        correlation_id = LoopCorrelator.get_or_create_loop_correlation_id(source_guid, loop_base_name, get_demo_session_id())
+        correlation_id = LoopIdGenerator.get_or_create_loop_correlation_id(source_guid, loop_base_name, get_demo_session_id())
         with results_lock:
             guid_results[source_guid] = correlation_id
         print(f"  GUID '{source_guid}': {correlation_id[:8]}...")
 
     def position_worker(position: int):
         """Worker using position strategy."""
-        correlation_id = LoopCorrelator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, get_demo_session_id())
+        correlation_id = LoopIdGenerator.get_or_create_position_based_loop_correlation_id(position, loop_base_name, get_demo_session_id())
         with results_lock:
             position_results[position] = correlation_id
         print(f'  Position {position}: {correlation_id[:8]}...')
@@ -182,6 +182,6 @@ def main():
         print(f'❌ Demonstration failed: {e}')
         raise
     finally:
-        LoopCorrelator.clear_loop_correlation_registry()
+        LoopIdGenerator.clear_loop_correlation_registry()
 if __name__ == '__main__':
     main()

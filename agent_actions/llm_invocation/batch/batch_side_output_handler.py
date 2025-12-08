@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any, Tuple
 
-from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+from agent_actions.utilities.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 

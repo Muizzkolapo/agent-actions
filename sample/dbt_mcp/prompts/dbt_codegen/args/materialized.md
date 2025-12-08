@@ -1,1 +1,0 @@
-The materialization type for the model config block (optional, e.g., 'view', 'table')

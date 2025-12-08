@@ -10,7 +10,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any
 
-from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+from agent_actions.utilities.path_utils import ensure_directory_exists
 from agent_actions.errors import ProcessingError  # New modular pattern!
 
 logger = logging.getLogger(__name__)

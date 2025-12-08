@@ -2,7 +2,7 @@
 from pathlib import Path
 from typing import List, Dict, Optional
 from agent_actions.prompt_generation.directory_handler import DirectoryCombiner
-from agent_actions.prompt_generation.file_handler import FileHandler
+from agent_actions.prompt_generation.json_file_handler import JsonFileHandler
 
 class OutputProcessor:
     """Processes output data from workflow runs."""
@@ -45,7 +45,7 @@ class OutputProcessor:
             return None
         final_agent_output_folder = ephemeral_directories[-1]['output_folder']
         final_workflow_output = Path(final_agent_output_folder).parent / 'final_workflow_output'
-        FileHandler.ensure_directory(str(final_workflow_output))
+        JsonFileHandler.ensure_directory(str(final_workflow_output))
         side_output_dir = Path(final_agent_output_folder).parent / 'side_output'
         if side_output_dir.exists():
             self.combine_json_arrays(final_agent_output_folder, str(side_output_dir), str(final_workflow_output))

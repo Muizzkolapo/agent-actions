@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Dict, Optional, Callable
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry, BatchRegistryStats
-from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+from agent_actions.utilities.path_utils import ensure_directory_exists
 
 logger = logging.getLogger(__name__)
 

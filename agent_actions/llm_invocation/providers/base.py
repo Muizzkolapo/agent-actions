@@ -497,7 +497,7 @@ class BatchProvider(ABC):
         Returns:
             Path to batch directory
         """
-        from agent_actions.utilities.utils_path_utils import ensure_directory_exists
+        from agent_actions.utilities.path_utils import ensure_directory_exists
         if output_directory:
             batch_dir = Path(output_directory) / 'batch'
         else:

@@ -1,1 +1,0 @@
-dbt test runs data tests defined on models, sources, snapshots, and seeds and unit tests defined on SQL models.

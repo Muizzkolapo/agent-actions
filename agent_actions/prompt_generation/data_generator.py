@@ -1,7 +1,7 @@
 """Module for generating data using agents."""
 from typing import Dict, Any, List, Optional, Tuple
 from agent_actions.response_processing.config_types import AgentEntryDict
-from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor_helpers import run_dynamic_agent
 from agent_actions.configuration.interfaces import IGenerator, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry
 

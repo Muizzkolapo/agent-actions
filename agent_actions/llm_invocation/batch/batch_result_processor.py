@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from agent_actions.preprocessing.data_transformer import DataTransformer
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
+from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
 from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
 from agent_actions.llm_invocation.providers.base import BatchResult
@@ -309,7 +309,7 @@ class BatchResultProcessor:
             if ctx.agent_config:
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 if record_index >= 0:
-                    structured_items[idx] = LoopCorrelator.add_loop_correlation_id(
+                    structured_items[idx] = LoopIdGenerator.add_loop_correlation_id(
                         item, ctx.agent_config, record_index=record_index
                     )
 

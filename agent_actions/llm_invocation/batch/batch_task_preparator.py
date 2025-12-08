@@ -10,7 +10,7 @@ import sys
 from typing import Dict, List, Any, Optional
 from pathlib import Path
 
-from agent_actions.preprocessing.prompt_formatter import PromptFormatter
+from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
