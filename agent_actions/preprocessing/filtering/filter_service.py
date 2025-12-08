@@ -15,7 +15,7 @@ clauses across both batch and realtime processing modes. It handles two filterin
 
 **Batch Mode** (`batch_service.py`):
 ```python
-from agent_actions.preprocessing.filter_service import get_filter_service
+from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
 filter_service = get_filter_service()
 
@@ -36,7 +36,7 @@ for row in data:
 
 **Realtime Mode** (`target_content_processor.py`):
 ```python
-from agent_actions.preprocessing.filter_service import get_filter_service
+from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
 filter_service = get_filter_service()
 

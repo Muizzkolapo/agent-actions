@@ -1,7 +1,7 @@
 """Integration tests for refactored field chunking module."""
 
 import pytest
-from agent_actions.preprocessing.field_chunking import (
+from agent_actions.preprocessing.chunking.field_chunking import (
     FieldAnalyzer,
     FieldChunker,
     FieldAnalysisResult,

@@ -6,7 +6,7 @@ context_scope.passthrough configuration at runtime.
 """
 from typing import Dict, List, Optional
 from .base import IPassthroughTransformStrategy
-from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 
 
 class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):

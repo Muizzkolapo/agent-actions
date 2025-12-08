@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Dict, Any
-from agent_actions.preprocessing.string_transformer import Tokenizer
+from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 
 
 @dataclass

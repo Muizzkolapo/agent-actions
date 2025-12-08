@@ -1,8 +1,8 @@
 """Module for processing target content with specialized components."""
 from typing import Dict, List, Tuple, Optional
 import asyncio
-from agent_actions.preprocessing.data_transformer import DataTransformer
-from agent_actions.preprocessing.where_clause_handler import get_where_clause_handler
+from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
+from agent_actions.preprocessing.filtering.where_clause_handler import get_where_clause_handler
 from agent_actions.configuration.interfaces import IContentProcessor, IDataLoader, IDataProcessor, IGenerator
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import registry

@@ -3,7 +3,7 @@ import pytest
 import json
 from pathlib import Path
 from unittest.mock import patch, mock_open
-from agent_actions.preprocessing.historical_node_loader import HistoricalNodeDataLoader
+from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
 
 
 class TestHistoricalNodeDataLoader:

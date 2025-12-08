@@ -23,8 +23,8 @@ WhereClauseHandler (this module) - Unified orchestration interface
 
 **Batch Mode** (per-item with full context tracking):
 ```python
-from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
-from agent_actions.preprocessing.filter_service import get_filter_service
+from agent_actions.preprocessing.filtering.where_clause_handler import WhereClauseHandler
+from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
 handler = WhereClauseHandler(get_filter_service())
 
@@ -459,6 +459,6 @@ def get_where_clause_handler() -> WhereClauseHandler:
     """
     global _global_where_clause_handler
     if _global_where_clause_handler is None:
-        from agent_actions.preprocessing.filter_service import get_filter_service
+        from agent_actions.preprocessing.filtering.filter_service import get_filter_service
         _global_where_clause_handler = WhereClauseHandler(get_filter_service())
     return _global_where_clause_handler

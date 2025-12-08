@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from typing import List
-from agent_actions.preprocessing.string_transformer import Tokenizer
+from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 
 
 class ChunkingStrategy(ABC):

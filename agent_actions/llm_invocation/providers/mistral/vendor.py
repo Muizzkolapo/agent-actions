@@ -1,7 +1,7 @@
 import json
 import logging
 from mistralai import Mistral
-from agent_actions.preprocessing.string_transformer import StringProcessor
+from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from textwrap import dedent
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY

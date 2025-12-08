@@ -1,13 +1,13 @@
 """Tests for fallback strategies."""
 
 import pytest
-from agent_actions.preprocessing.strategies.fallback_strategies import (
+from agent_actions.preprocessing.chunking.strategies.fallback_strategies import (
     PreserveOriginalStrategy,
     TruncateStrategy,
     SkipStrategy,
     ErrorStrategy,
 )
-from agent_actions.preprocessing.field_chunking import FieldChunkingError
+from agent_actions.preprocessing.chunking.field_chunking import FieldChunkingError
 
 
 class TestPreserveOriginalStrategy:

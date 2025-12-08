@@ -6,7 +6,7 @@ are pre-computed and provided directly (new behavior).
 """
 from typing import Dict, List, Optional
 from .base import IPassthroughTransformStrategy
-from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):

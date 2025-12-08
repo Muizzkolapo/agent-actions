@@ -5,9 +5,9 @@ from agent_actions.errors import ProcessingError  # New modular pattern!
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.preprocessing.response_transformer import ResponseTransformer
-from agent_actions.preprocessing.context_preprocessor import ContextPreprocessor
-from .source_path_manager import SourcePathManager
+from agent_actions.preprocessing.transformation.response_transformer import ResponseTransformer
+from agent_actions.preprocessing.context.context_preprocessor import ContextPreprocessor
+from ..utilities.source_path_manager import SourcePathManager
 
 class StagingProcessor(ProcessorErrorHandlerMixin):
     """Orchestrates the prompt processing workflow (Open/Closed principle)."""

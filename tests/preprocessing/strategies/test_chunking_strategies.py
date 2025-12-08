@@ -1,7 +1,7 @@
 """Tests for chunking strategies."""
 
 import pytest
-from agent_actions.preprocessing.strategies.chunking_strategies import (
+from agent_actions.preprocessing.chunking.strategies.chunking_strategies import (
     TiktokenChunkingStrategy,
     CharBasedChunkingStrategy,
     SpacyChunkingStrategy,

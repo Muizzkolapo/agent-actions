@@ -48,7 +48,7 @@ class ConfigValidator:
         errors.extend(ConfigValidator._validate_field_rules(field_rules))
 
         if errors:
-            from agent_actions.preprocessing.field_chunking import (
+            from agent_actions.preprocessing.chunking.field_chunking import (
                 FieldChunkingValidationError,
             )
 
@@ -100,7 +100,7 @@ class ConfigValidator:
                 )
 
         if errors:
-            from agent_actions.preprocessing.field_chunking import (
+            from agent_actions.preprocessing.chunking.field_chunking import (
                 FieldChunkingValidationError,
             )
 

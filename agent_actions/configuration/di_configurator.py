@@ -33,7 +33,7 @@ class DIConfigurator:
     @staticmethod
     def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
         """Register processor implementations."""
-        from agent_actions.preprocessing.data_processor import DataProcessor
+        from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
         from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
         container.register_transient(IDataProcessor, DataProcessor)
@@ -43,7 +43,7 @@ class DIConfigurator:
     @staticmethod
     def _register_utilities(container: DependencyContainer, config: Dict[str, Any]):
         """Register utility services."""
-        from agent_actions.preprocessing.data_transformer import DataTransformer
+        from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
         from agent_actions.prompt_generation.prompt_handler import PromptLoader
         from agent_actions.prompt_generation.sample_enricher import SampleEnricher
         from agent_actions.logging.factory import LoggerFactory

@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
-from agent_actions.preprocessing.where_clause_handler import WhereClauseHandler
+from agent_actions.preprocessing.filtering.where_clause_handler import WhereClauseHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
@@ -286,7 +286,7 @@ class BatchTaskPreparator:
             return self.where_clause_handler
 
         # Create handler with filter service
-        from agent_actions.preprocessing.where_clause_handler import get_where_clause_handler
+        from agent_actions.preprocessing.filtering.where_clause_handler import get_where_clause_handler
         return get_where_clause_handler()
 
     def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
@@ -343,5 +343,5 @@ class BatchTaskPreparator:
         if self.filter_service:
             return self.filter_service
         # Fall back to global filter service
-        from agent_actions.preprocessing.filter_service import get_filter_service
+        from agent_actions.preprocessing.filtering.filter_service import get_filter_service
         return get_filter_service()

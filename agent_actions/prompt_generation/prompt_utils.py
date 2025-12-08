@@ -1,7 +1,7 @@
 """Module for String Processing Functions"""
 import re
 import json
-from agent_actions.preprocessing.string_transformer import StringProcessor
+from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 
 class PromptUtils:

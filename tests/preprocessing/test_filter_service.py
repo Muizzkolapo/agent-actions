@@ -7,7 +7,7 @@ shared between batch and realtime modes.
 
 import pytest
 from unittest.mock import Mock, patch
-from agent_actions.preprocessing.filter_service import FilterService, FilterStatus, get_filter_service
+from agent_actions.preprocessing.filtering.filter_service import FilterService, FilterStatus, get_filter_service
 
 
 class MockFilterResult:
