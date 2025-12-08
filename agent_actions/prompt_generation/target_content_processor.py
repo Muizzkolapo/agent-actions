@@ -9,7 +9,7 @@ from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.correlation import LoopCorrelator
+from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.configuration.base_async_processor import BaseAsyncProcessor
 from agent_actions.errors import DependencyError  # New modular pattern!
 
