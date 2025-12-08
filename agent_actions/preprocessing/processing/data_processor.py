@@ -1,7 +1,7 @@
 """Module for processing generated data."""
 from typing import Dict, List, Optional
-from agent_actions.utilities.processor_helpers import transform_with_passthrough
-from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utilities.processor.processor_helpers import transform_with_passthrough
+from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.errors import TransformationError  # New modular pattern!
 from agent_actions.configuration.interfaces import IDataProcessor, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry

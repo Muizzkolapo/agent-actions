@@ -1,6 +1,6 @@
 """Module for orchestrating prompt processing workflow."""
-from agent_actions.utilities.processor_helpers import run_dynamic_agent
-from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.errors import ProcessingError  # New modular pattern!
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager

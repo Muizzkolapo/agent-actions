@@ -242,7 +242,7 @@ class FilterService:
         # Handle conditional clause (legacy feature)
         if conditional_clause:
             try:
-                from agent_actions.utilities.tooling import execute_user_defined_function
+                from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
                 result = execute_user_defined_function(conditional_clause, item_content)
 
                 if not result:

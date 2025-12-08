@@ -7,7 +7,7 @@ import tempfile
 import shutil
 import yaml
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
-from agent_actions.utilities.udf_registry import clear_registry
+from agent_actions.utilities.udf_management.udf_registry import clear_registry
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():

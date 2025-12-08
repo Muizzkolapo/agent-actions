@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from agent_actions.prompt_generation.data_generator import DataGenerator
-from agent_actions.utilities.processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
 
 
 class TestContextScopeEndToEnd:

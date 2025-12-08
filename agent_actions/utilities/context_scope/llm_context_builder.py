@@ -25,7 +25,7 @@ to maintain backward compatibility and existing behavior.
 
 **Batch Mode** (`batch_service.py`):
 ```python
-from agent_actions.utilities.llm_context_builder import LLMContextBuilder
+from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
 
 # Build LLM context from row content
 llm_full_context = LLMContextBuilder.build_llm_context_for_batch(
@@ -45,7 +45,7 @@ formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
 
 **Realtime Mode** (`processor_helpers.py`):
 ```python
-from agent_actions.utilities.llm_context_builder import LLMContextBuilder
+from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
 
 # Extract content from nested structure
 if isinstance(context, dict) and 'content' in context:
@@ -157,7 +157,7 @@ the existing approaches to ensure:
 """
 
 from typing import Dict, Any, Optional
-from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 
 

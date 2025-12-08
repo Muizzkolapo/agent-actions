@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
-from agent_actions.utilities.tooling import load_user_defined_function, _split_udf_name
+from agent_actions.utilities.udf_management.tooling import load_user_defined_function, _split_udf_name
 from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 
 logger = logging.getLogger(__name__)

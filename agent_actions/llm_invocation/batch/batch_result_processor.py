@@ -332,7 +332,7 @@ class BatchResultProcessor:
 
         if stored_passthrough:
             # Use pre-computed passthrough
-            from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+            from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
             generated_list = ContextScopeProcessor.merge_passthrough_fields(
                 generated_list, stored_passthrough
             )
@@ -344,7 +344,7 @@ class BatchResultProcessor:
 
             for field_ref in passthrough_refs:
                 try:
-                    from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+                    from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
                     _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                     passthrough_fields.append(field_name)
                 except ValueError:

@@ -7,7 +7,7 @@ from click.testing import CliRunner
 import tempfile
 import shutil
 from agent_actions.cli.list_udfs import list_udfs_cmd
-from agent_actions.utilities.udf_registry import clear_registry
+from agent_actions.utilities.udf_management.udf_registry import clear_registry
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():

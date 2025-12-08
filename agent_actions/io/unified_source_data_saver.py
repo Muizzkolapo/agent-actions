@@ -14,7 +14,7 @@ configurable deduplication and file locking strategies.
 
 **Batch Mode** (with locking and deduplication):
 ```python
-from agent_actions.utilities.unified_source_data_saver import UnifiedSourceDataSaver
+from agent_actions.io.unified_source_data_saver import UnifiedSourceDataSaver
 
 saver = UnifiedSourceDataSaver(
     base_directory='/path/to/workflow',

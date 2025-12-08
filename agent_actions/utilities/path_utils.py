@@ -5,10 +5,13 @@ This module provides convenience functions that consolidate the most frequently
 duplicated path logic identified across the codebase.
 """
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Dict, List, Set, TypeVar
 import logging
+from collections import deque
 from agent_actions.state_management.path_manager import PathManager
+
 logger = logging.getLogger(__name__)
+T = TypeVar('T')
 _global_path_manager: Optional[PathManager] = None
 
 def get_path_manager() -> PathManager:
@@ -253,3 +256,46 @@ def mkdir_with_parents(path: Union[str, Path]) -> Path:
 def get_absolute_path(path: Union[str, Path]) -> Path:
     """Backward compatibility alias for resolve_absolute_path."""
     return resolve_absolute_path(path)
+
+
+def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
+    """
+    Perform a topological sort on a dependency graph.
+
+    Consolidated from core_utils.py as part of utilities module reorganization.
+
+    Args:
+        dependencies: A dictionary where each key is a node and the value is a list of nodes
+                      that the key depends on.
+
+    Returns:
+        A list of nodes in topologically sorted order (reversed order for correct processing).
+
+    Raises:
+        ValueError: If the dependencies input is invalid or a cyclic dependency is detected.
+    """
+    if not isinstance(dependencies, dict):
+        from agent_actions.errors import DataValidationError
+        raise DataValidationError('dependencies', 'dictionary', str(type(dependencies).__name__), context={'operation': 'topological_sort'})
+    all_nodes = set(dependencies.keys())
+    for dependent_nodes in dependencies.values():
+        all_nodes.update(dependent_nodes)
+    in_degree: Dict[T, int] = {node: 0 for node in all_nodes}
+    for node, dependent_nodes in dependencies.items():
+        for dep_node in dependent_nodes:
+            in_degree[dep_node] += 1
+    queue = deque([node for node, degree in in_degree.items() if degree == 0])
+    sorted_nodes: List[T] = []
+    while queue:
+        current = queue.popleft()
+        sorted_nodes.append(current)
+        if current in dependencies:
+            for neighbor in dependencies[current]:
+                in_degree[neighbor] -= 1
+                if in_degree[neighbor] == 0:
+                    queue.append(neighbor)
+    if len(sorted_nodes) != len(all_nodes):
+        from agent_actions.errors import WorkflowError
+        cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
+        raise WorkflowError('dependency_resolution', f'Cyclic dependency detected in the workflow', context={'cycle_nodes': list(cycle_nodes), 'sorted_nodes': sorted_nodes, 'all_nodes': list(all_nodes), 'operation': 'topological_sort'})
+    return sorted_nodes[::-1]

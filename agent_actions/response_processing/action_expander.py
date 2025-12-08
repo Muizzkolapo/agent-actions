@@ -47,7 +47,7 @@ class ActionExpander:
         """
         if not vendor:
             return
-        from agent_actions.utilities.vendor_config import VendorType
+        from agent_actions.llm_invocation.config.vendor_config import VendorType
         from agent_actions.errors import ConfigValidationError  # New modular pattern!
         valid_vendors = [v.value for v in VendorType]
         if vendor not in valid_vendors:
@@ -166,7 +166,7 @@ class ActionExpander:
                 agent['schema'] = schema_value
         if action.get('guard'):
             from agent_actions.response_processing.guard_parser import GuardParser
-            from agent_actions.utilities.consolidated_guard import GuardBehavior, parse_guard_config
+            from agent_actions.response_processing.consolidated_guard import GuardBehavior, parse_guard_config
             guard_data = action['guard']
             if isinstance(guard_data, str):
                 guard_expr = GuardParser.parse(guard_data)

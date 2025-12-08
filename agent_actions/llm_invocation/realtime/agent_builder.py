@@ -121,7 +121,7 @@ def create_dynamic_agent(
 
     # Append additional_context if provided (context_scope.observe fields)
     if additional_context:
-        from agent_actions.utilities.context_scope_processor import (
+        from agent_actions.utilities.context_scope.context_scope_processor import (
             ContextScopeProcessor
         )
         context_msg = ContextScopeProcessor.format_llm_context(additional_context)

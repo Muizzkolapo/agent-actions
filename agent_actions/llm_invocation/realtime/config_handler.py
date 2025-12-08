@@ -3,7 +3,7 @@ import yaml
 import logging
 from pathlib import Path
 from pydantic import ValidationError
-from agent_actions.utilities.core_utils import Utils
+from agent_actions.utilities.path_utils import topological_sort
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 from agent_actions.validation.config_validator import ConfigValidator
 from typing import Dict, Any, Optional, List
@@ -165,7 +165,7 @@ class ConfigManager:
             if config.is_operational:
                 dependencies = [dep for dep in config.dependencies if dep in self.agent_configs and self.agent_configs[dep].is_operational]
                 dependency_graph[agent_type] = dependencies
-        self.execution_order = Utils.topological_sort(dependency_graph)
+        self.execution_order = topological_sort(dependency_graph)
 
     def load_environment_config(self) -> EnvironmentConfig:
         """Load and validate environment configuration."""
