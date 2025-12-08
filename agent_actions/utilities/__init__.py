@@ -1,7 +1,7 @@
 """Core utilities for Agent Actions."""
 
 # Path utilities (exported for backward compatibility)
-from .utils_path_utils import (
+from .path_utils import (
     ensure_directory_exists,
     resolve_absolute_path,
     create_side_output_directory,

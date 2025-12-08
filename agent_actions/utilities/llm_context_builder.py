@@ -43,7 +43,7 @@ formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
 )
 ```
 
-**Realtime Mode** (`utils_processor_helpers.py`):
+**Realtime Mode** (`processor_helpers.py`):
 ```python
 from agent_actions.utilities.llm_context_builder import LLMContextBuilder
 
@@ -116,7 +116,7 @@ different approaches for field removal:
 - More sophisticated field removal
 - Handles nested structures
 - Integrates with existing realtime infrastructure
-- Matches existing utils_processor_helpers.py behavior
+- Matches existing processor_helpers.py behavior
 
 ### Preserving Backward Compatibility
 
@@ -239,7 +239,7 @@ class LLMContextBuilder:
         """
         Build LLM context for realtime mode.
 
-        This method implements the exact logic from utils_processor_helpers.py:
+        This method implements the exact logic from processor_helpers.py:
         1. Start with processed_context
         2. Remove dropped fields using DataTransformer.remove_schema_objects() (context_scope.drop)
         3. Merge llm_additional_context using dict spread (context_scope.observe)

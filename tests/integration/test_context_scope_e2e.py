@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from agent_actions.prompt_generation.data_generator import DataGenerator
-from agent_actions.utilities.utils_processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor_helpers import run_dynamic_agent
 
 
 class TestContextScopeEndToEnd:
@@ -158,7 +158,7 @@ class TestContextScopeEndToEnd:
         assert 'Classify:' in formatted_prompt
 
         # Test that run_dynamic_agent merges passthrough (Phase 4)
-        with patch('agent_actions.utilities.utils_processor_helpers.agent_builder.create_dynamic_agent') as mock_create:
+        with patch('agent_actions.utilities.processor_helpers.agent_builder.create_dynamic_agent') as mock_create:
             mock_create.return_value = [
                 {
                     'source_guid': 'guid1',
@@ -270,7 +270,7 @@ class TestContextScopeEndToEnd:
         assert 'Process:' in formatted_prompt
 
         # Test run_dynamic_agent with empty dicts (should be no-op)
-        with patch('agent_actions.utilities.utils_processor_helpers.agent_builder.create_dynamic_agent') as mock_create:
+        with patch('agent_actions.utilities.processor_helpers.agent_builder.create_dynamic_agent') as mock_create:
             mock_create.return_value = [{'content': {'output': 'result'}}]
 
             response, executed = run_dynamic_agent(
