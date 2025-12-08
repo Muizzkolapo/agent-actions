@@ -80,7 +80,7 @@ def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **k
         FunctionNotFoundError: If the function is not in the UDF registry.
         Exception: If there's an error executing the function.
     """
-    from agent_actions.utilities.udf_registry import get_udf
+    from agent_actions.utilities.udf_management.udf_registry import get_udf
     udf = get_udf(udf_name)
     try:
         result = udf(input_data, **kwargs)

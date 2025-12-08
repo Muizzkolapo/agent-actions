@@ -1,5 +1,5 @@
 """Module for transforming agent responses."""
-from agent_actions.utilities.processor_helpers import transform_with_passthrough
+from agent_actions.utilities.processor.processor_helpers import transform_with_passthrough
 
 class ResponseTransformer:
     """Handles response transformation (Single Responsibility)."""

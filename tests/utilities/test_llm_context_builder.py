@@ -7,7 +7,7 @@ batch and realtime modes.
 
 import pytest
 from unittest.mock import patch, Mock
-from agent_actions.utilities.llm_context_builder import LLMContextBuilder
+from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
 
 
 class TestLLMContextBuilderBatchMode:

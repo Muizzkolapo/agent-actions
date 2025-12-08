@@ -1,6 +1,6 @@
 """Tests for ContextScopeProcessor utility class."""
 import pytest
-from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
 
 
 class TestContextScopeProcessor:

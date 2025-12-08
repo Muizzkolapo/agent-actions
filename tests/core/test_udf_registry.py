@@ -1,7 +1,7 @@
 """Tests for UDF registry and @udf_tool decorator."""
 import pytest
 from pathlib import Path
-from agent_actions.utilities.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_management.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
 
 @pytest.fixture(autouse=True)

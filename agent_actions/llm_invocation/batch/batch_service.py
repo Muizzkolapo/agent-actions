@@ -312,7 +312,7 @@ class BatchService:
             output_directory: Output directory for processed files
         """
         from pathlib import Path
-        from agent_actions.utilities.unified_source_data_saver import UnifiedSourceDataSaver
+        from agent_actions.io.unified_source_data_saver import UnifiedSourceDataSaver
 
         # Calculate paths for source saving
         # Find workflow root by looking for 'agent_io' in the path and going up one level

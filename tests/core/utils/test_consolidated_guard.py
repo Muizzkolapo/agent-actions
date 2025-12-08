@@ -4,7 +4,7 @@ Following TDD approach - these tests define the expected API and behavior.
 """
 import pytest
 from agent_actions.response_processing.guard_parser import GuardParser, GuardType, GuardExpression
-from agent_actions.utilities.consolidated_guard import GuardConfig, GuardBehavior
+from agent_actions.response_processing.consolidated_guard import GuardConfig, GuardBehavior
 from agent_actions.errors import ValidationError, ConfigValidationError  # New modular pattern!
 
 class TestGuardConfig:

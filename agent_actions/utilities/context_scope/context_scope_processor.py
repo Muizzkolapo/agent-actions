@@ -428,7 +428,7 @@ class ContextScopeProcessor:
                     'workflow': {...}
                 }
         """
-        from agent_actions.utilities.llm_context_utils import LLMContextUtils
+        from agent_actions.utilities.context_scope.llm_context_utils import LLMContextUtils
         from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
 
         field_context = {}

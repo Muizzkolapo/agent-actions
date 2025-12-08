@@ -11,7 +11,7 @@ from typing import List, Dict, Any
 from rich.console import Console
 from rich.table import Table
 from agent_actions.input_loading.udf_loader import discover_udfs
-from agent_actions.utilities.udf_registry import list_udfs, clear_registry
+from agent_actions.utilities.udf_management.udf_registry import list_udfs, clear_registry
 from agent_actions.cli.cli_decorators import handles_user_errors
 
 class ListUDFsCommand:

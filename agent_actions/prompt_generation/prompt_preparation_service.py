@@ -101,9 +101,9 @@ from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.prompt_generation.prompt_utils import PromptUtils
 from agent_actions.prompt_generation.sample_enricher import SampleEnricher
-from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-from agent_actions.utilities.llm_context_builder import LLMContextBuilder
-from agent_actions.utilities.static_data_loader import StaticDataLoader, StaticDataLoadError
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
+from agent_actions.utilities.context_scope.static_data_loader import StaticDataLoader, StaticDataLoadError
 
 logger = logging.getLogger(__name__)
 

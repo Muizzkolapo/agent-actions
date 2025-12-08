@@ -4,7 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, Optional, TypeVar, Generic
 from agent_actions.response_processing.config_types import AgentEntryDict
-from agent_actions.utilities.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.configuration.interfaces import IDataLoader, ProcessingMode
 __version__ = '0.1.0'
 logger = logging.getLogger(__name__)

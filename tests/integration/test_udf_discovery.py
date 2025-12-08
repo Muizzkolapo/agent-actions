@@ -4,8 +4,8 @@ from pathlib import Path
 import tempfile
 import shutil
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
-from agent_actions.utilities.udf_registry import clear_registry, UDF_REGISTRY
-from agent_actions.utilities.tooling import execute_user_defined_function
+from agent_actions.utilities.udf_management.udf_registry import clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
 
 @pytest.fixture(autouse=True)

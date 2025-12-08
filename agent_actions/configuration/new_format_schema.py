@@ -63,7 +63,7 @@ class ActionConfig(BaseModel):
                     from agent_actions.response_processing.guard_parser import GuardParser
                     GuardParser.parse(v)
                 elif isinstance(v, dict):
-                    from agent_actions.utilities.consolidated_guard import parse_guard_config
+                    from agent_actions.response_processing.consolidated_guard import parse_guard_config
                     parse_guard_config(v)
                 else:
                     from agent_actions.errors import ConfigValidationError as CVE  # New modular pattern!

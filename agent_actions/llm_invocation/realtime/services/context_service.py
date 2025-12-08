@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Union
 
-from agent_actions.utilities.static_data_loader import StaticDataLoader, StaticDataLoadError
+from agent_actions.utilities.context_scope.static_data_loader import StaticDataLoader, StaticDataLoadError
 
 logger = logging.getLogger(__name__)
 

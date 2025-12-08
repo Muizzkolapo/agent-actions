@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Set
 from rich.console import Console
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
-from agent_actions.utilities.udf_registry import clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_management.udf_registry import clear_registry, UDF_REGISTRY
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!

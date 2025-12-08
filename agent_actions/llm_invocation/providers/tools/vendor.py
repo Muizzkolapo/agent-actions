@@ -1,5 +1,5 @@
 import json
-from agent_actions.utilities.tooling import execute_user_defined_function
+from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from typing import Dict, Any, Optional, Union
 
