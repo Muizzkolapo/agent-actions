@@ -39,8 +39,11 @@ class TestContextScopeProcessor:
         assert llm_context['extracted_entities'] == ['entity1', 'entity2']
         assert 'metadata' in llm_context
         assert llm_context['metadata'] == {'count': 2, 'source': 'research'}
-        assert 'extracted_entities' not in prompt_context.get('fact_extractor', {})
-        assert 'metadata' not in prompt_context.get('fact_extractor', {})
+        # Observed fields should REMAIN in prompt_context for template rendering
+        assert 'extracted_entities' in prompt_context.get('fact_extractor', {})
+        assert prompt_context['fact_extractor']['extracted_entities'] == ['entity1', 'entity2']
+        assert 'metadata' in prompt_context.get('fact_extractor', {})
+        assert prompt_context['fact_extractor']['metadata'] == {'count': 2, 'source': 'research'}
 
         # Validate DROP directive
         assert 'api_key' not in prompt_context.get('source', {})

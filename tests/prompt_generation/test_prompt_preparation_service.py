@@ -181,7 +181,7 @@ class TestPromptPreparationServiceContextScope:
     def test_prepare_prompt_with_all_context_scope_directives(self):
         """Test combining observe, drop, and passthrough directives."""
         agent_config = {
-            'prompt': 'Validate the data',  # Don't reference observed field in prompt
+            'prompt': 'Validate {{extractor.entities}} data',  # Now we CAN reference observed field in prompt
             'agent_type': 'validator',
             'context_scope': {
                 'observe': ['extractor.entities'],
@@ -209,8 +209,8 @@ class TestPromptPreparationServiceContextScope:
             # All directives should be tracked in metadata
             assert result.metadata['observe_fields'] or result.metadata['drop_fields'] or result.metadata['passthrough_fields']
             assert result.metadata['mode'] == 'realtime'
-            # Prompt should be simple since we don't reference observed fields
-            assert 'Validate the data' in result.formatted_prompt
+            # Observed fields should now be available in prompt template
+            assert "Validate ['entity1'] data" in result.formatted_prompt
 
 
 class TestPromptPreparationServiceModeSpecific:
