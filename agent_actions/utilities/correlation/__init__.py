@@ -1,5 +1,8 @@
 """Loop correlation utilities for processors."""
 
-from .loop_correlator import LoopCorrelator
+from .loop_id_generator import LoopIdGenerator
 
-__all__ = ['LoopCorrelator']
+# Backward compatibility alias
+LoopCorrelator = LoopIdGenerator
+
+__all__ = ['LoopIdGenerator', 'LoopCorrelator']
