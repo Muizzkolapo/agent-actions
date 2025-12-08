@@ -5,7 +5,7 @@ that control how upstream action fields flow through the current action.
 
 Supports four directives:
 - static_data: Load external reference files, available in both prompt and LLM context
-- observe: Fields sent to LLM context only (not in prompt, not in output)
+- observe: Fields added to LLM context, available in prompt templates (not in output unless in schema)
 - drop: Fields blocked from LLM entirely (security/privacy)
 - passthrough: Fields guaranteed in output (also available in templates)
 """
@@ -144,7 +144,7 @@ class ContextScopeProcessor:
         This is the core method that implements the context_scope feature by:
         0. Processing static_data: Merge into prompt_context and llm_context
         1. Processing drop: Removes fields from prompt_context
-        2. Processing observe: Extracts to llm_context, removes from prompt_context
+        2. Processing observe: Adds to llm_context, KEEPS in prompt_context for template rendering
         3. Processing passthrough: Extracts to passthrough_fields, keeps in prompt_context for template access
 
         Args:
@@ -181,7 +181,7 @@ class ContextScopeProcessor:
             >>> prompt_ctx, llm_ctx, passthrough = apply_context_scope(
             ...     field_context, context_scope, static_data
             ... )
-            >>> # prompt_ctx: {source: {text: 'data'}, extractor: {facts: [...]}, syllabus: {...}}
+            >>> # prompt_ctx: {source: {text: 'data'}, extractor: {facts: [...], meta: {...}, id: '123'}, seed: {syllabus: {...}}}
             >>> # llm_ctx: {syllabus: {...}, meta: {...}}
             >>> # passthrough: {id: '123'}
         """
@@ -221,7 +221,7 @@ class ContextScopeProcessor:
                 # Invalid reference, skip silently
                 continue
 
-        # Process OBSERVE: Extract to llm_context, remove from prompt_context
+        # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
         for field_ref in context_scope.get('observe', []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
@@ -235,9 +235,7 @@ class ContextScopeProcessor:
                     # Add to llm_context (flat dict with field names as keys)
                     llm_context[field_name] = value
 
-                    # Remove from prompt_context
-                    if action_name in prompt_context and isinstance(prompt_context[action_name], dict):
-                        prompt_context[action_name].pop(field_name, None)
+                    # DO NOT remove from prompt_context - users need it for {{action.field}} template refs
 
             except ValueError:
                 # Invalid reference, skip silently
