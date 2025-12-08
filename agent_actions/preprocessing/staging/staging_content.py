@@ -44,7 +44,7 @@ class StagingContentLoader:
 
     def _apply_field_chunking_if_enabled(self, processed_content, agent_config=None):
         """Apply field chunking if enabled and return processed content."""
-        from agent_actions.preprocessing.field_chunking import FieldAnalyzer, FieldChunker
+        from agent_actions.preprocessing.chunking.field_chunking import FieldAnalyzer, FieldChunker
         from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
         import json
         import uuid

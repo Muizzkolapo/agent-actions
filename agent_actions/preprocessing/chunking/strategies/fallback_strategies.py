@@ -150,7 +150,7 @@ class ErrorStrategy(FallbackStrategy):
         self, field_value: str, field_name: str, maximum_field_size: int
     ) -> Tuple[str, str]:
         """Raise exception when field exceeds maximum allowed size."""
-        from agent_actions.preprocessing.field_chunking import FieldChunkingError
+        from agent_actions.preprocessing.chunking.field_chunking import FieldChunkingError
 
         raise FieldChunkingError(
             f"Field '{field_name}' exceeds maximum allowed size of {maximum_field_size} characters"
@@ -160,7 +160,7 @@ class ErrorStrategy(FallbackStrategy):
         self, chunk_list: List[str], field_name: str, maximum_chunks_allowed: int
     ) -> Tuple[List[str], str]:
         """Raise exception when chunk count exceeds maximum allowed limit."""
-        from agent_actions.preprocessing.field_chunking import FieldChunkingError
+        from agent_actions.preprocessing.chunking.field_chunking import FieldChunkingError
 
         actual_chunk_count = len(chunk_list)
         raise FieldChunkingError(
@@ -172,7 +172,7 @@ class ErrorStrategy(FallbackStrategy):
         self, record: Dict[str, Any], field_name: str, error_message: str
     ) -> List[Dict[str, Any]]:
         """Re-raise chunking error with detailed context information."""
-        from agent_actions.preprocessing.field_chunking import FieldChunkingError
+        from agent_actions.preprocessing.chunking.field_chunking import FieldChunkingError
 
         raise FieldChunkingError(
             f"Failed to chunk field '{field_name}': {error_message}"

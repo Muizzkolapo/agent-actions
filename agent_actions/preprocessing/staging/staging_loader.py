@@ -6,7 +6,7 @@ REFACTORED: Unified source saving logic to prevent timing issues.
 - Helper functions separate concerns and improve maintainability
 """
 from pathlib import Path
-from agent_actions.preprocessing.string_transformer import Tokenizer
+from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 from .staging_content import StagingContentLoader
 from agent_actions.input_loading.file_reader import FileReader
 from agent_actions.io.file_writer import FileWriter

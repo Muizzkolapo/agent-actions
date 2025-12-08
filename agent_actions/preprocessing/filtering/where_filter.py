@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 
-from .parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
+from ..parsing.parser import WhereClauseParser, SafeExpressionEvaluator, ParseResult
 
 logger = logging.getLogger(__name__)
 

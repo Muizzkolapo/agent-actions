@@ -48,7 +48,7 @@ class DIConfigurator:
     def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
         """Register processor implementations."""
         # Data processors
-        from agent_actions.preprocessing.data_processor import DataProcessor
+        from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
 
         container.register_transient(IDataProcessor, DataProcessor)

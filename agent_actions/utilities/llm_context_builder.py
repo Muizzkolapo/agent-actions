@@ -158,7 +158,7 @@ the existing approaches to ensure:
 
 from typing import Dict, Any, Optional
 from agent_actions.utilities.context_scope_processor import ContextScopeProcessor
-from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 
 
 class LLMContextBuilder:

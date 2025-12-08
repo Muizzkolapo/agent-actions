@@ -4,7 +4,7 @@ import json
 import tempfile
 from pathlib import Path
 from agent_actions.prompt_generation.data_generator import DataGenerator
-from agent_actions.preprocessing.historical_node_loader import HistoricalNodeDataLoader
+from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
 from agent_actions.orchestration.node_mapper import NodeMappingService
 
 

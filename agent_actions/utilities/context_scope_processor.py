@@ -429,7 +429,7 @@ class ContextScopeProcessor:
                 }
         """
         from agent_actions.utilities.llm_context_utils import LLMContextUtils
-        from agent_actions.preprocessing.historical_node_loader import HistoricalNodeDataLoader
+        from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
 
         field_context = {}
 
@@ -441,7 +441,7 @@ class ContextScopeProcessor:
             if source_guid:
                 # Import required classes for source loading
                 from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
-                from agent_actions.preprocessing.data_transformer import DataTransformer
+                from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
                 from agent_actions.state_management.path_manager import PathManager
 
                 try:

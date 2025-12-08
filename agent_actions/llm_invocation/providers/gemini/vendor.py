@@ -2,7 +2,7 @@ import json
 import logging
 from textwrap import dedent
 import google.generativeai as genai
-from agent_actions.preprocessing.string_transformer import StringProcessor
+from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!

@@ -93,7 +93,7 @@ class ApplicationContainer:
             TargetContentProcessor instance with injected dependencies.
         """
         from agent_actions.prompt_generation.data_generator import DataGenerator
-        from agent_actions.preprocessing.data_processor import DataProcessor
+        from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.llm_invocation.batch.batch_service import BatchService
         from agent_actions.orchestration.node_mapper import NodeMappingService
 

@@ -6,7 +6,7 @@ the refactored visit_comparison() method using the operator registry.
 """
 
 import pytest
-from agent_actions.preprocessing.ast_nodes import (
+from agent_actions.preprocessing.parsing.ast_nodes import (
     ComparisonNode,
     FieldNode,
     LiteralNode,

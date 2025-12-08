@@ -10,7 +10,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
-from agent_actions.preprocessing.data_transformer import DataTransformer
+from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopIdGenerator
