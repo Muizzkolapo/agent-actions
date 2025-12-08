@@ -6,7 +6,7 @@ from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.preprocessing.pp_response_transformer import ResponseTransformer
-from agent_actions.preprocessing.pp_context_preprocessor import ContextPreprocessor
+from agent_actions.preprocessing.context_preprocessor import ContextPreprocessor
 from .source_path_manager import SourcePathManager
 
 class StagingProcessor(ProcessorErrorHandlerMixin):
