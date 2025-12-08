@@ -2,7 +2,7 @@
 import logging
 from pathlib import Path
 from typing import Tuple, Dict, Optional
-from agent_actions.utilities.file_handler import FileHandler
+from agent_actions.io.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import InitialStrategy, TerminalStrategy, IntermediateStrategy, AgentStrategy
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 

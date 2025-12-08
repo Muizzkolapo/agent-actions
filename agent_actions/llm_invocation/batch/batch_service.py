@@ -6,7 +6,7 @@ from datetime import datetime
 
 from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
-from agent_actions.utilities.file_writer import FileWriter
+from agent_actions.io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
 from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry

@@ -9,7 +9,7 @@ from pathlib import Path
 from agent_actions.preprocessing.string_transformer import Tokenizer
 from .staging_content import StagingContentLoader
 from agent_actions.input_loading.file_reader import FileReader
-from agent_actions.utilities.file_writer import FileWriter
+from agent_actions.io.file_writer import FileWriter
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.errors import AgentActionsException  # New modular pattern!

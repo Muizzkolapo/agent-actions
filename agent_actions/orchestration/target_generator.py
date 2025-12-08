@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 from typing import Optional
 from agent_actions.input_loading.file_reader import FileReader
-from agent_actions.utilities.file_writer import FileWriter
+from agent_actions.io.file_writer import FileWriter
 from agent_actions.prompt_generation.target_content_processor import TargetContentProcessor  # Required for DI registration
 from agent_actions.llm_invocation.realtime.output_handler import OutputHandler
 from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError  # New modular pattern!

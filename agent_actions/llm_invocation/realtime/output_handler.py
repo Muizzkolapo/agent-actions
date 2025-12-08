@@ -1,7 +1,7 @@
 """Module for handling output data saving operations."""
 import json
 from pathlib import Path
-from agent_actions.utilities.file_writer import FileWriter
+from agent_actions.io.file_writer import FileWriter
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 
 class OutputHandler:
