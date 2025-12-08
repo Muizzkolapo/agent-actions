@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Set
 from agent_actions.response_processing.config_types import AgentConfigMap
-from agent_actions.utilities.file_handler import FileHandler
+from agent_actions.io.file_handler import FileHandler
 from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY, MODEL_NAME_KEY, JSON_MODE_KEY, API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY, CHUNK_CONFIG_KEY
 from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import AgentEntryValidationOrchestrator

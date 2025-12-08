@@ -105,7 +105,7 @@ class PromptLoader:
         # Search for the .md file anywhere in the project tree
         # No requirement for a specific directory structure
         # Import here to avoid circular import
-        from agent_actions.utilities.file_handler import FileHandler
+        from agent_actions.io.file_handler import FileHandler
         prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
 
         if not prompt_file_str:

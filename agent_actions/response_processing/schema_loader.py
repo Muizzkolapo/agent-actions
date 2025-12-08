@@ -5,7 +5,7 @@ This module provides schema loading functionality used by both batch and realtim
 Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
 """
 from pathlib import Path
-from agent_actions.utilities.file_handler import FileHandler
+from agent_actions.io.file_handler import FileHandler
 import yaml
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 

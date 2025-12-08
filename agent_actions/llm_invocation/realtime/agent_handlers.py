@@ -1,7 +1,7 @@
 import json
 import shutil
 from typing import Callable, Optional, Dict, Any
-from agent_actions.utilities.file_handler import FileHandler
+from agent_actions.io.file_handler import FileHandler
 from pathlib import Path
 from agent_actions.errors import AgentNotFoundError  # New modular pattern!
 import logging
