@@ -309,7 +309,7 @@ class BatchResultProcessor:
             if ctx.agent_config:
                 record_index = ctx.reconciler.get_record_index(custom_id)
                 if record_index >= 0:
-                    structured_items[idx] = LoopCorrelator.add_loop_correlation_id(
+                    structured_items[idx] = LoopIdGenerator.add_loop_correlation_id(
                         item, ctx.agent_config, record_index=record_index
                     )
 

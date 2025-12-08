@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Set
-from agent_actions.prompt_generation.file_handler import FileHandler
+from agent_actions.prompt_generation.json_file_handler import JsonFileHandler
 
 class DirectoryCombiner:
     """Handles combining JSON data from directories."""

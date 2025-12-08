@@ -4,8 +4,8 @@ import json
 from typing import List, Dict, Set
 
 
-class FileHandler:
-    """Handles file operations for the output processor."""
+class JsonFileHandler:
+    """Handles JSON file operations for the output processor."""
 
     @staticmethod
     def list_json_files(directory: str) -> Set[str]:

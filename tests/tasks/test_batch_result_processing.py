@@ -475,7 +475,7 @@ class TestBatchResultProcessing:
             BatchResult(custom_id='rec_1', success=True, content={'result': 'B'}, usage={}, metadata={}, error=None)
         ]
 
-        with patch('agent_actions.utilities.correlation.LoopCorrelator.add_loop_correlation_id') as mock_add_corr:
+        with patch('agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id') as mock_add_corr:
             mock_add_corr.side_effect = lambda item, cfg, **kwargs: item  # Return unchanged
 
             processed = batch_service._convert_batch_results_to_workflow_format(

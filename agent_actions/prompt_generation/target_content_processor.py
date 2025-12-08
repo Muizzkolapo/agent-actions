@@ -283,7 +283,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # For split records (multiple outputs from one input), append sub-index to node_id
                     node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
-                    obj = LoopCorrelator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    obj = LoopIdGenerator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -416,7 +416,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     # For split records (multiple outputs from one input), append sub-index to node_id
                     node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
-                    obj = LoopCorrelator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
+                    obj = LoopIdGenerator.add_loop_correlation_id(obj, self.agent_config, record_index=record_index)
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -443,7 +443,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     else:
                         processed_item.update(passthrough_fields)
 
-                processed_item = LoopCorrelator.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
+                processed_item = LoopIdGenerator.add_loop_correlation_id(processed_item, self.agent_config, record_index=record_index)
                 processed = [processed_item]
             return processed
         except Exception as e:

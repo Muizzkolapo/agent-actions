@@ -11,9 +11,9 @@ import hashlib
 from typing import Dict, Optional
 
 
-class LoopCorrelator:
+class LoopIdGenerator:
     """
-    Thread-safe loop correlation ID manager.
+    Thread-safe loop correlation ID generator.
 
     Uses a class-level registry to maintain correlation IDs across
     all processor instances within a workflow session.
