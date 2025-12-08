@@ -52,10 +52,13 @@ from .transformation.response_transformer import ResponseTransformer
 from .context.context_preprocessor import ContextPreprocessor
 from .context.historical_node_loader import HistoricalNodeDataLoader
 
-# Staging submodule
-from .staging.staging_loader import generate_staging
-from .staging.staging_content import StagingContentLoader
-from .staging.staging_processor import StagingProcessor
+# Staging submodule - Lazy imports to avoid circular dependencies
+# These imports are deferred because staging_loader imports BatchService,
+# which imports DataTransformer, creating a circular dependency chain.
+# Use: from agent_actions.preprocessing.staging.staging_loader import generate_staging
+# from .staging.staging_loader import generate_staging
+# from .staging.staging_content import StagingContentLoader
+# from .staging.staging_processor import StagingProcessor
 
 # Processing submodule
 from .processing.data_processor import DataProcessor
@@ -102,10 +105,8 @@ __all__ = [
     # Context
     'ContextPreprocessor',
     'HistoricalNodeDataLoader',
-    # Staging
-    'generate_staging',
-    'StagingContentLoader',
-    'StagingProcessor',
+    # Staging - Not exported to avoid circular imports
+    # Import directly: from agent_actions.preprocessing.staging.staging_loader import generate_staging
     # Processing
     'DataProcessor',
     # Utilities
