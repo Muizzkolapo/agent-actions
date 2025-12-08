@@ -24,15 +24,17 @@ Based on comprehensive analysis of the codebase:
 
 ## Priority 1: High Priority (Immediate)
 
-### Task 1.1: Remove Duplicate Files
+### Task 1.1: Remove Duplicate Files ✅ COMPLETED
 
-**Files to delete:**
-```bash
-# Duplicate sample enricher (identical content, not imported anywhere)
-agent_actions/preprocessing/pp_sample_enricher.py
-```
+**What:** Delete 1 duplicate file that's not being used
 
-**Action:**
+**Why:**
+- `pp_sample_enricher.py` is 100% identical to `sample_enricher.py`
+- Having duplicates causes confusion about which file is "correct"
+- Wastes developer time when searching code
+- Risk of updating one but not the other
+
+**How:**
 ```bash
 git rm agent_actions/preprocessing/pp_sample_enricher.py
 ```
@@ -43,6 +45,8 @@ git rm agent_actions/preprocessing/pp_sample_enricher.py
 
 **Impact:** Zero risk - true duplicate not in use
 
+**Status:** ✅ Completed in commit dca801e
+
 **Note:** `utilities/logging.py` was removed from this task as it's actively used by `di_configurator.py`.
 It contains `LoggerFactory` which differs from `logging/factory.py`. Migration deferred to Task 2.5.
 
@@ -50,14 +54,21 @@ It contains `LoggerFactory` which differs from `logging/factory.py`. Migration d
 
 ### Task 1.2: Move Prompt Files to prompt_generation/
 
-**Files to move:**
-```bash
-agent_actions/preprocessing/prompt_formatter.py  → agent_actions/prompt_generation/
-agent_actions/preprocessing/prompt_utils.py      → agent_actions/prompt_generation/
-agent_actions/preprocessing/sample_enricher.py   → agent_actions/prompt_generation/
-```
+**What:** Move 3 prompt-related files from preprocessing/ to prompt_generation/
 
-**Action:**
+**Why:**
+- These files handle **prompt preparation**, not data preprocessing
+- Current location violates Single Responsibility Principle
+- Developers expect prompt logic in the `prompt_generation/` module
+- `preprocessing/` module is too large (20 files) - needs focus
+- Improves code discoverability and maintainability
+
+**Files misplaced:**
+- `prompt_formatter.py` - Loads and formats prompts with field references
+- `prompt_utils.py` - Processes field references and dispatch_task() calls
+- `sample_enricher.py` - Enriches prompts with few-shot examples
+
+**How:**
 ```bash
 git mv agent_actions/preprocessing/prompt_formatter.py agent_actions/prompt_generation/
 git mv agent_actions/preprocessing/prompt_utils.py agent_actions/prompt_generation/
@@ -70,21 +81,34 @@ git mv agent_actions/preprocessing/sample_enricher.py agent_actions/prompt_gener
 - [ ] Search for `from agent_actions.preprocessing.sample_enricher import`
 - [ ] Update all imports to `agent_actions.prompt_generation.*`
 
-**Impact:** Medium risk - requires import updates
+**Impact:** Medium risk - requires import updates across codebase
 
 ---
 
 ### Task 1.3: Rename Files to Avoid Conflicts
 
-**Problem 1: Two FileHandler classes**
+**What:** Rename 2 files that have confusing name conflicts
+
+---
+
+#### **Problem 1: Two Different FileHandler Classes**
+
+**Why this is bad:**
+- Two different files, both defining a class called `FileHandler`
+- Causes confusion: "Which FileHandler should I import?"
+- Can lead to bugs when wrong one is imported
+- Makes code reviews harder
+- Violates naming uniqueness principle
+
+**Current state:**
 ```bash
-agent_actions/utilities/file_handler.py              (FileHandler - general)
-agent_actions/prompt_generation/file_handler.py      (FileHandler - JSON specific)
+agent_actions/utilities/file_handler.py           → class FileHandler (general file ops)
+agent_actions/prompt_generation/file_handler.py  → class FileHandler (JSON-specific)
 ```
 
-**Action:**
+**How to fix:**
 ```bash
-# Rename the prompt_generation one to be more specific
+# Rename the JSON-specific one to be descriptive
 git mv agent_actions/prompt_generation/file_handler.py \
        agent_actions/prompt_generation/json_file_handler.py
 ```
@@ -96,15 +120,24 @@ git mv agent_actions/prompt_generation/file_handler.py \
 
 ---
 
-**Problem 2: Two LoopCorrelator classes**
+#### **Problem 2: Two Confusingly Similar LoopCorrelator Names**
+
+**Why this is bad:**
+- Two files with almost identical names but different responsibilities
+- `loop_correlator.py` appears twice in codebase
+- Developer confusion: "Which loop correlator do I need?"
+- Easy to import the wrong one
+- Names don't clearly indicate different purposes
+
+**Current state:**
 ```bash
-agent_actions/orchestration/loop_correlator.py           (LoopOutputCorrelator)
-agent_actions/utilities/correlation/loop_correlator.py   (LoopCorrelator - ID manager)
+agent_actions/orchestration/loop_correlator.py           → LoopOutputCorrelator (handles parallel loop outputs)
+agent_actions/utilities/correlation/loop_correlator.py  → LoopCorrelator (generates correlation IDs)
 ```
 
-**Action:**
+**How to fix:**
 ```bash
-# Rename the utilities one to be more descriptive
+# Rename utilities one to be more descriptive of its actual purpose
 git mv agent_actions/utilities/correlation/loop_correlator.py \
        agent_actions/utilities/correlation/loop_id_generator.py
 ```
@@ -112,8 +145,8 @@ git mv agent_actions/utilities/correlation/loop_correlator.py \
 **Import updates needed:**
 - [ ] Search for `from agent_actions.utilities.correlation.loop_correlator import`
 - [ ] Update to `from agent_actions.utilities.correlation.loop_id_generator import`
-- [ ] Rename class `LoopCorrelator` → `LoopIdGenerator` inside the file
-- [ ] Update all class usage
+- [ ] Rename class inside file: `LoopCorrelator` → `LoopIdGenerator`
+- [ ] Update all class instantiations and usage
 
 **Impact:** Medium risk - requires import and class name updates
 
