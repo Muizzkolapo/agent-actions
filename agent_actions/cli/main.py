@@ -19,6 +19,7 @@ from agent_actions.llm_invocation.batch.batch_cli import batch  # CLI command gr
 from agent_actions.cli.status import status
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
+from agent_actions.cli.docs import docs  # Documentation generation and serving
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 __version__ = '1.0.0'
 
@@ -58,6 +59,7 @@ class CLI:
         self.click_group.add_command(status)
         self.click_group.add_command(list_udfs_cmd)
         self.click_group.add_command(validate_udfs_cmd)
+        self.click_group.add_command(docs)
 
     def _register_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown."""
@@ -212,6 +214,7 @@ cli.add_command(render)
 cli.add_command(run)
 cli.add_command(batch)
 cli.add_command(status)
+cli.add_command(docs)
 
 def main_entrypoint(argv: Optional[Sequence[str]]=None) -> int:
     """

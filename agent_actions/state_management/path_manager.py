@@ -77,7 +77,7 @@ class PathManager:
         PathType.SCHEMA: "schema",
         PathType.PROMPT_STORE: "prompt_store",
         PathType.TEMPLATES: "templates",
-        PathType.RENDERED_WORKFLOWS: "rendered_workflows",
+        PathType.RENDERED_WORKFLOWS: "artefact/rendered_workflows",
         PathType.BATCH: "batch",
         PathType.SIDE_OUTPUT: "side_output",
     }
