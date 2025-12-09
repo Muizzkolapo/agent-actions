@@ -164,6 +164,10 @@ class TestFailedRenderCache:
         import os
         os.chdir(self.original_cwd)
         shutil.rmtree(self.temp_dir)
+        # Clean up test cache directory
+        cache_dir = Path('.agent-actions')
+        if cache_dir.exists():
+            shutil.rmtree(cache_dir)
 
     def test_failed_render_saved_to_cache(self):
         """Test that failed YAML renders are saved to cache."""
