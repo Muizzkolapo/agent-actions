@@ -63,3 +63,5 @@ pdoc_docs/
 
 # Ignore Taskfile
 Taskfile.yml
+artefact/
+.agent-actions/

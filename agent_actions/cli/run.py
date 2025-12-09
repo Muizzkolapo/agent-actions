@@ -7,6 +7,7 @@ which executes agent workflows based on configuration files.
 import click
 from pathlib import Path
 from typing import Optional
+from datetime import datetime
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
@@ -14,6 +15,7 @@ from agent_actions.orchestration.agent_workflow import AgentWorkflow
 from agent_actions.errors import FileLoadError  # New modular pattern!
 from agent_actions.validation.run_validator import RunCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.docs import track_workflow_run
 
 class RunCommand:
     """Implementation of the run command."""
@@ -74,6 +76,12 @@ class RunCommand:
         click.echo('Initializing agent workflow...')
         workflow = AgentWorkflow(constructor_path=str(full_path), user_code_path=str(self.args.user_code) if self.args.user_code else None, default_path=str(paths.default_config_path), use_tools=self.args.use_tools)
         click.echo('Starting workflow execution...')
+
+        # Track execution start time
+        started_at = datetime.now().isoformat()
+        status = 'FAILED'  # Default to failed, update on success
+        error_message = None
+
         use_parallel = False
         if hasattr(self.args, 'parallel') and self.args.parallel:
             use_parallel = True
@@ -86,17 +94,67 @@ class RunCommand:
             click.echo('🔀 Using parallel execution (auto-detected)...')
         else:
             click.echo('Using sequential execution...')
-        if use_parallel:
-            import asyncio
-            asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
-        else:
-            workflow.run()
 
-        # Check if workflow actually completed or stopped for batch processing
-        if workflow.state_manager.is_workflow_complete():
-            click.echo(f'Successfully completed agent run for: {self.args.agent}')
-        else:
-            click.echo(f'Workflow paused - batch job(s) submitted. Run again to check status and continue.')
+        try:
+            if use_parallel:
+                import asyncio
+                asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
+            else:
+                workflow.run()
+
+            # Determine final status
+            if workflow.state_manager.is_workflow_complete():
+                status = 'SUCCESS'
+                click.echo(f'Successfully completed agent run for: {self.args.agent}')
+            else:
+                status = 'PAUSED'
+                click.echo(f'Workflow paused - batch job(s) submitted. Run again to check status and continue.')
+
+        except Exception as e:
+            status = 'FAILED'
+            error_message = str(e)
+            raise  # Re-raise to maintain existing error handling
+
+        finally:
+            # Track the run (even if it failed)
+            ended_at = datetime.now().isoformat()
+
+            # Get workflow details
+            workflow_id = self.agent_name
+            workflow_name = getattr(workflow, 'agent_name', self.agent_name)
+
+            # Get action counts from execution order
+            actions_total = len(getattr(workflow, 'execution_order', [])) if hasattr(workflow, 'execution_order') else 0
+            actions_completed = 0
+
+            # For SUCCESS status, assume all actions completed
+            if status == 'SUCCESS':
+                actions_completed = actions_total
+            # For PAUSED, we could potentially get partial completion from state manager
+            elif status == 'PAUSED' and hasattr(workflow, 'state_manager'):
+                # Try to get completion info from state manager
+                try:
+                    # This is a best-effort attempt - exact method may vary
+                    if hasattr(workflow.state_manager, 'completed_actions'):
+                        actions_completed = len(workflow.state_manager.completed_actions)
+                except Exception:
+                    pass
+
+            # Track the run
+            try:
+                track_workflow_run(
+                    workflow_id=workflow_id,
+                    workflow_name=workflow_name,
+                    status=status,
+                    started_at=started_at,
+                    ended_at=ended_at,
+                    actions_completed=actions_completed,
+                    actions_total=actions_total,
+                    error_message=error_message
+                )
+            except Exception as track_error:
+                # Don't fail the workflow if tracking fails
+                click.echo(f"Warning: Could not record workflow run: {track_error}", err=True)
 
 @click.command()
 @click.option('-a', '--agent', required=True, help='Agent configuration file name without path or extension')
