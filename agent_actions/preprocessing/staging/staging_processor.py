@@ -1,11 +1,10 @@
 """Module for orchestrating prompt processing workflow."""
-from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent, transform_with_passthrough
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.errors import ProcessingError  # New modular pattern!
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.preprocessing.transformation.response_transformer import ResponseTransformer
 from agent_actions.preprocessing.context.context_preprocessor import ContextPreprocessor
 from ..utilities.source_path_manager import SourcePathManager
 
@@ -59,7 +58,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             if not source_guid:
                 source_guid = IDGenerator.generate_deterministic_source_guid(enriched_data or context_data)
             if executed:
-                transformed_response = ResponseTransformer.transform_response(response, enriched_data, source_guid, self.agent_config)
+                transformed_response = transform_with_passthrough(response, enriched_data, source_guid, self.agent_config)
             else:
                 transformed_response = [FieldManager().create_processed_item(source_guid=source_guid, content=response)]
             idx = self.agent_config.get('idx', 0)
