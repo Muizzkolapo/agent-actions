@@ -46,7 +46,6 @@ from .chunking.field_chunking import FieldChunker, FieldAnalyzer, FieldAnalysisR
 # Transformation submodule
 from .transformation.data_transformer import DataTransformer
 from .transformation.string_transformer import StringProcessor, Tokenizer
-from .transformation.response_transformer import ResponseTransformer
 
 # Context submodule
 from .context.context_preprocessor import ContextPreprocessor
@@ -60,8 +59,11 @@ from .context.historical_node_loader import HistoricalNodeDataLoader
 # from .staging.staging_content import StagingContentLoader
 # from .staging.staging_processor import StagingProcessor
 
-# Processing submodule
-from .processing.data_processor import DataProcessor
+# Processing submodule - Lazy import to avoid circular dependencies
+# DataProcessor imports from processor_helpers, which imports agent_builder,
+# which imports prompt_utils, which imports StringProcessor from preprocessing.
+# Use: from agent_actions.preprocessing.processing.data_processor import DataProcessor
+# from .processing.data_processor import DataProcessor
 
 # Utilities submodule
 from .utilities.source_path_manager import SourcePathManager
@@ -101,14 +103,13 @@ __all__ = [
     'DataTransformer',
     'StringProcessor',
     'Tokenizer',
-    'ResponseTransformer',
     # Context
     'ContextPreprocessor',
     'HistoricalNodeDataLoader',
     # Staging - Not exported to avoid circular imports
     # Import directly: from agent_actions.preprocessing.staging.staging_loader import generate_staging
-    # Processing
-    'DataProcessor',
+    # Processing - Not exported to avoid circular imports
+    # Import directly: from agent_actions.preprocessing.processing.data_processor import DataProcessor
     # Utilities
     'SourcePathManager',
 ]

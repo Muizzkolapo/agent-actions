@@ -2,7 +2,7 @@
 Tests for exceptions module - specifically the fixed __str__ method.
 """
 import pytest
-from agent_actions.shared.exceptions import AgentActionsException
+from agent_actions.errors import AgentActionsException
 
 class TestAgentActionsException:
     """Test AgentActionsException class, especially the fixed __str__ method."""
