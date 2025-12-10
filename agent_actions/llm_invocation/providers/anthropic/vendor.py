@@ -5,6 +5,7 @@ from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.openai.vendor import _set_last_usage
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,16 @@ class ClaudeHandler(BaseVendorHandler):
         start_time = datetime.now()
         response = client.messages.create(**api_args)
         duration = (datetime.now() - start_time).total_seconds()
+
+        # Extract token usage and store in thread-local
+        usage_data = None
+        if response.usage:
+            usage_data = {
+                'input_tokens': response.usage.input_tokens,
+                'output_tokens': response.usage.output_tokens,
+                'total_tokens': response.usage.input_tokens + response.usage.output_tokens
+            }
+            _set_last_usage(usage_data)
 
         # Log API response at DEBUG level
         logger.debug(

@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
@@ -10,6 +11,19 @@ from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
+
+# Thread-local storage for token usage
+_thread_local = threading.local()
+
+
+def _set_last_usage(usage: Optional[Dict[str, int]]) -> None:
+    """Store token usage in thread-local storage."""
+    _thread_local.last_usage = usage
+
+
+def _get_last_usage() -> Optional[Dict[str, int]]:
+    """Retrieve token usage from thread-local storage."""
+    return getattr(_thread_local, 'last_usage', None)
 
 class OpenAIHandler(BaseVendorHandler):
 
@@ -36,6 +50,16 @@ class OpenAIHandler(BaseVendorHandler):
         start_time = datetime.now()
         response = client.chat.completions.create(model=model_name, messages=messages, response_format={'type': 'json_schema', 'json_schema': schema})
         duration = (datetime.now() - start_time).total_seconds()
+
+        # Extract token usage and store in thread-local
+        usage_data = None
+        if response.usage:
+            usage_data = {
+                'input_tokens': response.usage.prompt_tokens,
+                'output_tokens': response.usage.completion_tokens,
+                'total_tokens': response.usage.total_tokens
+            }
+            _set_last_usage(usage_data)
 
         # Log API response at DEBUG level
         logger.debug(
@@ -83,6 +107,16 @@ class OpenAIHandler(BaseVendorHandler):
         start_time = datetime.now()
         response = client.chat.completions.create(model=model_name, messages=messages)
         duration = (datetime.now() - start_time).total_seconds()
+
+        # Extract token usage and store in thread-local
+        usage_data = None
+        if response.usage:
+            usage_data = {
+                'input_tokens': response.usage.prompt_tokens,
+                'output_tokens': response.usage.completion_tokens,
+                'total_tokens': response.usage.total_tokens
+            }
+            _set_last_usage(usage_data)
 
         # Log API response at DEBUG level
         logger.debug(

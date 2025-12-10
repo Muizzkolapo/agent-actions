@@ -321,7 +321,7 @@ function renderRecentRunsTable(runsToShow) {
 
     if (runsToShow.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="5" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
+        row.innerHTML = '<td colspan="6" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
         tbody.appendChild(row);
         return;
     }
@@ -355,6 +355,12 @@ function renderRecentRunsTable(runsToShow) {
         const actionsText = `${run.successful_actions}/${run.total_actions}`;
 
         row.innerHTML = `
+            <td style="width: 30px;">
+                <button class="expand-btn" onclick="toggleActionDetails(event, '${run.id}')"
+                        style="border:none; background:none; cursor:pointer; padding:4px 8px;">
+                    <span id="expand-icon-${run.id}">▶</span>
+                </button>
+            </td>
             <td><strong>${run.workflow_name}</strong></td>
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
@@ -364,6 +370,93 @@ function renderRecentRunsTable(runsToShow) {
 
         tbody.appendChild(row);
     });
+}
+
+function toggleActionDetails(event, runId) {
+    event.stopPropagation(); // Prevent row click from navigating
+
+    const detailsRowId = `action-details-${runId}`;
+    const existingRow = document.getElementById(detailsRowId);
+    const icon = document.getElementById(`expand-icon-${runId}`);
+
+    if (existingRow) {
+        // Collapse
+        existingRow.remove();
+        icon.textContent = '▶';
+    } else {
+        // Expand
+        const run = runs.executions.find(r => r.id === runId);
+        if (!run || !run.actions) return;
+
+        const currentRow = event.target.closest('tr');
+        const detailsRow = document.createElement('tr');
+        detailsRow.id = detailsRowId;
+        detailsRow.innerHTML = `
+            <td colspan="6" style="padding: 0; background: var(--bg-subtle);">
+                ${renderActionDetails(run)}
+            </td>
+        `;
+
+        currentRow.insertAdjacentElement('afterend', detailsRow);
+        icon.textContent = '▼';
+    }
+}
+
+function renderActionDetails(run) {
+    const actions = Object.entries(run.actions || {});
+
+    if (actions.length === 0) {
+        return '<div style="padding: var(--space-4); text-align: center; color: var(--text-subtle);">No action details available</div>';
+    }
+
+    let html = `
+        <div style="padding: var(--space-4); max-height: 400px; overflow-y: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 1px solid var(--border-subtle);">
+                        <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">ACTION</th>
+                        <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">TYPE</th>
+                        <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">STATUS</th>
+                        <th style="text-align: right; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">DURATION</th>
+                        <th style="text-align: right; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">TOKENS</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    actions.forEach(([actionName, actionData]) => {
+        const statusClass = actionData.status === 'success' ? 'SUCCESS' :
+                          actionData.status === 'failed' ? 'FAILED' :
+                          actionData.status === 'skipped' ? 'PAUSED' : '';
+
+        const tokens = actionData.tokens && actionData.tokens.total_tokens
+            ? `${(actionData.tokens.total_tokens / 1000).toFixed(1)}K`
+            : 'N/A';
+
+        const duration = actionData.duration_seconds
+            ? `${actionData.duration_seconds.toFixed(2)}s`
+            : 'N/A';
+
+        const typeLabel = actionData.type === 'llm' ? 'LLM' : 'Tool';
+
+        html += `
+            <tr style="border-bottom: 1px solid var(--border-subtle);">
+                <td style="padding: var(--space-2); font-family: var(--font-mono); font-size: 0.9rem;">${actionName}</td>
+                <td style="padding: var(--space-2); font-size: 0.9rem;">${typeLabel}</td>
+                <td style="padding: var(--space-2);"><span class="status-badge ${statusClass}">${actionData.status}</span></td>
+                <td style="padding: var(--space-2); text-align: right; font-family: var(--font-mono); font-size: 0.9rem;">${duration}</td>
+                <td style="padding: var(--space-2); text-align: right; font-family: var(--font-mono); font-size: 0.9rem;">${tokens}</td>
+            </tr>
+        `;
+    });
+
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    return html;
 }
 
 function setupTableSorting(viewId) {
@@ -807,7 +900,7 @@ function renderRunsListTable(runsToShow) {
 
     if (runsToShow.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="5" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
+        row.innerHTML = '<td colspan="6" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
         tbody.appendChild(row);
         return;
     }
@@ -840,6 +933,12 @@ function renderRunsListTable(runsToShow) {
         const actionsText = `${run.successful_actions}/${run.total_actions}`;
 
         row.innerHTML = `
+            <td style="width: 30px;">
+                <button class="expand-btn" onclick="toggleActionDetails(event, '${run.id}')"
+                        style="border:none; background:none; cursor:pointer; padding:4px 8px;">
+                    <span id="expand-icon-${run.id}">▶</span>
+                </button>
+            </td>
             <td><strong>${run.workflow_name}</strong></td>
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
@@ -1111,6 +1210,11 @@ function extractFieldMappings(actions) {
         // Remove duplicates
         inputFields = [...new Set(inputFields)];
 
+        // Fallback: check for inputs array (catalog format)
+        if (inputFields.length === 0 && action.inputs && Array.isArray(action.inputs)) {
+            inputFields = action.inputs;
+        }
+
         // Extract output fields from schema
         let outputFields = [];
 
@@ -1125,6 +1229,11 @@ function extractFieldMappings(actions) {
                 // Inline schema format like {field1: "string", field2: "number"}
                 outputFields = Object.keys(schema);
             }
+        }
+
+        // Fallback: check for output_fields array (catalog format)
+        if (outputFields.length === 0 && action.output_fields && Array.isArray(action.output_fields)) {
+            outputFields = action.output_fields.map(field => field.name);
         }
 
         // Add passthrough fields to outputs as well
@@ -1371,7 +1480,7 @@ function renderWorkflowRuns(workflow) {
         failed_runs: 0,
         success_rate: 0,
         avg_duration_seconds: 0,
-        total_cost_usd: 0
+        total_tokens: 0
     };
 
     const workflowRuns = runs.executions.filter(run => run.workflow_id === workflow.id);
@@ -1383,7 +1492,7 @@ function renderWorkflowRuns(workflow) {
     document.getElementById('workflow-avg-duration').textContent =
         formatDuration(workflowMetrics.avg_duration_seconds);
     document.getElementById('workflow-total-cost').textContent =
-        `$${workflowMetrics.total_cost_usd.toFixed(2)}`;
+        `${(workflowMetrics.total_tokens / 1000).toFixed(1)}K`;
 
     // Update progress bar
     const progressBar = document.getElementById('workflow-success-progress');
@@ -1512,15 +1621,9 @@ function renderRunsTable(workflowRuns) {
     recentRuns.forEach(run => {
         const row = document.createElement('tr');
 
-        // Calculate cost for this run
-        let runCost = 0;
-        if (run.actions && typeof run.actions === 'object') {
-            Object.values(run.actions).forEach(action => {
-                if (action.cost_usd) {
-                    runCost += action.cost_usd;
-                }
-            });
-        }
+        // Get tokens for this run
+        const runTokens = run.total_tokens || 0;
+        const tokensDisplay = runTokens > 0 ? `${(runTokens / 1000).toFixed(1)}K` : 'N/A';
 
         // Format status badge
         const statusClass = run.status === 'success' ? 'success' :
@@ -1539,7 +1642,7 @@ function renderRunsTable(workflowRuns) {
             <td>${statusBadge}</td>
             <td>${formatDuration(run.duration_seconds)}</td>
             <td>${actionsSummary}</td>
-            <td>$${runCost.toFixed(3)}</td>
+            <td>${tokensDisplay}</td>
             <td>${formattedDate}</td>
         `;
 

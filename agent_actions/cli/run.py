@@ -16,6 +16,7 @@ from agent_actions.errors import FileLoadError  # New modular pattern!
 from agent_actions.validation.run_validator import RunCommandArgs
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from agent_actions.docs import track_workflow_run
+from agent_actions.docs.run_tracker import RunTracker
 
 class RunCommand:
     """Implementation of the run command."""
@@ -75,10 +76,22 @@ class RunCommand:
         ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir)
         click.echo('Initializing agent workflow...')
         workflow = AgentWorkflow(constructor_path=str(full_path), user_code_path=str(self.args.user_code) if self.args.user_code else None, default_path=str(paths.default_config_path), use_tools=self.args.use_tools)
+
+        # Initialize run tracker
+        tracker = RunTracker()
+        run_id = tracker.start_workflow_run(
+            workflow_id=self.agent_name,
+            workflow_name=self.agent_name,
+            actions_total=len(workflow.execution_order)
+        )
+
+        # Pass tracker and run_id to executor for action-level tracking
+        workflow.agent_executor.run_tracker = tracker
+        workflow.agent_executor.run_id = run_id
+
         click.echo('Starting workflow execution...')
 
-        # Track execution start time
-        started_at = datetime.now().isoformat()
+        # Track execution state
         status = 'FAILED'  # Default to failed, update on success
         error_message = None
 
@@ -116,45 +129,12 @@ class RunCommand:
             raise  # Re-raise to maintain existing error handling
 
         finally:
-            # Track the run (even if it failed)
-            ended_at = datetime.now().isoformat()
-
-            # Get workflow details
-            workflow_id = self.agent_name
-            workflow_name = getattr(workflow, 'agent_name', self.agent_name)
-
-            # Get action counts from execution order
-            actions_total = len(getattr(workflow, 'execution_order', [])) if hasattr(workflow, 'execution_order') else 0
-            actions_completed = 0
-
-            # For SUCCESS status, assume all actions completed
-            if status == 'SUCCESS':
-                actions_completed = actions_total
-            # For PAUSED, we could potentially get partial completion from state manager
-            elif status == 'PAUSED' and hasattr(workflow, 'state_manager'):
-                # Try to get completion info from state manager
-                try:
-                    # This is a best-effort attempt - exact method may vary
-                    if hasattr(workflow.state_manager, 'completed_actions'):
-                        actions_completed = len(workflow.state_manager.completed_actions)
-                except Exception:
-                    pass
-
-            # Track the run
+            # Finalize run tracking
             try:
-                track_workflow_run(
-                    workflow_id=workflow_id,
-                    workflow_name=workflow_name,
-                    status=status,
-                    started_at=started_at,
-                    ended_at=ended_at,
-                    actions_completed=actions_completed,
-                    actions_total=actions_total,
-                    error_message=error_message
-                )
+                tracker.finalize_workflow_run(run_id, status, error_message)
             except Exception as track_error:
                 # Don't fail the workflow if tracking fails
-                click.echo(f"Warning: Could not record workflow run: {track_error}", err=True)
+                click.echo(f"Warning: Could not finalize workflow run tracking: {track_error}", err=True)
 
 @click.command()
 @click.option('-a', '--agent', required=True, help='Agent configuration file name without path or extension')

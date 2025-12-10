@@ -333,6 +333,7 @@
                     <table class="runs-table recent-runs-table">
                         <thead>
                             <tr>
+                                <th style="width: 30px;"></th>
                                 <th class="sortable-header" data-sort-field="workflow">Workflow</th>
                                 <th class="sortable-header" data-sort-field="status">Status</th>
                                 <th class="sortable-header sorted-desc" data-sort-field="started">Started</th>
@@ -405,8 +406,8 @@
                             </div>
 
                             <div class="metric-card">
-                                <div class="metric-value" id="workflow-total-cost">$0.00</div>
-                                <div class="metric-label">LLM Cost</div>
+                                <div class="metric-value" id="workflow-total-cost">0K</div>
+                                <div class="metric-label">Total Tokens</div>
                                 <div class="metric-trend" id="workflow-cost-info"></div>
                             </div>
                         </div>
@@ -437,7 +438,7 @@
                                     <th>Status</th>
                                     <th>Duration</th>
                                     <th>Actions</th>
-                                    <th>Cost</th>
+                                    <th>Tokens</th>
                                     <th>Started</th>
                                 </tr>
                             </thead>

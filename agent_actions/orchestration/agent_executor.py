@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
+from agent_actions.llm_invocation.providers.openai.vendor import _get_last_usage
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,21 @@ class AgentExecutionResult:
         output_folder: Optional[str] = None,
         status: str = 'completed',
         error: Optional[Exception] = None,
-        duration: float = 0.0
+        duration: float = 0.0,
+        tokens: Optional[Dict[str, int]] = None,
+        model_vendor: Optional[str] = None,
+        model_name: Optional[str] = None,
+        files_processed: int = 0
     ):
         self.success = success
         self.output_folder = output_folder
         self.status = status  # 'completed', 'batch_submitted', 'failed'
         self.error = error
         self.duration = duration
+        self.tokens = tokens  # {'input_tokens': int, 'output_tokens': int, 'total_tokens': int}
+        self.model_vendor = model_vendor
+        self.model_name = model_name
+        self.files_processed = files_processed
 
 
 class AgentExecutor:
@@ -121,10 +130,20 @@ class AgentExecutor:
             self.console.print(f'Skipping agent {agent_name} due to WHERE clause condition')
             self.output_manager.create_passthrough_output(agent_idx, agent_name)
             self.state_manager.update_status(agent_name, 'completed')
+
+            # Track action skip
+            duration = (datetime.now() - start_time).total_seconds()
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'skipped',
+                    duration_seconds=duration,
+                    skip_reason='WHERE clause condition not met'
+                )
+
             return AgentExecutionResult(
                 success=True,
                 status='completed',
-                duration=(datetime.now() - start_time).total_seconds()
+                duration=duration
             )
 
         # Execute the agent
@@ -187,10 +206,20 @@ class AgentExecutor:
             self.console.print(f'  [yellow]Skipping {agent_name} (WHERE clause)[/yellow]')
             self.output_manager.create_passthrough_output(agent_idx, agent_name)
             self.state_manager.update_status(agent_name, 'completed')
+
+            # Track action skip
+            duration = (datetime.now() - start_time).total_seconds()
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'skipped',
+                    duration_seconds=duration,
+                    skip_reason='WHERE clause condition not met'
+                )
+
             return AgentExecutionResult(
                 success=True,
                 status='completed',
-                duration=(datetime.now() - start_time).total_seconds()
+                duration=duration
             )
 
         # Execute the agent
@@ -309,6 +338,13 @@ class AgentExecutor:
         """Execute agent run (synchronous)."""
         self.state_manager.update_status(agent_name, 'running')
 
+        # Track action start
+        if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+            action_type = 'tool' if agent_config.get('model_vendor') == 'tool' else 'llm'
+            self.run_tracker.record_action_start(
+                self.run_id, agent_name, action_type, agent_config
+            )
+
         # Setup correlation if needed
         original_setup = self._setup_correlation(agent_idx)
 
@@ -378,11 +414,27 @@ class AgentExecutor:
                 }
             )
 
+            # Retrieve token usage from thread-local storage
+            tokens = _get_last_usage()
+
+            # Track action success
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'success',
+                    duration_seconds=duration,
+                    tokens=tokens,
+                    files_processed=0  # TODO: Track actual files processed
+                )
+
             return AgentExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status='completed',
-                duration=duration
+                duration=duration,
+                tokens=tokens,
+                model_vendor=agent_config.get('model_vendor'),
+                model_name=agent_config.get('model_name'),
+                files_processed=0
             )
 
         except Exception as e:
@@ -401,6 +453,14 @@ class AgentExecutor:
                 exc_info=True
             )
             self.state_manager.update_status(agent_name, 'failed')
+
+            # Track action failure
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'failed',
+                    duration_seconds=duration,
+                    error=str(e)
+                )
 
             return AgentExecutionResult(
                 success=False,
@@ -434,6 +494,13 @@ class AgentExecutor:
     ) -> AgentExecutionResult:
         """Execute agent run (asynchronous)."""
         self.state_manager.update_status(agent_name, 'running')
+
+        # Track action start
+        if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+            action_type = 'tool' if agent_config.get('model_vendor') == 'tool' else 'llm'
+            self.run_tracker.record_action_start(
+                self.run_id, agent_name, action_type, agent_config
+            )
 
         # Setup correlation if needed
         original_setup = self._setup_correlation(agent_idx)
@@ -488,11 +555,27 @@ class AgentExecutor:
                 }
             )
 
+            # Retrieve token usage from thread-local storage
+            tokens = _get_last_usage()
+
+            # Track action success
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'success',
+                    duration_seconds=duration,
+                    tokens=tokens,
+                    files_processed=0  # TODO: Track actual files processed
+                )
+
             return AgentExecutionResult(
                 success=True,
                 output_folder=output_folder,
                 status='completed',
-                duration=duration
+                duration=duration,
+                tokens=tokens,
+                model_vendor=agent_config.get('model_vendor'),
+                model_name=agent_config.get('model_name'),
+                files_processed=0
             )
 
         except Exception as e:
@@ -512,6 +595,14 @@ class AgentExecutor:
             )
             self.console.print(f'  [red]✗ {agent_name} failed: {e}[/red]')
             self.state_manager.update_status(agent_name, 'failed')
+
+            # Track action failure
+            if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
+                self.run_tracker.record_action_complete(
+                    self.run_id, agent_name, 'failed',
+                    duration_seconds=duration,
+                    error=str(e)
+                )
 
             return AgentExecutionResult(
                 success=False,
