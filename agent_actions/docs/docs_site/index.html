@@ -761,10 +761,11 @@
         let catalog = null;
         let runs = null;
 
-        // Load both JSON files
+        // Load both JSON files with cache-busting to ensure fresh data
+        const cacheBuster = `?v=${Date.now()}`;
         Promise.all([
-            fetch('artefact/catalog.json').then(r => r.json()),
-            fetch('artefact/runs.json').then(r => r.json())
+            fetch(`artefact/catalog.json${cacheBuster}`).then(r => r.json()),
+            fetch(`artefact/runs.json${cacheBuster}`).then(r => r.json())
         ]).then(([catalogData, runsData]) => {
             catalog = catalogData;
             runs = runsData;
