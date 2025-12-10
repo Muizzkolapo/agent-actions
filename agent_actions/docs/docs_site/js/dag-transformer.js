@@ -168,7 +168,10 @@ function buildNodesAndEdges(workflow) {
                 // Add field information
                 inputFields: inputFields,
                 outputFields: outputFields,
-                droppedFields: droppedFields
+                droppedFields: droppedFields,
+                // Add plan status
+                inPlan: action.in_plan !== false, // Default to true if not specified
+                planOrder: action.plan_order || null
             },
             position: { x: 0, y: 0 } // Will be set by dagre
         });

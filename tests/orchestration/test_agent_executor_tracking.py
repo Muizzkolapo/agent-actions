@@ -3,8 +3,8 @@ import pytest
 from unittest.mock import Mock, MagicMock
 from agent_actions.orchestration.agent_executor import AgentExecutor, AgentExecutionResult
 from agent_actions.docs.run_tracker import RunTracker
-from agent_actions.llm_invocation.providers.openai.vendor import (
-    _set_last_usage, _get_last_usage
+from agent_actions.llm_invocation.providers.usage_tracker import (
+    set_last_usage, get_last_usage
 )
 
 
@@ -84,10 +84,10 @@ class TestAgentExecutorIntegration:
         """Breaking: Thread-local token storage must work."""
         # Set usage
         usage = {'input_tokens': 100, 'output_tokens': 50, 'total_tokens': 150}
-        _set_last_usage(usage)
+        set_last_usage(usage)
 
         # Get usage
-        retrieved = _get_last_usage()
+        retrieved = get_last_usage()
 
         assert retrieved is not None
         assert retrieved['total_tokens'] == 150
