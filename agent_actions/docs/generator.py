@@ -4,7 +4,7 @@ Catalog and runs data generator.
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .parser import WorkflowParser
 from .scanner import ProjectScanner
@@ -13,9 +13,79 @@ from .scanner import ProjectScanner
 class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
-    def __init__(self, workflows_data: Dict[str, Dict]):
+    def __init__(self, workflows_data: Dict[str, Dict], project_path: Optional[str] = None):
         self.workflows_data = workflows_data
         self.parser = WorkflowParser()
+        self.project_path = Path(project_path) if project_path else None
+        self.schema_dir = self._find_schema_dir()
+
+    def _find_schema_dir(self) -> Optional[Path]:
+        """Find the schema directory in the project."""
+        if not self.project_path:
+            return None
+
+        # Try common locations
+        schema_locations = [
+            self.project_path / 'schema',
+            self.project_path / 'schemas',
+            self.project_path.parent / 'schema',
+        ]
+
+        for schema_dir in schema_locations:
+            if schema_dir.exists() and schema_dir.is_dir():
+                return schema_dir
+
+        return None
+
+    def _enrich_action_with_fields(self, action: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Enrich action with input/output field information for lineage.
+
+        Args:
+            action: Action dictionary from parser
+
+        Returns:
+            Enriched action with 'inputs' and 'outputs' fields
+        """
+        enriched = action.copy()
+
+        # Extract output fields from schema
+        if 'schema' in action:
+            schema_value = action['schema']
+
+            # Handle two types of schemas:
+            # 1. String reference to schema file (e.g., "candidate_facts_list")
+            # 2. Inline schema dict (e.g., {"summary_title": "string", ...})
+
+            if isinstance(schema_value, str) and self.schema_dir:
+                # Referenced schema - load from YAML file
+                schema = self.parser.load_schema(schema_value, self.schema_dir)
+                if schema and schema.get('fields'):
+                    # Add output fields (field names only for lineage view)
+                    enriched['outputs'] = [field['name'] for field in schema['fields']]
+                    # Optionally add field details for tooltips/documentation
+                    enriched['output_fields'] = schema['fields']
+
+            elif isinstance(schema_value, dict):
+                # Inline schema - extract field names directly
+                field_names = list(schema_value.keys())
+                enriched['outputs'] = field_names
+                # Create field details from inline schema
+                enriched['output_fields'] = [
+                    {'name': name, 'type': type_val, 'description': ''}
+                    for name, type_val in schema_value.items()
+                ]
+
+        # Extract input fields from context_scope
+        if 'context_scope' in action:
+            inputs = self.parser.extract_input_fields(action['context_scope'])
+            if inputs:
+                enriched['inputs'] = inputs
+
+        # Clean up internal fields not needed in catalog
+        enriched.pop('context_scope', None)
+
+        return enriched
 
     def generate(self) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
@@ -36,6 +106,10 @@ class CatalogGenerator:
             }
         }
 
+        # Track unique schemas and prompts across all workflows
+        unique_schemas = set()
+        actions_with_prompts = 0
+
         for workflow_name, paths in self.workflows_data.items():
             # Use rendered workflow if available, otherwise use original
             yaml_path = paths['rendered'] or paths['original']
@@ -55,9 +129,12 @@ class CatalogGenerator:
                 except Exception:
                     pass  # Silently skip dependency extraction if it fails
 
-            # Merge dependencies into actions
+            # Merge dependencies and enrich actions with field information
+            enriched_actions = {}
             for action_name, action in workflow['actions'].items():
                 action['dependencies'] = dep_map.get(action_name, [])
+                # Enrich with input/output fields for lineage
+                enriched_actions[action_name] = self._enrich_action_with_fields(action)
 
             # Create workflow entry
             workflow_id = workflow_name
@@ -67,20 +144,33 @@ class CatalogGenerator:
                 'description': workflow['description'],
                 'path': workflow['path'],
                 'version': workflow['version'],
-                'actions': workflow['actions'],
-                'action_count': len(workflow['actions'])
+                'actions': enriched_actions,
+                'action_count': len(enriched_actions)
             }
 
             # Update stats
             catalog['stats']['total_workflows'] += 1
             catalog['stats']['total_actions'] += len(workflow['actions'])
 
-            # Count action types
+            # Count action types, schemas, and prompts
             for action in workflow['actions'].values():
                 if action.get('type') == 'llm':
                     catalog['stats']['llm_actions'] += 1
                 elif action.get('type') == 'tool':
                     catalog['stats']['tool_actions'] += 1
+
+                # Count unique schemas (only string references, not inline dicts)
+                schema = action.get('schema')
+                if schema and isinstance(schema, str):
+                    unique_schemas.add(schema)
+
+                # Count actions with prompts (LLM actions typically have prompts)
+                if action.get('prompt') or (action.get('type') == 'llm' and action.get('intent')):
+                    actions_with_prompts += 1
+
+        # Update global stats for schemas and prompts
+        catalog['stats']['total_schemas'] = len(unique_schemas)
+        catalog['stats']['total_prompts'] = actions_with_prompts
 
         return catalog
 
@@ -127,7 +217,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         return False
 
     # Step 2: Generate catalog
-    catalog_gen = CatalogGenerator(workflows_data)
+    catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
     catalog = catalog_gen.generate()
 
     # Step 3: Initialize empty runs structure

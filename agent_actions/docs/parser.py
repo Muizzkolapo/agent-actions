@@ -2,6 +2,7 @@
 Workflow YAML parser for documentation generation.
 """
 import yaml
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 
 
@@ -30,7 +31,7 @@ class WorkflowParser:
             'plan': data.get('plan', [])
         }
 
-        # Parse actions
+        # Parse actions (flat structure from rendered workflows)
         actions = data.get('actions', [])
         for action_data in actions:
             action_name = action_data.get('name', 'unnamed')
@@ -41,21 +42,24 @@ class WorkflowParser:
                 'dependencies': []
             }
 
-            # Parse action type (llm or tool)
-            if 'llm' in action_data:
-                action['type'] = 'llm'
-                llm_data = action_data['llm']
-                action['provider'] = llm_data.get('provider', 'unknown')
-                action['model'] = llm_data.get('model', 'unknown')
-                action['inputs'] = [inp.get('name') for inp in llm_data.get('inputs', [])]
-                action['outputs'] = [out.get('name') for out in llm_data.get('outputs', [])]
-            elif 'tool' in action_data:
+            # Determine action type (llm or tool) from flat structure
+            if action_data.get('kind') == 'tool':
                 action['type'] = 'tool'
-                tool_data = action_data['tool']
-                action['provider'] = tool_data.get('provider', 'unknown')
-                action['implementation'] = tool_data.get('impl', 'unknown')
-                action['inputs'] = [inp.get('name') for inp in tool_data.get('inputs', [])]
-                action['outputs'] = [out.get('name') for out in tool_data.get('outputs', [])]
+                action['provider'] = 'tool'
+                action['implementation'] = action_data.get('impl', 'unknown')
+            else:
+                # Default to LLM action
+                action['type'] = 'llm'
+                action['provider'] = action_data.get('model_vendor', 'unknown')
+                action['model'] = action_data.get('model_name', 'unknown')
+
+            # Extract schema (for field-level lineage)
+            if 'schema' in action_data:
+                action['schema'] = action_data['schema']
+
+            # Extract context_scope (for input fields)
+            if 'context_scope' in action_data:
+                action['context_scope'] = action_data['context_scope']
 
             workflow['actions'][action_name] = action
 
@@ -99,3 +103,88 @@ class WorkflowParser:
                 })
 
         return execution_plan, dependency_map
+
+    @staticmethod
+    def load_schema(schema_name: str, schema_dir: Path) -> Optional[Dict[str, Any]]:
+        """
+        Load and parse a schema YAML file.
+
+        Args:
+            schema_name: Name of the schema (e.g., 'candidate_facts_list')
+            schema_dir: Path to schema directory
+
+        Returns:
+            Dictionary with schema definition including field names and types
+        """
+        schema_file = schema_dir / f"{schema_name}.yml"
+
+        if not schema_file.exists():
+            return None
+
+        try:
+            with open(schema_file, 'r') as f:
+                schema_data = yaml.safe_load(f)
+        except Exception:
+            return None
+
+        # Extract field information from schema
+        fields = []
+        if schema_data.get('type') == 'array' and 'items' in schema_data:
+            # Array schema - fields are in items.properties
+            properties = schema_data.get('items', {}).get('properties', {})
+            for field_name, field_info in properties.items():
+                fields.append({
+                    'name': field_name,
+                    'type': field_info.get('type', 'unknown'),
+                    'description': field_info.get('description', '')
+                })
+        elif schema_data.get('type') == 'object' and 'properties' in schema_data:
+            # Object schema - fields are in properties
+            properties = schema_data.get('properties', {})
+            for field_name, field_info in properties.items():
+                fields.append({
+                    'name': field_name,
+                    'type': field_info.get('type', 'unknown'),
+                    'description': field_info.get('description', '')
+                })
+
+        return {
+            'name': schema_data.get('name', schema_name),
+            'type': schema_data.get('type', 'unknown'),
+            'fields': fields
+        }
+
+    @staticmethod
+    def extract_input_fields(context_scope: Dict[str, Any]) -> List[str]:
+        """
+        Extract input field names from context_scope.
+
+        Args:
+            context_scope: The context_scope dict from action definition
+
+        Returns:
+            List of input field names (e.g., ['source.page_content', 'seed.exam_syllabus'])
+        """
+        inputs = []
+
+        # Extract from 'observe' - fields that are read as inputs
+        if 'observe' in context_scope and isinstance(context_scope['observe'], list):
+            inputs.extend(context_scope['observe'])
+
+        # Extract from 'passthrough' - fields that flow through (both input and output)
+        if 'passthrough' in context_scope and isinstance(context_scope['passthrough'], list):
+            inputs.extend(context_scope['passthrough'])
+
+        # Extract from 'keep' (legacy/alternative pattern)
+        if 'keep' in context_scope and isinstance(context_scope['keep'], list):
+            inputs.extend(context_scope['keep'])
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_inputs = []
+        for field in inputs:
+            if field not in seen:
+                seen.add(field)
+                unique_inputs.append(field)
+
+        return unique_inputs

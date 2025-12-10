@@ -84,6 +84,22 @@ function extractActionFields(action) {
 
     inputFields = [...new Set(inputFields)];
 
+    // Fallback: use action.inputs from catalog if no fields extracted
+    if (inputFields.length === 0 && action.inputs && Array.isArray(action.inputs)) {
+        inputFields = action.inputs;
+        // Build mappings for catalog inputs
+        action.inputs.forEach(field => {
+            const parts = field.split('.');
+            if (parts.length >= 2) {
+                inputFieldMappings.push({
+                    displayField: field,
+                    sourceAction: parts[0],
+                    sourceField: parts.slice(1).join('.')
+                });
+            }
+        });
+    }
+
     // Extract output fields from schema
     let outputFields = [];
     if (action.schema && action.schema.structure) {
@@ -104,6 +120,11 @@ function extractActionFields(action) {
         });
     }
     outputFields = [...new Set(outputFields)];
+
+    // Fallback: use action.output_fields from catalog if no fields extracted
+    if (outputFields.length === 0 && action.output_fields && Array.isArray(action.output_fields)) {
+        outputFields = action.output_fields.map(field => field.name);
+    }
 
     // Extract dropped fields
     let droppedFields = [];
