@@ -119,20 +119,30 @@ class CatalogGenerator:
             if workflow is None:
                 continue
 
-            # Extract dependencies from original workflow's plan section
+            # Extract dependencies and plan from original workflow's plan section
             dep_map = {}
+            actions_in_plan = set()
+            plan_order_map = {}
             if paths['original']:
                 try:
                     original_workflow = self.parser.parse_workflow(paths['original'])
                     if original_workflow and original_workflow.get('plan'):
-                        _, dep_map = self.parser.parse_plan(original_workflow['plan'])
+                        execution_plan, dep_map = self.parser.parse_plan(original_workflow['plan'])
+                        # Track which actions are in the plan and their execution order
+                        for idx, plan_item in enumerate(execution_plan):
+                            action_name = plan_item['action']
+                            actions_in_plan.add(action_name)
+                            plan_order_map[action_name] = idx + 1
                 except Exception:
                     pass  # Silently skip dependency extraction if it fails
 
-            # Merge dependencies and enrich actions with field information
+            # Merge dependencies, plan status, and enrich actions with field information
             enriched_actions = {}
             for action_name, action in workflow['actions'].items():
                 action['dependencies'] = dep_map.get(action_name, [])
+                # Mark if action is in active execution plan
+                action['in_plan'] = action_name in actions_in_plan
+                action['plan_order'] = plan_order_map.get(action_name, None)
                 # Enrich with input/output fields for lineage
                 enriched_actions[action_name] = self._enrich_action_with_fields(action)
 
@@ -220,10 +230,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
     catalog = catalog_gen.generate()
 
-    # Step 3: Initialize empty runs structure
-    runs = RunsGenerator.initialize_empty()
-
-    # Step 4: Write data files
+    # Step 3: Write data files
     # Ensure output directory exists
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -232,10 +239,13 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     with open(catalog_path, 'w') as f:
         json.dump(catalog, f, indent=2)
 
-    # Write runs.json
+    # Initialize runs.json only if it doesn't exist
+    # (RunTracker manages all updates to this file during workflow execution)
     runs_path = output_dir / 'runs.json'
-    with open(runs_path, 'w') as f:
-        json.dump(runs, f, indent=2)
+    if not runs_path.exists():
+        runs = RunsGenerator.initialize_empty()
+        with open(runs_path, 'w') as f:
+            json.dump(runs, f, indent=2)
 
     # Print summary
     total_workflows = catalog['stats']['total_workflows']

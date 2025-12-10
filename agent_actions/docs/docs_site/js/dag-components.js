@@ -63,20 +63,24 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // MODEL NODE COMPONENT
     // ============================================
     window.ModelNode = function({ data, isConnectable }) {
+        const isInactive = data.inPlan === false;
         return h('div', {
             className: 'rf-node-card rf-model-node',
             style: {
                 width: '280px',
                 minHeight: '90px',
                 maxHeight: data.fieldsExpanded ? '500px' : '120px',
-                background: 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${data.isOperational ? '#3b82f6' : '#6b7280'}`,
+                background: isInactive
+                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#3b82f6' : '#6b7280')}`,
                 borderRadius: '8px',
                 padding: '10px',
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                opacity: isInactive ? 0.5 : 1
             }
         }, [
             // Top handle
@@ -296,20 +300,24 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // TOOL NODE COMPONENT
     // ============================================
     window.ToolNode = function({ data, isConnectable }) {
+        const isInactive = data.inPlan === false;
         return h('div', {
             className: 'rf-node-card rf-tool-node',
             style: {
                 width: '280px',
                 minHeight: '90px',
                 maxHeight: data.fieldsExpanded ? '500px' : '120px',
-                background: 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${data.isOperational ? '#10b981' : '#6b7280'}`,
+                background: isInactive
+                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#10b981' : '#6b7280')}`,
                 borderRadius: '8px',
                 padding: '10px',
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                opacity: isInactive ? 0.5 : 1
             }
         }, [
             // Top handle
