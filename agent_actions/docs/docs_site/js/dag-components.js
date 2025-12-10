@@ -67,15 +67,15 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         return h('div', {
             className: 'rf-node-card rf-model-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: data.fieldsExpanded ? '500px' : '120px',
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
                 background: isInactive
                     ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
                     : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
                 border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#3b82f6' : '#6b7280')}`,
                 borderRadius: '8px',
-                padding: '10px',
+                padding: '14px',                  // Increased from 10px
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -98,23 +98,23 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    marginBottom: '8px',
-                    paddingBottom: '6px',
+                    gap: '10px',                  // Increased from 6px
+                    marginBottom: '12px',         // Increased from 8px
+                    paddingBottom: '10px',        // Increased from 6px
                     borderBottom: '1px solid #334155'
                 }
             }, [
                 h('div', {
                     key: 'icon',
                     style: {
-                        width: '24px',
-                        height: '24px',
+                        width: '32px',            // Increased from 24px
+                        height: '32px',
                         borderRadius: '50%',
                         background: '#3b82f6',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px'
+                        fontSize: '16px'          // Increased from 12px
                     }
                 }, '🤖'),
                 h('div', {
@@ -123,7 +123,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                         flex: 1,
                         fontWeight: 600,
                         color: '#f1f5f9',
-                        fontSize: '0.85rem',
+                        fontSize: '1rem',         // Increased from 0.85rem
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
@@ -304,15 +304,15 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         return h('div', {
             className: 'rf-node-card rf-tool-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: data.fieldsExpanded ? '500px' : '120px',
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
                 background: isInactive
                     ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
                     : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
                 border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#10b981' : '#6b7280')}`,
                 borderRadius: '8px',
-                padding: '10px',
+                padding: '14px',                  // Increased from 10px
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -335,23 +335,23 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    marginBottom: '8px',
-                    paddingBottom: '6px',
+                    gap: '10px',                  // Increased from 6px
+                    marginBottom: '12px',         // Increased from 8px
+                    paddingBottom: '10px',        // Increased from 6px
                     borderBottom: '1px solid #334155'
                 }
             }, [
                 h('div', {
                     key: 'icon',
                     style: {
-                        width: '24px',
-                        height: '24px',
+                        width: '32px',            // Increased from 24px
+                        height: '32px',
                         borderRadius: '50%',
                         background: '#10b981',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px'
+                        fontSize: '16px'          // Increased from 12px
                     }
                 }, '🔧'),
                 h('div', {
@@ -360,7 +360,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                         flex: 1,
                         fontWeight: 600,
                         color: '#f1f5f9',
-                        fontSize: '0.85rem',
+                        fontSize: '1rem',         // Increased from 0.85rem
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
@@ -599,9 +599,9 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         return h('div', {
             className: 'rf-node-card rf-field-action-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: expanded ? '500px' : '120px',
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: expanded ? '600px' : '140px',  // Increased heights
                 background: '#ffffff',
                 border: '1px solid #e5e7eb',
                 borderRadius: '6px',
@@ -1011,7 +1011,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 ...node,
                 data: {
                     ...node.data,
-                    fieldsExpanded: false,  // Initially collapsed
+                    fieldsExpanded: true,   // Start with fields expanded by default
                     onExpandFields: handleExpandFields
                 }
             }));
