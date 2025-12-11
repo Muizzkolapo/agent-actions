@@ -980,16 +980,18 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         const { fitView } = RF.useReactFlow();
 
         // Track which nodes have fields expanded
-        const [expandedFields, setExpandedFields] = React.useState(new Set());
+        // Initialize as null - will be populated when workflow loads
+        const [expandedFields, setExpandedFields] = React.useState(null);
 
         // Handle field expansion toggle
+        // When node is in Set → expanded, when not in Set → collapsed
         const handleExpandFields = React.useCallback((nodeName) => {
             setExpandedFields(prev => {
                 const newSet = new Set(prev);
                 if (newSet.has(nodeName)) {
-                    newSet.delete(nodeName);
+                    newSet.delete(nodeName);  // Remove from Set = collapse fields
                 } else {
-                    newSet.add(nodeName);
+                    newSet.add(nodeName);     // Add to Set = expand fields
                 }
                 return newSet;
             });
@@ -1005,6 +1007,11 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             console.log('Transforming workflow:', workflow.name);
             const transformed = window.transformWorkflowToReactFlow(workflow);
             console.log('Transformed data:', transformed);
+
+            // Initialize expandedFields Set with ALL node labels to start with all fields expanded
+            // This ensures the toggle button logic works correctly (node in Set = expanded)
+            const allNodeLabels = transformed.nodes.map(node => node.data.label);
+            setExpandedFields(new Set(allNodeLabels));
 
             // Add the onExpandFields callback to all nodes immediately
             const nodesWithCallbacks = transformed.nodes.map(node => ({
@@ -1029,14 +1036,17 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             }, 100);
         }, [workflow, fitView, setNodes, setEdges, handleExpandFields]);
 
-        // Update nodes with field expansion state
+        // Update nodes with field expansion state whenever expandedFields changes
         React.useEffect(() => {
+            // Only update if expandedFields has been initialized
+            if (!expandedFields) return;
+
             setNodes(currentNodes =>
                 currentNodes.map(node => ({
                     ...node,
                     data: {
                         ...node.data,
-                        fieldsExpanded: expandedFields.has(node.data.label),
+                        fieldsExpanded: expandedFields.has(node.data.label),  // Node is expanded if its label is in the Set
                         onExpandFields: handleExpandFields
                     }
                 }))
@@ -1172,8 +1182,18 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // MAIN WORKFLOW DAG COMPONENT (Exported)
     // ============================================
     window.WorkflowDAG = function({ workflow, workflowId }) {
-        return h(RF.ReactFlowProvider, null,
-            h(WorkflowDAGContent, { workflow, workflowId })
+        return h('div', {
+            id: 'dag-container',              // ID for fullscreen target
+            className: 'dag-container',       // Class for styling
+            style: {
+                width: '100%',
+                height: '600px',              // Default height
+                position: 'relative'
+            }
+        },
+            h(RF.ReactFlowProvider, null,
+                h(WorkflowDAGContent, { workflow, workflowId })
+            )
         );
     };
 
