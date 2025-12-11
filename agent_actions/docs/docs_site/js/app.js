@@ -389,11 +389,12 @@ function toggleActionDetails(event, runId) {
         if (!run || !run.actions) return;
 
         const currentRow = event.target.closest('tr');
+        const columnCount = currentRow.cells.length;
         const detailsRow = document.createElement('tr');
         detailsRow.id = detailsRowId;
         detailsRow.innerHTML = `
-            <td colspan="6" style="padding: 0; background: var(--bg-subtle);">
-                ${renderActionDetails(run)}
+            <td colspan="${columnCount}" style="padding: 0; background: var(--bg-subtle);">
+                ${renderRunActionDetails(run)}
             </td>
         `;
 
@@ -402,7 +403,7 @@ function toggleActionDetails(event, runId) {
     }
 }
 
-function renderActionDetails(run) {
+function renderRunActionDetails(run) {
     const actions = Object.entries(run.actions || {});
 
     if (actions.length === 0) {
@@ -1638,7 +1639,7 @@ function renderRunsTable(workflowRuns) {
         const formattedDate = formatRelativeTime(startDate);
 
         row.innerHTML = `
-            <td><code style="font-size: 0.75rem;">${run.id}</code></td>
+            <td><code style="font-size: 0.75rem; color: var(--color-primary); cursor: pointer;">${run.id}</code></td>
             <td>${statusBadge}</td>
             <td>${formatDuration(run.duration_seconds)}</td>
             <td>${actionsSummary}</td>
@@ -1646,7 +1647,7 @@ function renderRunsTable(workflowRuns) {
             <td>${formattedDate}</td>
         `;
 
-        // Add click event to show run details
+        // Make run ID clickable to show run details page
         row.style.cursor = 'pointer';
         row.addEventListener('click', () => showRunDetails(run));
 
@@ -1689,21 +1690,63 @@ function formatRelativeTime(date) {
 }
 
 function showRunDetails(run) {
-    // For now, just log the run details
-    // In the future, this could open a modal or navigate to a detailed view
-    console.log('Run details:', run);
+    // Hide all views
+    document.querySelectorAll('.content-view').forEach(v => v.classList.remove('active'));
 
-    // Show a simple alert with run information
-    const details = `
-Run ID: ${run.id}
-Status: ${run.status}
-Duration: ${formatDuration(run.duration_seconds)}
-Actions: ${run.successful_actions}/${run.total_actions}
-Started: ${new Date(run.started_at).toLocaleString()}
-${run.error ? `\nError: ${run.error}` : ''}
-    `.trim();
+    // Show run detail view
+    const view = document.getElementById('run-detail-view');
+    view.classList.add('active');
 
-    alert(details);
+    // Update title and subtitle
+    document.getElementById('run-detail-title').textContent = run.id;
+    const statusClass = run.status.toLowerCase();
+    const statusBadge = `<span class="status-badge ${statusClass}">${run.status}</span>`;
+    document.getElementById('run-detail-subtitle').innerHTML = `${statusBadge} • ${formatDuration(run.duration_seconds)} • ${new Date(run.started_at).toLocaleString()}`;
+
+    // Update workflow breadcrumb link
+    const workflowLink = document.getElementById('run-detail-workflow-link');
+    workflowLink.textContent = run.workflow_name || run.workflow_id;
+    workflowLink.onclick = () => showWorkflow(run.workflow_id);
+
+    // Render run details content
+    const content = document.getElementById('run-detail-content');
+    content.innerHTML = `
+        <div class="section-header">
+            <h3>Run Summary</h3>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <div class="metric-card">
+                <div class="metric-label">Actions Executed</div>
+                <div class="metric-value">${Object.keys(run.actions || {}).length} / ${run.total_actions}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Successful</div>
+                <div class="metric-value" style="color: var(--color-success);">${run.successful_actions}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Failed</div>
+                <div class="metric-value" style="color: var(--color-error);">${run.failed_actions || 0}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Tokens</div>
+                <div class="metric-value">${(run.total_tokens / 1000).toFixed(1)}K</div>
+            </div>
+        </div>
+
+        ${run.error_message ? `
+        <div class="section-header">
+            <h3>Error Message</h3>
+        </div>
+        <div style="background: #fee; border-left: 3px solid #dc2626; padding: 1rem; margin-bottom: 2rem; border-radius: 4px;">
+            <code style="color: #dc2626; white-space: pre-wrap; word-break: break-word; font-size: 0.875rem; line-height: 1.5;">${run.error_message}</code>
+        </div>
+        ` : ''}
+
+        <div class="section-header">
+            <h3>Action Breakdown</h3>
+        </div>
+        ${renderRunActionDetails(run)}
+    `;
 }
 
 // ============================================

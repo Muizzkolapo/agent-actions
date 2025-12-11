@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
 from rich.console import Console
-from agent_actions.llm_invocation.providers.openai.vendor import _get_last_usage
+from agent_actions.llm_invocation.providers.usage_tracker import get_last_usage
 
 logger = logging.getLogger(__name__)
 
@@ -415,7 +415,7 @@ class AgentExecutor:
             )
 
             # Retrieve token usage from thread-local storage
-            tokens = _get_last_usage()
+            tokens = get_last_usage()
 
             # Track action success
             if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):
@@ -556,7 +556,7 @@ class AgentExecutor:
             )
 
             # Retrieve token usage from thread-local storage
-            tokens = _get_last_usage()
+            tokens = get_last_usage()
 
             # Track action success
             if hasattr(self, 'run_tracker') and hasattr(self, 'run_id'):

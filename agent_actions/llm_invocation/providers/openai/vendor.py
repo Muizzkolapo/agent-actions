@@ -1,6 +1,5 @@
 import json
 import logging
-import threading
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
@@ -8,22 +7,10 @@ from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
-
-# Thread-local storage for token usage
-_thread_local = threading.local()
-
-
-def _set_last_usage(usage: Optional[Dict[str, int]]) -> None:
-    """Store token usage in thread-local storage."""
-    _thread_local.last_usage = usage
-
-
-def _get_last_usage() -> Optional[Dict[str, int]]:
-    """Retrieve token usage from thread-local storage."""
-    return getattr(_thread_local, 'last_usage', None)
 
 class OpenAIHandler(BaseVendorHandler):
 
@@ -59,7 +46,7 @@ class OpenAIHandler(BaseVendorHandler):
                 'output_tokens': response.usage.completion_tokens,
                 'total_tokens': response.usage.total_tokens
             }
-            _set_last_usage(usage_data)
+            set_last_usage(usage_data)
 
         # Log API response at DEBUG level
         logger.debug(
@@ -116,7 +103,7 @@ class OpenAIHandler(BaseVendorHandler):
                 'output_tokens': response.usage.completion_tokens,
                 'total_tokens': response.usage.total_tokens
             }
-            _set_last_usage(usage_data)
+            set_last_usage(usage_data)
 
         # Log API response at DEBUG level
         logger.debug(

@@ -168,7 +168,10 @@ function buildNodesAndEdges(workflow) {
                 // Add field information
                 inputFields: inputFields,
                 outputFields: outputFields,
-                droppedFields: droppedFields
+                droppedFields: droppedFields,
+                // Add plan status
+                inPlan: action.in_plan !== false, // Default to true if not specified
+                planOrder: action.plan_order || null
             },
             position: { x: 0, y: 0 } // Will be set by dagre
         });
@@ -193,11 +196,20 @@ function buildNodesAndEdges(workflow) {
 function applyDagreLayout(nodes, edges, direction = 'LR') {
     const dagreGraph = new dagre.graphlib.Graph();
     dagreGraph.setDefaultEdgeLabel(() => ({}));
-    dagreGraph.setGraph({ rankdir: direction });
 
-    // Add nodes to dagre
+    // Configure graph layout with better spacing
+    dagreGraph.setGraph({
+        rankdir: direction,        // Layout direction (LR = left-to-right, TB = top-to-bottom)
+        nodesep: 120,              // Horizontal spacing between nodes in same rank (increased from default 50)
+        ranksep: 200,              // Vertical spacing between ranks/levels (increased from default 50)
+        edgesep: 80,               // Spacing between edges (increased from default 10)
+        marginx: 50,               // Margin on x-axis
+        marginy: 50                // Margin on y-axis
+    });
+
+    // Add nodes to dagre with updated dimensions to match our bigger nodes
     nodes.forEach(node => {
-        dagreGraph.setNode(node.id, { width: 180, height: 100 });
+        dagreGraph.setNode(node.id, { width: 350, height: 140 });  // Match our actual node size (was 180x100)
     });
 
     // Add edges to dagre
@@ -215,8 +227,8 @@ function applyDagreLayout(nodes, edges, direction = 'LR') {
             return {
                 ...node,
                 position: {
-                    x: positioned.x - 90, // Center the node
-                    y: positioned.y - 50
+                    x: positioned.x - 175,  // Center the node (half of 350px width)
+                    y: positioned.y - 70    // Center the node (half of 140px height)
                 }
             };
         }),

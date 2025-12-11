@@ -63,20 +63,24 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // MODEL NODE COMPONENT
     // ============================================
     window.ModelNode = function({ data, isConnectable }) {
+        const isInactive = data.inPlan === false;
         return h('div', {
             className: 'rf-node-card rf-model-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: data.fieldsExpanded ? '500px' : '120px',
-                background: 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${data.isOperational ? '#3b82f6' : '#6b7280'}`,
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
+                background: isInactive
+                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#3b82f6' : '#6b7280')}`,
                 borderRadius: '8px',
-                padding: '10px',
+                padding: '14px',                  // Increased from 10px
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                opacity: isInactive ? 0.5 : 1
             }
         }, [
             // Top handle
@@ -94,23 +98,23 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    marginBottom: '8px',
-                    paddingBottom: '6px',
+                    gap: '10px',                  // Increased from 6px
+                    marginBottom: '12px',         // Increased from 8px
+                    paddingBottom: '10px',        // Increased from 6px
                     borderBottom: '1px solid #334155'
                 }
             }, [
                 h('div', {
                     key: 'icon',
                     style: {
-                        width: '24px',
-                        height: '24px',
+                        width: '32px',            // Increased from 24px
+                        height: '32px',
                         borderRadius: '50%',
                         background: '#3b82f6',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px'
+                        fontSize: '16px'          // Increased from 12px
                     }
                 }, '🤖'),
                 h('div', {
@@ -119,7 +123,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                         flex: 1,
                         fontWeight: 600,
                         color: '#f1f5f9',
-                        fontSize: '0.85rem',
+                        fontSize: '1rem',         // Increased from 0.85rem
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
@@ -296,20 +300,24 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // TOOL NODE COMPONENT
     // ============================================
     window.ToolNode = function({ data, isConnectable }) {
+        const isInactive = data.inPlan === false;
         return h('div', {
             className: 'rf-node-card rf-tool-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: data.fieldsExpanded ? '500px' : '120px',
-                background: 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${data.isOperational ? '#10b981' : '#6b7280'}`,
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
+                background: isInactive
+                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#10b981' : '#6b7280')}`,
                 borderRadius: '8px',
-                padding: '10px',
+                padding: '14px',                  // Increased from 10px
                 boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
-                overflow: 'hidden'
+                overflow: 'hidden',
+                opacity: isInactive ? 0.5 : 1
             }
         }, [
             // Top handle
@@ -327,23 +335,23 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 style: {
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
-                    marginBottom: '8px',
-                    paddingBottom: '6px',
+                    gap: '10px',                  // Increased from 6px
+                    marginBottom: '12px',         // Increased from 8px
+                    paddingBottom: '10px',        // Increased from 6px
                     borderBottom: '1px solid #334155'
                 }
             }, [
                 h('div', {
                     key: 'icon',
                     style: {
-                        width: '24px',
-                        height: '24px',
+                        width: '32px',            // Increased from 24px
+                        height: '32px',
                         borderRadius: '50%',
                         background: '#10b981',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '12px'
+                        fontSize: '16px'          // Increased from 12px
                     }
                 }, '🔧'),
                 h('div', {
@@ -352,7 +360,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                         flex: 1,
                         fontWeight: 600,
                         color: '#f1f5f9',
-                        fontSize: '0.85rem',
+                        fontSize: '1rem',         // Increased from 0.85rem
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap'
@@ -591,9 +599,9 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         return h('div', {
             className: 'rf-node-card rf-field-action-node',
             style: {
-                width: '280px',
-                minHeight: '90px',
-                maxHeight: expanded ? '500px' : '120px',
+                width: '350px',                   // Increased from 280px
+                minHeight: '110px',               // Increased from 90px
+                maxHeight: expanded ? '600px' : '140px',  // Increased heights
                 background: '#ffffff',
                 border: '1px solid #e5e7eb',
                 borderRadius: '6px',
@@ -972,16 +980,18 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
         const { fitView } = RF.useReactFlow();
 
         // Track which nodes have fields expanded
-        const [expandedFields, setExpandedFields] = React.useState(new Set());
+        // Initialize as null - will be populated when workflow loads
+        const [expandedFields, setExpandedFields] = React.useState(null);
 
         // Handle field expansion toggle
+        // When node is in Set → expanded, when not in Set → collapsed
         const handleExpandFields = React.useCallback((nodeName) => {
             setExpandedFields(prev => {
                 const newSet = new Set(prev);
                 if (newSet.has(nodeName)) {
-                    newSet.delete(nodeName);
+                    newSet.delete(nodeName);  // Remove from Set = collapse fields
                 } else {
-                    newSet.add(nodeName);
+                    newSet.add(nodeName);     // Add to Set = expand fields
                 }
                 return newSet;
             });
@@ -998,12 +1008,17 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             const transformed = window.transformWorkflowToReactFlow(workflow);
             console.log('Transformed data:', transformed);
 
+            // Initialize expandedFields Set with ALL node labels to start with all fields expanded
+            // This ensures the toggle button logic works correctly (node in Set = expanded)
+            const allNodeLabels = transformed.nodes.map(node => node.data.label);
+            setExpandedFields(new Set(allNodeLabels));
+
             // Add the onExpandFields callback to all nodes immediately
             const nodesWithCallbacks = transformed.nodes.map(node => ({
                 ...node,
                 data: {
                     ...node.data,
-                    fieldsExpanded: false,  // Initially collapsed
+                    fieldsExpanded: true,   // Start with fields expanded by default
                     onExpandFields: handleExpandFields
                 }
             }));
@@ -1021,14 +1036,17 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             }, 100);
         }, [workflow, fitView, setNodes, setEdges, handleExpandFields]);
 
-        // Update nodes with field expansion state
+        // Update nodes with field expansion state whenever expandedFields changes
         React.useEffect(() => {
+            // Only update if expandedFields has been initialized
+            if (!expandedFields) return;
+
             setNodes(currentNodes =>
                 currentNodes.map(node => ({
                     ...node,
                     data: {
                         ...node.data,
-                        fieldsExpanded: expandedFields.has(node.data.label),
+                        fieldsExpanded: expandedFields.has(node.data.label),  // Node is expanded if its label is in the Set
                         onExpandFields: handleExpandFields
                     }
                 }))
@@ -1164,8 +1182,18 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
     // MAIN WORKFLOW DAG COMPONENT (Exported)
     // ============================================
     window.WorkflowDAG = function({ workflow, workflowId }) {
-        return h(RF.ReactFlowProvider, null,
-            h(WorkflowDAGContent, { workflow, workflowId })
+        return h('div', {
+            id: 'dag-container',              // ID for fullscreen target
+            className: 'dag-container',       // Class for styling
+            style: {
+                width: '100%',
+                height: '600px',              // Default height
+                position: 'relative'
+            }
+        },
+            h(RF.ReactFlowProvider, null,
+                h(WorkflowDAGContent, { workflow, workflowId })
+            )
         );
     };
 
