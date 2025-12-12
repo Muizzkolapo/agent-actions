@@ -1146,15 +1146,18 @@ function createPromptCard(prompt) {
     card.style.cursor = 'pointer';
     card.addEventListener('click', () => showPrompt(prompt.id));
 
+    // Create preview from first 150 characters of content
+    const preview = prompt.content ? prompt.content.substring(0, 150) + '...' : 'No content available';
+
     card.innerHTML = `
         <div class="workflow-card-header">
             <h3>${prompt.name}</h3>
             <span class="badge" style="background: #7b61ff; color: white; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px;">Prompt</span>
         </div>
-        <p class="workflow-description">${prompt.preview}</p>
+        <p class="workflow-description">${preview}</p>
         <div class="workflow-meta">
-            <span><strong>Workflow:</strong> ${prompt.workflow}</span>
-            ${prompt.variables.length > 0 ? `<span><strong>Variables:</strong> ${prompt.variable_count}</span>` : ''}
+            <span><strong>Source:</strong> ${prompt.source_file_name || 'Unknown'}</span>
+            <span><strong>Length:</strong> ${prompt.length || 0} chars</span>
         </div>
     `;
 
@@ -2492,40 +2495,19 @@ function renderPromptDetails(prompt) {
     metaSection.className = 'action-detail-section';
     metaSection.innerHTML = `
         <h2>Metadata</h2>
-        <p><strong>Workflow:</strong> ${prompt.workflow}</p>
-        <p><strong>File:</strong> <code>${prompt.file_path}</code></p>
-        <p><strong>Lines:</strong> ${prompt.line_range[0]} - ${prompt.line_range[1]}</p>
-        ${prompt.variables.length > 0 ? `<p><strong>Variables:</strong> ${prompt.variable_count}</p>` : ''}
+        <p><strong>Source File:</strong> <code>${prompt.source_file_name || 'Unknown'}</code></p>
+        <p><strong>Full Path:</strong> <code style="font-size: 0.8rem;">${prompt.source_file || 'Unknown'}</code></p>
+        <p><strong>Lines:</strong> ${prompt.line_start || 0} - ${prompt.line_end || 0}</p>
+        <p><strong>Length:</strong> ${prompt.length || 0} characters</p>
     `;
     container.appendChild(metaSection);
-
-    // Variables section
-    if (prompt.variables && prompt.variables.length > 0) {
-        const varsSection = document.createElement('div');
-        varsSection.className = 'action-detail-section';
-        varsSection.innerHTML = '<h2>Template Variables</h2>';
-
-        const varsList = document.createElement('div');
-        varsList.className = 'dependency-list';
-
-        prompt.variables.forEach(varName => {
-            const tag = document.createElement('span');
-            tag.className = 'dependency-tag';
-            tag.textContent = `{${varName}}`;
-            tag.style.cursor = 'default';
-            varsList.appendChild(tag);
-        });
-
-        varsSection.appendChild(varsList);
-        container.appendChild(varsSection);
-    }
 
     // Content section
     const contentSection = document.createElement('div');
     contentSection.className = 'action-detail-section';
     contentSection.innerHTML = `
         <h2>Prompt Content</h2>
-        <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; font-size: 0.875rem; line-height: 1.6;">${escapeHtml(prompt.content)}</pre>
+        <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; font-size: 0.875rem; line-height: 1.6;">${escapeHtml(prompt.content || 'No content available')}</pre>
     `;
     container.appendChild(contentSection);
 }

@@ -1,12 +1,13 @@
 """
-Project scanner for finding workflow files.
+Project scanner for finding workflow files and prompts.
 """
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
+import re
 
 
 class ProjectScanner:
-    """Scan project directory for agent workflows."""
+    """Scan project directory for agent workflows and prompts."""
 
     def __init__(self, project_root: str):
         self.project_root = Path(project_root).resolve()
@@ -63,3 +64,63 @@ class ProjectScanner:
                     }
 
         return workflows
+
+    def scan_prompts(self) -> Dict[str, Any]:
+        """
+        Scan project directory for prompt files.
+
+        Looks for prompt_store/*.md files and extracts prompts using the pattern:
+        {prompt prompt_name}
+        ...content...
+        {end_prompt}
+
+        Returns:
+            Dict mapping prompt names to prompt data:
+            {
+                'prompt_name': {
+                    'id': 'prompt_name',
+                    'name': 'prompt_name',
+                    'content': '...',
+                    'source_file': '/path/to/file.md',
+                    'line_start': 1,
+                    'line_end': 10
+                }
+            }
+        """
+        prompts = {}
+        prompt_store_dir = self.project_root / 'prompt_store'
+
+        if not prompt_store_dir.exists():
+            return prompts
+
+        # Pattern to match {prompt name} ... {end_prompt}
+        prompt_pattern = re.compile(
+            r'\{prompt\s+(\w+)\}(.*?)\{end_prompt\}',
+            re.DOTALL
+        )
+
+        for md_file in prompt_store_dir.glob('*.md'):
+            content = md_file.read_text()
+
+            # Find all prompts in this file
+            for match in prompt_pattern.finditer(content):
+                prompt_name = match.group(1)
+                prompt_content = match.group(2).strip()
+
+                # Calculate line numbers
+                content_before = content[:match.start()]
+                line_start = content_before.count('\n') + 1
+                line_end = line_start + prompt_content.count('\n')
+
+                prompts[prompt_name] = {
+                    'id': prompt_name,
+                    'name': prompt_name,
+                    'content': prompt_content,
+                    'source_file': str(md_file),
+                    'source_file_name': md_file.name,
+                    'line_start': line_start,
+                    'line_end': line_end,
+                    'length': len(prompt_content)
+                }
+
+        return prompts
