@@ -64,8 +64,146 @@ const state = {
     dagZoom: 1,
     dagTransform: { x: 0, y: 0 },
     dagLayout: 'horizontal', // 'vertical' or 'horizontal'
-    navigationContext: null // Tracks where the user came from: 'workflow', 'actions-list', 'sidebar', etc.
+    navigationContext: null, // Tracks where the user came from: 'workflow', 'actions-list', 'sidebar', etc.
+    isNavigatingHistory: false // Prevent pushState during popstate
 };
+
+// ============================================
+// REAL-TIME UPDATES (Polling)
+// ============================================
+
+const pollingConfig = {
+    interval: 5000,
+    enabled: true,
+    timerId: null,
+    lastUpdate: null,
+    failureCount: 0,
+    maxFailures: 3
+};
+
+function startPolling() {
+    if (!pollingConfig.enabled) return;
+
+    console.log('✓ Real-time updates enabled (5s polling)');
+
+    pollingConfig.timerId = setInterval(async () => {
+        try {
+            await fetchUpdates();
+            pollingConfig.failureCount = 0;
+        } catch (error) {
+            pollingConfig.failureCount++;
+            console.warn(`Polling failed (${pollingConfig.failureCount}/${pollingConfig.maxFailures}):`, error);
+
+            if (pollingConfig.failureCount >= pollingConfig.maxFailures) {
+                console.error('Max polling failures reached, stopping updates');
+                stopPolling();
+                showPollingError();
+            }
+        }
+    }, pollingConfig.interval);
+}
+
+function stopPolling() {
+    if (pollingConfig.timerId) {
+        clearInterval(pollingConfig.timerId);
+        pollingConfig.timerId = null;
+    }
+}
+
+async function fetchUpdates() {
+    const cacheBuster = `?v=${Date.now()}`;
+    const response = await fetch(`sample_artefact/runs.json${cacheBuster}`);
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const newRunsData = await response.json();
+
+    // Normalize the new data (status values, run_id field, etc.)
+    if (typeof window.normalizeRunsData === 'function') {
+        window.normalizeRunsData(newRunsData);
+    }
+
+    const hasChanges = JSON.stringify(newRunsData) !== JSON.stringify(runs);
+
+    if (hasChanges) {
+        const oldRunCount = runs.executions ? runs.executions.length : 0;
+        runs = newRunsData;
+        const newRunCount = runs.executions ? runs.executions.length : 0;
+
+        pollingConfig.lastUpdate = new Date();
+        updateUIAfterPoll(oldRunCount, newRunCount);
+
+        if (window.A11y && window.A11y.announceToScreenReader) {
+            const message = newRunCount > oldRunCount
+                ? `${newRunCount - oldRunCount} new runs detected`
+                : 'Runs updated';
+            window.A11y.announceToScreenReader(message, 'polite');
+        }
+    }
+}
+
+function updateUIAfterPoll(oldCount, newCount) {
+    if (state.currentView === 'overview') {
+        renderOverviewCharts();
+        renderRecentRuns();
+    }
+
+    if (state.currentView === 'workflow') {
+        const workflow = catalog.workflows[state.currentWorkflow];
+        if (workflow) {
+            if (state.currentTab === 'runs') {
+                renderWorkflowRuns(workflow);
+            }
+            renderWorkflowTimeline(workflow);
+        }
+    }
+
+    if (newCount > oldCount) {
+        showUpdateNotification(`${newCount - oldCount} new run${newCount - oldCount > 1 ? 's' : ''}`);
+    }
+}
+
+function showPollingError() {
+    const errorBanner = document.createElement('div');
+    errorBanner.className = 'polling-error-banner';
+    errorBanner.innerHTML = `
+        <svg width="20" height="20" fill="currentColor">
+            <path d="M10 18a8 8 0 100-16 8 8 0 000 16z"/>
+        </svg>
+        <span>Live updates paused due to connection issues</span>
+        <button onclick="retryPolling()">Retry</button>
+    `;
+    document.body.appendChild(errorBanner);
+}
+
+function retryPolling() {
+    pollingConfig.failureCount = 0;
+    const errorBanner = document.querySelector('.polling-error-banner');
+    if (errorBanner) errorBanner.remove();
+    startPolling();
+}
+
+function showUpdateNotification(message) {
+    const notification = document.createElement('div');
+    notification.className = 'update-notification';
+    notification.innerHTML = `
+        <svg width="16" height="16" fill="currentColor">
+            <path d="M8 2a6 6 0 100 12A6 6 0 008 2z"/>
+        </svg>
+        <span>${message}</span>
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.classList.add('fadeout');
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+
+window.retryPolling = retryPolling;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
@@ -83,11 +221,37 @@ function initializeApp() {
         return;
     }
 
+    // Hide skeleton loader
+    const skeletonLoader = document.getElementById('skeleton-loader');
+    if (skeletonLoader) {
+        skeletonLoader.classList.add('hidden');
+    }
+
     renderSidebar();
     renderOverview();
     setupEventListeners();
     setupSearch();
+
+    // Initialize keyboard shortcuts
+    if (window.KeyboardShortcutManager) {
+        window.keyboardShortcuts = new KeyboardShortcutManager();
+        console.log('✓ Keyboard shortcuts enabled (press ? for help)');
+    }
+
+    // Initialize history support
+    parseInitialHash();
+
+    // Check and show welcome modal
+    checkWelcomeModal();
+
+    // Start real-time updates
+    startPolling();
 }
+
+// Cleanup on page unload
+window.addEventListener('beforeunload', () => {
+    stopPolling();
+});
 
 // ============================================
 // SIDEBAR RENDERING
@@ -227,6 +391,19 @@ function renderSidebar() {
 // OVERVIEW RENDERING
 // ============================================
 
+function showOverview(pushHistory = true) {
+    state.currentView = 'overview';
+    state.currentWorkflow = null;
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('overview', {}, 'Overview');
+    }
+
+    updateNavigation();
+    switchView('overview-view');
+}
+
 function renderOverview() {
     // Update stats
     document.getElementById('stat-workflows').textContent = catalog.stats.total_workflows;
@@ -235,6 +412,9 @@ function renderOverview() {
     document.getElementById('stat-tools').textContent = catalog.stats.tool_actions;
     document.getElementById('stat-prompts').textContent = catalog.stats.total_prompts || 0;
     document.getElementById('stat-schemas').textContent = catalog.stats.total_schemas || 0;
+
+    // Render charts
+    renderOverviewCharts();
 
     // Render recent runs
     renderRecentRuns();
@@ -311,6 +491,9 @@ function renderRecentRuns() {
 
     // Set runs and apply filters
     runsFilterManager.setItems(allRuns);
+
+    // Setup quick status filters
+    setupQuickFilters('recent-runs', runsFilterManager, allRuns);
 }
 
 function renderRecentRunsTable(runsToShow) {
@@ -321,7 +504,7 @@ function renderRecentRunsTable(runsToShow) {
 
     if (runsToShow.length === 0) {
         const row = document.createElement('tr');
-        row.innerHTML = '<td colspan="6" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
+        row.innerHTML = '<td colspan="5" style="text-align: center; color: var(--text-subtle); padding: var(--space-8);">No runs match the current filters</td>';
         tbody.appendChild(row);
         return;
     }
@@ -330,12 +513,7 @@ function renderRecentRunsTable(runsToShow) {
         const row = document.createElement('tr');
         row.style.cursor = 'pointer';
         row.addEventListener('click', () => {
-            showWorkflow(run.workflow_id);
-            // Switch to runs tab
-            setTimeout(() => {
-                const runsTab = document.querySelector('[data-tab="runs"]');
-                if (runsTab) runsTab.click();
-            }, 100);
+            showRunDetails(run);
         });
 
         const startedDate = new Date(run.started_at);
@@ -355,12 +533,6 @@ function renderRecentRunsTable(runsToShow) {
         const actionsText = `${run.successful_actions}/${run.total_actions}`;
 
         row.innerHTML = `
-            <td style="width: 30px;">
-                <button class="expand-btn" onclick="toggleActionDetails(event, '${run.id}')"
-                        style="border:none; background:none; cursor:pointer; padding:4px 8px;">
-                    <span id="expand-icon-${run.id}">▶</span>
-                </button>
-            </td>
             <td><strong>${run.workflow_name}</strong></td>
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
@@ -458,6 +630,228 @@ function renderRunActionDetails(run) {
     `;
 
     return html;
+}
+
+// ============================================
+// QUICK STATUS FILTERS
+// ============================================
+
+function setupQuickFilters(viewId, filterManager, allRuns) {
+    const quickFiltersContainer = document.getElementById(`${viewId}-quick-filters`);
+    if (!quickFiltersContainer) return;
+
+    // Update counts
+    updateQuickFilterCounts(viewId, allRuns);
+
+    // Get all filter buttons
+    const filterButtons = quickFiltersContainer.querySelectorAll('.quick-filter-btn');
+
+    // Add click handlers
+    filterButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const status = button.getAttribute('data-status');
+
+            // Update active state
+            filterButtons.forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+
+            // Apply filter
+            applyQuickFilter(viewId, filterManager, status);
+        });
+    });
+}
+
+function updateQuickFilterCounts(viewId, allRuns) {
+    if (!allRuns) return;
+
+    // Calculate counts
+    const counts = {
+        all: allRuns.length,
+        failed: allRuns.filter(r => r.status === 'failed').length,
+        running: allRuns.filter(r => r.status === 'running').length,
+        completed: allRuns.filter(r => r.status === 'completed').length
+    };
+
+    // Determine prefix based on view
+    const prefix = viewId === 'runs-list' ? 'runs-filter-count' : 'filter-count';
+
+    // Update count badges
+    Object.entries(counts).forEach(([status, count]) => {
+        const countElement = document.getElementById(`${prefix}-${status}`);
+        if (countElement) {
+            countElement.textContent = count;
+        }
+    });
+}
+
+function applyQuickFilter(viewId, filterManager, status) {
+    if (!filterManager) return;
+
+    // Clear existing filters
+    filterManager.clearFilters();
+
+    // If not 'all', apply status filter
+    if (status !== 'all') {
+        // The FilterManager uses filter IDs like 'status-failed', 'status-running', etc.
+        const filterId = `status-${status}`;
+        filterManager.toggleFilter(filterId);
+    }
+
+    // Re-apply filters (this will trigger onFilter callback)
+    filterManager.applyFilters();
+}
+
+// ============================================
+// DATA VISUALIZATIONS
+// ============================================
+
+function renderOverviewCharts() {
+    if (!runs || !runs.executions) return;
+
+    const allRuns = runs.executions;
+    const totalRuns = allRuns.length;
+
+    // Calculate success rate
+    const successRuns = allRuns.filter(r => r.status === 'completed').length;
+    const failedRuns = allRuns.filter(r => r.status === 'failed').length;
+    const successRate = totalRuns > 0 ? Math.round((successRuns / totalRuns) * 100) : 0;
+
+    // Update success rate chart
+    document.getElementById('success-rate-value').textContent = `${successRate}%`;
+    document.getElementById('success-rate-bar').style.width = `${successRate}%`;
+    document.getElementById('success-count').textContent = successRuns;
+    document.getElementById('failed-count').textContent = failedRuns;
+
+    // Calculate action type breakdown
+    let llmActions = 0;
+    let toolActions = 0;
+
+    allRuns.forEach(run => {
+        if (run.actions) {
+            Object.values(run.actions).forEach(action => {
+                if (action.type === 'llm') {
+                    llmActions++;
+                } else if (action.type === 'tool') {
+                    toolActions++;
+                }
+            });
+        }
+    });
+
+    const totalActions = llmActions + toolActions;
+    const llmPercentage = totalActions > 0 ? Math.round((llmActions / totalActions) * 100) : 0;
+    const toolPercentage = totalActions > 0 ? Math.round((toolActions / totalActions) * 100) : 0;
+
+    // Update action type chart
+    document.getElementById('total-actions-value').textContent = totalActions;
+    document.getElementById('llm-bar').style.width = `${llmPercentage}%`;
+    document.getElementById('tool-bar').style.width = `${toolPercentage}%`;
+    document.getElementById('llm-count').textContent = llmActions;
+    document.getElementById('tool-count').textContent = toolActions;
+
+    // Calculate token usage for last 10 runs
+    const last10Runs = allRuns.slice(0, 10).reverse();
+    const tokenData = last10Runs.map(run => {
+        let totalTokens = 0;
+        if (run.actions) {
+            Object.values(run.actions).forEach(action => {
+                if (action.tokens && action.tokens.total_tokens) {
+                    totalTokens += action.tokens.total_tokens;
+                }
+            });
+        }
+        return totalTokens;
+    });
+
+    const maxTokens = Math.max(...tokenData, 1);
+    const totalTokens = tokenData.reduce((sum, t) => sum + t, 0);
+
+    // Update token usage chart
+    const tokenChartContainer = document.getElementById('token-usage-chart');
+    tokenChartContainer.innerHTML = tokenData.map((tokens, index) => {
+        const height = (tokens / maxTokens) * 100;
+        const tokensK = (tokens / 1000).toFixed(1);
+        return `<div class="mini-bar" style="height: ${height}%" data-value="${tokensK}K"></div>`;
+    }).join('');
+
+    document.getElementById('total-tokens-value').textContent = `${(totalTokens / 1000).toFixed(1)}K`;
+
+    // Update run distribution donut chart
+    const completedPercentage = successRate;
+    document.getElementById('total-runs-value').textContent = totalRuns;
+    document.getElementById('completed-percentage').textContent = `${completedPercentage}%`;
+
+    // Calculate donut chart segments
+    const circumference = 2 * Math.PI * 40; // radius = 40
+    const successArc = (successRuns / totalRuns) * circumference;
+    const failedArc = (failedRuns / totalRuns) * circumference;
+
+    const successSegment = document.getElementById('success-segment');
+    const failedSegment = document.getElementById('failed-segment');
+
+    if (successSegment && totalRuns > 0) {
+        successSegment.setAttribute('stroke-dasharray', `${successArc} ${circumference}`);
+        successSegment.setAttribute('stroke-dashoffset', '0');
+    }
+
+    if (failedSegment && totalRuns > 0) {
+        failedSegment.setAttribute('stroke-dasharray', `${failedArc} ${circumference}`);
+        failedSegment.setAttribute('stroke-dashoffset', `-${successArc}`);
+    }
+}
+
+function renderWorkflowTimeline(workflow) {
+    const timelineContainer = document.getElementById('workflow-run-timeline');
+    if (!timelineContainer || !runs || !runs.executions) return;
+
+    // Get runs for this workflow
+    const workflowRuns = runs.executions.filter(r => r.workflow_id === workflow.id);
+
+    if (workflowRuns.length === 0) {
+        timelineContainer.innerHTML = '<div style="text-align: center; color: #6b7280; padding: 24px;">No run history available</div>';
+        return;
+    }
+
+    // Group runs by date
+    const runsByDate = {};
+    workflowRuns.forEach(run => {
+        const date = new Date(run.started_at);
+        const dateKey = date.toISOString().split('T')[0];
+
+        if (!runsByDate[dateKey]) {
+            runsByDate[dateKey] = [];
+        }
+        runsByDate[dateKey].push(run);
+    });
+
+    // Sort dates
+    const sortedDates = Object.keys(runsByDate).sort().reverse().slice(0, 7);
+
+    // Render timeline
+    timelineContainer.innerHTML = sortedDates.map(dateKey => {
+        const date = new Date(dateKey);
+        const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const runsOnDate = runsByDate[dateKey];
+
+        const barsHTML = runsOnDate.map(run => {
+            const statusClass = run.status === 'completed' ? 'success' :
+                              run.status === 'failed' ? 'failed' : 'running';
+            const runTime = new Date(run.started_at).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            const tooltip = `${run.status} at ${runTime}`;
+
+            return `<div class="timeline-bar ${statusClass}" data-tooltip="${tooltip}" onclick="showRunDetails('${run.run_id}')"></div>`;
+        }).join('');
+
+        return `
+            <div class="timeline-row">
+                <span class="timeline-date">${dateLabel}</span>
+                <div class="timeline-bars">${barsHTML}</div>
+            </div>
+        `;
+    }).join('');
 }
 
 function setupTableSorting(viewId) {
@@ -629,8 +1023,14 @@ function createActionCard(action, workflowName, workflowId) {
 
 let workflowsFilterManager = null;
 
-function showAllWorkflows() {
+function showAllWorkflows(pushHistory = true) {
     state.currentView = 'workflows-list';
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('workflows-list', {}, 'All Workflows');
+    }
+
     updateNavigation();
     switchView('workflows-list-view');
 
@@ -817,8 +1217,14 @@ function createSchemaCard(schema) {
 
 let runsListFilterManager = null;
 
-function showAllRuns() {
+function showAllRuns(pushHistory = true) {
     state.currentView = 'runs-list';
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('runs-list', {}, 'All Runs');
+    }
+
     updateNavigation();
     switchView('runs-list-view');
 
@@ -891,6 +1297,9 @@ function showAllRuns() {
 
     // Set runs and apply filters
     runsListFilterManager.setItems(allRuns);
+
+    // Setup quick status filters
+    setupQuickFilters('runs-list', runsListFilterManager, allRuns);
 }
 
 function renderRunsListTable(runsToShow) {
@@ -955,8 +1364,14 @@ function renderRunsListTable(runsToShow) {
 // FILTERED ACTIONS LIST VIEW
 // ============================================
 
-function showFilteredActions(filterType) {
+function showFilteredActions(filterType, pushHistory = true) {
     state.currentView = 'actions-list';
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('actions-list', {}, 'Actions');
+    }
+
     updateNavigation();
     switchView('actions-list-view');
 
@@ -1027,13 +1442,18 @@ function showFilteredActions(filterType) {
 // WORKFLOW VIEW
 // ============================================
 
-function showWorkflow(workflowId) {
+function showWorkflow(workflowId, pushHistory = true) {
     const workflow = catalog.workflows[workflowId];
     if (!workflow) return;
 
     state.currentWorkflow = workflowId;
     state.currentView = 'workflow';
     state.currentTab = 'details';
+
+    // Push to history
+    if (pushHistory) {
+        pushHistoryState('workflow', { workflowId }, workflow.name);
+    }
 
     // Update navigation
     updateNavigation();
@@ -1048,6 +1468,7 @@ function showWorkflow(workflowId) {
     renderFieldLineage(workflow);
     renderWorkflowDetails(workflow);
     renderWorkflowRuns(workflow);
+    renderWorkflowTimeline(workflow);
 }
 
 function renderFieldLineage(workflow) {
@@ -2281,6 +2702,116 @@ function switchView(viewId) {
     document.getElementById(viewId).classList.add('active');
 }
 
+// ============================================
+// BROWSER HISTORY MANAGEMENT
+// ============================================
+
+function pushHistoryState(viewType, data, title) {
+    if (state.isNavigatingHistory) return;
+
+    const stateObj = { view: viewType, ...data };
+    let url = '#';
+
+    switch (viewType) {
+        case 'overview':
+            url = '#/';
+            break;
+        case 'workflow':
+            url = `#/workflows/${data.workflowId}`;
+            if (data.tab) url += `/${data.tab}`;
+            break;
+        case 'workflows-list':
+            url = '#/workflows';
+            break;
+        case 'runs-list':
+            url = '#/runs';
+            break;
+        case 'actions-list':
+            url = '#/actions';
+            break;
+    }
+
+    history.pushState(stateObj, title, url);
+}
+
+function restoreHistoryState(stateObj) {
+    if (!stateObj) {
+        showOverview(false);
+        return;
+    }
+
+    state.isNavigatingHistory = true;
+
+    try {
+        switch (stateObj.view) {
+            case 'overview':
+                showOverview(false);
+                break;
+            case 'workflow':
+                showWorkflow(stateObj.workflowId, false);
+                if (stateObj.tab) {
+                    setTimeout(() => {
+                        const tabButton = document.querySelector(`[data-tab="${stateObj.tab}"]`);
+                        if (tabButton) tabButton.click();
+                    }, 100);
+                }
+                break;
+            case 'workflows-list':
+                showAllWorkflows(false);
+                break;
+            case 'runs-list':
+                showAllRuns(false);
+                break;
+        }
+    } finally {
+        state.isNavigatingHistory = false;
+    }
+}
+
+window.addEventListener('popstate', (event) => {
+    restoreHistoryState(event.state);
+});
+
+function parseInitialHash() {
+    const hash = window.location.hash;
+    if (!hash || hash === '#' || hash === '#/') {
+        pushHistoryState('overview', {}, 'Overview');
+        return;
+    }
+
+    const match = hash.match(/#\/([^\/]+)(?:\/([^\/]+))?(?:\/([^\/]+))?/);
+    if (!match) return;
+
+    const [, section, id, tab] = match;
+
+    state.isNavigatingHistory = true;
+    try {
+        switch (section) {
+            case 'workflows':
+                if (id) {
+                    showWorkflow(id, false);
+                    if (tab) {
+                        setTimeout(() => {
+                            const tabButton = document.querySelector(`[data-tab="${tab}"]`);
+                            if (tabButton) tabButton.click();
+                        }, 100);
+                    }
+                } else {
+                    showAllWorkflows(false);
+                }
+                break;
+            case 'runs':
+                showAllRuns(false);
+                break;
+            case 'actions':
+                showFilteredActions('all-actions', false);
+                break;
+        }
+    } finally {
+        state.isNavigatingHistory = false;
+    }
+}
+
 function updateNavigation() {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
@@ -2508,4 +3039,110 @@ function setupSearch() {
 
 function truncateText(text, maxLength) {
     return text.length > maxLength ? text.substring(0, maxLength - 3) + '...' : text;
+}
+
+// ============================================
+// WELCOME MODAL
+// ============================================
+
+function showWelcomeModal() {
+    if (!window.A11y || !window.A11y.AccessibleModal) {
+        console.warn('AccessibleModal not available');
+        return;
+    }
+
+    const content = `
+        <div class="welcome-modal-content">
+            <div class="welcome-icon">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                    <circle cx="12" cy="24" r="5" fill="#0ea5e9"/>
+                    <circle cx="24" cy="12" r="5" fill="#8b5cf6"/>
+                    <circle cx="24" cy="36" r="5" fill="#10b981"/>
+                    <circle cx="36" cy="24" r="5" fill="#f59e0b"/>
+                    <path d="M16 22l6-6M16 26l6 6M28 14l6 6M28 34l6-6" stroke="#6b7280" stroke-width="2"/>
+                </svg>
+            </div>
+
+            <h2 class="welcome-title">Welcome to Agent-Actions</h2>
+
+            <p class="welcome-intro">
+                Track and visualize your AI workflow executions with comprehensive
+                lineage tracking, real-time monitoring, and detailed analytics.
+            </p>
+
+            <div class="welcome-features">
+                <div class="welcome-feature">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="#0ea5e9">
+                        <path d="M10 2a8 8 0 100 16 8 8 0 000-16z"/>
+                    </svg>
+                    <div>
+                        <strong>Real-time Updates</strong>
+                        <p>Live monitoring of workflow executions every 5 seconds</p>
+                    </div>
+                </div>
+
+                <div class="welcome-feature">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="#8b5cf6">
+                        <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V4z"/>
+                    </svg>
+                    <div>
+                        <strong>Keyboard Shortcuts</strong>
+                        <p>Press <kbd>?</kbd> anytime to view all shortcuts</p>
+                    </div>
+                </div>
+
+                <div class="welcome-feature">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="#10b981">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                    </svg>
+                    <div>
+                        <strong>Complete Lineage</strong>
+                        <p>Track data flow across all actions and workflows</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="welcome-tips">
+                <h3>Quick Tips</h3>
+                <ul>
+                    <li>Use <kbd>/</kbd> to focus search</li>
+                    <li>Press <kbd>g</kbd> then <kbd>w</kbd> to view all workflows</li>
+                    <li>Press <kbd>g</kbd> then <kbd>r</kbd> to view all runs</li>
+                    <li>Click any stat card to filter views</li>
+                </ul>
+            </div>
+
+            <div class="welcome-footer">
+                <label class="welcome-checkbox">
+                    <input type="checkbox" id="welcome-dont-show">
+                    <span>Don't show this again</span>
+                </label>
+            </div>
+        </div>
+    `;
+
+    const modal = new window.A11y.AccessibleModal({
+        title: '',
+        content: content,
+        confirmText: 'Get Started',
+        cancelText: '',
+        onConfirm: () => {
+            const dontShow = document.getElementById('welcome-dont-show');
+            if (dontShow && dontShow.checked) {
+                localStorage.setItem('agent-actions-welcome-seen', 'true');
+            }
+        }
+    });
+
+    modal.open();
+}
+
+function checkWelcomeModal() {
+    const hasSeenWelcome = localStorage.getItem('agent-actions-welcome-seen');
+
+    if (!hasSeenWelcome) {
+        setTimeout(() => {
+            showWelcomeModal();
+        }, 500);
+    }
 }

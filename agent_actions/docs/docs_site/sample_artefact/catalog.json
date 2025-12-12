@@ -1,0 +1,1494 @@
+{
+  "metadata": {
+    "generated_at": "2025-12-10T19:28:47.478208",
+    "total_workflows": 6,
+    "generator_version": "1.0.0"
+  },
+  "workflows": {
+    "qanalabs_quiz_gen": {
+      "id": "qanalabs_quiz_gen",
+      "name": "qanalabs_quiz_gen",
+      "description": "Educational quiz generation workflow with fact extraction, clustering, validation, and distractor generation",
+      "path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/artefact/rendered_workflows/qanalabs_quiz_gen.yml",
+      "version": "2.0.0",
+      "actions": {
+        "fact_extractor": {
+          "name": "fact_extractor",
+          "intent": "Extract candidate facts from educational content",
+          "dependencies": [],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": "candidate_facts_list",
+          "in_plan": true,
+          "plan_order": 1,
+          "outputs": [
+            "fact",
+            "quote",
+            "technical_level",
+            "supports_objective"
+          ],
+          "output_fields": [
+            {
+              "name": "fact",
+              "type": "string",
+              "description": "Short, testable statement with technical detail"
+            },
+            {
+              "name": "quote",
+              "type": "string",
+              "description": "Short verbatim evidence from source"
+            },
+            {
+              "name": "technical_level",
+              "type": "string",
+              "description": "Type of technical content"
+            },
+            {
+              "name": "supports_objective",
+              "type": "string",
+              "description": "Which specific learning objective this fact supports"
+            }
+          ]
+        },
+        "flatten_the_facts": {
+          "name": "flatten_the_facts",
+          "intent": "Group extracted facts into logical clusters",
+          "dependencies": [
+            "fact_extractor"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_quotes",
+          "in_plan": true,
+          "plan_order": 2
+        },
+        "cluster_list": {
+          "name": "cluster_list",
+          "intent": "Group extracted facts into logical clusters",
+          "dependencies": [
+            "flatten_the_facts"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "run_dedup",
+          "in_plan": true,
+          "plan_order": 3
+        },
+        "group_by_similarity": {
+          "name": "group_by_similarity",
+          "intent": "Group extracted facts into logical clusters",
+          "dependencies": [
+            "cluster_list"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "group_by_similarity",
+          "in_plan": true,
+          "plan_order": 4
+        },
+        "Cluster_Validation_Agent": {
+          "name": "Cluster_Validation_Agent",
+          "intent": "Validate and regroup facts based on semantic_unique_id to ensure semantically identical facts are clustered together",
+          "dependencies": [
+            "group_by_similarity"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": "cluster_validation",
+          "in_plan": true,
+          "plan_order": 5,
+          "inputs": [
+            "fact_extractor.candidate_facts_list",
+            "cluster_list.semantic_unique_id",
+            "group_by_similarity.num_similar_facts",
+            "group_by_similarity.similarity_group_id",
+            "group_by_similarity.grouped_facts"
+          ]
+        },
+        "flatten_clusters": {
+          "name": "flatten_clusters",
+          "intent": "Group extracted facts into logical clusters",
+          "dependencies": [
+            "Cluster_Validation_Agent"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_clusters",
+          "in_plan": true,
+          "plan_order": 6
+        },
+        "generate_summary": {
+          "name": "generate_summary",
+          "intent": "Generate quiz-type specific summaries synthesizing multiple flagged items with appropriate technical details and code snippets",
+          "dependencies": [
+            "flatten_clusters"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": {
+            "summary_title": "string",
+            "summary_content": "string",
+            "key_concepts": "array",
+            "technical_details": "string",
+            "code_snippets": "array",
+            "learning_objectives": "array"
+          },
+          "in_plan": true,
+          "plan_order": 7,
+          "outputs": [
+            "summary_title",
+            "summary_content",
+            "key_concepts",
+            "technical_details",
+            "code_snippets",
+            "learning_objectives"
+          ],
+          "output_fields": [
+            {
+              "name": "summary_title",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "summary_content",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "key_concepts",
+              "type": "array",
+              "description": ""
+            },
+            {
+              "name": "technical_details",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "code_snippets",
+              "type": "array",
+              "description": ""
+            },
+            {
+              "name": "learning_objectives",
+              "type": "array",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "source.page_content"
+          ]
+        },
+        "review_code_snippets": {
+          "name": "review_code_snippets",
+          "intent": "Review code snippets and filter out non-code documentation",
+          "dependencies": [
+            "generate_summary"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": {
+            "code_snippets": "array",
+            "removed_snippets": "array",
+            "removal_reasoning": "string"
+          },
+          "in_plan": true,
+          "plan_order": 8,
+          "outputs": [
+            "code_snippets",
+            "removed_snippets",
+            "removal_reasoning"
+          ],
+          "output_fields": [
+            {
+              "name": "code_snippets",
+              "type": "array",
+              "description": ""
+            },
+            {
+              "name": "removed_snippets",
+              "type": "array",
+              "description": ""
+            },
+            {
+              "name": "removal_reasoning",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "fix_code_snippets": {
+          "name": "fix_code_snippets",
+          "intent": "Fix double-escaped code snippets in content.code_snippets field",
+          "dependencies": [
+            "review_code_snippets"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "fix_code_snippets",
+          "in_plan": true,
+          "plan_order": 9
+        },
+        "score_summary_quality": {
+          "name": "score_summary_quality",
+          "intent": "Score summary quality based on alignment with specific learning objectives using LLM evaluation",
+          "dependencies": [
+            "fix_code_snippets"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": "summary_quality_score",
+          "in_plan": true,
+          "plan_order": 10,
+          "inputs": [
+            "generate_summary.summary_title",
+            "generate_summary.summary_content",
+            "generate_summary.key_concepts",
+            "generate_summary.technical_details",
+            "generate_summary.code_snippets",
+            "generate_summary.learning_objectives",
+            "source.referenced_in"
+          ]
+        },
+        "review_borderline_summaries": {
+          "name": "review_borderline_summaries",
+          "intent": "LLM review for borderline quality summaries (scores 45-64)",
+          "dependencies": [
+            "score_summary_quality"
+          ],
+          "type": "llm",
+          "provider": "anthropic",
+          "model": "claude-haiku-4-5-20251001",
+          "schema": "borderline_summary_review",
+          "in_plan": true,
+          "plan_order": 11,
+          "inputs": [
+            "generate_summary.summary_content",
+            "generate_summary.key_concepts",
+            "generate_summary.technical_details",
+            "generate_summary.code_snippets",
+            "score_summary_quality.quality_score",
+            "score_summary_quality.objective_alignment",
+            "score_summary_quality.primary_skill_area",
+            "score_summary_quality.reasoning",
+            "source.referenced_in"
+          ]
+        },
+        "filter_low_quality_summaries": {
+          "name": "filter_low_quality_summaries",
+          "intent": "Filter out low-quality summaries (keep only score >= 65 or LLM-approved borderline)",
+          "dependencies": [
+            "review_borderline_summaries"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "apply_quality_filter",
+          "in_plan": true,
+          "plan_order": 12,
+          "inputs": [
+            "generate_summary.code_snippets"
+          ]
+        },
+        "generate_scenarios": {
+          "name": "generate_scenarios",
+          "intent": "Generate quiz scenarios based on classified facts and learning objectives",
+          "dependencies": [
+            "filter_low_quality_summaries"
+          ],
+          "type": "llm",
+          "provider": "anthropic",
+          "model": "claude-haiku-4-5-20251001",
+          "schema": "ScenarioGenerator_schema",
+          "in_plan": true,
+          "plan_order": 13,
+          "inputs": [
+            "generate_summary.summary_title",
+            "generate_summary.summary_content",
+            "generate_summary.key_concepts"
+          ]
+        },
+        "flatten_questions": {
+          "name": "flatten_questions",
+          "intent": "Flatten nested question structures for processing",
+          "dependencies": [
+            "generate_scenarios"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_questions",
+          "in_plan": true,
+          "plan_order": 14
+        },
+        "fix_options_format": {
+          "name": "fix_options_format",
+          "intent": "Convert options field from JSON string to array format",
+          "dependencies": [
+            "flatten_questions"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "fix_options_formatting",
+          "in_plan": true,
+          "plan_order": 15
+        },
+        "score_question_quality": {
+          "name": "score_question_quality",
+          "intent": "Score question alignment with specific learning objectives - keep only questions scoring >= 85",
+          "dependencies": [
+            "fix_options_format"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": "question_quality_score",
+          "in_plan": true,
+          "plan_order": 16,
+          "inputs": [
+            "source.referenced_in",
+            "generate_scenarios.question",
+            "generate_scenarios.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation"
+          ]
+        },
+        "filter_low_quality_questions": {
+          "name": "filter_low_quality_questions",
+          "intent": "Filter out questions with syllabus_alignment_score < 85",
+          "dependencies": [
+            "score_question_quality"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "filter_questions_by_score",
+          "in_plan": true,
+          "plan_order": 17
+        },
+        "suggest_distractor_counts": {
+          "name": "suggest_distractor_counts",
+          "intent": "Suggest word counts for answer distractors",
+          "dependencies": [
+            "filter_low_quality_questions"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "suggest_word_counts",
+          "in_plan": true,
+          "plan_order": 18,
+          "inputs": [
+            "generate_scenarios.question",
+            "generate_scenarios.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation"
+          ]
+        },
+        "add_answer_text": {
+          "name": "add_answer_text",
+          "intent": "Add structured answer text to questions",
+          "dependencies": [
+            "suggest_distractor_counts"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "add_answer_text",
+          "in_plan": true,
+          "plan_order": 19
+        },
+        "generate_distractor_1": {
+          "name": "generate_distractor_1",
+          "intent": "Generate first distractor - focus on wrong technology/service",
+          "dependencies": [
+            "add_answer_text"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": {
+            "distractor_1": "string",
+            "explanation_why_it_is_incorrect_1": "string",
+            "thinking_process_1": "string"
+          },
+          "in_plan": true,
+          "plan_order": 20,
+          "outputs": [
+            "distractor_1",
+            "explanation_why_it_is_incorrect_1",
+            "thinking_process_1"
+          ],
+          "output_fields": [
+            {
+              "name": "distractor_1",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "explanation_why_it_is_incorrect_1",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "thinking_process_1",
+              "type": "string",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "generate_scenarios.question",
+            "generate_scenarios.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation",
+            "add_answer_text.answer_text"
+          ]
+        },
+        "generate_distractor_2": {
+          "name": "generate_distractor_2",
+          "intent": "Generate second distractor - focus on wrong approach/concept - MUST differ from distractor_1",
+          "dependencies": [
+            "generate_distractor_1"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": {
+            "distractor_2": "string",
+            "explanation_why_it_is_incorrect_2": "string",
+            "thinking_process_2": "string"
+          },
+          "in_plan": true,
+          "plan_order": 21,
+          "outputs": [
+            "distractor_2",
+            "explanation_why_it_is_incorrect_2",
+            "thinking_process_2"
+          ],
+          "output_fields": [
+            {
+              "name": "distractor_2",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "explanation_why_it_is_incorrect_2",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "thinking_process_2",
+              "type": "string",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "add_answer_text.answer_text",
+            "generate_scenarios.question",
+            "generate_scenarios.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation",
+            "generate_distractor_1.distractor_1",
+            "generate_distractor_1.explanation_why_it_is_incorrect_1",
+            "generate_distractor_1.thinking_process_1"
+          ]
+        },
+        "generate_distractor_3": {
+          "name": "generate_distractor_3",
+          "intent": "Generate third distractor - focus on edge case/misconception - MUST differ from both previous",
+          "dependencies": [
+            "generate_distractor_2"
+          ],
+          "type": "llm",
+          "provider": "openai",
+          "model": "gpt-4o-mini",
+          "schema": {
+            "distractor_3": "string",
+            "explanation_why_it_is_incorrect_3": "string",
+            "thinking_process_3": "string"
+          },
+          "in_plan": true,
+          "plan_order": 22,
+          "outputs": [
+            "distractor_3",
+            "explanation_why_it_is_incorrect_3",
+            "thinking_process_3"
+          ],
+          "output_fields": [
+            {
+              "name": "distractor_3",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "explanation_why_it_is_incorrect_3",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "thinking_process_3",
+              "type": "string",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "generate_scenarios.question",
+            "generate_scenarios.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation",
+            "generate_distractor_1.distractor_1",
+            "generate_distractor_1.explanation_why_it_is_incorrect_1",
+            "generate_distractor_1.thinking_process_1",
+            "generate_distractor_2.distractor_2",
+            "generate_distractor_2.explanation_why_it_is_incorrect_2",
+            "generate_distractor_2.thinking_process_2",
+            "add_answer_text.answer_text"
+          ]
+        },
+        "reconstruct_options": {
+          "name": "reconstruct_options",
+          "intent": "Reconstruct final answer options from correct answer and distractors",
+          "dependencies": [
+            "generate_distractor_3"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "apply_edited_distractors",
+          "in_plan": true,
+          "plan_order": 23,
+          "inputs": [
+            "add_answer_text.answer_text"
+          ]
+        },
+        "generate_feynman_explanation": {
+          "name": "generate_feynman_explanation",
+          "intent": "Generate Feynman-style explanations for why the quiz answer is correct",
+          "dependencies": [
+            "reconstruct_options"
+          ],
+          "type": "llm",
+          "provider": "anthropic",
+          "model": "claude-haiku-4-5-20251001",
+          "schema": {
+            "question_explanation": "string",
+            "answer_reasoning": "string",
+            "key_concept_analogy": "string",
+            "memorable_takeaway": "string"
+          },
+          "in_plan": true,
+          "plan_order": 24,
+          "outputs": [
+            "question_explanation",
+            "answer_reasoning",
+            "key_concept_analogy",
+            "memorable_takeaway"
+          ],
+          "output_fields": [
+            {
+              "name": "question_explanation",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "answer_reasoning",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "key_concept_analogy",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "memorable_takeaway",
+              "type": "string",
+              "description": ""
+            }
+          ],
+          "inputs": [
+            "generate_summary.summary_content",
+            "generate_summary.key_concepts",
+            "generate_summary.technical_details",
+            "generate_scenarios.question",
+            "reconstruct_options.options",
+            "generate_scenarios.answer",
+            "generate_scenarios.answer_explanation",
+            "add_answer_text.answer_text",
+            "generate_summary.code_snippets",
+            "generate_distractor_1.distractor_1",
+            "generate_distractor_1.explanation_why_it_is_incorrect_1",
+            "generate_distractor_1.thinking_process_1",
+            "generate_distractor_2.distractor_2",
+            "generate_distractor_2.explanation_why_it_is_incorrect_2",
+            "generate_distractor_3.distractor_3",
+            "generate_distractor_3.explanation_why_it_is_incorrect_3",
+            "source.url",
+            "flatten_clusters.url_list",
+            "filter_low_quality_questions.status_reason",
+            "filter_low_quality_questions.question_status"
+          ]
+        },
+        "OptionsCombiner": {
+          "name": "OptionsCombiner",
+          "intent": "Format the quiz",
+          "dependencies": [
+            "generate_feynman_explanation"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "merge_correct_answer_with_distractors",
+          "in_plan": true,
+          "plan_order": 25
+        },
+        "format_quiz_text": {
+          "name": "format_quiz_text",
+          "intent": "Format the quiz",
+          "dependencies": [
+            "OptionsCombiner"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "format_quiz_object",
+          "in_plan": true,
+          "plan_order": 26
+        }
+      },
+      "action_count": 26
+    },
+    "run_thinkific_gen": {
+      "id": "run_thinkific_gen",
+      "name": "run_thinkific_gen",
+      "description": "Convert quiz objects to Thinkific-compatible format with HTML formatting",
+      "path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/run_thinkific_gen/agent_config/run_thinkific_gen.yml",
+      "version": "2.0.0",
+      "actions": {
+        "fix_code_snippets": {
+          "name": "fix_code_snippets",
+          "intent": "Fix double-escaped code snippets in content.code_snippets field",
+          "dependencies": [],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "fix_code_snippets",
+          "in_plan": true,
+          "plan_order": 1
+        },
+        "format_quiz_object": {
+          "name": "format_quiz_object",
+          "intent": "Format quiz object with HTML text",
+          "dependencies": [
+            "fix_code_snippets"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "format_quiz_object_with_html",
+          "in_plan": true,
+          "plan_order": 2
+        },
+        "improve_readability": {
+          "name": "improve_readability",
+          "intent": "Break long paragraphs into shorter chunks for better readability",
+          "dependencies": [
+            "format_quiz_object"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "improve_text_readability",
+          "in_plan": true,
+          "plan_order": 3
+        },
+        "prettify_html": {
+          "name": "prettify_html",
+          "intent": "Prettify HTML formatting for better readability",
+          "dependencies": [
+            "improve_readability"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "prettify_html_formatting",
+          "in_plan": true,
+          "plan_order": 4
+        },
+        "add_asterisk_to_correct_answer": {
+          "name": "add_asterisk_to_correct_answer",
+          "intent": "Add asterisk marker to correct answer option",
+          "dependencies": [
+            "prettify_html"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "add_asterisk_to_correct_answer",
+          "in_plan": true,
+          "plan_order": 5
+        },
+        "convert_html_json_to_thinkific": {
+          "name": "convert_html_json_to_thinkific",
+          "intent": "Convert HTML JSON format to Thinkific-compatible structure",
+          "dependencies": [
+            "add_asterisk_to_correct_answer"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "convert_html_json_to_thinkific",
+          "in_plan": true,
+          "plan_order": 6
+        }
+      },
+      "action_count": 6
+    },
+    "code_centered_quiz": {
+      "id": "code_centered_quiz",
+      "name": "code_centered_quiz",
+      "description": "Code-centered quiz generation workflow for technical documentation with fact extraction, explanations, and distractor generation",
+      "path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/code_centered_quiz/agent_config/code_centered_quiz.yml",
+      "version": "2.0.0",
+      "actions": {
+        "fact_extractor": {
+          "name": "fact_extractor",
+          "intent": "Extract candidate facts from educational content",
+          "dependencies": [],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "candidate_facts_list",
+          "in_plan": true,
+          "plan_order": 1,
+          "outputs": [
+            "fact",
+            "quote",
+            "technical_level",
+            "supports_objective"
+          ],
+          "output_fields": [
+            {
+              "name": "fact",
+              "type": "string",
+              "description": "Short, testable statement with technical detail"
+            },
+            {
+              "name": "quote",
+              "type": "string",
+              "description": "Short verbatim evidence from source"
+            },
+            {
+              "name": "technical_level",
+              "type": "string",
+              "description": "Type of technical content"
+            },
+            {
+              "name": "supports_objective",
+              "type": "string",
+              "description": "Which specific learning objective this fact supports"
+            }
+          ]
+        },
+        "cluster_list": {
+          "name": "cluster_list",
+          "intent": "Group extracted facts into logical clusters",
+          "dependencies": [
+            "fact_extractor"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "cluster_list",
+          "in_plan": true,
+          "plan_order": 2
+        },
+        "combine_by_cluster_and_id": {
+          "name": "combine_by_cluster_and_id",
+          "intent": "Combine records by cluster and ID for processing",
+          "dependencies": [
+            "cluster_list"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "combine_records_to_items",
+          "in_plan": true,
+          "plan_order": 3
+        },
+        "Cluster_Validation_Agent": {
+          "name": "Cluster_Validation_Agent",
+          "intent": "Validate cluster quality and flag problematic items",
+          "dependencies": [
+            "combine_by_cluster_and_id"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "cluster_validation",
+          "in_plan": true,
+          "plan_order": 4
+        },
+        "create_new_clusters": {
+          "name": "create_new_clusters",
+          "intent": "Create new clusters when validation indicates need for splitting",
+          "dependencies": [
+            "Cluster_Validation_Agent"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "create_new_clusters",
+          "in_plan": true,
+          "plan_order": 5
+        },
+        "fact_explanations": {
+          "name": "fact_explanations",
+          "intent": "Generate detailed explanations for extracted facts",
+          "dependencies": [
+            "create_new_clusters"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "fact_explanation": "string",
+            "applicable_code_block": "string"
+          },
+          "in_plan": true,
+          "plan_order": 6,
+          "outputs": [
+            "fact_explanation",
+            "applicable_code_block"
+          ],
+          "output_fields": [
+            {
+              "name": "fact_explanation",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "applicable_code_block",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "ScenarioGenerator": {
+          "name": "ScenarioGenerator",
+          "intent": "Generate quiz scenarios based on technical facts",
+          "dependencies": [
+            "fact_explanations"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "ScenarioGenerator_schema",
+          "in_plan": true,
+          "plan_order": 7
+        },
+        "flatten_questions": {
+          "name": "flatten_questions",
+          "intent": "Flatten nested question structures for processing",
+          "dependencies": [
+            "ScenarioGenerator"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_questions",
+          "in_plan": true,
+          "plan_order": 8
+        },
+        "answer_explanation": {
+          "name": "answer_explanation",
+          "intent": "Generate solution approach and key concept definitions",
+          "dependencies": [
+            "flatten_questions"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "solution_approach": "string",
+            "key_concept_definition": "string"
+          },
+          "in_plan": true,
+          "plan_order": 9,
+          "outputs": [
+            "solution_approach",
+            "key_concept_definition"
+          ],
+          "output_fields": [
+            {
+              "name": "solution_approach",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "key_concept_definition",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "distractor_count_suggestions": {
+          "name": "distractor_count_suggestions",
+          "intent": "Suggest word counts for answer distractors",
+          "dependencies": [
+            "answer_explanation"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "suggest_word_counts",
+          "in_plan": true,
+          "plan_order": 10
+        },
+        "generate_distractors": {
+          "name": "generate_distractors",
+          "intent": "Generate answer distractors with explanations for multiple choice questions",
+          "dependencies": [
+            "distractor_count_suggestions"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "distractor_${stage}": "string",
+            "explanation_why_it_is_incorrect_${stage}": "string"
+          },
+          "in_plan": true,
+          "plan_order": 11,
+          "outputs": [
+            "distractor_${stage}",
+            "explanation_why_it_is_incorrect_${stage}"
+          ],
+          "output_fields": [
+            {
+              "name": "distractor_${stage}",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "explanation_why_it_is_incorrect_${stage}",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "reconstruct_options_from_answer": {
+          "name": "reconstruct_options_from_answer",
+          "intent": "Reconstruct final answer options from correct answer and distractors",
+          "dependencies": [
+            "generate_distractors"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "apply_edited_distractors",
+          "in_plan": true,
+          "plan_order": 12
+        },
+        "QuizTaker": {
+          "name": "QuizTaker",
+          "intent": "This takes the quiz to show us if we have issues",
+          "dependencies": [
+            "reconstruct_options_from_answer"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "my_answer_letter_key": "string",
+            "my_answer_text": "string",
+            "my_reasoning": "string",
+            "my_confidence_level": "string"
+          },
+          "in_plan": true,
+          "plan_order": 13,
+          "outputs": [
+            "my_answer_letter_key",
+            "my_answer_text",
+            "my_reasoning",
+            "my_confidence_level"
+          ],
+          "output_fields": [
+            {
+              "name": "my_answer_letter_key",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "my_answer_text",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "my_reasoning",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "my_confidence_level",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "quiztaker_maker": {
+          "name": "quiztaker_maker",
+          "intent": "Mark the quiz",
+          "dependencies": [
+            "QuizTaker"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "mark_and_attach",
+          "in_plan": true,
+          "plan_order": 14
+        },
+        "OptionsCombiner": {
+          "name": "OptionsCombiner",
+          "intent": "Create the quiz structure",
+          "dependencies": [
+            "quiztaker_maker"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "merge_correct_answer_with_distractors",
+          "in_plan": true,
+          "plan_order": 15
+        },
+        "format_quiz_text": {
+          "name": "format_quiz_text",
+          "intent": "Format the quiz",
+          "dependencies": [
+            "OptionsCombiner"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "format_quiz_object",
+          "in_plan": true,
+          "plan_order": 16
+        }
+      },
+      "action_count": 16
+    },
+    "drop_down_quiz": {
+      "id": "drop_down_quiz",
+      "name": "drop_down_quiz",
+      "description": "Code-centered quiz generation workflow with code extraction, scenario generation, and fill-in-the-blank questions",
+      "path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/drop_down_quiz/agent_config/drop_down_quiz.yml",
+      "version": "2.0.0",
+      "actions": {
+        "code_extractor": {
+          "name": "code_extractor",
+          "intent": "Extract code blocks from technical documentation",
+          "dependencies": [],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "candidate_code_list",
+          "in_plan": true,
+          "plan_order": 1,
+          "outputs": [
+            "code",
+            "code_explanation",
+            "technical_level"
+          ],
+          "output_fields": [
+            {
+              "name": "code",
+              "type": "string",
+              "description": "A reperesentative code snippet from doc"
+            },
+            {
+              "name": "code_explanation",
+              "type": "string",
+              "description": "what does the code do and its comntext"
+            },
+            {
+              "name": "technical_level",
+              "type": "string",
+              "description": "Technical level of the fact"
+            }
+          ]
+        },
+        "flatten_quotes": {
+          "name": "flatten_quotes",
+          "intent": "Flatten extracted code blocks for processing",
+          "dependencies": [
+            "code_extractor"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_code",
+          "in_plan": true,
+          "plan_order": 2
+        },
+        "code_usage_scenario": {
+          "name": "code_usage_scenario",
+          "intent": "Generate usage scenarios for extracted code",
+          "dependencies": [
+            "flatten_quotes"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "sample_usage_scenario": "string",
+            "code_for_scenario": "string",
+            "scenario_complexity": "string",
+            "key_considerations": "string"
+          },
+          "in_plan": true,
+          "plan_order": 3,
+          "outputs": [
+            "sample_usage_scenario",
+            "code_for_scenario",
+            "scenario_complexity",
+            "key_considerations"
+          ],
+          "output_fields": [
+            {
+              "name": "sample_usage_scenario",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "code_for_scenario",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "scenario_complexity",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "key_considerations",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "Blank_Recommendations": {
+          "name": "Blank_Recommendations",
+          "intent": "Recommend code sections to blank out for quiz questions",
+          "dependencies": [
+            "code_usage_scenario"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "Blank_Recommendations",
+          "in_plan": true,
+          "plan_order": 4
+        },
+        "select_random_blanks": {
+          "name": "select_random_blanks",
+          "intent": "Select random subset of recommended blanks (70%)",
+          "dependencies": [
+            "Blank_Recommendations"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "select_random_blanks",
+          "in_plan": true,
+          "plan_order": 5
+        },
+        "FillInTheBlank_Generator": {
+          "name": "FillInTheBlank_Generator",
+          "intent": "Generate fill-in-the-blank quiz questions from code",
+          "dependencies": [
+            "select_random_blanks"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "BlankifiedCode",
+          "in_plan": true,
+          "plan_order": 6
+        },
+        "Wrong_Answer_Generator": {
+          "name": "Wrong_Answer_Generator",
+          "intent": "Generate wrong answer options for code quiz",
+          "dependencies": [
+            "FillInTheBlank_Generator"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "CodeWrongAnswers",
+          "in_plan": true,
+          "plan_order": 7
+        },
+        "code_answer_explainer": {
+          "name": "code_answer_explainer",
+          "intent": "Recommend code sections to blank out for quiz questions",
+          "dependencies": [
+            "Wrong_Answer_Generator"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "code_answer_explainer": "string"
+          },
+          "in_plan": true,
+          "plan_order": 8,
+          "outputs": [
+            "code_answer_explainer"
+          ],
+          "output_fields": [
+            {
+              "name": "code_answer_explainer",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "generate_thinkific_format": {
+          "name": "generate_thinkific_format",
+          "intent": "Generate Thinkific-compatible quiz with embedded HTML",
+          "dependencies": [
+            "code_answer_explainer"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "generate_thinkific_quiz",
+          "in_plan": true,
+          "plan_order": 9
+        }
+      },
+      "action_count": 9
+    },
+    "code_options_quiz": {
+      "id": "code_options_quiz",
+      "name": "code_options_quiz",
+      "description": "Generate code options quizzes where users select the best implementation from multiple working alternatives",
+      "path": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/agent_workflow/code_options_quiz/agent_config/code_options_quiz.yml",
+      "version": "1.0.0",
+      "actions": {
+        "code_extractor": {
+          "name": "code_extractor",
+          "intent": "Extract code blocks from technical documentation",
+          "dependencies": [],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": "candidate_code_list",
+          "in_plan": true,
+          "plan_order": 1,
+          "outputs": [
+            "code",
+            "code_explanation",
+            "technical_level"
+          ],
+          "output_fields": [
+            {
+              "name": "code",
+              "type": "string",
+              "description": "A reperesentative code snippet from doc"
+            },
+            {
+              "name": "code_explanation",
+              "type": "string",
+              "description": "what does the code do and its comntext"
+            },
+            {
+              "name": "technical_level",
+              "type": "string",
+              "description": "Technical level of the fact"
+            }
+          ]
+        },
+        "flatten_code": {
+          "name": "flatten_code",
+          "intent": "Flatten extracted code blocks for processing",
+          "dependencies": [
+            "code_extractor"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "flatten_code",
+          "in_plan": true,
+          "plan_order": 2
+        },
+        "code_usage_scenario": {
+          "name": "code_usage_scenario",
+          "intent": "Generate realistic usage scenarios for code comparison",
+          "dependencies": [
+            "flatten_code"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "sample_usage_scenario": "string",
+            "code_for_scenario": "string",
+            "scenario_complexity": "string",
+            "key_considerations": "string"
+          },
+          "in_plan": true,
+          "plan_order": 3,
+          "outputs": [
+            "sample_usage_scenario",
+            "code_for_scenario",
+            "scenario_complexity",
+            "key_considerations"
+          ],
+          "output_fields": [
+            {
+              "name": "sample_usage_scenario",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "code_for_scenario",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "scenario_complexity",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "key_considerations",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "generate_optimal_code": {
+          "name": "generate_optimal_code",
+          "intent": "Generate the BEST implementation following industry best practices",
+          "dependencies": [
+            "code_usage_scenario"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "optimal_code": "string"
+          },
+          "in_plan": true,
+          "plan_order": 4,
+          "outputs": [
+            "optimal_code"
+          ],
+          "output_fields": [
+            {
+              "name": "optimal_code",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "generate_scenario_question": {
+          "name": "generate_scenario_question",
+          "intent": "Generate a scenario-based quiz question from the code scenario and optimal implementation",
+          "dependencies": [
+            "generate_optimal_code"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "question": "string",
+            "answer_explanation": "string"
+          },
+          "in_plan": true,
+          "plan_order": 5,
+          "outputs": [
+            "question",
+            "answer_explanation"
+          ],
+          "output_fields": [
+            {
+              "name": "question",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "answer_explanation",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "generate_code_alternatives": {
+          "name": "generate_code_alternatives",
+          "intent": "Generate 3 suboptimal but working code alternatives with different issues",
+          "dependencies": [
+            "generate_scenario_question"
+          ],
+          "type": "llm",
+          "provider": "unknown",
+          "model": "unknown",
+          "schema": {
+            "alternative_code_${alternative_num}": "string",
+            "issue_type_${alternative_num}": "string",
+            "issue_description_${alternative_num}": "string"
+          },
+          "in_plan": true,
+          "plan_order": 6,
+          "outputs": [
+            "alternative_code_${alternative_num}",
+            "issue_type_${alternative_num}",
+            "issue_description_${alternative_num}"
+          ],
+          "output_fields": [
+            {
+              "name": "alternative_code_${alternative_num}",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "issue_type_${alternative_num}",
+              "type": "string",
+              "description": ""
+            },
+            {
+              "name": "issue_description_${alternative_num}",
+              "type": "string",
+              "description": ""
+            }
+          ]
+        },
+        "merge_alternatives": {
+          "name": "merge_alternatives",
+          "intent": "Merge all code alternatives into single record",
+          "dependencies": [
+            "generate_code_alternatives"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "merge_alternatives",
+          "in_plan": true,
+          "plan_order": 7
+        },
+        "clean_quiz_data": {
+          "name": "clean_quiz_data",
+          "intent": "Randomize the order of code options (A, B, C, D) and track correct answer",
+          "dependencies": [
+            "merge_alternatives"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "format_for_lms",
+          "in_plan": true,
+          "plan_order": 8
+        },
+        "transform_code_quiz_thinkific_compatible_structure": {
+          "name": "transform_code_quiz_thinkific_compatible_structure",
+          "intent": "transform_code_quiz_thinkific_compatible_structure",
+          "dependencies": [
+            "clean_quiz_data"
+          ],
+          "type": "tool",
+          "provider": "tool",
+          "implementation": "transform_code_quiz_thinkific_compatible_structure",
+          "in_plan": true,
+          "plan_order": 9
+        }
+      },
+      "action_count": 9
+    }
+  },
+  "stats": {
+    "total_workflows": 5,
+    "total_actions": 66,
+    "llm_actions": 30,
+    "tool_actions": 36,
+    "total_prompts": 30,
+    "total_schemas": 10
+  }
+}
