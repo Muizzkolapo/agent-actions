@@ -256,6 +256,7 @@ h3 {
 
 .sidebar.collapsed {
   width: 64px !important;               /* Up from 56px */
+  min-width: 64px !important;           /* Override min-width from .sidebar */
 }
 
 .sidebar.collapsed ~ .main-content {
