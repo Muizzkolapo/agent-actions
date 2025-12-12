@@ -573,10 +573,10 @@ function toggleActionDetails(event, runId) {
 }
 
 function renderRunActionDetails(run) {
-    const actions = Object.entries(run.actions || {});
-
-    if (actions.length === 0) {
-        return '<div style="padding: var(--space-4); text-align: center; color: var(--text-subtle);">No action details available</div>';
+    // Get workflow to show ALL actions (including skipped ones)
+    const workflow = window.catalog.workflows[run.workflow_id];
+    if (!workflow || !workflow.actions) {
+        return '<div style="padding: var(--space-4); text-align: center; color: var(--text-subtle);">No workflow details available</div>';
     }
 
     let html = `
@@ -594,7 +594,28 @@ function renderRunActionDetails(run) {
                 <tbody>
     `;
 
-    actions.forEach(([actionName, actionData]) => {
+    // Iterate through ALL actions in workflow
+    Object.keys(workflow.actions).forEach(actionName => {
+        const workflowAction = workflow.actions[actionName];
+        const runActionData = run.actions ? run.actions[actionName] : null;
+
+        // If action didn't run, mark as SKIPPED
+        if (!runActionData) {
+            const actionType = workflowAction.type === 'llm' ? 'LLM' : 'Tool';
+            html += `
+                <tr style="border-bottom: 1px solid var(--border-subtle); opacity: 0.6;">
+                    <td style="padding: var(--space-2); font-family: var(--font-mono); font-size: 0.9rem;">${actionName}</td>
+                    <td style="padding: var(--space-2); font-size: 0.9rem;">${actionType}</td>
+                    <td style="padding: var(--space-2);"><span class="status-badge PAUSED">skipped</span></td>
+                    <td style="padding: var(--space-2); text-align: right; font-family: var(--font-mono); font-size: 0.9rem;">-</td>
+                    <td style="padding: var(--space-2); text-align: right; font-family: var(--font-mono); font-size: 0.9rem;">-</td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Action ran - show its details
+        const actionData = runActionData;
         const statusClass = actionData.status === 'success' ? 'SUCCESS' :
                           actionData.status === 'failed' ? 'FAILED' :
                           actionData.status === 'skipped' ? 'PAUSED' : '';
@@ -1197,12 +1218,23 @@ function createSchemaCard(schema) {
     card.style.cursor = 'pointer';
     card.addEventListener('click', () => showSchema(schema.id));
 
+    // Create description from field count and names
+    const fieldCount = schema.field_count || 0;
+    let description = '';
+    if (fieldCount > 0 && schema.fields) {
+        const fieldNames = schema.fields.slice(0, 3).map(f => f.name).join(', ');
+        const more = fieldCount > 3 ? ` and ${fieldCount - 3} more` : '';
+        description = `${fieldCount} field${fieldCount !== 1 ? 's' : ''}: ${fieldNames}${more}`;
+    } else {
+        description = `${schema.type} schema`;
+    }
+
     card.innerHTML = `
         <div class="workflow-card-header">
             <h3>${schema.name}</h3>
             <span class="badge" style="background: #059669; color: white; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px;">Schema</span>
         </div>
-        <p class="workflow-description">${schema.preview}</p>
+        <p class="workflow-description">${description}</p>
         <div class="workflow-meta">
             <span><strong>Type:</strong> ${schema.type}</span>
         </div>
@@ -2543,20 +2575,46 @@ function renderSchemaDetails(schema) {
     metaSection.className = 'action-detail-section';
     metaSection.innerHTML = `
         <h2>Metadata</h2>
-        <p><strong>File:</strong> <code>${schema.file_path}</code></p>
-        <p><strong>Type:</strong> ${schema.type}</p>
-        <p><strong>Preview:</strong> ${schema.preview}</p>
+        <p><strong>Source File:</strong> <code>${schema.source_file_name || 'Unknown'}</code></p>
+        <p><strong>Full Path:</strong> <code style="font-size: 0.8rem;">${schema.source_file || 'Unknown'}</code></p>
+        <p><strong>Type:</strong> ${schema.type || 'object'}</p>
+        <p><strong>Fields:</strong> ${schema.field_count || 0}</p>
     `;
     container.appendChild(metaSection);
 
-    // Structure section
-    const structureSection = document.createElement('div');
-    structureSection.className = 'action-detail-section';
-    structureSection.innerHTML = `
-        <h2>Schema Structure</h2>
-        <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto; font-size: 0.875rem; line-height: 1.6;">${escapeHtml(convertToYAML(schema.structure))}</pre>
-    `;
-    container.appendChild(structureSection);
+    // Fields section
+    if (schema.fields && schema.fields.length > 0) {
+        const fieldsSection = document.createElement('div');
+        fieldsSection.className = 'action-detail-section';
+        fieldsSection.innerHTML = '<h2>Fields</h2>';
+
+        const fieldsTable = document.createElement('table');
+        fieldsTable.style.width = '100%';
+        fieldsTable.style.borderCollapse = 'collapse';
+        fieldsTable.innerHTML = `
+            <thead>
+                <tr style="background: var(--bg-light); border-bottom: 2px solid #e5e7eb;">
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Field</th>
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Type</th>
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Required</th>
+                    <th style="padding: 0.75rem; text-align: left; font-weight: 600;">Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${schema.fields.map(field => `
+                    <tr style="border-bottom: 1px solid #e5e7eb;">
+                        <td style="padding: 0.75rem;"><code style="background: #f3f4f6; padding: 0.25rem 0.5rem; border-radius: 3px; font-size: 0.875rem;">${field.name}</code></td>
+                        <td style="padding: 0.75rem;"><span style="color: #7c3aed; font-weight: 500;">${field.type}</span></td>
+                        <td style="padding: 0.75rem;">${field.required ? '<span style="color: #059669;">✓</span>' : '<span style="color: #9ca3af;">-</span>'}</td>
+                        <td style="padding: 0.75rem; color: #6b7280; font-size: 0.875rem;">${field.description || '-'}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        `;
+
+        fieldsSection.appendChild(fieldsTable);
+        container.appendChild(fieldsSection);
+    }
 }
 
 // ============================================

@@ -954,9 +954,11 @@
     <!-- Application code -->
     <!-- Load data files as JSON -->
     <script>
-        // Load catalog and runs data from JSON files
-        let catalog = null;
-        let runs = null;
+        // Load catalog and runs data from JSON files (make them global)
+        window.catalog = null;
+        window.runs = null;
+        let catalog = window.catalog;
+        let runs = window.runs;
 
         /**
          * Normalize runs data to match UI expectations
@@ -1003,8 +1005,8 @@
             fetch(`sample_artefact/catalog.json${cacheBuster}`).then(r => r.json()),
             fetch(`sample_artefact/runs.json${cacheBuster}`).then(r => r.json())
         ]).then(([catalogData, runsData]) => {
-            catalog = catalogData;
-            runs = runsData;
+            catalog = window.catalog = catalogData;
+            runs = window.runs = runsData;
 
             // Normalize data format to match UI expectations
             normalizeRunsData(runs);

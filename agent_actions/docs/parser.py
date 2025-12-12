@@ -129,28 +129,59 @@ class WorkflowParser:
 
         # Extract field information from schema
         fields = []
-        if schema_data.get('type') == 'array' and 'items' in schema_data:
-            # Array schema - fields are in items.properties
+        schema_type = schema_data.get('type', 'object')
+
+        # Format 1: Custom 'fields' array at root
+        if 'fields' in schema_data and isinstance(schema_data['fields'], list):
+            for field_def in schema_data['fields']:
+                # Nested format: {id, type: array, items: {properties: {...}}}
+                if field_def.get('type') == 'array' and 'items' in field_def and 'properties' in field_def['items']:
+                    items = field_def['items']
+                    required_fields = items.get('required', [])
+                    for prop_name, prop_def in items['properties'].items():
+                        fields.append({
+                            'name': prop_name,
+                            'type': prop_def.get('type', 'unknown'),
+                            'description': prop_def.get('description', ''),
+                            'required': prop_name in required_fields
+                        })
+                    schema_type = 'array'
+                # Simple format: {id, type, description}
+                elif 'id' in field_def:
+                    fields.append({
+                        'name': field_def['id'],
+                        'type': field_def.get('type', 'unknown'),
+                        'description': field_def.get('description', ''),
+                        'required': field_def.get('required', False)
+                    })
+
+        # Format 2: Standard array schema with type at root
+        elif schema_data.get('type') == 'array' and 'items' in schema_data:
             properties = schema_data.get('items', {}).get('properties', {})
+            required_fields = schema_data.get('items', {}).get('required', [])
             for field_name, field_info in properties.items():
                 fields.append({
                     'name': field_name,
                     'type': field_info.get('type', 'unknown'),
-                    'description': field_info.get('description', '')
+                    'description': field_info.get('description', ''),
+                    'required': field_name in required_fields
                 })
+
+        # Format 3: Standard object schema
         elif schema_data.get('type') == 'object' and 'properties' in schema_data:
-            # Object schema - fields are in properties
             properties = schema_data.get('properties', {})
+            required_fields = schema_data.get('required', [])
             for field_name, field_info in properties.items():
                 fields.append({
                     'name': field_name,
                     'type': field_info.get('type', 'unknown'),
-                    'description': field_info.get('description', '')
+                    'description': field_info.get('description', ''),
+                    'required': field_name in required_fields
                 })
 
         return {
             'name': schema_data.get('name', schema_name),
-            'type': schema_data.get('type', 'unknown'),
+            'type': schema_type,
             'fields': fields
         }
 

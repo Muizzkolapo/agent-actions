@@ -124,3 +124,41 @@ class ProjectScanner:
                 }
 
         return prompts
+
+    def scan_schemas(self) -> Dict[str, Any]:
+        """
+        Scan project directory for schema files using the parser's load_schema method.
+
+        Returns:
+            Dict mapping schema names to schema data
+        """
+        from .parser import WorkflowParser
+
+        schemas = {}
+        schema_dir = self.project_root / 'schema'
+
+        if not schema_dir.exists():
+            return schemas
+
+        parser = WorkflowParser()
+
+        for yml_file in schema_dir.glob('*.yml'):
+            schema_name = yml_file.stem
+
+            # Use the parser's load_schema method which handles all formats
+            schema_data = parser.load_schema(schema_name, schema_dir)
+
+            if not schema_data:
+                continue
+
+            schemas[schema_name] = {
+                'id': schema_name,
+                'name': schema_data['name'],
+                'type': schema_data['type'],
+                'source_file': str(yml_file),
+                'source_file_name': yml_file.name,
+                'fields': schema_data.get('fields', []),
+                'field_count': len(schema_data.get('fields', []))
+            }
+
+        return schemas

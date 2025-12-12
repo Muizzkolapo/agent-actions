@@ -1489,7 +1489,7 @@
     "llm_actions": 30,
     "tool_actions": 36,
     "total_prompts": 22,
-    "total_schemas": 10
+    "total_schemas": 11
   },
   "prompts": {
     "Wrong_Answer_Generator": {
@@ -1711,6 +1711,370 @@
       "line_start": 1,
       "line_end": 1,
       "length": 33
+    }
+  },
+  "schemas": {
+    "summary_quality_score": {
+      "id": "summary_quality_score",
+      "name": "summary_quality_score",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/summary_quality_score.yml",
+      "source_file_name": "summary_quality_score.yml",
+      "fields": [
+        {
+          "name": "quality_score",
+          "type": "number",
+          "description": "Overall quality score from 0-100 based on specific learning objective alignment and implementation specificity",
+          "required": false
+        },
+        {
+          "name": "quality_tier",
+          "type": "string",
+          "description": "Quality tier: 'high' (>=65), 'borderline' (45-64), or 'low' (<45)",
+          "required": false
+        },
+        {
+          "name": "primary_skill_area",
+          "type": "string",
+          "description": "Main exam skill area this summary aligns with (e.g., 'Design and prepare a machine learning solution')",
+          "required": false
+        },
+        {
+          "name": "objective_alignment",
+          "type": "number",
+          "description": "How well summary addresses the specific learning objectives it was created for (0-35 points)",
+          "required": false
+        },
+        {
+          "name": "implementation_specificity",
+          "type": "number",
+          "description": "Presence of code, technical details, and actionable content supporting objectives (0-30 points)",
+          "required": false
+        },
+        {
+          "name": "technical_depth",
+          "type": "number",
+          "description": "Level of technical detail enabling objective achievement (0-20 points)",
+          "required": false
+        },
+        {
+          "name": "completeness",
+          "type": "number",
+          "description": "Completeness of coverage for achieving the stated objectives (0-15 points)",
+          "required": false
+        },
+        {
+          "name": "reasoning",
+          "type": "string",
+          "description": "Brief explanation explicitly referencing how the summary addresses (or fails to address) the specific objectives",
+          "required": false
+        }
+      ],
+      "field_count": 8
+    },
+    "CodeWrongAnswers": {
+      "id": "CodeWrongAnswers",
+      "name": "CodeWrongAnswers",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/CodeWrongAnswers.yml",
+      "source_file_name": "CodeWrongAnswers.yml",
+      "fields": [
+        {
+          "name": "wrong_answers",
+          "type": "string",
+          "description": "",
+          "required": false
+        }
+      ],
+      "field_count": 1
+    },
+    "borderline_summary_review": {
+      "id": "borderline_summary_review",
+      "name": "borderline_summary_review",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/borderline_summary_review.yml",
+      "source_file_name": "borderline_summary_review.yml",
+      "fields": [
+        {
+          "name": "final_decision",
+          "type": "string",
+          "description": "Keep or drop decision for borderline summary",
+          "required": false
+        },
+        {
+          "name": "objectives_addressed",
+          "type": "array",
+          "description": "List of specific objectives from referenced_in that are adequately addressed",
+          "required": false
+        },
+        {
+          "name": "objectives_missed",
+          "type": "array",
+          "description": "List of specific objectives from referenced_in that are missed or inadequately covered",
+          "required": false
+        },
+        {
+          "name": "reasoning",
+          "type": "string",
+          "description": "Explanation with specific references to which objectives are met/missed",
+          "required": false
+        },
+        {
+          "name": "confidence",
+          "type": "number",
+          "description": "Confidence level in the decision (0-100)",
+          "required": false
+        }
+      ],
+      "field_count": 5
+    },
+    "ScenarioGenerator_schema": {
+      "id": "ScenarioGenerator_schema",
+      "name": "question",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/ScenarioGenerator_schema.yml",
+      "source_file_name": "ScenarioGenerator_schema.yml",
+      "fields": [
+        {
+          "name": "question",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "options",
+          "type": "array",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "answer",
+          "type": "string",
+          "description": "This can only be letter A-z",
+          "required": true
+        },
+        {
+          "name": "answer_explanation",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "question_type",
+          "type": "string",
+          "description": "",
+          "required": true
+        }
+      ],
+      "field_count": 5
+    },
+    "question_quality_score": {
+      "id": "question_quality_score",
+      "name": "question_quality_score",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/question_quality_score.yml",
+      "source_file_name": "question_quality_score.yml",
+      "fields": [
+        {
+          "name": "syllabus_alignment_score",
+          "type": "number",
+          "description": "How well the question tests specific learning objectives (0-100). Score >= 85 means keep question.",
+          "required": false
+        },
+        {
+          "name": "objective_tested",
+          "type": "string",
+          "description": "Which specific objective(s) from referenced_in this question tests (quote the objective)",
+          "required": false
+        },
+        {
+          "name": "aligned_skill_area",
+          "type": "string",
+          "description": "Primary exam skill area tested (e.g., 'Train and deploy models', 'Optimize language models for AI applications')",
+          "required": false
+        },
+        {
+          "name": "reasoning",
+          "type": "string",
+          "description": "Explanation of how the question does (or doesn't) test the specific objective(s)",
+          "required": false
+        }
+      ],
+      "field_count": 4
+    },
+    "question_validation": {
+      "id": "question_validation",
+      "name": "question_validation",
+      "type": "object",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/question_validation.yml",
+      "source_file_name": "question_validation.yml",
+      "fields": [
+        {
+          "name": "validation_result",
+          "type": "boolean",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "failure_reason",
+          "type": "string",
+          "description": "",
+          "required": true
+        }
+      ],
+      "field_count": 2
+    },
+    "candidate_code_list": {
+      "id": "candidate_code_list",
+      "name": "candidate_code_list",
+      "type": "array",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/candidate_code_list.yml",
+      "source_file_name": "candidate_code_list.yml",
+      "fields": [
+        {
+          "name": "code",
+          "type": "string",
+          "description": "A reperesentative code snippet from doc",
+          "required": true
+        },
+        {
+          "name": "code_explanation",
+          "type": "string",
+          "description": "what does the code do and its comntext",
+          "required": true
+        },
+        {
+          "name": "technical_level",
+          "type": "string",
+          "description": "Technical level of the fact",
+          "required": true
+        }
+      ],
+      "field_count": 3
+    },
+    "cluster_validation": {
+      "id": "cluster_validation",
+      "name": "cluster_validation",
+      "type": "array",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/cluster_validation.yml",
+      "source_file_name": "cluster_validation.yml",
+      "fields": [
+        {
+          "name": "should_keep_cluster",
+          "type": "boolean",
+          "description": "",
+          "required": false
+        },
+        {
+          "name": "reasoning",
+          "type": "string",
+          "description": "",
+          "required": false
+        },
+        {
+          "name": "cluster_name",
+          "type": "string",
+          "description": "",
+          "required": false
+        },
+        {
+          "name": "semantic_unique_ids",
+          "type": "array",
+          "description": "",
+          "required": false
+        }
+      ],
+      "field_count": 4
+    },
+    "candidate_facts_list": {
+      "id": "candidate_facts_list",
+      "name": "candidate_facts_list",
+      "type": "array",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/candidate_facts_list.yml",
+      "source_file_name": "candidate_facts_list.yml",
+      "fields": [
+        {
+          "name": "fact",
+          "type": "string",
+          "description": "Short, testable statement with technical detail",
+          "required": true
+        },
+        {
+          "name": "quote",
+          "type": "string",
+          "description": "Short verbatim evidence from source",
+          "required": true
+        },
+        {
+          "name": "technical_level",
+          "type": "string",
+          "description": "Type of technical content",
+          "required": true
+        },
+        {
+          "name": "supports_objective",
+          "type": "string",
+          "description": "Which specific learning objective this fact supports",
+          "required": true
+        }
+      ],
+      "field_count": 4
+    },
+    "BlankifiedCode": {
+      "id": "BlankifiedCode",
+      "name": "BlankifiedCode",
+      "type": "array",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/BlankifiedCode.yml",
+      "source_file_name": "BlankifiedCode.yml",
+      "fields": [
+        {
+          "name": "block_id",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "original_code",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "blanked_code",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "blanks",
+          "type": "array",
+          "description": "",
+          "required": true
+        }
+      ],
+      "field_count": 4
+    },
+    "Blank_Recommendations": {
+      "id": "Blank_Recommendations",
+      "name": "Blank_Recommendations",
+      "type": "array",
+      "source_file": "/Users/muizz/Documents/codeshop/qanalabs/qanalabs-actions/qanalabs/schema/Blank_Recommendations.yml",
+      "source_file_name": "Blank_Recommendations.yml",
+      "fields": [
+        {
+          "name": "code_to_blank",
+          "type": "string",
+          "description": "",
+          "required": true
+        },
+        {
+          "name": "reason",
+          "type": "string",
+          "description": "",
+          "required": true
+        }
+      ],
+      "field_count": 2
     }
   }
 }
