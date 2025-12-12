@@ -380,9 +380,6 @@ function renderSidebar() {
             } else if (section === 'schemas') {
                 showAllSchemas();
             }
-
-            // Also toggle collapsed state
-            header.parentElement.classList.toggle('collapsed');
         });
     });
 }
