@@ -1,0 +1,394 @@
+[
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "summary_title": "Implementing Cross-Project References in dbt Mesh",
+            "summary_content": "To effectively set up additional dbt projects using the dbt Mesh pattern, leverage the power of cross-project references to facilitate multi-project deployments. The foundational feature that supports this architecture in dbt is the use of the `{{ ref() }}` function, which now supports cross-project calls on Enterprise and Enterprise+ plans. This allows data teams to create independent yet collaborative projects, enabling shared data and models across different dbt projects while maintaining appropriate governance and access controls.\n\nWhen implementing cross-project references, ensure that proper governance measures are in place. This includes managing access to data models and establishing roles and permissions that dictate who can refer to or utilize models defined in other dbt projects. Additionally, consider versioning your models as stable APIs to prevent disruptions to dependent projects, and utilize data contracts to clarify the expectations and structure of data shared between projects. These practices will enhance your organization's ability to operate securely and responsively in a multi-project environment, allowing for efficient data transformation workflows.",
+            "technical_details": "- Use the `{{ ref() }}` function for cross-project references in dbt Mesh to interlink models across different dbt projects.\n- Ensure access configurations are properly set to allow only authorized projects or users to reference specific models.\n- Implement model versioning to manage iterative changes and prevent breaking changes from affecting downstream models.\n- Utilize model contracts to define expectations regarding data shapes shared between projects.",
+            "key_concepts": [
+                "Cross-project references use `{{ ref() }}` for model interlinking in dbt Mesh.",
+                "Supports multi-project deployments on Enterprise and Enterprise+ plans.",
+                "Role-based access control secures who can reference models across projects.",
+                "Model versioning enables controlled updates and backward compatibility.",
+                "Data contracts define expectations and preserve dependencies among models."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Implement cross-project references using the `{{ ref() }}` function in dbt Mesh for enhanced multi-project architecture.",
+                "Establish governance protocols for model access across dbt projects.",
+                "Define and apply model versioning to ensure stability in project dependencies."
+            ]
+        },
+        "target_id": "c29a2b85-bb96-4428-920f-6fd2e06f04a9",
+        "node_id": "node_7_225e8a82-5142-4120-b2e1-2b2a9a87e913",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_0",
+            "node_7_225e8a82-5142-4120-b2e1-2b2a9a87e913"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "summary_content": "Establishing a dbt mesh architecture involves setting up multiple dbt projects that can reference one another seamlessly. This pattern is essential for organizations managing complex data transformation workflows, as it promotes collaboration while maintaining security and governance standards. A key requirement in this setup is ensuring that cross-project references are effective; specifically, each project name must be unique within your dbt account. This avoids resolution conflicts and facilitates smooth operation across projects, enabling data teams to share critical insights and codes without overlap or confusion.\n\nTo effectively leverage cross-project references, configure your dbt projects with clear, distinctive names. This setup encourages independent yet collaborative development, allowing teams to deploy their projects while still enabling visibility and access to shared resources. Furthermore, it simplifies governance by ensuring that access and security configurations can be consistently applied across all projects. The ability to manage dependencies and workflows through a well-structured dbt mesh empowers teams to optimize their operational efficiency and adhere to best practices in data governance and collaboration.",
+            "technical_details": "- Ensure that each dbt project name is unique within your dbt account to facilitate proper resolution of cross-project references.\n- Configure permissions and access controls across projects to manage who can reference specific models within this multi-project setup. \n- Use the two-argument ref() function in your model definitions to reference models in other projects effectively.",
+            "key_concepts": [
+                "Cross-project references require that each project 'name' be unique in your dbt account.",
+                "A distinctive naming convention supports proper resolution in cross-project workflows.",
+                "Leveraging dbt's governance features enhances model access control across multiple projects."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure cross-project references using unique project names to support dbt Mesh architecture.",
+                "Implement multi-project architecture in dbt for enhanced collaboration and governance.",
+                "Manage model access and permissions across dbt projects effectively."
+            ]
+        },
+        "target_id": "d6551247-0287-45cf-9ac8-663308766f37",
+        "node_id": "node_7_79fd90cd-3d09-4580-8267-a95bd2e6a944",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_1",
+            "node_7_79fd90cd-3d09-4580-8267-a95bd2e6a944"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "summary_content": "To effectively leverage dbt Mesh for a multi-project architecture, configure your projects to utilize cross-project references and establish robust governance practices. Start by creating additional dbt projects within your organization, ensuring that each project adheres to the defined structure and can be integrated with others. Utilize the `ref()` function to create dependencies across projects, enabling efficient data sharing while maintaining security and autonomy for each team involved. \n\nGovernance is critical; implement role-based access control to manage who can view or reference models in each project. By using access configurations and model access modifiers, such as Private, Protected, or Public, you can dictate the referenceability of your models across projects. Additionally, group related nodes within your dbt Directed Acyclic Graph (DAG) to streamline access management and ownership assignments, enhancing collaboration without compromising security. This setup allows teams to independently manage their workflows while ensuring consistency and compliance throughout the broader organizational architecture.",
+            "technical_details": "- Use `{{ ref('model_name') }}` syntax for referencing models across projects.\n- Define model access modifiers (Private, Protected, Public) in your dbt configurations to control access.\n- Create and assign groups to nodes in the dbt DAG to streamline model ownership and access management.\n- Implement role-based access controls for governance across multiple dbt projects.",
+            "key_concepts": [
+                "dbt\u2019s governance features allow role-based access control across multiple projects, enhancing security and compliance.",
+                "Groups in dbt organize nodes in the DAG for model access management, enabling easier ownership assignment.",
+                "Access configurations in dbt allow precise control over who can reference specific models, facilitating secure collaboration.",
+                "Models in dbt can have access modifiers: Private, Protected, or Public, controlling their referenceability across projects."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure cross-project references using the two-argument ref() syntax for dbt Mesh",
+                "Set role-based access controls for models across multiple dbt projects",
+                "Define model access modifiers to enhance security and compliance in a dbt Mesh setup"
+            ]
+        },
+        "target_id": "5bee662f-081a-4c8a-b6e9-998f67d7fe49",
+        "node_id": "node_7_bae11116-b4d8-4f33-a0f0-6fa9e04aa98c",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_1",
+            "node_5_4d0385a2-f1cf-45b4-8a96-f02f0bd6acda",
+            "node_6_71df9c1b-7f5a-4e99-a6e3-9f509b07f8ea",
+            "node_7_bae11116-b4d8-4f33-a0f0-6fa9e04aa98c"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "summary_content": "To effectively set up additional dbt projects using the Mesh pattern, leverage cross-project references to facilitate collaboration and governance. Implement cross-project references by utilizing the `{{ ref() }}` syntax, which enables models to reference others across different dbt projects, ensuring modularity and reducing the complexity of dependencies. This is crucial for organizations with multiple teams managing distinct workflows but sharing data assets, allowing each team to evolve their models independently without impacting others.\n\nGovernance is also an essential component; apply model versioning to manage model evolution gracefully, allowing teams to adopt changes and deprecate models while maintaining stability for downstream dependencies. The practice of treating data models as stable APIs enables easier coordination across teams and projects, mitigating risks associated with changes in model logic. Ensure proper access controls are in place by utilizing groups for organizing models and assigning ownership to manage permissions across project lines effectively.\n\nThis multi-project architecture is beneficial when scaling dbt operations, particularly when facing performance issues, communication barriers, or increasing security demands. By systematically adopting these practices, organizations can maintain clear separation while enhancing collaboration and security across dbt implementations.",
+            "technical_details": "- Utilize the `{{ ref() }}` syntax for cross-project referencing.\n- Implement model versioning to signify changes and enable backward compatibility.\n- Organize data models into logical groups for better governance and management.\n- Apply access control settings to regulate who can reference or utilize specific models across projects.",
+            "key_concepts": [
+                "Model versioning in dbt allows for graceful evolution and deprecation of models.",
+                "Cross-project references facilitate collaboration between teams working on separate dbt projects.",
+                "Using groups in dbt helps manage model access and organization across projects."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Implement cross-project references using the `{{ ref() }}` syntax for dbt Mesh.",
+                "Configure model versioning to manage changes and stability across projects effectively.",
+                "Establish governance structures utilizing groups and access controls in multi-project architecture."
+            ]
+        },
+        "target_id": "42355778-ea7d-4b23-81b1-9716f9727352",
+        "node_id": "node_7_e9b78b29-f9f0-4527-80a3-d69228c56b91",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_0",
+            "node_7_e9b78b29-f9f0-4527-80a3-d69228c56b91"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "summary_content": "To implement a multi-project architecture in dbt leveraging the Mesh pattern, begin by configuring cross-project references which allow models from different dbt projects to interact seamlessly. This is achieved using the `ref()` function, enabling you to establish dependencies between models across projects. Governance is paramount; utilize dbt\u2019s access control features to manage who can reference specific models. Assign permission sets and establish model groups that facilitate management by functional area for increased clarity.\n\nNext, deploy customized deployment environments tailored for each project, adjusting default schemas and using service accounts where appropriate to optimize the orchestration process. Creating robust governance ensures that as teams independently develop their models, they maintain a collaborative atmosphere without sacrificing security. Always assess performance and adjust your architecture incrementally to accommodate growing complexities and compliance needs as they arise.",
+            "technical_details": "- Use `{{ ref('model_name') }}` to reference models in other dbt projects\n- Create groups for organizing related models\n- Assign permissions to control model access across projects\n- Consider service accounts for environment-specific connections\n- Define custom schema settings in `dbt_project.yml` for each project environment",
+            "key_concepts": [
+                "Mesh enables independent and collaborative work across projects",
+                "Cross-project references facilitate model interdependencies",
+                "Governance features manage access and permissions for models",
+                "Model versioning allows for controlled evolution of model outputs",
+                "Incremental adoption of multi-project patterns aids in scaling effectively"
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Implement cross-project references using the ref() syntax for dbt Mesh",
+                "Configure model governance to control access across multiple dbt projects",
+                "Establish additional dbt projects to enhance organizational scalability and collaboration"
+            ]
+        },
+        "target_id": "6ede5ded-6cfb-4314-888d-290a7563ae5e",
+        "node_id": "node_7_b1ffbb26-bc19-43bd-956b-4de1a45f743f",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_1",
+            "node_7_b1ffbb26-bc19-43bd-956b-4de1a45f743f"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "summary_title": "Managing Staging Environments in dbt Mesh for Cross-Project References",
+            "summary_content": "To effectively manage cross-project references while ensuring data security during development, configure your dbt instances to use specific environment types. Staging environments are critical as they resolve cross-project references to Staging data, thus preventing unauthorized access to Production data. This setup guarantees that any references from development or Staging environments will align with Staging data, while only references originating from Production environments will connect to Production data. Employing Staging environments allows teams to work without the risk of impacting live data, maintaining development flexibility and security.\n\nMoreover, to enforce robust model governance within dbt Mesh, implement access modifiers and model contracts. Utilize contracts to define the structure standards of models, ensuring consistency across your data architecture. Access modifiers can control the visibility of models, categorizing them as Private, Protected, or Public. This level of governance reinforces data integrity and allows you to maintain tight control over who can access and modify the data models during the development lifecycle. The combined approach of using staging environments and model access governance optimizes collaboration while protecting sensitive production data.",
+            "technical_details": "- Define a Staging environment for development operations.\n- Configure cross-project references using the `ref()` function to ensure they resolve correctly based on environment type.\n- Utilize model contracts to enforce data standards and stability.\n- Apply access modifiers to control model accessibility:\n  - Private: Accessible only within the group.\n  - Protected: Usable in the same project and installed packages.\n  - Public: Available across projects and groups.",
+            "key_concepts": [
+                "Staging environments resolve cross-project references to Staging data.",
+                "Only references from Production environments resolve to Production data.",
+                "Model contracts define data structure standards and enforce stability.",
+                "Access modifiers control the visibility and use of models: Private, Protected, Public.",
+                "Model governance ensures data integrity and security during collaborative development."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure cross-project references to resolve to Staging data in Staging environments for secure development and data isolation.",
+                "Implement model governance through the use of access modifiers and model contracts to enhance data integrity and security."
+            ]
+        },
+        "target_id": "8b884c15-d934-4828-97fa-8db0e7b1d720",
+        "node_id": "node_7_69577249-2dea-4d1f-9236-cf052f267c1a",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_3",
+            "node_5_093abd84-2661-4db2-8df8-422657e3926e",
+            "node_6_69fa42aa-01db-4e32-9feb-3c37f44e67d1",
+            "node_7_69577249-2dea-4d1f-9236-cf052f267c1a"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "summary_title": "Leveraging Model Governance in dbt Mesh",
+            "summary_content": "To effectively implement model governance in a dbt Mesh setup, enforce strict data structure standards using model contracts. Model contracts ensure that any dbt model meets established specifications, including column data types and structures, thereby preventing builds from succeeding if those standards are violated. This governance mechanism allows teams to maintain a consistent data architecture across various projects, ensuring that dependencies remain stable and predictable.\n\nWhen establishing governance around model access and collaboration between projects, utilize the model access modifiers to define visibility and usage restrictions. Models can be classified as private, protected, or public, each limiting access accordingly. This structuring not only enhances security but also facilitates clearer ownership and management across teams. By implementing strong governance practices, organizations can benefit from improved collaboration, reduced complexity, and accelerated data product delivery without compromising data integrity or safety.",
+            "technical_details": "- Utilize model contracts to enforce data structure standards by defining column data types in model configurations.\n- Implement access modifiers:  \n  - **Private**: Accessible only within a single project.  \n  - **Protected**: Can be referenced within the project or when packaged, defaulting for backward compatibility.  \n  - **Public**: Referenced across different projects, suited for stable models meant for broader usage.\n- Apply governance policies using model groups to assign ownership and manage access, ensuring clear accountability.",
+            "key_concepts": [
+                "Model contracts enforce data structure standards in dbt models, causing builds to fail if contracts are not met.",
+                "Access modifiers (private, protected, public) define the visibility of models across projects.",
+                "Model groups categorize models for ownership and governance purposes."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Implement and enforce model contracts to ensure data structure compliance in dbt models.",
+                "Configure model access modifiers to define cross-project visibility and control for governance purposes."
+            ]
+        },
+        "target_id": "9d84b7ba-bca4-4b73-a723-cd28f3976003",
+        "node_id": "node_7_252052c8-0552-438a-b096-bfb81ef98cea",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_4",
+            "node_5_14e22b26-d418-4056-87e7-824648ac4d40",
+            "node_6_5eded240-c76b-412c-bab9-7142a43b8764",
+            "node_7_252052c8-0552-438a-b096-bfb81ef98cea"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "summary_title": "Leveraging Governance and Environment Types in dbt Mesh",
+            "summary_content": "To effectively utilize dbt Mesh, understanding the relationship between environment types and cross-project references is critical for maintaining data integrity and access governance. In a dbt implementation, Staging environments play a key role in isolating development work from production data. This configuration prevents unauthorized access, ensuring that changes can be made in an isolated testing environment without impacting the production dataset until explicitly intended.\n\nWhen managing model governance in dbt, administrators must recognize that changes to a model\u2019s access level, such as shifting from Public to Protected, introduce breaking changes for downstream consumers. This requires careful planning and communication, particularly when releasing updates that might affect other projects or teams depending on those models. Ensuring that strong contracts are in place allows teams to govern data models effectively, defining standards for data structures and supporting the stability required in a multi-project architecture to avoid unexpected dependencies issues. \n\nAdditionally, managing different model versions can help address concerns around backward compatibility and allow for safe transitions in model structure when adjustments are necessary. This governance enables teams to collaborate while minimizing disruption to their own datasets and workflows, leading to a more robust implementation of dbt in complex environments.",
+            "technical_details": "- Employ Staging environments to segregate development from production data. \n- Change model access types judiciously to prevent breaking changes; use deprecation strategies strategically. \n- Implement model contracts to enforce data structure standards and stability. \n- Manage model versioning to facilitate clear communication around changes and dependencies. \n- Use role-based access controls to enforce data governance and maintain secure references across projects.",
+            "key_concepts": [
+                "Changes from Public to Protected are breaking for downstream consumers.",
+                "Staging environments prevent unauthorized access to production data.",
+                "Model contracts enforce standards and regulate stability across models.",
+                "Version management is crucial for smooth transitions in data model structures.",
+                "Governance frameworks facilitate collaboration in multi-project environments."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Understand how environment types relate to cross-project references in dbt Mesh.",
+                "Utilize model governance by implementing contracts on models and managing access restrictions."
+            ]
+        },
+        "target_id": "7e8f4870-adfb-4f3e-8ff9-541b5f3e8dea",
+        "node_id": "node_7_07795da6-90b8-46ba-8585-c88f92c1e76c",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_5",
+            "node_5_95d976d1-5266-4546-b861-deba9240465e",
+            "node_6_43973cd6-b491-4c2b-9f46-e8552088a444",
+            "node_7_07795da6-90b8-46ba-8585-c88f92c1e76c"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "summary_title": "Configuring dbt Jobs for Scheduling and Dependencies",
+            "summary_content": "To effectively manage dbt jobs, it is essential to understand how to create, schedule, and configure them properly. Deploy jobs can be triggered automatically based on defined schedules, utilizing intervals, specific hours, or cron expressions. For scheduling, intervals allow jobs to run at consistent time intervals, and specific hours define exact times in UTC when the job should execute. This flexibility enables administrators to align job execution with business needs, while also ensuring consistent operation across different environments.\n\nWhen setting up a new dbt job, a comprehensive configuration path involves multiple steps, including defining job names, execution commands, and triggers. Triggers can include schedule-based execution or chaining jobs to run upon the successful completion of upstream jobs. It\u2019s crucial to configure optional settings such as environment variable overrides, threads, and target names to ensure optimal performance and behavior during job execution. Moreover, understanding different types of job deferral, such as self-deferral, allows for more efficient use of resources by enabling comparison of changes against the current job state or the state of a specific environment.\n\nThis level of detailed configuration ensures that job management aligns with organizational standards and performance expectations, making for a robust dbt deployment process in cloud environments.",
+            "technical_details": "- **Job Scheduling Options:**  \n  - *Intervals*: Set jobs to run every specified number of hours (e.g., every 2 hours).\n  - *Specific Hours*: Schedule jobs to run at specific UTC hours (e.g., midnight, noon).\n  - *Cron Schedule*: Use cron syntax for complex schedules (e.g., first Monday of each month).\n- **Job Creation Steps:**  \n  1. Create a new deploy job on your deployment environment page.\n  2. Define job settings (name, description, environment).\n  3. Configure execution settings (commands, docs generation).\n  4. Set triggers for scheduling or chaining (e.g., run when another job finishes).\n  5. (Optional) Configure advanced settings like environment variables, target name, and thread count.\n- **Deferral Configuration:**  \n  - *Self-Deferral*: Options to compare changes against \u2018This Job\u2019 or \u2018Environment\u2019.",
+            "key_concepts": [
+                "Deploy jobs can be scheduled using intervals, specific hours, or cron schedules.",
+                "Intervals allow jobs to be triggered every specified number of hours.",
+                "Specific hours schedule jobs at defined UTC times.",
+                "Cron schedules provide flexibility for complex scheduling needs.",
+                "Optional settings include environment variable overrides and thread configurations."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Configure a dbt job to run on a set schedule using intervals or cron syntax for job scheduling.",
+                "Create a new dbt job with proper execution and advanced settings for efficient task management.",
+                "Set job triggers to run when another job finishes for effective job chaining."
+            ]
+        },
+        "target_id": "6cbc54a8-98df-4837-8df4-af8cbbb4c7de",
+        "node_id": "node_7_e4859933-7e1f-4c5c-b3b3-e77ec771cbf6",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_6",
+            "node_5_fef6303b-00ea-4a9d-871a-db65d7f9f50c",
+            "node_6_19817cf7-5618-4d30-86d7-fd413095a4b3",
+            "node_7_e4859933-7e1f-4c5c-b3b3-e77ec771cbf6"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "summary_title": "Configuring and Scheduling dbt Deploy Jobs",
+            "summary_content": "In dbt Cloud, deploy jobs facilitate the execution of dbt commands to build production data assets, either on a set schedule or via specific triggers. To create a new deploy job, navigate to your deployment environment and use the 'Create job' option. Specify a job name and, if necessary, a description. By default, jobs include the `dbt build` command, but additional commands can be incorporated by selecting 'Add command'. It\u2019s essential to ensure jobs are scheduled appropriately to run at specified intervals, specific hours, or using complex cron schedules. \n\nThe scheduling options include intervals for frequent runs like every two hours, setting specific hours for daily runs, or defining a custom cron schedule using standard cron syntax. Moreover, for job orchestration, deploy jobs can be set to trigger based on the completion of other jobs, enabling efficient job chaining. Advanced settings such as environment variable definitions, target name customizations, and threads configurations can further optimize job executions. Understanding and applying these configurations support effective job management and deployment in a scalable dbt environment.",
+            "technical_details": "- **Commands Default**: Default is `dbt build`, customize with `Add command` button.\n- **Scheduling Options**: Use 'Run on schedule' for intervals, specific times, or cron schedules.\n- **Cron Syntax**: Example cron jobs include `0 * * * *` for every hour and `5 4 * * *` for 4:05 AM.\n- **Triggers**: Enable 'Run when another job completes' for job chaining.\n- **Advanced Settings**: Include environment variables, target names, and custom thread counts.",
+            "key_concepts": [
+                "Deploy jobs execute dbt commands to build production data assets.",
+                "Job default command is `dbt build` but can include multiple commands.",
+                "Jobs can be scheduled using intervals, specific hours, or cron syntax.",
+                "Job chaining allows one job to trigger another after completion.",
+                "Advanced settings enable customization of environment variables and thread counts."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Create a new dbt job to automate command execution for prod environments.",
+                "Schedule a job to run on specified intervals or cron configuration.",
+                "Configure optional settings like environment variables and threads for dbt jobs.",
+                "Configure jobs to be triggered after other dbt jobs, enabling efficient workflows."
+            ]
+        },
+        "target_id": "5bc4d0c3-a598-4632-9399-71fe0d113b6a",
+        "node_id": "node_7_1eb7e97e-2d91-44ab-8a2b-38b2cd6ad52b",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_7",
+            "node_5_54ed0d90-c47c-4fff-9a8b-c46125f0c59b",
+            "node_6_4b43654f-0cbe-4c78-85fd-c44399326a0d",
+            "node_7_1eb7e97e-2d91-44ab-8a2b-38b2cd6ad52b"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "summary_title": "Configuring dbt Job Definitions and Advanced Settings",
+            "summary_content": "To effectively create and maintain dbt job definitions, it's crucial to understand the steps within a dbt job and how to configure them for optimal performance. A deploy job in dbt is defined in several stages: first, by creating the job and specifying a name, optionally adding a description and defining the environment settings. In the execution settings, you can customize the commands that the job will execute, starting with the default `dbt build`. It is vital to understand job chaining, where one job can be set to run upon the completion of another job, allowing for sequential execution and better orchestration of your data workflows.\n\nWhen scheduling jobs, dbt provides flexible options: you can schedule a job to run at specific intervals, specific hours, or using a cron schedule for more complex timing requirements. Advanced settings such as environment variable overrides allow for dynamic project behavior, while parameters like target names, thread count adjustments, and dbt version overrides refine the job's execution context. Properly configuring these settings is key to ensuring deployment jobs are executed according to production standards, aligning with the organization's data governance and operational requirements.",
+            "technical_details": "- **Job Name**: Specify a unique name for the deploy job (e.g., `Daily build`).\n- **Execution Settings**: Default command is `dbt build`. Add additional commands as necessary.\n- **Triggers**: \n  - **Run on Schedule**: Choose intervals, specific hours, or cron schedule for job execution.\n  - **Run when Another Job Finishes**: Specify upstream job that triggers this job upon completion.\n- **Advanced Settings**: \n  - **Environment Variables**: Define variables for dynamic configurations during job runs.\n  - **Threads**: Set to control concurrency (default is 4 threads).\n  - **Deferral Options**: Choose to defer against Either Other Jobs or Environments, optimizing performance based on project structure.\n  - **DBT Version**: Override if necessary, though keeping default is recommended unless upgrading.",
+            "key_concepts": [
+                "Define environment variables to customize the behavior of your project when the deploy job runs.",
+                "A deploy job can be scheduled to run at regular intervals, specific times, or via cron syntax.",
+                "Job chaining allows one job to trigger another, enabling complex workflows.",
+                "Deferral options dictate how jobs interact based on state changes, impacting execution efficiency.",
+                "Advanced settings include target names, thread counts, and job-specific dbt version control."
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Define environment variables to customize the behavior of your project when the deploy job runs",
+                "Schedule a job to run on set intervals, specific hours, or cron schedules",
+                "Create a new dbt job and set up execution commands",
+                "Configure optional settings such as environment variable overrides and thread counts",
+                "Configure jobs to be triggered after other dbt jobs for task orchestration",
+                "Configure self-deferral to manage job execution sequences effectively",
+                "Understand when to use which type of job deferral for optimal performance"
+            ]
+        },
+        "target_id": "6aacfae8-5abd-406e-813b-5321232bb4d3",
+        "node_id": "node_7_71340613-243b-4c83-9524-51993a3ac4f2",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_8",
+            "node_5_85710f88-e555-40d6-9b8d-3e47288b6e96",
+            "node_6_183038af-ccac-440d-a99b-1b6f864b51d8",
+            "node_7_71340613-243b-4c83-9524-51993a3ac4f2"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "summary_title": "Creating and Configuring dbt Jobs for Enterprise Deployments",
+            "summary_content": "To establish a dbt job, navigate to your deployment environment page and select **Create job > Deploy job**. This initiates the job creation process, where you can specify the job name and an optional description. The execution settings allow you to define the default command, typically `dbt build`, and include additional commands as needed. Enabling the **Run source freshness** or **Generate docs on run** options allows for further customization during execution. \n\nJobs can be scheduled using several strategies: \n1. **Run on schedule** enables you to select intervals for recurring jobs, specific hours for daily execution, or employ cron syntax for more complex scheduling needs. \n2. Configure the **Run when another job finishes** option to set up job dependencies, enabling automated workflows when upstream jobs complete. This functionality enhances operational efficiency and ensures data integrity in sequential processes.\n\nAdvanced settings also include environment variable definitions, target name specifications, execution timeout settings, and dbt version overrides. Identify any required features, such as job chaining, which necessitate the Starter or Enterprise-tier plan for implementation.",
+            "technical_details": "- Create a job via deployment environment page: **Create job > Deploy job**.\n- Example settings:\n  - Job name: `Daily build`\n  - Execution Commands: Default `dbt build`, optional `dbt source freshness`.\n- Trigger configurations:\n  - Schedule:\n    - **Intervals**: Every 2 hours, for regular execution.\n    - **Specific hours**: Set hours like `0,12,23` (midnight, noon, 11 PM UTC).\n    - **Cron schedules**: Utilize cron syntax for customizable timings, e.g., `0 * * * *` for hourly execution.\n  - **Run when another job finishes**: Specify upstream project and job, allowing seamless workflow execution.\n- Advanced settings:\n  - Specify environment variables.\n  - Set target names and thread counts to optimize performance.",
+            "key_concepts": [
+                "Deploy jobs facilitate seamless execution of dbt commands",
+                "Job configuration allows for detailed execution control and scheduling",
+                "Job chaining requires Starter or Enterprise-tier plan for execution dependencies",
+                "Advanced settings include environment variable configuration and job execution constraints",
+                "Defining run triggers enhances job automation and scheduling capabilities"
+            ],
+            "code_snippets": [],
+            "learning_objectives": [
+                "Create a new dbt job on the deployment environment page using specified settings and triggers",
+                "Schedule a job to run at specific intervals or cron schedules for production needs",
+                "Configure jobs to be triggered after other dbt jobs for efficient job chaining",
+                "Set optional advanced settings such as environment variable overrides and target name configurations"
+            ]
+        },
+        "target_id": "1590bc62-1672-4f69-9994-17d93fce8790",
+        "node_id": "node_7_ab504038-8483-4d78-964f-69438b2e5400",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_9",
+            "node_5_92512a63-ac87-4a03-a8fa-d38b083b4d1a",
+            "node_6_6edfb58c-4095-4221-a445-4fe2dfd8af4d",
+            "node_7_ab504038-8483-4d78-964f-69438b2e5400"
+        ]
+    }
+]

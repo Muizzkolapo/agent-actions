@@ -1,0 +1,434 @@
+[
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quality_score": 88,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 35,
+            "implementation_specificity": 25,
+            "technical_depth": 20,
+            "completeness": 15,
+            "reasoning": "The summary effectively addresses all specific objectives regarding cross-project references in the dbt Mesh pattern, detailing how to implement `{{{{ ref() }}}`, establish governance protocols, and apply model versioning. It includes relevant governance measures and model contracts, which align with the stated objectives. While there are no code snippets, the technical details provided offer a strong foundation for understanding the implications of cross-project references and governance, making it suitable for an advanced audience.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 88 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "d14a1595-883b-49e2-9d0d-ee7efae3df78",
+        "node_id": "node_12_2fc02a5d-8774-4481-9de1-bb5edd7be500",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_0",
+            "node_7_225e8a82-5142-4120-b2e1-2b2a9a87e913",
+            "node_8_32340f67-fbd9-4e4a-a8df-4dbe7c3005da",
+            "node_9_75242887-cc5a-4e0f-b3ec-0a33df4bac0b",
+            "node_10_9ae1543b-b989-469c-89b0-c19d3aba0f10",
+            "node_11_c6283fd0-8d69-4eaf-9f4b-3d438c7907cc",
+            "node_12_2fc02a5d-8774-4481-9de1-bb5edd7be500"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quality_score": 71,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 30,
+            "implementation_specificity": 20,
+            "technical_depth": 16,
+            "completeness": 5,
+            "reasoning": "The summary effectively addresses the specific objectives related to setting up additional dbt projects and cross-project references, providing a clear description of project naming requirements and governance implications. However, it lacks practical implementations such as code snippets, limiting the actionable content that supports the objectives and somewhat affecting the overall completeness.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 71 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "31796635-34d3-4402-9d06-8292ff967985",
+        "node_id": "node_12_f31f13aa-6641-4431-9e18-8626dfb45150",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_1",
+            "node_7_79fd90cd-3d09-4580-8267-a95bd2e6a944",
+            "node_8_eaceaa19-c61c-4f96-9477-d7b303c60523",
+            "node_9_c1e24c26-fc9b-4350-a096-de98d0863aae",
+            "node_10_b9dc9802-b842-443a-8ab8-86ac12253bf7",
+            "node_11_7190cb64-f56b-4066-9627-25e78bd57ced",
+            "node_12_f31f13aa-6641-4431-9e18-8626dfb45150"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quality_score": 85,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 30,
+            "implementation_specificity": 25,
+            "technical_depth": 20,
+            "completeness": 10,
+            "reasoning": "The summary directly addresses the objectives by explaining how to configure cross-project references using the `ref()` syntax and how to set up role-based access controls and model access modifiers, which aligns with the goal of enhancing security and compliance in a dbt Mesh setup. Technical details about governance practices and the importance of structuring projects are highlighted, although an inclusion of actual code snippets would have improved the implementation specificity.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 85 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "0738dabc-5a32-4ae0-b677-3c60132ce96a",
+        "node_id": "node_12_d5b000eb-6995-494c-ba25-71dd0ece397b",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_1",
+            "node_5_4d0385a2-f1cf-45b4-8a96-f02f0bd6acda",
+            "node_6_71df9c1b-7f5a-4e99-a6e3-9f509b07f8ea",
+            "node_7_bae11116-b4d8-4f33-a0f0-6fa9e04aa98c",
+            "node_8_e95e0d7a-1e81-42ce-beea-eb4983071511",
+            "node_9_9856fb8d-6cb7-4e33-a951-bcbe5084379c",
+            "node_10_f8a77bbe-78b4-4a3c-88e9-6c904be59365",
+            "node_11_0cba772c-2255-42a8-a414-6c97713b9283",
+            "node_12_d5b000eb-6995-494c-ba25-71dd0ece397b"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quality_score": 80,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 30,
+            "implementation_specificity": 25,
+            "technical_depth": 15,
+            "completeness": 10,
+            "reasoning": "The summary comprehensively addresses all specific objectives, including setting up cross-project references using the `{{ ref() }}` syntax and establishing governance with model versioning and access controls. It lacks code snippets but includes actionable details and relevant technical configurations. Overall, it meets the needs of the target audience by providing advanced applications of prerequisite knowledge.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 80 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "104f8c98-30b0-417c-9eb3-5bdc1c87166c",
+        "node_id": "node_12_ed801263-a412-45b7-a45a-cdb2d79e0473",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_0",
+            "node_7_e9b78b29-f9f0-4527-80a3-d69228c56b91",
+            "node_8_ddef6bbd-d143-41ba-8f66-b81e76289905",
+            "node_9_e86d9767-393e-41bc-b008-3fb2e67f5fed",
+            "node_10_f7b264bc-cce9-4d62-a999-75c6693da1bc",
+            "node_11_2afb189d-c549-4ec7-bea3-311311dcb250",
+            "node_12_ed801263-a412-45b7-a45a-cdb2d79e0473"
+        ]
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quality_score": 85,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 35,
+            "implementation_specificity": 25,
+            "technical_depth": 20,
+            "completeness": 15,
+            "reasoning": "The summary directly addresses the specific objectives regarding setting up additional dbt projects and configuring cross-project references through the use of the `ref()` function and permission management. It provides actionable insights on governance, service accounts, and environment adjustments, making it highly relevant and practical for the target audience. While it lacks specific code snippets, the depth of implementation details compensates well.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 85 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "76579fdd-83a0-42ae-8f51-2fcb17637e8a",
+        "node_id": "node_12_ceffb5d5-444a-4367-a4b7-17afb6e2082d",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_1",
+            "node_7_b1ffbb26-bc19-43bd-956b-4de1a45f743f",
+            "node_8_636ffcef-7057-469a-8977-ad5faa0d2b37",
+            "node_9_bc6a3249-11f0-40a0-9bc6-98fe1a282807",
+            "node_10_2b05a891-febd-42f5-8236-b9e73bf01cd5",
+            "node_11_563f8a19-04c7-4314-b7c4-99837f50fb35",
+            "node_12_ceffb5d5-444a-4367-a4b7-17afb6e2082d"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quality_score": 78,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 30,
+            "implementation_specificity": 25,
+            "technical_depth": 16,
+            "completeness": 7,
+            "reasoning": "The summary effectively addresses the specific objectives of configuring cross-project references in Staging environments and implementing model governance through access modifiers and contracts. It provides clear guidelines on managing staging environments to prevent access to production data and outlines governance practices, though it lacks code snippets or specific configuration commands, which slightly impacts the implementation specificity. Overall, it presents advanced applications of dbt concepts in a manner suitable for the target audience.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 78 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "1257e293-3b31-46b0-b830-3d6152f9b077",
+        "node_id": "node_12_90b0430e-f13f-4738-a1c8-8aecf5bc1d63",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_3",
+            "node_5_093abd84-2661-4db2-8df8-422657e3926e",
+            "node_6_69fa42aa-01db-4e32-9feb-3c37f44e67d1",
+            "node_7_69577249-2dea-4d1f-9236-cf052f267c1a",
+            "node_8_2863d32c-70c8-4a5d-b93d-5033d5a12d5d",
+            "node_9_4cbc2c69-5b74-4a1a-abf1-9d0e9bd04a5f",
+            "node_10_b5743137-015e-49dd-ad98-3e0c7134b275",
+            "node_11_9a2bd7d1-80ff-4952-b062-30c58dd6375c",
+            "node_12_90b0430e-f13f-4738-a1c8-8aecf5bc1d63"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quality_score": 77,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 33,
+            "implementation_specificity": 25,
+            "technical_depth": 17,
+            "completeness": 12,
+            "reasoning": "The summary effectively addresses both specific objectives: it explains how to implement model governance by enforcing data structure compliance through model contracts and details the usage of access modifiers for defining cross-project visibility. Although it lacks code snippets, the technical details provided are sufficient for practitioners familiar with dbt administration. The summary covers advanced concepts and governance practices relevant to environment orchestration and role-based access control.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 77 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "e1fe5d62-35a5-4950-a10d-bb54a0bb091f",
+        "node_id": "node_12_ceb4de2f-46a0-444f-be23-7d9e1327f9b7",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_4",
+            "node_5_14e22b26-d418-4056-87e7-824648ac4d40",
+            "node_6_5eded240-c76b-412c-bab9-7142a43b8764",
+            "node_7_252052c8-0552-438a-b096-bfb81ef98cea",
+            "node_8_8637e222-c888-4a2b-a3ea-cf6995416bf6",
+            "node_9_af82960c-49d0-4a80-97e5-043c8213dd79",
+            "node_10_0f78afd4-e6af-4cd0-9ba9-021c04d7addd",
+            "node_11_0a960514-95cf-4856-89ce-e505464abccb",
+            "node_12_ceb4de2f-46a0-444f-be23-7d9e1327f9b7"
+        ]
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quality_score": 85,
+            "quality_tier": "high",
+            "primary_skill_area": "Setting up a dbt mesh and leveraging cross-project references",
+            "objective_alignment": 35,
+            "implementation_specificity": 25,
+            "technical_depth": 15,
+            "completeness": 10,
+            "reasoning": "The summary effectively addresses both specific learning objectives regarding environment types and model governance in dbt Mesh. It clearly explains the importance of Staging environments in preventing unauthorized access to production data and discusses the implications of managing model governance, including the potential breaking changes associated with access level adjustments. Though it lacks code snippets, it provides sufficient technical details and recommendations for implementing governance strategies, making it a strong resource for professionals tasked with managing dbt implementations.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 85 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "0334b263-eea5-4365-88f1-e2a6ed90b742",
+        "node_id": "node_12_41da179b-5b46-4849-b278-e062de26b598",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_5",
+            "node_5_95d976d1-5266-4546-b861-deba9240465e",
+            "node_6_43973cd6-b491-4c2b-9f46-e8552088a444",
+            "node_7_07795da6-90b8-46ba-8585-c88f92c1e76c",
+            "node_8_9fcfa5db-0da9-4a0d-bec8-dd0467317c26",
+            "node_9_2e8b534c-381a-4e4a-a0e0-2220ed17933c",
+            "node_10_56baf92e-47fb-4407-84fe-ccd2dea39ab5",
+            "node_11_746112a3-a1ad-4924-85de-47fe67128e45",
+            "node_12_41da179b-5b46-4849-b278-e062de26b598"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quality_score": 84,
+            "quality_tier": "high",
+            "primary_skill_area": "Creating and maintaining job definitions",
+            "objective_alignment": 30,
+            "implementation_specificity": 25,
+            "technical_depth": 16,
+            "completeness": 13,
+            "reasoning": "The summary comprehensively addresses the specific objectives related to job configuration, scheduling, and advanced settings, directly enabling learners to create and manage dbt jobs effectively. It provides clear technical details on scheduling options and job creation, and while it lacks code snippets, the description of configurations and settings is highly relevant. This aligns with the target audience's responsibilities and prerequisites.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 84 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "9125ad37-5d21-4534-8728-f4ca2b9346a1",
+        "node_id": "node_12_fecdc671-870b-40a7-89eb-74318dbfa338",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_6",
+            "node_5_fef6303b-00ea-4a9d-871a-db65d7f9f50c",
+            "node_6_19817cf7-5618-4d30-86d7-fd413095a4b3",
+            "node_7_e4859933-7e1f-4c5c-b3b3-e77ec771cbf6",
+            "node_8_ef8e6afd-7cc3-4b0c-ad4a-904fa796f0d8",
+            "node_9_69a6e13d-aa7f-4ed9-9bf9-20041c85e519",
+            "node_10_ff598c39-26e5-4953-9b5e-4865471304e2",
+            "node_11_bf1a9153-ee79-4be5-9f79-726624b8e477",
+            "node_12_fecdc671-870b-40a7-89eb-74318dbfa338"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quality_score": 80,
+            "quality_tier": "high",
+            "primary_skill_area": "Creating and maintaining job definitions",
+            "objective_alignment": 30,
+            "implementation_specificity": 25,
+            "technical_depth": 16,
+            "completeness": 14,
+            "reasoning": "The summary successfully addresses all specific learning objectives related to job creation, scheduling, and configuration options in dbt. It provides actionable content such as scheduling intervals and cron syntax, job chaining features, and advanced settings for environment variables and threads. However, it lacks specific code snippets that could illustrate these configurations, which is why implementation specificity received a slightly lower score. Overall, it is comprehensive and well-aligned with the objectives.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 80 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "22b2503d-e87d-40a3-9867-b6247e7cbd85",
+        "node_id": "node_12_974706dc-90b1-4fba-8f6e-4658627a402b",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_7",
+            "node_5_54ed0d90-c47c-4fff-9a8b-c46125f0c59b",
+            "node_6_4b43654f-0cbe-4c78-85fd-c44399326a0d",
+            "node_7_1eb7e97e-2d91-44ab-8a2b-38b2cd6ad52b",
+            "node_8_c8c51f59-248e-444b-a75f-2181a48f1dd5",
+            "node_9_6f841afc-3cf2-4e59-b47b-4fa81ff71f2b",
+            "node_10_1785110b-e0e8-4f10-b6a8-ed4beecbb196",
+            "node_11_142781bf-d214-47a0-8742-47647d29a0c6",
+            "node_12_974706dc-90b1-4fba-8f6e-4658627a402b"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quality_score": 82,
+            "quality_tier": "high",
+            "primary_skill_area": "Creating and maintaining job definitions",
+            "objective_alignment": 32,
+            "implementation_specificity": 26,
+            "technical_depth": 16,
+            "completeness": 8,
+            "reasoning": "The summary effectively covers the majority of the specific learning objectives related to creating and maintaining dbt job definitions. It explains job creation, configuration, scheduling, advanced settings, job chaining, and deferral. However, the summary could be improved by including actual code snippets to enhance implementation specificity. The content is well-focused on advanced applications for a target audience with the appropriate experience level, making it suitable to achieve the stated objectives.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 82 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "dad3a613-45ed-4ba3-aaeb-7afffd874180",
+        "node_id": "node_12_1909e96f-b0c8-4c48-b814-d6690d6f1bea",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_8",
+            "node_5_85710f88-e555-40d6-9b8d-3e47288b6e96",
+            "node_6_183038af-ccac-440d-a99b-1b6f864b51d8",
+            "node_7_71340613-243b-4c83-9524-51993a3ac4f2",
+            "node_8_7e7c7891-c3b0-45f1-8a11-0986c1d7fc78",
+            "node_9_245b4cf3-a279-4f24-b193-8bf8bd6f9fbb",
+            "node_10_6389e0ae-5e04-46c1-ab5a-b8a5ee3cf9ee",
+            "node_11_4682242c-38c9-4e75-b323-47367e68a256",
+            "node_12_1909e96f-b0c8-4c48-b814-d6690d6f1bea"
+        ]
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quality_score": 85,
+            "quality_tier": "high",
+            "primary_skill_area": "Creating and maintaining job definitions",
+            "objective_alignment": 33,
+            "implementation_specificity": 25,
+            "technical_depth": 18,
+            "completeness": 14,
+            "reasoning": "The summary effectively addresses the specific objectives related to creating and maintaining dbt jobs. It guides users through the job creation process, scheduling strategies, and advanced configurations, such as environment variables and job chaining. However, it lacks actual code snippets to instruct learners concretely, thus falling slightly short in implementation specificity, but it provides rich technical details and actionable content.",
+            "filter_decision": {
+                "kept": true,
+                "reason": "Auto-keep: quality_score 85 >= 65",
+                "threshold_used": 65
+            },
+            "code_snippets": []
+        },
+        "target_id": "0ff86932-909a-43e2-a494-0fdc5ebc08bc",
+        "node_id": "node_12_3f26b16e-4fba-43b6-8179-e3b9e0ba5c45",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_9",
+            "node_5_92512a63-ac87-4a03-a8fa-d38b083b4d1a",
+            "node_6_6edfb58c-4095-4221-a445-4fe2dfd8af4d",
+            "node_7_ab504038-8483-4d78-964f-69438b2e5400",
+            "node_8_d08b8e0f-a40a-41be-bbd4-6f9b1c59bd51",
+            "node_9_a904abba-1b35-43ba-ad59-84824d7e9500",
+            "node_10_b2c65999-5883-40be-896d-c50c75a6f7e8",
+            "node_11_a05dd6ee-52cf-4397-88e8-ad767785f8bd",
+            "node_12_3f26b16e-4fba-43b6-8179-e3b9e0ba5c45"
+        ]
+    }
+]

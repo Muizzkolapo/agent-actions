@@ -1,0 +1,622 @@
+[
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual understanding of cross-project references and the associated governance in dbt Mesh, rather than offering executable code examples. Although technical details are present, there are no complete, runnable code implementations, and the snippets are illustrative rather than substantive. Consequently, testing knowledge through conceptual questions about implementation and governance is more appropriate than comparing code implementations.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Implementing Cross-Project References in dbt Mesh",
+            "key_concepts": [
+                "Cross-project references use `{{ ref() }}` for model interlinking in dbt Mesh.",
+                "Supports multi-project deployments on Enterprise and Enterprise+ plans.",
+                "Role-based access control secures who can reference models across projects.",
+                "Model versioning enables controlled updates and backward compatibility.",
+                "Data contracts define expectations and preserve dependencies among models."
+            ],
+            "learning_objectives": [
+                "Implement cross-project references using the `{{ ref() }}` function in dbt Mesh for enhanced multi-project architecture.",
+                "Establish governance protocols for model access across dbt projects.",
+                "Define and apply model versioning to ensure stability in project dependencies."
+            ]
+        },
+        "target_id": "6d8b8dfd-4159-42b5-a7f9-12998e8e94f6",
+        "node_id": "node_20_0023bbf2-5d2c-44e4-a00d-ae4085ee2a79",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_0",
+            "node_7_225e8a82-5142-4120-b2e1-2b2a9a87e913",
+            "node_8_32340f67-fbd9-4e4a-a8df-4dbe7c3005da",
+            "node_9_75242887-cc5a-4e0f-b3ec-0a33df4bac0b",
+            "node_10_9ae1543b-b989-469c-89b0-c19d3aba0f10",
+            "node_11_c6283fd0-8d69-4eaf-9f4b-3d438c7907cc",
+            "node_12_2fc02a5d-8774-4481-9de1-bb5edd7be500",
+            "node_13_f8e3c1e0-e4d2-4ca0-aac5-4127105189e4",
+            "node_14_089f20f9-67fd-44d4-ad26-55cef76872c2",
+            "node_15_78bf2caf-8ca7-4bf9-a104-7d021ad55256",
+            "node_16_fcb3a46e-6558-44ff-80eb-a2a5f5672495",
+            "node_17_cfe7860d-6010-4696-a96f-ebfab19c00bc",
+            "node_20_0023bbf2-5d2c-44e4-a00d-ae4085ee2a79"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_9422e65ffb0687a5"
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content is primarily conceptual, focusing on understanding how to set up a dbt mesh architecture and the importance of unique project names for cross-project references. There are no substantial code snippets provided, and the mentioned technical details are more about configuration than practical implementation. Testing knowledge of principles and requirements surrounding dbt projects is more appropriate in a standard quiz format rather than comparing implementations. Therefore, it is better suited for a normal quiz.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "key_concepts": [
+                "Cross-project references require that each project 'name' be unique in your dbt account.",
+                "A distinctive naming convention supports proper resolution in cross-project workflows.",
+                "Leveraging dbt's governance features enhances model access control across multiple projects."
+            ],
+            "learning_objectives": [
+                "Configure cross-project references using unique project names to support dbt Mesh architecture.",
+                "Implement multi-project architecture in dbt for enhanced collaboration and governance.",
+                "Manage model access and permissions across dbt projects effectively."
+            ]
+        },
+        "target_id": "f7f0e065-c3f7-4919-a7af-f939b0d43f14",
+        "node_id": "node_20_5e687744-0930-4d46-961f-37dc0f7e83bf",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_0",
+            "node_5_a014a587-3bd5-4beb-808b-38e841be1482",
+            "node_6_648c7b2a-ba14-4399-b2f7-d3302ed36cb2_1",
+            "node_7_79fd90cd-3d09-4580-8267-a95bd2e6a944",
+            "node_8_eaceaa19-c61c-4f96-9477-d7b303c60523",
+            "node_9_c1e24c26-fc9b-4350-a096-de98d0863aae",
+            "node_10_b9dc9802-b842-443a-8ab8-86ac12253bf7",
+            "node_11_7190cb64-f56b-4066-9627-25e78bd57ced",
+            "node_12_f31f13aa-6641-4431-9e18-8626dfb45150",
+            "node_13_5668744d-0361-4304-abff-8dc92ccfdbf5",
+            "node_14_ff6fab43-7767-457c-b61b-142f8dd2d68e",
+            "node_15_b5a3162a-99ca-49d3-b2f7-6b1a33d12a4c",
+            "node_16_cb1f471e-7f4c-405c-ba05-4b8821865428",
+            "node_17_c1d14f52-171f-4e6b-9313-a1ccae914e81",
+            "node_20_5e687744-0930-4d46-961f-37dc0f7e83bf"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_f45ac1a42614bad7"
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual understanding, detailing how to set up dbt Mesh and implement governance practices without providing substantial, runnable code examples. The key points revolve around configurations and governance concepts rather than implementation specifics, indicating that a conceptual question is more appropriate here. There are no multiple valid implementations or educational comparisons to be made from the presented material, reinforcing that it should be classified as a normal quiz.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "key_concepts": [
+                "dbt\u2019s governance features allow role-based access control across multiple projects, enhancing security and compliance.",
+                "Groups in dbt organize nodes in the DAG for model access management, enabling easier ownership assignment.",
+                "Access configurations in dbt allow precise control over who can reference specific models, facilitating secure collaboration.",
+                "Models in dbt can have access modifiers: Private, Protected, or Public, controlling their referenceability across projects."
+            ],
+            "learning_objectives": [
+                "Configure cross-project references using the two-argument ref() syntax for dbt Mesh",
+                "Set role-based access controls for models across multiple dbt projects",
+                "Define model access modifiers to enhance security and compliance in a dbt Mesh setup"
+            ]
+        },
+        "target_id": "67cf6e41-6017-4cc6-a2dd-50b7e8c64886",
+        "node_id": "node_20_469c6fbb-69fc-4c6b-b8a8-0fc975a7837b",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_1",
+            "node_5_4d0385a2-f1cf-45b4-8a96-f02f0bd6acda",
+            "node_6_71df9c1b-7f5a-4e99-a6e3-9f509b07f8ea",
+            "node_7_bae11116-b4d8-4f33-a0f0-6fa9e04aa98c",
+            "node_8_e95e0d7a-1e81-42ce-beea-eb4983071511",
+            "node_9_9856fb8d-6cb7-4e33-a951-bcbe5084379c",
+            "node_10_f8a77bbe-78b4-4a3c-88e9-6c904be59365",
+            "node_11_0cba772c-2255-42a8-a414-6c97713b9283",
+            "node_12_d5b000eb-6995-494c-ba25-71dd0ece397b",
+            "node_13_83631941-ce5f-436e-b5bb-48b08b2ef177",
+            "node_14_fc18ad58-0558-4fa5-81c4-fd6245a35f53",
+            "node_15_f4eab239-41b2-4eb6-9e3e-22d103d2797e",
+            "node_16_963e4250-df64-4acc-a8fb-88ae316bd1aa",
+            "node_17_e68ca508-2562-4e1d-80bf-c7d55bcd3f67",
+            "node_20_469c6fbb-69fc-4c6b-b8a8-0fc975a7837b"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_722f1ae5a6df022c"
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual knowledge related to setting up dbt projects and governance practices rather than providing specific, runnable code examples. There are no significant code snippets that demonstrate complete implementations or multiple valid approaches. Instead, the material outlines theoretical aspects such as cross-project references and model versioning, which are better tested through standard multiple choice questions addressing 'what' and 'why' rather than 'how to implement'.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "key_concepts": [
+                "Model versioning in dbt allows for graceful evolution and deprecation of models.",
+                "Cross-project references facilitate collaboration between teams working on separate dbt projects.",
+                "Using groups in dbt helps manage model access and organization across projects."
+            ],
+            "learning_objectives": [
+                "Implement cross-project references using the `{{ ref() }}` syntax for dbt Mesh.",
+                "Configure model versioning to manage changes and stability across projects effectively.",
+                "Establish governance structures utilizing groups and access controls in multi-project architecture."
+            ]
+        },
+        "target_id": "4251ddcb-71e1-4030-86fc-984d020eeb43",
+        "node_id": "node_20_3e0614ab-5f17-4aff-beb4-f5034230f91e",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_0",
+            "node_7_e9b78b29-f9f0-4527-80a3-d69228c56b91",
+            "node_8_ddef6bbd-d143-41ba-8f66-b81e76289905",
+            "node_9_e86d9767-393e-41bc-b008-3fb2e67f5fed",
+            "node_10_f7b264bc-cce9-4d62-a999-75c6693da1bc",
+            "node_11_2afb189d-c549-4ec7-bea3-311311dcb250",
+            "node_12_ed801263-a412-45b7-a45a-cdb2d79e0473",
+            "node_13_582d9a90-7130-48d0-b5b8-952829639194",
+            "node_14_d38b262f-752a-45e7-abcc-b7d273fd0581",
+            "node_15_95b57cb1-8d84-4c0d-870c-bb6087e42f61",
+            "node_16_e02770ef-8e2f-46a3-a26e-c8662347b51e",
+            "node_17_b2fe7133-81be-4255-883c-75acee857b8d",
+            "node_20_3e0614ab-5f17-4aff-beb4-f5034230f91e"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_3daafe420bfc40ea"
+    },
+    {
+        "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual understanding related to implementing a multi-project architecture in dbt and governance features. While it does mention code snippets for referencing models and setting configurations, these are not complete implementations and lack substantial detail for comparison. This material tests knowledge of theoretical concepts, such as how to manage cross-project references and access control, rather than practical code implementations, making it more suitable for a normal quiz format.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Setting Up Additional dbt Projects with Mesh",
+            "key_concepts": [
+                "Mesh enables independent and collaborative work across projects",
+                "Cross-project references facilitate model interdependencies",
+                "Governance features manage access and permissions for models",
+                "Model versioning allows for controlled evolution of model outputs",
+                "Incremental adoption of multi-project patterns aids in scaling effectively"
+            ],
+            "learning_objectives": [
+                "Implement cross-project references using the ref() syntax for dbt Mesh",
+                "Configure model governance to control access across multiple dbt projects",
+                "Establish additional dbt projects to enhance organizational scalability and collaboration"
+            ]
+        },
+        "target_id": "bb7bc527-3285-48ac-bff2-586a48530b67",
+        "node_id": "node_20_767ef260-b20d-421d-ac32-4f06f3e8be03",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_2",
+            "node_5_f9e3e91c-7ecc-4d07-99ec-d83c751e1f2a",
+            "node_6_bed13be3-53c3-4eb7-abc7-bc30a9a52b66_1",
+            "node_7_b1ffbb26-bc19-43bd-956b-4de1a45f743f",
+            "node_8_636ffcef-7057-469a-8977-ad5faa0d2b37",
+            "node_9_bc6a3249-11f0-40a0-9bc6-98fe1a282807",
+            "node_10_2b05a891-febd-42f5-8236-b9e73bf01cd5",
+            "node_11_563f8a19-04c7-4314-b7c4-99837f50fb35",
+            "node_12_ceffb5d5-444a-4367-a4b7-17afb6e2082d",
+            "node_13_731aa852-a656-45e0-863d-24c69df5c8c6",
+            "node_14_d63265b0-babc-40f5-b9c7-0b58f4079beb",
+            "node_15_4852e43f-da04-4324-934e-fe4fb347306c",
+            "node_16_f8d7427b-20a1-4322-b6b5-c6ac59720f24",
+            "node_17_b67ae1f6-e835-4eed-9448-01a18bafd200",
+            "node_20_767ef260-b20d-421d-ac32-4f06f3e8be03"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_3920a4855c1282d2"
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual understanding of how to manage Staging environments and implement model governance in dbt Mesh. Although there are a few technical details, no complete runnable code examples are provided, and the information lacks complexity that would lend itself to multiple approaches. The key concepts and governance practices discussed are better suited for assessment through comprehension rather than coding implementation, making a normal quiz format more appropriate.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Managing Staging Environments in dbt Mesh for Cross-Project References",
+            "key_concepts": [
+                "Staging environments resolve cross-project references to Staging data.",
+                "Only references from Production environments resolve to Production data.",
+                "Model contracts define data structure standards and enforce stability.",
+                "Access modifiers control the visibility and use of models: Private, Protected, Public.",
+                "Model governance ensures data integrity and security during collaborative development."
+            ],
+            "learning_objectives": [
+                "Configure cross-project references to resolve to Staging data in Staging environments for secure development and data isolation.",
+                "Implement model governance through the use of access modifiers and model contracts to enhance data integrity and security."
+            ]
+        },
+        "target_id": "e285ca4f-45dc-49bd-be3b-229319864d84",
+        "node_id": "node_20_80db299f-0f79-4aa1-925e-8742deb81913",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_3",
+            "node_5_093abd84-2661-4db2-8df8-422657e3926e",
+            "node_6_69fa42aa-01db-4e32-9feb-3c37f44e67d1",
+            "node_7_69577249-2dea-4d1f-9236-cf052f267c1a",
+            "node_8_2863d32c-70c8-4a5d-b93d-5033d5a12d5d",
+            "node_9_4cbc2c69-5b74-4a1a-abf1-9d0e9bd04a5f",
+            "node_10_b5743137-015e-49dd-ad98-3e0c7134b275",
+            "node_11_9a2bd7d1-80ff-4952-b062-30c58dd6375c",
+            "node_12_90b0430e-f13f-4738-a1c8-8aecf5bc1d63",
+            "node_13_e09159eb-3833-4cb0-acd4-294093728397",
+            "node_14_aeec2ca3-6d26-4da5-b984-be3ddf0490c5",
+            "node_15_e5834d62-3c6b-4145-a369-79e270844ba6",
+            "node_16_9a1ff87f-7289-40c7-ba06-5f98d957bf60",
+            "node_17_e1cd6270-385c-4f5f-90c2-cc8a2e1ec5e5",
+            "node_20_80db299f-0f79-4aa1-925e-8742deb81913"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_d7400d2830843fd6"
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on conceptual understanding rather than providing substantial code. It discusses model governance, access modifiers, and their importance in a dbt setup, but lacks specific code implementations or examples. Testing knowledge about what model contracts or access modifiers are suitable for is more appropriate than comparing code implementations since no real coding examples are present. Therefore, a normal quiz is better suited for this content.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Leveraging Model Governance in dbt Mesh",
+            "key_concepts": [
+                "Model contracts enforce data structure standards in dbt models, causing builds to fail if contracts are not met.",
+                "Access modifiers (private, protected, public) define the visibility of models across projects.",
+                "Model groups categorize models for ownership and governance purposes."
+            ],
+            "learning_objectives": [
+                "Implement and enforce model contracts to ensure data structure compliance in dbt models.",
+                "Configure model access modifiers to define cross-project visibility and control for governance purposes."
+            ]
+        },
+        "target_id": "d31351da-a79e-43ae-9a17-e553b8b26d74",
+        "node_id": "node_20_92a844af-2c47-4202-bd2a-0eb42ef0b474",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_4",
+            "node_5_14e22b26-d418-4056-87e7-824648ac4d40",
+            "node_6_5eded240-c76b-412c-bab9-7142a43b8764",
+            "node_7_252052c8-0552-438a-b096-bfb81ef98cea",
+            "node_8_8637e222-c888-4a2b-a3ea-cf6995416bf6",
+            "node_9_af82960c-49d0-4a80-97e5-043c8213dd79",
+            "node_10_0f78afd4-e6af-4cd0-9ba9-021c04d7addd",
+            "node_11_0a960514-95cf-4856-89ce-e505464abccb",
+            "node_12_ceb4de2f-46a0-444f-be23-7d9e1327f9b7",
+            "node_13_be9b4117-149e-4bac-bd19-ebb82b1a2973",
+            "node_14_c0e14889-85aa-49f8-858c-d78284181fa3",
+            "node_15_da1f7dfb-fe96-4df9-977b-bf9bb585b715",
+            "node_16_6cf2c79d-342c-4ada-b024-a016a3bab54d",
+            "node_17_e723737f-144a-41fb-8625-5b26ac1e07e6",
+            "node_20_92a844af-2c47-4202-bd2a-0eb42ef0b474"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_d654d6a84fd36d05"
+    },
+    {
+        "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The provided content primarily focuses on concepts related to dbt Mesh, environment types, and model governance without presenting substantial runnable code examples. The code snippets are minimal and illustrative, lacking in complexity and variety. The discussion centers around theoretical knowledge such as the impact of access level changes and governance frameworks rather than implementation details, making it more suitable for a normal quiz format that tests conceptual understanding rather than coding skills.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Leveraging Governance and Environment Types in dbt Mesh",
+            "key_concepts": [
+                "Changes from Public to Protected are breaking for downstream consumers.",
+                "Staging environments prevent unauthorized access to production data.",
+                "Model contracts enforce standards and regulate stability across models.",
+                "Version management is crucial for smooth transitions in data model structures.",
+                "Governance frameworks facilitate collaboration in multi-project environments."
+            ],
+            "learning_objectives": [
+                "Understand how environment types relate to cross-project references in dbt Mesh.",
+                "Utilize model governance by implementing contracts on models and managing access restrictions."
+            ]
+        },
+        "target_id": "b229e915-189c-4d31-9b53-a514b48e1b02",
+        "node_id": "node_20_0f70f486-1426-43f0-8b79-e9a537d3de01",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_5",
+            "node_5_95d976d1-5266-4546-b861-deba9240465e",
+            "node_6_43973cd6-b491-4c2b-9f46-e8552088a444",
+            "node_7_07795da6-90b8-46ba-8585-c88f92c1e76c",
+            "node_8_9fcfa5db-0da9-4a0d-bec8-dd0467317c26",
+            "node_9_2e8b534c-381a-4e4a-a0e0-2220ed17933c",
+            "node_10_56baf92e-47fb-4407-84fe-ccd2dea39ab5",
+            "node_11_746112a3-a1ad-4924-85de-47fe67128e45",
+            "node_12_41da179b-5b46-4849-b278-e062de26b598",
+            "node_13_4a8e0a6b-fb0f-423e-bc2c-4d60e77b624d",
+            "node_14_a13dda19-ea13-442d-a2e4-ccbf9a75f200",
+            "node_15_4e83e5b9-38e5-4fd9-90eb-67f9172d0e88",
+            "node_16_88917470-114a-4cfa-a9b7-aaabb5a942c3",
+            "node_17_4d8cdd2e-4432-47ed-9741-3d1645a2108e",
+            "node_20_0f70f486-1426-43f0-8b79-e9a537d3de01"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_e506d440f4c18275"
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content focuses primarily on the conceptual understanding of configuring and scheduling dbt jobs rather than implementing specific code solutions. While it explains the structures and steps to manage jobs effectively, there are no substantial code examples provided, which disqualifies it from being a code options quiz. Additionally, the discussion centers on configurations and best practices rather than code comparisons, making it more suited for a normal quiz format.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Configuring dbt Jobs for Scheduling and Dependencies",
+            "key_concepts": [
+                "Deploy jobs can be scheduled using intervals, specific hours, or cron schedules.",
+                "Intervals allow jobs to be triggered every specified number of hours.",
+                "Specific hours schedule jobs at defined UTC times.",
+                "Cron schedules provide flexibility for complex scheduling needs.",
+                "Optional settings include environment variable overrides and thread configurations."
+            ],
+            "learning_objectives": [
+                "Configure a dbt job to run on a set schedule using intervals or cron syntax for job scheduling.",
+                "Create a new dbt job with proper execution and advanced settings for efficient task management.",
+                "Set job triggers to run when another job finishes for effective job chaining."
+            ]
+        },
+        "target_id": "8cf44f3b-e373-4760-a173-15665e0b1ed2",
+        "node_id": "node_20_fdd903cb-41b3-4494-b312-294c60c2bfb3",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_6",
+            "node_5_fef6303b-00ea-4a9d-871a-db65d7f9f50c",
+            "node_6_19817cf7-5618-4d30-86d7-fd413095a4b3",
+            "node_7_e4859933-7e1f-4c5c-b3b3-e77ec771cbf6",
+            "node_8_ef8e6afd-7cc3-4b0c-ad4a-904fa796f0d8",
+            "node_9_69a6e13d-aa7f-4ed9-9bf9-20041c85e519",
+            "node_10_ff598c39-26e5-4953-9b5e-4865471304e2",
+            "node_11_bf1a9153-ee79-4be5-9f79-726624b8e477",
+            "node_12_fecdc671-870b-40a7-89eb-74318dbfa338",
+            "node_13_ffd1a87a-2ba3-47df-b1be-a6113e246fd9",
+            "node_14_43137b32-4e16-42aa-b96e-76f0fd042407",
+            "node_15_9fe09562-2221-4838-bfec-d9d49b00b41a",
+            "node_16_d636d0b4-1152-4597-93bd-06d697dc72ad",
+            "node_17_066ab8ec-1835-4579-8112-d7b9af3a6257",
+            "node_20_fdd903cb-41b3-4494-b312-294c60c2bfb3"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_61c4d289c5e900bf"
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily discusses concepts related to configuring and managing dbt deploy jobs, focusing on scheduling, job chaining, and advanced settings. It does not contain any substantial code examples or allow for multiple valid coding approaches since it aims to explain how to perform configurations and options rather than demonstrating specific implementations. The educational value lies in understanding features and capabilities rather than in coding comparisons, making it more suitable for a conceptual quiz format.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Configuring and Scheduling dbt Deploy Jobs",
+            "key_concepts": [
+                "Deploy jobs execute dbt commands to build production data assets.",
+                "Job default command is `dbt build` but can include multiple commands.",
+                "Jobs can be scheduled using intervals, specific hours, or cron syntax.",
+                "Job chaining allows one job to trigger another after completion.",
+                "Advanced settings enable customization of environment variables and thread counts."
+            ],
+            "learning_objectives": [
+                "Create a new dbt job to automate command execution for prod environments.",
+                "Schedule a job to run on specified intervals or cron configuration.",
+                "Configure optional settings like environment variables and threads for dbt jobs.",
+                "Configure jobs to be triggered after other dbt jobs, enabling efficient workflows."
+            ]
+        },
+        "target_id": "5ecb3253-e9d9-4d63-95ee-625a532e7dce",
+        "node_id": "node_20_8a118ec4-88fe-4408-88dc-a6abfe47e609",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_7",
+            "node_5_54ed0d90-c47c-4fff-9a8b-c46125f0c59b",
+            "node_6_4b43654f-0cbe-4c78-85fd-c44399326a0d",
+            "node_7_1eb7e97e-2d91-44ab-8a2b-38b2cd6ad52b",
+            "node_8_c8c51f59-248e-444b-a75f-2181a48f1dd5",
+            "node_9_6f841afc-3cf2-4e59-b47b-4fa81ff71f2b",
+            "node_10_1785110b-e0e8-4f10-b6a8-ed4beecbb196",
+            "node_11_142781bf-d214-47a0-8742-47647d29a0c6",
+            "node_12_974706dc-90b1-4fba-8f6e-4658627a402b",
+            "node_13_a2a18414-0ba8-4112-a498-6a1f7675e307",
+            "node_14_2953a2cb-20d7-44d2-a080-dc09c706c155",
+            "node_15_d8ce1dc7-b64a-45e6-b5c2-ec3153e01058",
+            "node_16_550d19d1-de4e-45cd-9d8f-1ff2614e9b9f",
+            "node_17_9fc6256a-baea-45e1-9762-933b811b7729",
+            "node_20_8a118ec4-88fe-4408-88dc-a6abfe47e609"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_97067d8bed7aac87"
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content primarily focuses on understanding job configuration and orchestration within dbt, rather than providing detailed, runnable code examples. While some technical details are offered, they are largely descriptive and do not include complete code snippets essential for a code options quiz. Furthermore, there are no multiple valid approaches presented for comparison, making normal quiz questions more appropriate for testing conceptual understanding of job definitions and configurations within dbt.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Configuring dbt Job Definitions and Advanced Settings",
+            "key_concepts": [
+                "Define environment variables to customize the behavior of your project when the deploy job runs.",
+                "A deploy job can be scheduled to run at regular intervals, specific times, or via cron syntax.",
+                "Job chaining allows one job to trigger another, enabling complex workflows.",
+                "Deferral options dictate how jobs interact based on state changes, impacting execution efficiency.",
+                "Advanced settings include target names, thread counts, and job-specific dbt version control."
+            ],
+            "learning_objectives": [
+                "Define environment variables to customize the behavior of your project when the deploy job runs",
+                "Schedule a job to run on set intervals, specific hours, or cron schedules",
+                "Create a new dbt job and set up execution commands",
+                "Configure optional settings such as environment variable overrides and thread counts",
+                "Configure jobs to be triggered after other dbt jobs for task orchestration",
+                "Configure self-deferral to manage job execution sequences effectively",
+                "Understand when to use which type of job deferral for optimal performance"
+            ]
+        },
+        "target_id": "7db9a949-c94e-4b2e-8689-0f56ea254a8c",
+        "node_id": "node_20_fa06e580-756f-4e94-9ab5-c05d3b652d68",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_8",
+            "node_5_85710f88-e555-40d6-9b8d-3e47288b6e96",
+            "node_6_183038af-ccac-440d-a99b-1b6f864b51d8",
+            "node_7_71340613-243b-4c83-9524-51993a3ac4f2",
+            "node_8_7e7c7891-c3b0-45f1-8a11-0986c1d7fc78",
+            "node_9_245b4cf3-a279-4f24-b193-8bf8bd6f9fbb",
+            "node_10_6389e0ae-5e04-46c1-ab5a-b8a5ee3cf9ee",
+            "node_11_4682242c-38c9-4e75-b323-47367e68a256",
+            "node_12_1909e96f-b0c8-4c48-b814-d6690d6f1bea",
+            "node_13_63b1860d-dd30-4643-acb2-2aa1dd9280fe",
+            "node_14_fcaf27cc-b059-4898-b070-9e5b0ef7e545",
+            "node_15_7e786635-237e-4c50-a6ce-72b8a0b02554",
+            "node_16_ec2828ca-6e36-4222-9d6e-afa175dfc3ff",
+            "node_17_43e064e9-b481-4875-ae4c-80d294cfac95",
+            "node_20_fa06e580-756f-4e94-9ab5-c05d3b652d68"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_61ab158ced665bb8"
+    },
+    {
+        "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+        "content": {
+            "quiz_type": "normal",
+            "reasoning": "The content mainly covers the conceptual aspects of creating and configuring dbt jobs and focuses on understanding settings and configurations without providing substantial code examples. While there is some technical detail, it lacks complete code implementations or multiple approaches to solving problems, making it more suited for a normal quiz format. The technical details serve primarily to inform rather than to demonstrate how to implement something through various methods.",
+            "has_substantial_code": false,
+            "code_complexity_level": "simple",
+            "suitable_for_code_comparison": false,
+            "summary_title": "Creating and Configuring dbt Jobs for Enterprise Deployments",
+            "key_concepts": [
+                "Deploy jobs facilitate seamless execution of dbt commands",
+                "Job configuration allows for detailed execution control and scheduling",
+                "Job chaining requires Starter or Enterprise-tier plan for execution dependencies",
+                "Advanced settings include environment variable configuration and job execution constraints",
+                "Defining run triggers enhances job automation and scheduling capabilities"
+            ],
+            "learning_objectives": [
+                "Create a new dbt job on the deployment environment page using specified settings and triggers",
+                "Schedule a job to run at specific intervals or cron schedules for production needs",
+                "Configure jobs to be triggered after other dbt jobs for efficient job chaining",
+                "Set optional advanced settings such as environment variable overrides and target name configurations"
+            ]
+        },
+        "target_id": "13829042-e97c-4f9f-96ef-0e51855ca5e0",
+        "node_id": "node_20_d656d160-f46e-4a48-9d4a-a7b3da3eaed0",
+        "lineage": [
+            "node_0_71dbbf45-c707-4368-b20d-dc8c881cef7a",
+            "node_1_13c9fb5b-fdef-42ce-998c-da4a1e978837",
+            "node_2_298e4355-5a00-47c7-b805-8d9937488d5d_0",
+            "node_3_9c169b20-7fc6-4f9d-9432-d9a5c6da8787_0",
+            "node_4_dcc1f7f7-a3b8-4384-a42b-901e1d083b3a_9",
+            "node_5_92512a63-ac87-4a03-a8fa-d38b083b4d1a",
+            "node_6_6edfb58c-4095-4221-a445-4fe2dfd8af4d",
+            "node_7_ab504038-8483-4d78-964f-69438b2e5400",
+            "node_8_d08b8e0f-a40a-41be-bbd4-6f9b1c59bd51",
+            "node_9_a904abba-1b35-43ba-ad59-84824d7e9500",
+            "node_10_b2c65999-5883-40be-896d-c50c75a6f7e8",
+            "node_11_a05dd6ee-52cf-4397-88e8-ad767785f8bd",
+            "node_12_3f26b16e-4fba-43b6-8179-e3b9e0ba5c45",
+            "node_13_f6b05fb1-833f-4651-9365-9585f1bcab82",
+            "node_14_631ad86c-e429-4b54-8bc0-c0acfec11cb4",
+            "node_15_7190275a-d44f-4492-879a-9b0294237f80",
+            "node_16_881ea9e5-cdb4-4184-9fa2-173e61fe93f6",
+            "node_17_b9c5d4ea-6150-4fdd-821b-1b67c7d2492a",
+            "node_20_d656d160-f46e-4a48-9d4a-a7b3da3eaed0"
+        ],
+        "metadata": {
+            "agent_type": "passthrough",
+            "reason": "where_clause_not_matched",
+            "skipped_by_where_clause": true
+        },
+        "loop_correlation_id": "corr_e052fa16a05b4dea"
+    }
+]

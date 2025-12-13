@@ -101,44 +101,19 @@ class InitialStrategy(AgentStrategy):
         """
         return generate_staging(agent_config, agent_name, file_path, base_directory, output_directory, idx)
 
-class TerminalStrategy(AgentStrategy):
+class StandardStrategy(AgentStrategy):
     """
-    Strategy for the terminal (final) agent in a workflow.
+    Standard strategy for executing agents (formerly Intermediate/Terminal).
 
-    This strategy typically handles the final processing and output generation.
-    """
-
-    def execute(self, agent_config: Dict[str, Any], agent_name: str, file_path: str, base_directory: str, output_directory: str, idx: int, agent_configs: Optional[Dict[str, Dict]]=None) -> str:
-        """
-        Execute the terminal agent strategy.
-
-        Generates final target data from the input file.
-
-        Args:
-            agent_config: Configuration dictionary for the agent.
-            agent_name: Name of the agent.
-            file_path: Path to the file being processed.
-            base_directory: Base input directory.
-            output_directory: Directory where output should be written.
-            idx: Index of the config being processed.
-            agent_configs: Optional dict mapping agent names to their configs (for dependency resolution).
-        Returns:
-            Path to the generated output file.
-        """
-        return self._execute_generate_target(agent_config, agent_name, file_path, base_directory, output_directory, idx, agent_configs)
-
-class IntermediateStrategy(AgentStrategy):
-    """
-    Strategy for intermediate agents in a workflow.
-
-    This strategy handles the processing of data between initial and terminal agents.
+    This strategy handles the processing of data for all agents except the initial one.
+    It reads input from upstream directories and generates target output.
     """
 
     def execute(self, agent_config: Dict[str, Any], agent_name: str, file_path: str, base_directory: str, output_directory: str, idx: int, agent_configs: Optional[Dict[str, Dict]]=None) -> str:
         """
-        Execute the intermediate agent strategy.
+        Execute the standard agent strategy.
 
-        Processes input data and generates intermediate target data.
+        Processes input data and generates target data using _execute_generate_target.
 
         Args:
             agent_config: Configuration dictionary for the agent.
