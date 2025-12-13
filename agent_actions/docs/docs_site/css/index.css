@@ -1,6 +1,6 @@
 /* ============================================
    Main CSS Entry Point
-   Phase 5: Cards, Badges, Tables (Compatibility Mode)
+   Phase 7: Fully Modular Architecture - Complete
    ============================================ */
 
 /* Core - New modular architecture */
@@ -15,14 +15,24 @@
 @import './layout/responsive.css';
 
 /* Components - New modular architecture (alphabetical) */
+@import './components/action-badges.css';
 @import './components/badges.css';
+@import './components/breadcrumbs.css';
 @import './components/cards.css';
+@import './components/charts.css';
+@import './components/dag.css';
+@import './components/details.css';
 @import './components/filters.css';
+@import './components/interactions.css';
+@import './components/modals.css';
 @import './components/navigation.css';
 @import './components/search.css';
 @import './components/tables.css';
+@import './components/tabs.css';
+@import './components/utilities.css';
 
-/* Legacy - Old CSS files (will be removed in Phase 6) */
-@import './styles.css';
-@import './critical-fixes.css';
-@import './skeleton.css';
+/* Layout - Responsive overrides */
+@import './layout/responsive-overrides.css';
+
+/* Legacy - Loading states */
+@import './skeleton.css';        /* Loading states */

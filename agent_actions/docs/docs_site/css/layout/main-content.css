@@ -11,16 +11,13 @@
 /* Main Content Area - Using enhanced sidebar width (240px -> 64px) */
 .main-content {
     flex: 1;
-    margin-left: 240px;                   /* Enhanced from 180px */
+    margin-left: 240px !important;        /* Enhanced from 180px */
     margin-right: auto;
     padding: var(--space-6) var(--space-5);
     max-width: 1600px;
     width: 100%;
     transition: margin-left 0.2s ease;
-}
-
-.sidebar.collapsed ~ .main-content {
-    margin-left: 64px;                    /* Enhanced from 56px */
+    position: relative;
 }
 
 /* Content View Management */

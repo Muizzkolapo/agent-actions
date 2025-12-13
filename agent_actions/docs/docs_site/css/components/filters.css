@@ -9,7 +9,7 @@
     gap: 12px;
     padding: 20px 0;                      /* Enhanced from 16px */
     border-bottom: 1px solid #e5e7eb;     /* Enhanced color */
-    margin-bottom: 24px;
+    margin-bottom: 16px;                  /* Reduced from 24px */
     flex-wrap: wrap;
     position: relative;                    /* For filter panel positioning */
 }

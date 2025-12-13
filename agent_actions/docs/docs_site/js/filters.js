@@ -102,8 +102,25 @@ class FilterManager {
 
         filterButton.addEventListener('click', () => {
             const isVisible = filterPanel.style.display !== 'none';
-            filterPanel.style.display = isVisible ? 'none' : 'block';
-            filterButton.classList.toggle('active', !isVisible);
+
+            if (!isVisible) {
+                // Position the panel below the button
+                const buttonRect = filterButton.getBoundingClientRect();
+                const filterBar = filterButton.closest('.filter-bar');
+
+                // Get filter bar's position to align panel with it
+                const filterBarRect = filterBar ? filterBar.getBoundingClientRect() : { left: buttonRect.left };
+
+                // Use fixed positioning to place panel below button
+                filterPanel.style.position = 'fixed';
+                filterPanel.style.top = `${buttonRect.bottom + 4}px`;
+                filterPanel.style.left = `${filterBarRect.left}px`;
+                filterPanel.style.display = 'block';
+                filterButton.classList.add('active');
+            } else {
+                filterPanel.style.display = 'none';
+                filterButton.classList.remove('active');
+            }
         });
 
         // Close on click outside

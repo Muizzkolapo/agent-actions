@@ -6,15 +6,15 @@
 .stats-cards {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: var(--space-4);
-    margin-bottom: var(--space-6);
+    gap: 16px;                            /* Enhanced - explicit 16px */
+    margin-bottom: 24px;                  /* Enhanced - explicit 24px */
 }
 
 .stat-card {
     background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: var(--space-3) var(--space-4);
+    padding: 20px;                        /* Enhanced - explicit 20px for more breathing room */
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -99,38 +99,88 @@
 }
 
 .stat-card .stat-value {
-    font-size: 2.5rem;                    /* Enhanced from 1.75rem */
-    font-weight: 600;
+    font-size: 2.5rem;
+    font-weight: 700;                     /* Enhanced - bolder for emphasis */
     font-family: var(--font-mono);
-    background: linear-gradient(135deg, var(--text) 0%, var(--text-muted) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin-bottom: 0;
+    color: var(--text);                   /* Enhanced - solid color, no gradient */
+    font-variant-numeric: tabular-nums;   /* Enhanced - better number alignment */
+    margin-bottom: 0.25rem;
     line-height: 1;
     letter-spacing: -0.02em;
 }
 
 .stat-card .stat-label {
-    font-size: 0.6875rem;
+    font-size: 0.8125rem;                 /* Enhanced - 13px, more readable */
     color: var(--text-muted);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-weight: 500;                     /* Enhanced - medium instead of semibold */
+    text-transform: none;                 /* Enhanced - no uppercase */
+    letter-spacing: 0;                    /* Enhanced - no letter spacing */
+}
+
+/* Metric Cards (used in observability views) */
+.metric-card {
+    background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;                        /* Enhanced - explicit 20px */
+    box-shadow: var(--shadow-sm);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--teal-500) 100%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.metric-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+    border-color: var(--accent);
+}
+
+.metric-card:hover::before {
+    opacity: 1;
+}
+
+.metric-value {
+    font-size: 2rem;                      /* Enhanced - 32px */
+    font-weight: 700;                     /* Enhanced - bolder */
+    font-family: var(--font-mono);
+    color: var(--text);                   /* Enhanced - solid color */
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    margin-bottom: var(--space-1);
+}
+
+.metric-label {
+    font-size: 0.75rem;
+    font-weight: 500;                     /* Enhanced - medium */
+    color: var(--text-muted);
+    text-transform: none;                 /* Enhanced - no uppercase */
+    letter-spacing: 0;                    /* Enhanced - no letter spacing */
 }
 
 /* Workflow Cards */
 .workflows-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: var(--space-2);
+    gap: 16px;                            /* Enhanced - explicit 16px */
 }
 
 .workflow-card {
     background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    padding: var(--space-4);
+    padding: 20px;                        /* Enhanced - explicit 20px */
     cursor: pointer;
     transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--shadow-sm);

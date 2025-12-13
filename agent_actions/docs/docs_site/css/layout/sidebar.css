@@ -4,10 +4,10 @@
 
 /* Sidebar Container - Using enhanced values from critical-fixes.css */
 .sidebar {
-    width: 240px;                         /* Enhanced from 180px */
-    min-width: 240px;
-    background: #0f172a;                  /* Solid background (enhanced) */
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    width: 240px !important;              /* Enhanced from 180px */
+    min-width: 240px !important;
+    background: #0f172a !important;       /* Solid background (enhanced) */
+    border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     position: fixed;
     height: 100vh;
     overflow-y: auto;
@@ -20,8 +20,12 @@
 
 /* Collapsed State */
 .sidebar.collapsed {
-    width: 64px;                          /* Enhanced from 56px */
-    min-width: 64px;
+    width: 64px !important;               /* Enhanced from 56px */
+    min-width: 64px !important;
+}
+
+.sidebar.collapsed ~ .main-content {
+    margin-left: 64px !important;
 }
 
 .sidebar.collapsed .logo span,
@@ -214,17 +218,17 @@
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    font-size: 0.625rem;
-    font-weight: 600;
+    font-size: 0.6875rem !important;      /* 11px - enhanced */
+    font-weight: 600 !important;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.6) !important;  /* Enhanced from 0.5 */
     margin-bottom: var(--space-1);
     padding: var(--space-1) 0;
 }
 
 .nav-header svg {
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.6) !important;  /* Enhanced from 0.5 */
 }
 
 .nav-header.clickable {
@@ -292,9 +296,9 @@
 /* Navigation Links */
 .nav-link {
     display: block;
-    padding: 6px 8px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.75rem;
+    padding: 8px 10px !important;         /* Enhanced - more padding */
+    color: rgba(255, 255, 255, 0.85) !important;  /* Enhanced - brighter */
+    font-size: 0.8125rem !important;      /* Enhanced - slightly larger */
     border-radius: var(--radius-sm);
     transition: all 0.15s;
     font-weight: 400;
@@ -302,14 +306,16 @@
 }
 
 .nav-link:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: rgba(255, 255, 255, 0.08) !important;  /* Enhanced */
+    color: rgba(255, 255, 255, 1) !important;
 }
 
 .nav-link.active {
-    background: linear-gradient(90deg, var(--accent) 0%, var(--teal-500) 100%);
-    color: #ffffff;
-    font-weight: 500;
+    background: rgba(1, 124, 238, 0.15) !important;  /* Enhanced - softer accent */
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    border-left: 3px solid var(--accent) !important;
+    padding-left: 7px !important;         /* Adjust for border */
     box-shadow: 0 2px 8px rgba(1, 124, 238, 0.3);
 }
 
