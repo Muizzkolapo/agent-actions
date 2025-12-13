@@ -1,0 +1,35 @@
+/* ============================================
+   Responsive Layout
+   ============================================ */
+
+@media (max-width: 768px) {
+    /* Hide sidebar off-screen on mobile - Using enhanced width (240px) */
+    .sidebar {
+        transform: translateX(-240px);
+    }
+
+    .sidebar.collapsed {
+        transform: translateX(-240px);
+    }
+
+    /* Main content full width on mobile */
+    .main-content {
+        margin-left: 0;
+        padding: var(--space-6) var(--space-4);
+    }
+
+    /* Single column grids on mobile */
+    .workflows-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .stats-cards {
+        grid-template-columns: 1fr;
+    }
+
+    /* Filter bar stacked on mobile */
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

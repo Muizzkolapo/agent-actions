@@ -1,0 +1,36 @@
+/* ============================================
+   Breadcrumbs Component
+   ============================================ */
+
+/* Breadcrumb Navigation */
+.breadcrumbs,
+.breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-bottom: 1rem !important;       /* Enhanced - more space */
+    font-size: 0.875rem !important;
+    color: var(--text-muted);
+}
+
+/* Breadcrumb Links */
+.breadcrumbs a,
+.breadcrumb a {
+    color: #6b7280 !important;            /* Enhanced - specific gray */
+    font-weight: 500 !important;          /* Enhanced - medium weight */
+    transition: color 0.15s ease;
+}
+
+.breadcrumbs a:hover,
+.breadcrumb a:hover {
+    color: var(--accent) !important;
+    text-decoration: underline !important;  /* Enhanced - underline on hover */
+    text-underline-offset: 2px !important;  /* Enhanced - offset for better appearance */
+}
+
+/* Current Page (non-link) */
+.breadcrumbs span:not(a),
+.breadcrumb span:not(a) {
+    color: #111827 !important;            /* Enhanced - darker for current page */
+    font-weight: 600 !important;          /* Enhanced - bold for current page */
+}

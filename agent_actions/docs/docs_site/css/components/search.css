@@ -1,0 +1,131 @@
+/* ============================================
+   Search Component
+   ============================================ */
+
+/* Filter Search (in filter bar) */
+.filter-search {
+    position: relative;
+    flex: 0 1 320px;
+    max-width: 400px;
+}
+
+.filter-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #5f6368;
+    pointer-events: none;
+}
+
+.filter-search-input {
+    width: 100%;
+    height: 40px;                         /* Enhanced from 36px to match filter buttons */
+    padding: 0 12px 0 36px;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;                   /* Enhanced from 4px to match filter buttons */
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    color: #202124;
+    background: #ffffff;
+    transition: all 0.15s ease;
+}
+
+.filter-search-input:hover {
+    border-color: #c0c0c0;
+}
+
+.filter-search-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.filter-search-input::placeholder {
+    color: #9aa0a6;
+}
+
+/* Enhanced Search Box (with clear button) */
+.search-box-enhanced {
+    position: relative;
+    flex: 0 1 320px;
+    max-width: 400px;
+}
+
+.search-box-enhanced-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #5f6368;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.search-box-enhanced-input {
+    width: 100%;
+    height: 40px;
+    padding: 0 36px 0 36px;              /* Space for both search icon and clear button */
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    color: #202124;
+    background: #ffffff;
+    transition: all 0.15s ease;
+}
+
+.search-box-enhanced-input:hover {
+    border-color: #c0c0c0;
+}
+
+.search-box-enhanced-input:focus {
+    outline: none;
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 1px #1a73e8;
+}
+
+.search-box-enhanced-input::placeholder {
+    color: #9aa0a6;
+}
+
+.search-box-enhanced-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    padding: 4px;
+    cursor: pointer;
+    color: #5f6368;
+    display: none;                        /* Hidden by default */
+    border-radius: 50%;
+    transition: all 0.15s ease;
+}
+
+.search-box-enhanced-clear:hover {
+    background: #f8f9fa;
+    color: #202124;
+}
+
+.search-box-enhanced-clear svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Show clear button when input has value (controlled by JS) */
+.search-box-enhanced-clear.visible {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .filter-search,
+    .search-box-enhanced {
+        flex: 1 1 auto;
+        max-width: 100%;
+    }
+}

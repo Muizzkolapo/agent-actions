@@ -44,15 +44,55 @@ class FilterManager {
         const searchInput = document.getElementById(this.ids.search);
         if (!searchInput) return;
 
+        // Get clear button and results count elements
+        const clearButton = document.getElementById(`${this.viewId}-search-clear`);
+        const resultsCount = document.getElementById(`${this.viewId}-results-count`);
+
+        // Setup clear button click handler
+        if (clearButton) {
+            clearButton.addEventListener('click', () => {
+                searchInput.value = '';
+                this.searchQuery = '';
+                clearButton.style.display = 'none';
+                if (resultsCount) resultsCount.style.display = 'none';
+                this.applyFilters();
+                this.saveState();
+                searchInput.focus();
+            });
+        }
+
         let debounceTimer;
         searchInput.addEventListener('input', (e) => {
             clearTimeout(debounceTimer);
+
+            // Show/hide clear button
+            const hasValue = e.target.value.length > 0;
+            if (clearButton) {
+                clearButton.style.display = hasValue ? 'block' : 'none';
+            }
+
             debounceTimer = setTimeout(() => {
                 this.searchQuery = e.target.value.toLowerCase();
                 this.applyFilters();
                 this.saveState();
+                this.updateResultsCount();
             }, 300);
         });
+    }
+
+    updateResultsCount() {
+        const resultsCount = document.getElementById(`${this.viewId}-results-count`);
+        if (!resultsCount) return;
+
+        const count = this.filteredItems.length;
+        const total = this.allItems.length;
+
+        if (this.searchQuery || Object.keys(this.activeFilters).length > 0) {
+            resultsCount.textContent = `Showing ${count} of ${total} ${this.viewId === 'workflows' ? 'workflows' : 'runs'}`;
+            resultsCount.style.display = 'block';
+        } else {
+            resultsCount.style.display = 'none';
+        }
     }
 
     setupFilterButton() {
@@ -62,8 +102,25 @@ class FilterManager {
 
         filterButton.addEventListener('click', () => {
             const isVisible = filterPanel.style.display !== 'none';
-            filterPanel.style.display = isVisible ? 'none' : 'block';
-            filterButton.classList.toggle('active', !isVisible);
+
+            if (!isVisible) {
+                // Position the panel below the button
+                const buttonRect = filterButton.getBoundingClientRect();
+                const filterBar = filterButton.closest('.filter-bar');
+
+                // Get filter bar's position to align panel with it
+                const filterBarRect = filterBar ? filterBar.getBoundingClientRect() : { left: buttonRect.left };
+
+                // Use fixed positioning to place panel below button
+                filterPanel.style.position = 'fixed';
+                filterPanel.style.top = `${buttonRect.bottom + 4}px`;
+                filterPanel.style.left = `${filterBarRect.left}px`;
+                filterPanel.style.display = 'block';
+                filterButton.classList.add('active');
+            } else {
+                filterPanel.style.display = 'none';
+                filterButton.classList.remove('active');
+            }
         });
 
         // Close on click outside
@@ -330,6 +387,9 @@ class FilterManager {
 
         this.filteredItems = items;
 
+        // Update results count
+        this.updateResultsCount();
+
         // Notify callback
         if (this.options.onFilter) {
             this.options.onFilter(items);
@@ -398,6 +458,12 @@ class FilterManager {
             const searchInput = document.getElementById(this.ids.search);
             if (searchInput && this.searchQuery) {
                 searchInput.value = this.searchQuery;
+
+                // Show clear button if search has value
+                const clearButton = document.getElementById(`${this.viewId}-search-clear`);
+                if (clearButton) {
+                    clearButton.style.display = 'block';
+                }
             }
 
             if (this.currentSort) {

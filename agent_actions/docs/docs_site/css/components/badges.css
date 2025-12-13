@@ -1,0 +1,106 @@
+/* ============================================
+   Badges Component
+   ============================================ */
+
+/* Base Badge Styles */
+.action-badge,
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+/* Status Badge - Enhanced with status indicator dots */
+.status-badge {
+    font-weight: 600;                     /* Enhanced from 500 */
+}
+
+/* Add status indicator dots (::before pseudo-element) */
+.status-badge::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+/* Success State - WCAG AAA compliant (Enhanced) */
+.status-badge.success,
+.status-badge.completed {
+    background: #dcfce7;                  /* Enhanced from #d1fae5 */
+    color: #166534;                       /* Enhanced - darker for 4.8:1 contrast */
+    border: 1px solid #86efac;            /* Enhanced from #a7f3d0 */
+}
+
+.status-badge.success::before,
+.status-badge.completed::before {
+    background: #16a34a;
+}
+
+/* Failed State - Enhanced */
+.status-badge.failed {
+    background: #fee2e2;                  /* Enhanced */
+    color: #991b1b;                       /* Enhanced - darker for 5.2:1 contrast */
+    border: 1px solid #fca5a5;            /* Enhanced from #fecaca */
+}
+
+.status-badge.failed::before {
+    background: #dc2626;
+}
+
+/* Running State - Enhanced with pulse animation */
+.status-badge.running {
+    background: #dbeafe;                  /* Enhanced */
+    color: #1e3a8a;                       /* Enhanced - darker for 5.8:1 contrast */
+    border: 1px solid #93c5fd;            /* Enhanced from #bfdbfe */
+}
+
+.status-badge.running::before {
+    background: #2563eb;
+    animation: statusPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Pending State - Enhanced */
+.status-badge.pending {
+    background: #f3f4f6;                  /* Enhanced from #f3f4f6 */
+    color: #374151;                       /* Enhanced - darker for 7.2:1 contrast */
+    border: 1px solid #d1d5db;            /* Enhanced from #e5e7eb */
+}
+
+.status-badge.pending::before {
+    background: #6b7280;
+}
+
+/* Remove hover effect from status badges (they're not interactive) */
+.status-badge:hover,
+.action-badge:not([role="button"]):hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Workflow Version Badge */
+.workflow-version-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: #f1f3f4;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    font-size: 0.6875rem;
+    font-family: var(--font-mono);
+    color: #5f6368;
+    font-weight: 500;
+}

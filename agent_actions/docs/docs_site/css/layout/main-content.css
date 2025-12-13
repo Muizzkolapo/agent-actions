@@ -1,0 +1,45 @@
+/* ============================================
+   Main Content Layout
+   ============================================ */
+
+/* App Container */
+.app-container {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Main Content Area - Using enhanced sidebar width (240px -> 64px) */
+.main-content {
+    flex: 1;
+    margin-left: 240px !important;        /* Enhanced from 180px */
+    margin-right: auto;
+    padding: var(--space-6) var(--space-5);
+    max-width: 1600px;
+    width: 100%;
+    transition: margin-left 0.2s ease;
+    position: relative;
+}
+
+/* Content View Management */
+.content-view {
+    display: none;
+}
+
+.content-view.active {
+    display: block;
+}
+
+/* Page Header - Compact */
+.page-header {
+    margin-bottom: var(--space-4);
+}
+
+.page-header h1 {
+    margin-bottom: var(--space-1);
+    font-size: 1.75rem;
+}
+
+.subtitle {
+    color: #6b7280;
+    font-size: 0.875rem;
+}

@@ -87,7 +87,7 @@ class CatalogGenerator:
 
         return enriched
 
-    def generate(self) -> Dict[str, Any]:
+    def generate(self, prompts_data: Optional[Dict[str, Any]] = None, schemas_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
         catalog = {
             'metadata': {
@@ -96,6 +96,8 @@ class CatalogGenerator:
                 'generator_version': '1.0.0'
             },
             'workflows': {},
+            'prompts': prompts_data or {},
+            'schemas': schemas_data or {},
             'stats': {
                 'total_workflows': 0,
                 'total_actions': 0,
@@ -179,8 +181,8 @@ class CatalogGenerator:
                     actions_with_prompts += 1
 
         # Update global stats for schemas and prompts
-        catalog['stats']['total_schemas'] = len(unique_schemas)
-        catalog['stats']['total_prompts'] = actions_with_prompts
+        catalog['stats']['total_schemas'] = len(schemas_data) if schemas_data else 0
+        catalog['stats']['total_prompts'] = len(prompts_data) if prompts_data else 0
 
         return catalog
 
@@ -226,9 +228,15 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
         print("❌ No workflows found in project!")
         return False
 
+    # Step 1b: Scan prompts
+    prompts_data = scanner.scan_prompts()
+
+    # Step 1c: Scan schemas
+    schemas_data = scanner.scan_schemas()
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
-    catalog = catalog_gen.generate()
+    catalog = catalog_gen.generate(prompts_data=prompts_data, schemas_data=schemas_data)
 
     # Step 3: Write data files
     # Ensure output directory exists
@@ -250,10 +258,14 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Print summary
     total_workflows = catalog['stats']['total_workflows']
     total_actions = catalog['stats']['total_actions']
+    total_prompts = catalog['stats']['total_prompts']
+    total_schemas = catalog['stats']['total_schemas']
 
     print(f"\nBuilding catalog")
     print(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
     print(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
+    print(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
+    print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
     print(f"\nDone. Documentation compiled to artefact/")
 
     return True
