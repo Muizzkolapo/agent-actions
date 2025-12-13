@@ -1,0 +1,319 @@
+/* ============================================
+   Sidebar Layout
+   ============================================ */
+
+/* Sidebar Container - Using enhanced values from critical-fixes.css */
+.sidebar {
+    width: 240px;                         /* Enhanced from 180px */
+    min-width: 240px;
+    background: #0f172a;                  /* Solid background (enhanced) */
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    position: fixed;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 100;
+    transition: width 0.2s ease;
+    border-left: 3px solid var(--accent);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Collapsed State */
+.sidebar.collapsed {
+    width: 64px;                          /* Enhanced from 56px */
+    min-width: 64px;
+}
+
+.sidebar.collapsed .logo span,
+.sidebar.collapsed .nav-header span,
+.sidebar.collapsed .count {
+    display: none;
+}
+
+.sidebar.collapsed .search-input {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: var(--space-2) 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.sidebar.collapsed .sidebar-header-top {
+    margin-bottom: 0;
+    flex-direction: column;
+    width: 100%;
+    gap: var(--space-2);
+}
+
+.sidebar.collapsed .logo {
+    justify-content: center;
+    padding: var(--space-2) 0;
+    width: 100%;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+    margin: 0;
+}
+
+.sidebar.collapsed .nav-header {
+    justify-content: center;
+    padding: var(--space-2);
+}
+
+.sidebar.collapsed .nav-link {
+    justify-content: center;
+    padding: var(--space-2);
+}
+
+.sidebar.collapsed .nav-list {
+    display: none;
+}
+
+.sidebar.collapsed .nav-section {
+    margin-bottom: var(--space-1);
+}
+
+.sidebar.collapsed .sidebar-nav {
+    padding: var(--space-1);
+}
+
+/* Sidebar Header */
+.sidebar-header {
+    padding: var(--space-3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.sidebar-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-bottom: var(--space-2);
+}
+
+/* Logo */
+.logo {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: #ffffff;
+    flex: 1;
+    min-width: 0;
+}
+
+.logo svg {
+    color: var(--accent);
+    flex-shrink: 0;
+}
+
+/* Search Input */
+.search-input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    font-family: var(--font-sans);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.search-input:hover {
+    border-color: rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(1, 124, 238, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.search-input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Sidebar Toggle Button */
+.sidebar-toggle {
+    background: transparent;
+    border: none;
+    padding: var(--space-2);
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    border-radius: var(--radius-sm);
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+}
+
+.sidebar-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.sidebar-toggle:active {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* Sidebar Panel Icon Animation */
+.sidebar-panel-icon {
+    transition: all 0.25s ease;
+    display: block;
+}
+
+.sidebar-panel-icon .panel-divider {
+    transition: transform 0.25s ease, opacity 0.25s ease;
+    transform-origin: center;
+}
+
+/* When sidebar is OPEN, show divider */
+.sidebar:not(.collapsed) .sidebar-toggle .sidebar-panel-icon .panel-divider {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* When sidebar is COLLAPSED, hide/fade divider */
+.sidebar.collapsed ~ .floating-sidebar-toggle .sidebar-panel-icon .panel-divider {
+    opacity: 0.3;
+    transform: translateX(-2px);
+}
+
+/* Sidebar Navigation */
+.sidebar-nav {
+    padding: var(--space-2) var(--space-3);
+}
+
+.nav-section {
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-2);
+}
+
+/* Add separator line between sections */
+.nav-section:not(:last-child) {
+    border-bottom: none;
+}
+
+.nav-section.collapsed .nav-list {
+    display: none;
+}
+
+/* Navigation Header */
+.nav-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: var(--space-1);
+    padding: var(--space-1) 0;
+}
+
+.nav-header svg {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.nav-header.clickable {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s;
+}
+
+.nav-header.clickable:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.nav-header .count {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.8);
+    padding: 0.125rem var(--space-2);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+}
+
+/* Door Icon Animation */
+.door-icon {
+    transition: all 0.3s ease;
+    margin-left: auto;
+}
+
+.door-icon .door-panel {
+    transform-origin: left center;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* When section is expanded (not collapsed), door is open */
+.nav-section:not(.collapsed) .door-icon .door-panel {
+    transform: perspective(100px) rotateY(-60deg);
+    opacity: 0.05;
+}
+
+/* When section is collapsed, door is closed */
+.nav-section.collapsed .door-icon .door-panel {
+    transform: perspective(100px) rotateY(0deg);
+    opacity: 0.1;
+}
+
+.door-icon .door-knob {
+    transition: transform 0.3s ease;
+}
+
+.nav-section:not(.collapsed) .door-icon .door-knob {
+    transform: translateX(-2px);
+}
+
+/* Navigation List */
+.nav-list {
+    list-style: none;
+}
+
+.nav-list li {
+    margin-bottom: var(--space-1);
+}
+
+/* Navigation Links */
+.nav-link {
+    display: block;
+    padding: 6px 8px;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+    font-weight: 400;
+    line-height: 1.4;
+}
+
+.nav-link:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.nav-link.active {
+    background: linear-gradient(90deg, var(--accent) 0%, var(--teal-500) 100%);
+    color: #ffffff;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(1, 124, 238, 0.3);
+}
+
+/* Floating Sidebar Toggle */
+.floating-sidebar-toggle {
+    display: none;
+}
