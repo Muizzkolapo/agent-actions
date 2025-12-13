@@ -1,6 +1,6 @@
 /* ============================================
    Main CSS Entry Point
-   Phase 3: Navigation Component (Compatibility Mode)
+   Phase 4: Filter & Search System (Compatibility Mode)
    ============================================ */
 
 /* Core - New modular architecture */
@@ -16,6 +16,8 @@
 
 /* Components - New modular architecture */
 @import './components/navigation.css';
+@import './components/filters.css';
+@import './components/search.css';
 
 /* Legacy - Old CSS files (will be removed in Phase 6) */
 @import './styles.css';
