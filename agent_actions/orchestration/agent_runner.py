@@ -121,6 +121,7 @@ class AgentRunner:
         """
         files_processed_count: int = 0
         output_path = Path(output_directory)
+        processed_relative_paths: set = set()
         
         for input_directory in upstream_data_dirs:
             input_path = Path(input_directory)
@@ -138,6 +139,13 @@ class AgentRunner:
                         continue
 
                     relative_path = item.relative_to(input_path)
+                    
+                    # Deduplication check
+                    if relative_path in processed_relative_paths:
+                        logger.debug(f"Skipping duplicate file: {relative_path}")
+                        continue
+                    processed_relative_paths.add(relative_path)
+
                     output_file_path = output_path / relative_path
                     output_file_path.parent.mkdir(parents=True, exist_ok=True)
                     strategy.execute(agent_config, agent_name, str(item), str(input_directory), str(output_file_path.parent), idx, agent_configs=self.agent_configs)
