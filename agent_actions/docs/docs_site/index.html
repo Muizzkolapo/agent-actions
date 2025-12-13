@@ -653,55 +653,53 @@
 
                 <!-- Filter Bar -->
                 <div class="filter-bar" id="workflows-filter-bar">
-                    <!-- Search -->
-                    <div class="filter-search">
-                        <svg class="filter-search-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
-                            <path d="M11 11l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                        </svg>
-                        <input type="text" placeholder="Search workflows..." class="filter-search-input" id="workflows-filter-search">
-                    </div>
+                    <div class="filter-bar-left">
+                        <div class="search-box search-box-enhanced">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="7" cy="7" r="6"></circle>
+                                <path d="m11 11 4 4"></path>
+                            </svg>
+                            <input type="text" placeholder="Search by name or description..." id="workflows-filter-search" />
+                            <button class="search-clear-btn" id="workflows-search-clear" style="display: none;" title="Clear search">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                    <path d="M3 3l8 8M11 3l-8 8"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="search-results-count" id="workflows-results-count" style="display: none;"></div>
 
-                    <!-- Filter Button -->
-                    <button class="filter-button" id="workflows-filter-button">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                        </svg>
-                        <span>Filters</span>
-                        <span class="filter-badge" id="workflows-filter-count" style="display: none;">0</span>
-                    </button>
+                        <button class="filter-button" id="workflows-filter-button">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h10M5 10h6M7 14h2"></path>
+                            </svg>
+                            Filters
+                        </button>
 
-                    <!-- Sort Dropdown -->
-                    <div class="sort-dropdown">
                         <button class="sort-button" id="workflows-sort-button">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                                <path d="M3 6l3-3 3 3M9 10l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
                             <span id="workflows-sort-label">Sort: Name (A-Z)</span>
-                            <svg class="chevron" width="12" height="12" viewBox="0 0 12 12">
-                                <path d="M3 5l3 3 3-3" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="m3 5 3 3 3-3"></path>
                             </svg>
                         </button>
-                        <div class="sort-dropdown-menu" id="workflows-sort-menu" style="display: none;">
-                            <!-- Populated dynamically -->
-                        </div>
                     </div>
-
-                    <!-- Active Filters (Chips) -->
-                    <div class="active-filters" id="workflows-active-filters">
-                        <!-- Chips appear here -->
-                    </div>
-
-                    <!-- Clear All -->
-                    <button class="filter-clear-all" id="workflows-filter-clear-all" style="display: none;">
-                        Clear all
-                    </button>
                 </div>
 
-                <!-- Filter Panel -->
+                <!-- Active filters -->
+                <div class="active-filters" id="workflows-active-filters"></div>
+
+                <!-- Sort dropdown -->
+                <div class="sort-dropdown" id="workflows-sort-menu"></div>
+
+                <!-- Filter panel -->
                 <div class="filter-panel" id="workflows-filter-panel" style="display: none;">
-                    <div class="filter-panel-content" id="workflows-filter-panel-content">
-                        <!-- Populated dynamically -->
+                    <div class="filter-panel-content" id="workflows-filter-panel-content"></div>
+                    <div class="filter-panel-footer">
+                        <button class="filter-clear-all" id="workflows-filter-clear-all" style="display: none;">
+                            Clear all
+                        </button>
                     </div>
                 </div>
 
