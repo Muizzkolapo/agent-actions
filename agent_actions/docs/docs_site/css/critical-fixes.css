@@ -863,6 +863,7 @@ kbd {
   border-bottom: 1px solid #e5e7eb;
   margin-bottom: 24px;
   flex-wrap: wrap;
+  position: relative; /* For filter panel positioning */
 }
 
 .filter-bar-left {
@@ -933,9 +934,8 @@ kbd {
 /* Filter panel improvements */
 .filter-panel {
   position: absolute;
-  top: 48px;
-  left: 710px;
-  margin-top: 8px;
+  top: calc(100% + 8px);
+  left: 0;
   background: #ffffff;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
