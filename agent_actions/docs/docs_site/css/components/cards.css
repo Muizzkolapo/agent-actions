@@ -1,0 +1,198 @@
+/* ============================================
+   Cards Component
+   ============================================ */
+
+/* Stats Cards */
+.stats-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: var(--space-4);
+    margin-bottom: var(--space-6);
+}
+
+.stat-card {
+    background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3) var(--space-4);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, var(--accent) 0%, var(--teal-500) 100%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.stat-card:last-child {
+    border-right: 1px solid var(--border);
+}
+
+.stat-card:hover {
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+    border-color: var(--accent);
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+/* Stat Icon */
+.stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.stat-icon.workflows {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: var(--accent);
+}
+
+.stat-icon.actions {
+    background: linear-gradient(135deg, #ccfbf1 0%, #99f6e4 100%);
+    color: var(--teal-600);
+}
+
+.stat-icon.llm {
+    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+    color: #6366f1;
+}
+
+.stat-icon.tools {
+    background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+    color: var(--success);
+}
+
+.stat-icon.prompts {
+    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+    color: #d97706;
+}
+
+.stat-icon.schemas {
+    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+    color: #0284c7;
+}
+
+/* Stat Content */
+.stat-content {
+    flex: 1;
+}
+
+.stat-card .stat-value {
+    font-size: 2.5rem;                    /* Enhanced from 1.75rem */
+    font-weight: 600;
+    font-family: var(--font-mono);
+    background: linear-gradient(135deg, var(--text) 0%, var(--text-muted) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0;
+    line-height: 1;
+    letter-spacing: -0.02em;
+}
+
+.stat-card .stat-label {
+    font-size: 0.6875rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Workflow Cards */
+.workflows-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: var(--space-2);
+}
+
+.workflow-card {
+    background: linear-gradient(135deg, #ffffff 0%, #fafbfc 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+}
+
+.workflow-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent) 0%, var(--teal-500) 100%);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+
+.workflow-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-2px);
+}
+
+.workflow-card:hover::before {
+    opacity: 1;
+}
+
+.workflow-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: var(--space-2);
+}
+
+.workflow-card h3 {
+    font-size: 1rem;
+    margin-bottom: var(--space-1);
+    font-weight: 600;
+}
+
+.workflow-version {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    background: var(--gray-100);
+    padding: 0.125rem var(--space-2);
+    border-radius: var(--radius-sm);
+}
+
+.workflow-card p {
+    color: #6b7280;
+    font-size: 0.875rem;
+    margin-bottom: var(--space-2);
+    line-height: 1.6;
+}
+
+.workflow-meta {
+    display: flex;
+    gap: var(--space-3);
+    font-size: 0.8125rem;
+    color: #9ca3af;
+    font-family: var(--font-mono);
+    font-weight: 500;
+}
