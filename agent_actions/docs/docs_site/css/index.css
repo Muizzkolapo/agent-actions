@@ -1,0 +1,15 @@
+/* ============================================
+   Main CSS Entry Point
+   Phase 1: Foundation Setup (Compatibility Mode)
+   ============================================ */
+
+/* Core - New modular architecture */
+@import './core/variables.css';
+@import './core/reset.css';
+@import './core/typography.css';
+@import './core/utilities.css';
+
+/* Legacy - Old CSS files (will be removed in Phase 6) */
+@import './styles.css';
+@import './critical-fixes.css';
+@import './skeleton.css';
