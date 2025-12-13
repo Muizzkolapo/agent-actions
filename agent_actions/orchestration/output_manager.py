@@ -228,21 +228,41 @@ class AgentOutputManager:
         with open(skip_marker, 'w', encoding='utf-8') as f:
             f.write(f'Agent {agent_type} skipped due to WHERE clause condition')
 
-    def get_input_directory(self, idx: int) -> str:
+    def get_upstream_directories(self, idx: int) -> List[str]:
         """
-        Get input directory for an agent, considering loop correlation.
+        Get upstream data directories for an agent, resolving dependencies.
 
         Args:
             idx: Index of the agent
 
         Returns:
-            Path to input directory
+            List of paths to upstream directories
         """
         # First agent uses staging directory
         if idx == 0:
-            return str(self.agent_folder / 'staging')
+            return [str(self.agent_folder / 'staging')]
 
         current_agent = self.execution_order[idx]
+        agent_config = self.agent_configs.get(current_agent, {})
+
+        # Check for explicitly declared dependencies (DAG/Diamond)
+        dependencies = agent_config.get('dependencies', [])
+        if dependencies:
+            upstream_dirs = []
+            for dep_name in dependencies:
+                # Find the index of the dependency
+                if dep_name in self.execution_order:
+                    dep_idx = self.execution_order.index(dep_name)
+                    # Construct output path for that dependency
+                    dep_output = self.agent_folder / 'target' / f'node_{dep_idx}_{dep_name}'
+                    upstream_dirs.append(str(dep_output))
+                else:
+                    logger.warning(
+                        f"Dependency {dep_name} for agent {current_agent} not found in execution order.",
+                        extra={'agent': current_agent, 'dependency': dep_name}
+                    )
+            if upstream_dirs:
+                return upstream_dirs
 
         # Check if agent consumes loop outputs
         loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
@@ -266,16 +286,16 @@ class AgentOutputManager:
                     f'[blue]🔗 Using correlated input for {current_agent} from '
                     f'{len(loop_sources)} loop sources (pattern: {pattern})[/blue]'
                 )
-                return correlated_dir
+                return [correlated_dir]
             else:
                 self.console.print(
                     f'[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, '
                     f'falling back to standard input[/yellow]'
                 )
 
-        # Standard case: use previous agent's output
+        # Standard case: use previous agent's output (Linear Chain Default)
         prev_agent = self.execution_order[idx - 1]
-        return str(self.agent_folder / 'target' / f'node_{idx - 1}_{prev_agent}')
+        return [str(self.agent_folder / 'target' / f'node_{idx - 1}_{prev_agent}')]
 
     def setup_correlation_wrapper(
         self,

@@ -13,25 +13,7 @@ logger = logging.getLogger(__name__)
 class ActionExpander:
     """Converts action-based workflow configurations to agent configurations with loop expansion support."""
 
-    @staticmethod
-    def detect_format(config: Dict[str, Any]) -> str:
-        """
-        Detect whether a config uses old or new format.
 
-        Args:
-            config: Loaded YAML configuration
-
-        Returns:
-            "old" or "new"
-        """
-        if 'name' in config and 'actions' in config:
-            return 'new'
-        for key, value in config.items():
-            if isinstance(value, list) and value:
-                first_item = value[0]
-                if isinstance(first_item, dict) and 'agent_type' in first_item:
-                    return 'old'
-        return 'old'
 
     @staticmethod
     def _validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
@@ -216,7 +198,8 @@ class ActionExpander:
                 context_scope_action
             )
 
-        agent['dependencies'] = []
+        # Initialize dependencies from action if present, else empty list
+        agent['dependencies'] = action.get('dependencies', [])
         chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
         if chunk_config:
             agent['chunk_config'] = chunk_config
@@ -259,20 +242,17 @@ class ActionExpander:
         workflow_name = action_config.get('name', 'workflow')
         actions = action_config.get('actions', [])
         defaults = action_config.get('defaults', {})
-        plan = action_config.get('plan', [])
-        actions_in_plan = set()
-        for plan_item in plan:
-            if '<-' in plan_item:
-                action_name = plan_item.split('<-')[0].strip()
-            else:
-                action_name = plan_item.strip()
-            actions_in_plan.add(action_name)
+        
+        # We no longer process 'plan' for dependencies.
+        # Dependencies must be explicitly defined in the action config.
+        
         agents: AgentConfigList = []
         for action in actions:
             action_name = action.get('name')
-            is_in_plan = action_name in actions_in_plan
-            if not is_in_plan:
-                continue
+            # Assuming all actions listed are operational unless specified otherwise,
+            # or we could filter by some other logic. For now, we take all actions.
+            is_operational = True 
+            
             loop_config = action.get('loop')
             if loop_config:
                 param_name = loop_config.get('param', 'i')
@@ -306,78 +286,31 @@ class ActionExpander:
                     agent['loop_base_name'] = action.get('name', 'unknown')
                     agent['loop_iteration'] = i
                     agent['loop_mode'] = loop_config.get('mode', 'parallel')
-                    agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_in_plan))
+                    
+                    # Create agent
+                    created_agent = ActionExpander._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_operational)
+                    
+                    # For loops, we might need to adjust dependencies if they refer to the previous iteration (sequential loop)
+                    # But if dependencies are explicit, we trust the YAML. 
+                    # If users want sequential loops, they should use the 'sequential' mode which the Runner/OutputManager handles,
+                    # or explicitly chain them.
+                    # With the new dynamic resolution, we assume dependencies are correct.
+                    
+                    agents.append(created_agent)
             else:
                 agent: AgentEntryDict = {}
                 agent['agent_type'] = action.get('name', 'unknown')
                 agent['name'] = action.get('name')
-                agents.append(ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=True))
-        plan = action_config.get('plan', [])
-        action_loop_configs = {}
-        for action in actions:
-            action_name = action.get('name')
-            loop_config = action.get('loop')
-            if loop_config:
-                action_loop_configs[action_name] = loop_config
-        agent_name_to_indices = {}
-        agent_index = 0
-        for action in actions:
-            action_name = action.get('name')
-            loop_config = action.get('loop')
-            if loop_config:
-                loop_range = loop_config.get('range', [1, 1])
-                if len(loop_range) == 2:
-                    start, end = loop_range
-                    num_iterations = end - start + 1
-                else:
-                    num_iterations = len(loop_range)
-                agent_name_to_indices[action_name] = list(range(agent_index, agent_index + num_iterations))
-                agent_index += num_iterations
-            else:
-                agent_name_to_indices[action_name] = [agent_index]
-                agent_index += 1
-        for plan_item in plan:
-            if '<-' in plan_item:
-                action_name, deps_str = plan_item.split('<-', 1)
-                action_name = action_name.strip()
-                deps = [dep.strip() for dep in deps_str.split(',')]
-                if action_name in agent_name_to_indices:
-                    expanded_deps = []
-                    for dep in deps:
-                        if dep in agent_name_to_indices:
-                            for dep_idx in agent_name_to_indices[dep]:
-                                expanded_deps.append(agents[dep_idx]['agent_type'])
-                        else:
-                            expanded_deps.append(dep)
-                    loop_config = action_loop_configs.get(action_name)
-                    if loop_config and loop_config.get('mode') == 'sequential':
-                        for i, agent_idx in enumerate(agent_name_to_indices[action_name]):
-                            if i == 0:
-                                agents[agent_idx]['dependencies'] = expanded_deps
-                            else:
-                                prev_idx = agent_name_to_indices[action_name][i - 1]
-                                agents[agent_idx]['dependencies'] = [agents[prev_idx]['agent_type']]
-                    else:
-                        for agent_idx in agent_name_to_indices[action_name]:
-                            agents[agent_idx]['dependencies'] = expanded_deps
+                
+                # Check for explicit dependencies in action, defaulting to empty list
+                # This is handled inside _create_agent_from_action via inheritance, but we ensure it persists
+                created_agent = ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_operational)
+                if 'dependencies' not in created_agent and 'dependencies' in action:
+                     created_agent['dependencies'] = action['dependencies']
+                     
+                agents.append(created_agent)
+
         return {workflow_name: agents}
 
-    @staticmethod
-    def ensure_old_format(config: Dict[str, Any]) -> AgentConfigMap:
-        """
-        Ensure config is in old format, converting if necessary.
 
-        Args:
-            config: Configuration in either format
-
-        Returns:
-            Configuration in old format
-        """
-        format_type = ActionExpander.detect_format(config)
-        if format_type == 'new':
-            logger.info('Detected new workflow format, converting to old format for execution')
-            return ActionExpander.convert_new_to_old(config)
-        else:
-            logger.debug('Using existing old format configuration')
-            return config
 __all__ = ['ActionExpander']

@@ -27,8 +27,7 @@ class WorkflowParser:
             'description': data.get('description', ''),
             'path': yaml_path,
             'version': data.get('version', '1.0.0'),
-            'actions': {},
-            'plan': data.get('plan', [])
+            'actions': {}
         }
 
         # Parse actions (flat structure from rendered workflows)
@@ -39,7 +38,7 @@ class WorkflowParser:
             action = {
                 'name': action_name,
                 'intent': action_data.get('intent', ''),
-                'dependencies': []
+                'dependencies': action_data.get('dependencies', [])
             }
 
             # Determine action type (llm or tool) from flat structure
@@ -65,44 +64,7 @@ class WorkflowParser:
 
         return workflow
 
-    @staticmethod
-    def parse_plan(plan: List[str]) -> Tuple[List[Dict], Dict[str, List[str]]]:
-        """
-        Parse the plan section to extract execution order and dependencies.
 
-        Format: "action_name <- dep1, dep2, dep3"
-
-        Returns:
-            - execution_plan: List of dicts with action and dependencies
-            - dependency_map: Dict mapping action name to list of dependencies
-        """
-        execution_plan = []
-        dependency_map = {}
-
-        for line in plan:
-            if not line or line.strip().startswith('#'):
-                continue
-
-            line = line.strip()
-
-            if '<-' in line:
-                parts = line.split('<-')
-                action = parts[0].strip()
-                deps = [d.strip() for d in parts[1].split(',')]
-                dependency_map[action] = deps
-                execution_plan.append({
-                    'action': action,
-                    'dependencies': deps
-                })
-            else:
-                action = line.strip()
-                dependency_map[action] = []
-                execution_plan.append({
-                    'action': action,
-                    'dependencies': []
-                })
-
-        return execution_plan, dependency_map
 
     @staticmethod
     def load_schema(schema_name: str, schema_dir: Path) -> Optional[Dict[str, Any]]:

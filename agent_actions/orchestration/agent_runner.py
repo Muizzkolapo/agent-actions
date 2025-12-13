@@ -1,9 +1,9 @@
 """Module for managing and executing agents with different strategies in a workflow."""
 import logging
 from pathlib import Path
-from typing import Tuple, Dict, Optional
+from typing import Tuple, Dict, Optional, List
 from agent_actions.io.file_handler import FileHandler
-from agent_actions.orchestration.agent_strategies import InitialStrategy, TerminalStrategy, IntermediateStrategy, AgentStrategy
+from agent_actions.orchestration.agent_strategies import InitialStrategy, StandardStrategy, AgentStrategy
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,11 @@ class AgentRunner:
         self.processor_factory = processor_factory
         self.agent_configs: Optional[Dict[str, Dict]] = None
         self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
-        self.strategies: Dict[str, AgentStrategy] = {'initial': InitialStrategy(self.processor_factory), 'terminal': TerminalStrategy(self.processor_factory), 'intermediate': IntermediateStrategy(self.processor_factory)}
-
+        self.strategies: Dict[str, AgentStrategy] = {
+            'initial': InitialStrategy(processor_factory),
+            'intermediate': StandardStrategy(processor_factory),
+            'terminal': StandardStrategy(processor_factory)
+        }
     def get_agent_folder(self, agent_name: str) -> str:
         """
         Retrieves the agent folder using FileHandler.
@@ -52,7 +55,7 @@ class AgentRunner:
             raise FileSystemError(f'Agent folder not found for agent: {agent_name}', context={'agent_name': agent_name, 'workflow_name': folder_name, 'current_dir': str(current_dir), 'operation': 'get_agent_folder'})
         return agent_folder
 
-    def setup_directories(self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int) -> Tuple[str, str]:
+    def setup_directories(self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int) -> Tuple[List[str], str]:
         """
         Sets up input and output directories for the agent.
 
@@ -63,39 +66,43 @@ class AgentRunner:
             idx (int): Numeric index to prefix folder names.
 
         Returns:
-            Tuple[str, str]: (input_directory, output_directory)
+            Tuple[List[str], str]: (upstream_data_dirs, output_directory)
         """
         indexed_agent_type: str = f"node_{idx}_{agent_config['agent_type']}"
         dependencies = agent_config.get('dependencies', [])
-        if dependencies and hasattr(self, 'agent_indices') and self.agent_indices:
-            last_dependency = dependencies[-1]
-            try:
-                dep_idx = self.agent_indices.get(last_dependency)
+        upstream_data_dirs: List[Path] = []
+
+        # 1. Start Node: Always reads from Staging
+        if idx == 0:
+             upstream_data_dirs.append(Path(agent_folder) / 'staging')
+        
+        # 2. Explicit Dependencies (DAG/Diamond)
+        elif dependencies and hasattr(self, 'agent_indices') and self.agent_indices:
+            for dep_name in dependencies:
+                dep_idx = self.agent_indices.get(dep_name)
                 if dep_idx is not None:
-                    indexed_previous_agent_type: str = f'node_{dep_idx}_{last_dependency}'
-                    input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
+                     indexed_previous_agent_type: str = f'node_{dep_idx}_{dep_name}'
+                     upstream_data_dirs.append(Path(agent_folder) / 'target' / indexed_previous_agent_type)
                 else:
-                    raise ValueError(f'Dependency {last_dependency} not found in agent_indices')
-            except (ValueError, AttributeError, KeyError):
-                if previous_agent_type:
-                    prev_idx: int = idx - 1
-                    indexed_previous_agent_type: str = f'node_{prev_idx}_{previous_agent_type}'
-                    input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
-                else:
-                    input_directory = Path(agent_folder) / 'staging'
+                    # Fallback for missing index (shouldn't happen in valid workflow)
+                    logger.warning(f'Dependency {dep_name} index not found.')
+
+        # 3. Default Linear Behavior
         elif previous_agent_type:
-            prev_idx: int = idx - 1
-            indexed_previous_agent_type: str = f'node_{prev_idx}_{previous_agent_type}'
-            input_directory: Path = Path(agent_folder) / 'target' / indexed_previous_agent_type
+             prev_idx: int = idx - 1
+             indexed_previous_agent_type: str = f'node_{prev_idx}_{previous_agent_type}'
+             upstream_data_dirs.append(Path(agent_folder) / 'target' / indexed_previous_agent_type)
         else:
-            input_directory = Path(agent_folder) / 'staging'
+             # Fallback if no previous agent and not index 0 (rare edge case)
+             upstream_data_dirs.append(Path(agent_folder) / 'staging')
+
         output_directory: Path = Path(agent_folder) / 'target' / indexed_agent_type
         output_directory.mkdir(parents=True, exist_ok=True)
-        return (str(input_directory), str(output_directory))
+        return ([str(d) for d in upstream_data_dirs], str(output_directory))
 
-    def process_files(self, agent_config: Dict, agent_name: str, strategy: AgentStrategy, input_directory: str, output_directory: str, idx: int) -> None:
+    def process_files(self, agent_config: Dict, agent_name: str, strategy: AgentStrategy, upstream_data_dirs: List[str], output_directory: str, idx: int) -> None:
         """
-        Walks through the input directory, processing each file with the given strategy,
+        Walks through the upstream data directories, processing each file with the given strategy,
         explicitly excluding:
         - Any directory named 'batch'
         - Hidden files (starting with '.')
@@ -105,7 +112,7 @@ class AgentRunner:
             agent_config (dict): Configuration for the agent.
             agent_name (str): Name of the agent.
             strategy (AgentStrategy): Strategy instance to execute.
-            input_directory (str): Path to the input directory.
+            upstream_data_dirs (List[str]): List of paths to upstream data directories.
             output_directory (str): Path to the output directory.
             idx (int): Index of the config being processed.
 
@@ -113,39 +120,49 @@ class AgentRunner:
             ValueError: If no files are found in the input directory.
         """
         files_processed_count: int = 0
-        input_path = Path(input_directory)
         output_path = Path(output_directory)
-        for item in input_path.rglob('*'):
-            if 'batch' in item.parts:
+        
+        for input_directory in upstream_data_dirs:
+            input_path = Path(input_directory)
+            if not input_path.exists():
+                logger.warning(f"Upstream directory not found: {input_directory}")
                 continue
-            if item.is_file():
-                # Skip hidden files and marker files (e.g., .passthrough_processed)
-                if item.name.startswith('.'):
-                    logger.debug(f"Skipping hidden/marker file: {item.name}")
+                
+            for item in input_path.rglob('*'):
+                if 'batch' in item.parts:
                     continue
+                if item.is_file():
+                    # Skip hidden files and marker files (e.g., .passthrough_processed)
+                    if item.name.startswith('.'):
+                        logger.debug(f"Skipping hidden/marker file: {item.name}")
+                        continue
 
-                relative_path = item.relative_to(input_path)
-                output_file_path = output_path / relative_path
-                output_file_path.parent.mkdir(parents=True, exist_ok=True)
-                strategy.execute(agent_config, agent_name, str(item), input_directory, str(output_file_path.parent), idx, agent_configs=self.agent_configs)
-                files_processed_count += 1
+                    relative_path = item.relative_to(input_path)
+                    output_file_path = output_path / relative_path
+                    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+                    strategy.execute(agent_config, agent_name, str(item), str(input_directory), str(output_file_path.parent), idx, agent_configs=self.agent_configs)
+                    files_processed_count += 1
+                    
         if files_processed_count == 0:
-            if not any(input_path.iterdir()):
+            # Check if any input path has content
+            has_content = any(Path(d).exists() and any(Path(d).iterdir()) for d in upstream_data_dirs)
+            
+            if not has_content:
                 logger.warning(
-                    'No files found in empty directory: %s. Processing continues.',
-                    input_directory,
+                    'No files found in upstream directories: %s. Processing continues.',
+                    upstream_data_dirs,
                     extra={
-                        'input_directory': input_directory,
+                        'upstream_data_dirs': upstream_data_dirs,
                         'agent_name': agent_name,
                         'operation': 'directory_processing'
                     }
                 )
             else:
                 logger.info(
-                    'No files to process in %s, but directory structure was mirrored. Processing continues.',
-                    input_directory,
+                    'No files to process in %s (potentially filtered), but directory structure was mirrored. Processing continues.',
+                    upstream_data_dirs,
                     extra={
-                        'input_directory': input_directory,
+                        'upstream_data_dirs': upstream_data_dirs,
                         'agent_name': agent_name,
                         'operation': 'directory_processing'
                     }
@@ -166,8 +183,8 @@ class AgentRunner:
             str: Path to the output directory.
         """
         agent_folder: str = self.get_agent_folder(agent_name)
-        input_directory, output_directory = self.setup_directories(agent_folder, agent_config, previous_agent_type, idx)
-        self.process_files(agent_config, agent_name, strategy, input_directory, output_directory, idx)
+        input_directories, output_directory = self.setup_directories(agent_folder, agent_config, previous_agent_type, idx)
+        self.process_files(agent_config, agent_name, strategy, input_directories, output_directory, idx)
         return output_directory
 
     def run_agent(self, agent_config: Dict, agent_name: str, previous_agent_type: Optional[str], idx: int, is_last_agent: bool=False) -> str:
@@ -185,10 +202,10 @@ class AgentRunner:
             str: Path to the output directory.
         """
         if idx == 0:
-            strategy: AgentStrategy = self.strategies['initial']
-        elif is_last_agent:
-            strategy = self.strategies['terminal']
+            strategy_name = 'initial'
         else:
-            strategy = self.strategies['intermediate']
+            strategy_name = 'intermediate'
+
+        strategy = self.strategies[strategy_name]
         output_folder: str = self.process_and_generate_for_agent(agent_config, agent_name, previous_agent_type, strategy, idx)
         return output_folder

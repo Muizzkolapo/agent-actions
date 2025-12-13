@@ -102,7 +102,7 @@ class RunCommand:
         elif hasattr(self.args, 'no_parallel') and self.args.no_parallel:
             use_parallel = False
             click.echo('Using sequential execution (forced via --no-parallel flag)...')
-        elif workflow._should_use_parallel_execution():
+        elif workflow.action_level_orchestrator.should_use_parallel_execution():
             use_parallel = True
             click.echo('🔀 Using parallel execution (auto-detected)...')
         else:

@@ -52,6 +52,7 @@ class ActionConfig(BaseModel):
     loop_consumption: Optional[LoopConsumptionConfig] = Field(default=None, description='Loop output consumption configuration')
     idempotency_key: Optional[str] = Field(default=None, description='Idempotency key template')
     prompt: Optional[str] = Field(default=None, description='Prompt template or reference')
+    dependencies: List[str] = Field(default_factory=list, description='List of upstream dependencies')
 
     @field_validator('guard')
     @classmethod
@@ -96,39 +97,16 @@ class WorkflowConfigV2(BaseModel):
     version: str = Field(..., description='Workflow version')
     defaults: Optional[DefaultsConfig] = Field(default=None, description='Default settings')
     actions: List[ActionConfig] = Field(..., description='Workflow actions')
-    plan: List[str] = Field(..., description='Execution plan with dependencies')
-
-    @field_validator('plan')
-    @classmethod
-    def validate_plan(cls, v, info):
-        """Validate that all actions in plan are defined."""
-        if 'actions' in info.data:
-            action_names = {action.name for action in info.data['actions']}
-            for plan_item in v:
-                if '<-' in plan_item:
-                    action_name = plan_item.split('<-')[0].strip()
-                else:
-                    action_name = plan_item.strip()
-                if action_name not in action_names:
-                    from agent_actions.errors import ConfigValidationError  # New modular pattern!
-                    raise ConfigValidationError('workflow_plan', f"Action '{action_name}' in plan not defined in actions", context={'action_name': action_name, 'plan_item': plan_item, 'defined_actions': list(action_names), 'operation': 'validate_plan'})
-        return v
+    actions: List[ActionConfig] = Field(..., description='Workflow actions')
 
     def get_action(self, name: str) -> Optional[ActionConfig]:
         """Get an action by name."""
         return next((action for action in self.actions if action.name == name), None)
 
     def get_dependency_graph(self) -> Dict[str, List[str]]:
-        """Extract dependency graph from execution plan."""
+        """Extract dependency graph from action definitions."""
         dependencies = {}
-        for plan_item in self.plan:
-            if '<-' in plan_item:
-                parts = plan_item.split('<-')
-                action_name = parts[0].strip()
-                deps = [dep.strip() for dep in parts[1].split(',')]
-                dependencies[action_name] = deps
-            else:
-                action_name = plan_item.strip()
-                dependencies[action_name] = []
+        for action in self.actions:
+            dependencies[action.name] = action.dependencies
         return dependencies
 __all__ = ['ActionKind', 'Granularity', 'LoopConfig', 'ActionConfig', 'DefaultsConfig', 'DependencyEdge', 'WorkflowConfigV2']
