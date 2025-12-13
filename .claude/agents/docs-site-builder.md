@@ -136,6 +136,26 @@ const description = `${fieldCount} fields: ${fieldNames}...`;
 2. Use `workflow.actions` instead of `execution_plan`
 3. Show skipped actions with SKIPPED badge and "-" for metrics
 
+## UX Issues Identified (Dec 2025)
+
+### 1. Duration Values - Excessive Decimal Precision
+**Problem:** Durations display 15+ decimal places (e.g., "5.836507999999981s")
+**Impact:** Makes Action Breakdown table difficult to scan quickly
+**Solution:** Round to 2-3 decimal places (e.g., "5.84s")
+**Location:** `agent_actions/docs/docs_site/js/app.js` - run detail rendering
+
+### 2. Action Count Fractions - Missing Labels
+**Problem:** Values like "11/16" in Actions column lack explanatory labels
+**Impact:** Users must guess meaning (executed vs total actions)
+**Solution:** Add tooltip or header text explaining "Executed/Total"
+**Location:** `agent_actions/docs/docs_site/js/app.js` - action breakdown table
+
+### 3. Duration Column Header - Missing Unit Indicator
+**Problem:** "Duration" column header doesn't specify units
+**Impact:** Unclear if values are seconds, milliseconds, or mixed
+**Solution:** Update header to "Duration (s)" or "Duration (ms)"
+**Location:** `agent_actions/docs/docs_site/js/app.js` - table header rendering
+
 ## Architecture Patterns
 
 ### Data Flow
@@ -156,6 +176,20 @@ generator.py             runs.json
 - Screenshot-based visual validation
 - Data verification (counts, status badges, metrics)
 - Selector specificity for accurate element targeting
+
+**Testing Lessons Learned:**
+1. **Collapsed sidebar sections** - Elements in collapsed nav sections are not clickable
+   - Solution: Navigate using direct URLs (`#workflow/name`) or wait for expansion
+   - Example: `await page.goto(baseUrl + '#workflow/' + workflowName)`
+
+2. **Hash routing** - App uses client-side hash routing (#schemas, #runs, etc.)
+   - All navigation is handled by JavaScript without page reloads
+   - Test by navigating to hash URLs directly rather than clicking hidden links
+
+3. **Server startup requirements**:
+   - Must run from `agent_actions/docs/` directory
+   - Requires `artefact/` directory with `catalog.json` and `runs.json`
+   - Command: `cd agent_actions/docs && python -c "from server import serve_docs; serve_docs(8000)"`
 
 ## Best Practices
 

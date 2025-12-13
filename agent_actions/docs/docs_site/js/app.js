@@ -534,7 +534,7 @@ function renderRecentRunsTable(runsToShow) {
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
             <td>${durationText}</td>
-            <td>${actionsText}</td>
+            <td title="Executed Actions / Total Actions">${actionsText}</td>
         `;
 
         tbody.appendChild(row);
@@ -587,7 +587,7 @@ function renderRunActionDetails(run) {
                         <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">ACTION</th>
                         <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">TYPE</th>
                         <th style="text-align: left; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">STATUS</th>
-                        <th style="text-align: right; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">DURATION</th>
+                        <th style="text-align: right; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">DURATION (s)</th>
                         <th style="text-align: right; padding: var(--space-2); font-size: 0.85rem; color: var(--text-subtle);">TOKENS</th>
                     </tr>
                 </thead>
@@ -693,11 +693,31 @@ function updateQuickFilterCounts(viewId, allRuns) {
     // Determine prefix based on view
     const prefix = viewId === 'runs-list' ? 'runs-filter-count' : 'filter-count';
 
-    // Update count badges
+    // Map status to element ID (completed status uses 'success' in element ID)
+    const statusToElementId = {
+        'all': 'all',
+        'failed': 'failed',
+        'running': 'running',
+        'completed': 'success'  // Element ID is 'success' but status is 'completed'
+    };
+
+    // Update count badges and set data-has-results attribute
     Object.entries(counts).forEach(([status, count]) => {
-        const countElement = document.getElementById(`${prefix}-${status}`);
+        const elementId = statusToElementId[status] || status;
+        const countElement = document.getElementById(`${prefix}-${elementId}`);
         if (countElement) {
             countElement.textContent = count;
+
+            // Find the parent button and set data-has-results attribute
+            const button = countElement.closest('.quick-filter-btn');
+            if (button) {
+                // Don't gray out "All" filter
+                if (status === 'all') {
+                    button.removeAttribute('data-has-results');
+                } else {
+                    button.setAttribute('data-has-results', count > 0 ? 'true' : 'false');
+                }
+            }
         }
     });
 }
@@ -1385,7 +1405,7 @@ function renderRunsListTable(runsToShow) {
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
             <td>${durationText}</td>
-            <td>${actionsText}</td>
+            <td title="Executed Actions / Total Actions">${actionsText}</td>
         `;
 
         tbody.appendChild(row);
@@ -2095,7 +2115,7 @@ function renderRunsTable(workflowRuns) {
             <td><code style="font-size: 0.75rem; color: var(--color-primary); cursor: pointer;">${run.id}</code></td>
             <td>${statusBadge}</td>
             <td>${formatDuration(run.duration_seconds)}</td>
-            <td>${actionsSummary}</td>
+            <td title="Executed Actions / Total Actions">${actionsSummary}</td>
             <td>${tokensDisplay}</td>
             <td>${formattedDate}</td>
         `;
@@ -2110,10 +2130,10 @@ function renderRunsTable(workflowRuns) {
 
 function formatDuration(seconds) {
     if (seconds < 60) {
-        return `${seconds}s`;
+        return `${seconds.toFixed(2)}s`;
     } else if (seconds < 3600) {
         const minutes = Math.floor(seconds / 60);
-        const secs = seconds % 60;
+        const secs = (seconds % 60).toFixed(1);
         return `${minutes}m ${secs}s`;
     } else {
         const hours = Math.floor(seconds / 3600);

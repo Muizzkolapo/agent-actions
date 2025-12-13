@@ -44,15 +44,55 @@ class FilterManager {
         const searchInput = document.getElementById(this.ids.search);
         if (!searchInput) return;
 
+        // Get clear button and results count elements
+        const clearButton = document.getElementById(`${this.viewId}-search-clear`);
+        const resultsCount = document.getElementById(`${this.viewId}-results-count`);
+
+        // Setup clear button click handler
+        if (clearButton) {
+            clearButton.addEventListener('click', () => {
+                searchInput.value = '';
+                this.searchQuery = '';
+                clearButton.style.display = 'none';
+                if (resultsCount) resultsCount.style.display = 'none';
+                this.applyFilters();
+                this.saveState();
+                searchInput.focus();
+            });
+        }
+
         let debounceTimer;
         searchInput.addEventListener('input', (e) => {
             clearTimeout(debounceTimer);
+
+            // Show/hide clear button
+            const hasValue = e.target.value.length > 0;
+            if (clearButton) {
+                clearButton.style.display = hasValue ? 'block' : 'none';
+            }
+
             debounceTimer = setTimeout(() => {
                 this.searchQuery = e.target.value.toLowerCase();
                 this.applyFilters();
                 this.saveState();
+                this.updateResultsCount();
             }, 300);
         });
+    }
+
+    updateResultsCount() {
+        const resultsCount = document.getElementById(`${this.viewId}-results-count`);
+        if (!resultsCount) return;
+
+        const count = this.filteredItems.length;
+        const total = this.allItems.length;
+
+        if (this.searchQuery || Object.keys(this.activeFilters).length > 0) {
+            resultsCount.textContent = `Showing ${count} of ${total} ${this.viewId === 'workflows' ? 'workflows' : 'runs'}`;
+            resultsCount.style.display = 'block';
+        } else {
+            resultsCount.style.display = 'none';
+        }
     }
 
     setupFilterButton() {
@@ -330,6 +370,9 @@ class FilterManager {
 
         this.filteredItems = items;
 
+        // Update results count
+        this.updateResultsCount();
+
         // Notify callback
         if (this.options.onFilter) {
             this.options.onFilter(items);
@@ -398,6 +441,12 @@ class FilterManager {
             const searchInput = document.getElementById(this.ids.search);
             if (searchInput && this.searchQuery) {
                 searchInput.value = this.searchQuery;
+
+                // Show clear button if search has value
+                const clearButton = document.getElementById(`${this.viewId}-search-clear`);
+                if (clearButton) {
+                    clearButton.style.display = 'block';
+                }
             }
 
             if (this.currentSort) {

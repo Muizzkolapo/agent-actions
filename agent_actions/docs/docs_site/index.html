@@ -408,29 +408,6 @@
                     <a href="#" class="view-all-link">View all runs →</a>
                 </div>
 
-                <!-- Quick Status Filters -->
-                <div class="quick-filters" id="recent-runs-quick-filters">
-                    <button class="quick-filter-btn active" data-status="all">
-                        <span class="filter-label">All</span>
-                        <span class="filter-count" id="filter-count-all">0</span>
-                    </button>
-                    <button class="quick-filter-btn failed" data-status="failed">
-                        <span class="status-dot failed"></span>
-                        <span class="filter-label">Failed</span>
-                        <span class="filter-count" id="filter-count-failed">0</span>
-                    </button>
-                    <button class="quick-filter-btn running" data-status="running">
-                        <span class="status-dot running"></span>
-                        <span class="filter-label">Running</span>
-                        <span class="filter-count" id="filter-count-running">0</span>
-                    </button>
-                    <button class="quick-filter-btn success" data-status="completed">
-                        <span class="status-dot success"></span>
-                        <span class="filter-label">Success</span>
-                        <span class="filter-count" id="filter-count-success">0</span>
-                    </button>
-                </div>
-
                 <!-- Filter Bar for Recent Runs -->
                 <div class="filter-bar" id="runs-filter-bar">
                     <!-- Search -->
@@ -838,39 +815,22 @@
                     <p class="subtitle" id="runs-list-subtitle"></p>
                 </div>
 
-                <!-- Quick Status Filters -->
-                <div class="quick-filters" id="runs-list-quick-filters">
-                    <button class="quick-filter-btn active" data-status="all">
-                        <span class="filter-label">All</span>
-                        <span class="filter-count" id="runs-filter-count-all">0</span>
-                    </button>
-                    <button class="quick-filter-btn failed" data-status="failed">
-                        <span class="status-dot failed"></span>
-                        <span class="filter-label">Failed</span>
-                        <span class="filter-count" id="runs-filter-count-failed">0</span>
-                    </button>
-                    <button class="quick-filter-btn running" data-status="running">
-                        <span class="status-dot running"></span>
-                        <span class="filter-label">Running</span>
-                        <span class="filter-count" id="runs-filter-count-running">0</span>
-                    </button>
-                    <button class="quick-filter-btn success" data-status="completed">
-                        <span class="status-dot success"></span>
-                        <span class="filter-label">Success</span>
-                        <span class="filter-count" id="runs-filter-count-success">0</span>
-                    </button>
-                </div>
-
                 <!-- Filter bar (reuse Recent Runs filter structure) -->
                 <div class="filter-bar" id="runs-list-filter-bar">
                     <div class="filter-bar-left">
-                        <div class="search-box">
+                        <div class="search-box search-box-enhanced">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
-                            <input type="text" placeholder="Search runs..." id="runs-list-filter-search" />
+                            <input type="text" placeholder="Search by workflow, status, or date..." id="runs-list-filter-search" />
+                            <button class="search-clear-btn" id="runs-list-search-clear" style="display: none;" title="Clear search">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                    <path d="M3 3l8 8M11 3l-8 8"></path>
+                                </svg>
+                            </button>
                         </div>
+                        <div class="search-results-count" id="runs-list-results-count" style="display: none;"></div>
 
                         <button class="filter-button" id="runs-list-filter-button">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
@@ -898,7 +858,14 @@
                 <div class="sort-dropdown" id="runs-list-sort-menu"></div>
 
                 <!-- Filter panel -->
-                <div class="filter-panel" id="runs-list-filter-panel"></div>
+                <div class="filter-panel" id="runs-list-filter-panel" style="display: none;">
+                    <div class="filter-panel-content" id="runs-list-filter-panel-content"></div>
+                    <div class="filter-panel-footer">
+                        <button class="filter-clear-all" id="runs-list-filter-clear-all" style="display: none;">
+                            Clear all
+                        </button>
+                    </div>
+                </div>
 
                 <!-- Runs table -->
                 <div class="recent-runs-container">
