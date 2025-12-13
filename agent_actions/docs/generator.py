@@ -121,30 +121,14 @@ class CatalogGenerator:
             if workflow is None:
                 continue
 
-            # Extract dependencies and plan from original workflow's plan section
-            dep_map = {}
-            actions_in_plan = set()
-            plan_order_map = {}
-            if paths['original']:
-                try:
-                    original_workflow = self.parser.parse_workflow(paths['original'])
-                    if original_workflow and original_workflow.get('plan'):
-                        execution_plan, dep_map = self.parser.parse_plan(original_workflow['plan'])
-                        # Track which actions are in the plan and their execution order
-                        for idx, plan_item in enumerate(execution_plan):
-                            action_name = plan_item['action']
-                            actions_in_plan.add(action_name)
-                            plan_order_map[action_name] = idx + 1
-                except Exception:
-                    pass  # Silently skip dependency extraction if it fails
 
-            # Merge dependencies, plan status, and enrich actions with field information
+
+            # Merge dependencies and enrich actions with field information
             enriched_actions = {}
             for action_name, action in workflow['actions'].items():
-                action['dependencies'] = dep_map.get(action_name, [])
-                # Mark if action is in active execution plan
-                action['in_plan'] = action_name in actions_in_plan
-                action['plan_order'] = plan_order_map.get(action_name, None)
+                # Dependencies are already in action definition now
+                # action['dependencies'] = action.get('dependencies', []) 
+                
                 # Enrich with input/output fields for lineage
                 enriched_actions[action_name] = self._enrich_action_with_fields(action)
 
