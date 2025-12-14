@@ -689,7 +689,7 @@
                 <div class="active-filters" id="workflows-active-filters"></div>
 
                 <!-- Sort dropdown -->
-                <div class="sort-dropdown" id="workflows-sort-menu"></div>
+                <div class="sort-dropdown" id="workflows-sort-menu" style="display: none;"></div>
 
                 <!-- Filter panel -->
                 <div class="filter-panel" id="workflows-filter-panel" style="display: none;">
@@ -924,6 +924,83 @@
                     </div>
                     <h1 id="schemas-list-title">All Schemas</h1>
                     <p class="subtitle" id="schemas-list-subtitle"></p>
+                </div>
+
+                <!-- Filter Bar -->
+                <div class="filter-bar" id="schemas-filter-bar">
+                    <div class="filter-bar-left">
+                        <!-- Search Box -->
+                        <div class="search-box search-box-enhanced">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="7" cy="7" r="6"></circle>
+                                <path d="m11 11 4 4"></path>
+                            </svg>
+                            <input type="text" placeholder="Search schemas..." id="schemas-filter-search" />
+                            <button class="search-clear-btn" id="schemas-search-clear" style="display: none;" title="Clear search">
+                                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                                    <path d="M3 3l8 8M11 3l-8 8"></path>
+                                </svg>
+                            </button>
+                        </div>
+                        <div class="search-results-count" id="schemas-results-count" style="display: none;"></div>
+
+                        <!-- Filter Button (hidden, but required by FilterManager) -->
+                        <button class="filter-button" id="schemas-filter-button" style="display: none;">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h10M5 10h6M7 14h2"></path>
+                            </svg>
+                            Filters
+                        </button>
+
+                        <!-- Sort Button -->
+                        <button class="sort-button" id="schemas-sort-button">
+                            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 8h8M3 4h10M3 12h6"></path>
+                            </svg>
+                            <span id="schemas-sort-label">Sort: Name (A-Z)</span>
+                            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="m3 5 3 3 3-3"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Active Filters (hidden, but required by FilterManager) -->
+                <div class="active-filters" id="schemas-active-filters" style="display: none;"></div>
+
+                <!-- Sort Dropdown -->
+                <div class="sort-dropdown" id="schemas-sort-menu" style="display: none;"></div>
+
+                <!-- Filter Panel (hidden, but required by FilterManager) -->
+                <div class="filter-panel" id="schemas-filter-panel" style="display: none;">
+                    <div class="filter-panel-content" id="schemas-filter-panel-content"></div>
+                    <div class="filter-panel-footer">
+                        <button class="filter-clear-all" id="schemas-filter-clear-all" style="display: none;">
+                            Clear all
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Section Header with View Toggle -->
+                <div class="section-header">
+                    <h2 class="section-heading" id="schemas-list-heading"></h2>
+                    <div class="view-toggle">
+                        <button class="view-btn active" data-view="grid" data-target="schemas" title="Grid View">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="2" y="2" width="6" height="6" rx="1"/>
+                                <rect x="12" y="2" width="6" height="6" rx="1"/>
+                                <rect x="2" y="12" width="6" height="6" rx="1"/>
+                                <rect x="12" y="12" width="6" height="6" rx="1"/>
+                            </svg>
+                        </button>
+                        <button class="view-btn" data-view="list" data-target="schemas" title="List View">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="2" y1="5" x2="18" y2="5"/>
+                                <line x1="2" y1="10" x2="18" y2="10"/>
+                                <line x1="2" y1="15" x2="18" y2="15"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="workflows-grid" id="schemas-list-grid">

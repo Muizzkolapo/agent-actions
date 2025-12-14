@@ -1005,6 +1005,29 @@ function renderPromptsView(prompts, containerId, viewType) {
     }
 }
 
+function renderSchemasView(schemas, containerId, viewType) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (viewType === 'list') {
+        // Render list view with cards (single column)
+        container.className = 'workflows-list';
+        schemas.forEach(schema => {
+            const card = createSchemaCard(schema);
+            container.appendChild(card);
+        });
+    } else {
+        // Render grid view with cards (multi-column)
+        container.className = 'workflows-grid';
+        schemas.forEach(schema => {
+            const card = createSchemaCard(schema);
+            container.appendChild(card);
+        });
+    }
+}
+
 function createWorkflowsTable(workflows) {
     const table = document.createElement('table');
     table.className = 'workflows-table';
@@ -1310,6 +1333,8 @@ function createPromptCard(prompt) {
 // ALL SCHEMAS LIST VIEW
 // ============================================
 
+let schemasFilterManager = null;
+
 function showAllSchemas() {
     state.currentView = 'schemas-list';
     updateNavigation();
@@ -1321,16 +1346,67 @@ function showAllSchemas() {
     // Update header
     document.getElementById('schemas-list-subtitle').textContent = `Browse all ${totalSchemas} schemas in the catalog`;
 
-    // Render schema cards
-    const grid = document.getElementById('schemas-list-grid');
-    grid.innerHTML = '';
+    // Get saved view preference
+    const savedView = localStorage.getItem('schemasView') || 'grid';
 
-    schemas.sort((a, b) => a.name.localeCompare(b.name));
+    // Initialize FilterManager if not already created
+    if (!schemasFilterManager) {
+        schemasFilterManager = new FilterManager('schemas', {
+            // Default sort
+            defaultSort: {
+                id: 'name-asc',
+                label: 'Name (A-Z)',
+                field: 'name',
+                direction: 'asc'
+            },
 
-    schemas.forEach(schema => {
-        const card = createSchemaCard(schema);
-        grid.appendChild(card);
-    });
+            // Sort options
+            sortOptions: [
+                { id: 'name-asc', label: 'Name (A-Z)', field: 'name', direction: 'asc' },
+                { id: 'name-desc', label: 'Name (Z-A)', field: 'name', direction: 'desc' }
+            ],
+
+            // Filter groups (empty for now, can add later if needed)
+            filterGroups: [],
+
+            // Search fields
+            searchFields: ['name', 'id', 'type'],
+
+            // Filter functions (empty for now, can add later)
+            filterFunctions: {},
+
+            // Callback when filters change
+            onFilter: (filteredSchemas) => {
+                // Read current view preference
+                const currentView = localStorage.getItem('schemasView') || 'grid';
+
+                // Render filtered schemas
+                renderSchemasView(filteredSchemas, 'schemas-list-grid', currentView);
+
+                // Update heading with count
+                document.getElementById('schemas-list-heading').textContent = `${filteredSchemas.length} Schemas`;
+            }
+        });
+    }
+
+    // Set items and trigger initial render
+    schemasFilterManager.setItems(schemas);
+
+    // Update view toggle buttons
+    const container = document.getElementById('schemas-list-grid').closest('.content-view');
+    if (container) {
+        const gridBtn = container.querySelector('[data-view="grid"][data-target="schemas"]');
+        const listBtn = container.querySelector('[data-view="list"][data-target="schemas"]');
+        if (gridBtn && listBtn) {
+            if (savedView === 'list') {
+                gridBtn.classList.remove('active');
+                listBtn.classList.add('active');
+            } else {
+                gridBtn.classList.add('active');
+                listBtn.classList.remove('active');
+            }
+        }
+    }
 }
 
 function createSchemaCard(schema) {
@@ -3163,6 +3239,26 @@ function setupEventListeners() {
                 // Use FilterManager pattern
                 if (promptsFilterManager) {
                     promptsFilterManager.applyFilters();
+                }
+
+                return;
+            } else if (target === 'schemas') {
+                containerId = 'schemas-list-grid';
+                storageKey = 'schemasView';
+
+                // Update active button
+                const parentSection = button.closest('.section-header');
+                if (parentSection) {
+                    parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                }
+                button.classList.add('active');
+
+                // Save preference BEFORE applying filters
+                localStorage.setItem(storageKey, view);
+
+                // Use FilterManager pattern
+                if (schemasFilterManager) {
+                    schemasFilterManager.applyFilters();
                 }
 
                 return;
