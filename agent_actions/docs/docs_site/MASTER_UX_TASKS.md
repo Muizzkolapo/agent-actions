@@ -32,12 +32,12 @@ Use this table to track all UX improvements. Mark tasks as complete as you finis
 | # | Priority | Category | Task | Files to Modify | Effort | Status |
 |---|----------|----------|------|-----------------|--------|--------|
 | **PHASE 1: CRITICAL FIXES (Must Do Before Production)** |
-| 1 | 🔴 Critical | Accessibility | Fix multiple H1 headings - ensure only ONE H1 per page | `index.html` | Low | ⬜ Todo |
-| 2 | 🔴 Critical | Accessibility | Add aria-labels to all 15 unlabeled buttons | `index.html` | Low | ⬜ Todo |
-| 3 | 🔴 Critical | Accessibility | Add `<label>` elements for all search input fields | `index.html` | Low | ⬜ Todo |
-| 4 | 🔴 Critical | Content/IA | Fix page titles to match current page (not always "QanaLabs Workflows") | `js/app.js` | Low | ⬜ Todo |
-| 5 | 🟠 High | Navigation | Add workflow context badges to action/prompt/schema cards | `js/app.js` (createActionCard, createPromptCard, createSchemaCard) | Medium | ⬜ Todo |
-| 6 | 🟠 High | Navigation | Implement breadcrumb navigation system | `index.html`, `js/app.js`, `css/components/breadcrumbs.css` | Medium | ⬜ Todo |
+| 1 | 🔴 Critical | Accessibility | Fix multiple H1 headings - ensure only ONE H1 per page | `index.html` | Low | ✅ Done |
+| 2 | 🔴 Critical | Accessibility | Add aria-labels to all 15 unlabeled buttons | `index.html` | Low | ✅ Done |
+| 3 | 🔴 Critical | Accessibility | Add `<label>` elements for all search input fields | `index.html` | Low | ✅ Done |
+| 4 | 🔴 Critical | Content/IA | Fix page titles to match current page (not always "QanaLabs Workflows") | `js/app.js` | Low | ✅ Done |
+| 5 | 🟠 High | Navigation | Add workflow context badges to action/prompt/schema cards | `js/app.js` (createActionCard, createPromptCard, createSchemaCard) | Medium | ✅ Done |
+| 6 | 🟠 High | Navigation | Implement breadcrumb navigation system | `index.html`, `js/app.js`, `css/components/breadcrumbs.css` | Medium | ✅ Done |
 | 7 | 🟠 High | Navigation | Add back buttons to all detail pages | `js/app.js` | Low | ⬜ Todo |
 | **PHASE 2: UX IMPROVEMENTS (Production Ready+)** |
 | 8 | 🟡 Medium | UX | Add loading skeletons/placeholders for better perceived performance | `index.html`, `css/components/loading.css` | Medium | ⬜ Todo |

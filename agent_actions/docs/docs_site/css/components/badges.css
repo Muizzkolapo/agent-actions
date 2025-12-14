@@ -104,3 +104,37 @@
     color: #5f6368;
     font-weight: 500;
 }
+
+/* Workflow Context Badge - Shows which workflow an action/prompt/schema belongs to */
+.workflow-context-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    margin-top: 4px;
+    font-size: 0.75rem;
+    color: #3b82f6;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 500;
+}
+
+.workflow-context-badge:hover {
+    background: #3b82f6;
+    color: white;
+    border-color: #3b82f6;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
+}
+
+.workflow-context-badge svg {
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.workflow-context-badge:hover svg {
+    opacity: 1;
+}
