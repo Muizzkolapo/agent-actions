@@ -139,7 +139,7 @@ class FilterManager {
 
         sortButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            const isVisible = sortMenu.style.display !== 'none';
+            const isVisible = sortMenu.style.display === 'block';
             sortMenu.style.display = isVisible ? 'none' : 'block';
             sortButton.classList.toggle('active', !isVisible);
         });

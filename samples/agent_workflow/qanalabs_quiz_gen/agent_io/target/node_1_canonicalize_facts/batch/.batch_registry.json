@@ -1,0 +1,13 @@
+{
+  "dbt_architect_sample.json": {
+    "batch_id": "batch_693ea0ab6ba0819098a05b4909432600",
+    "status": "validating",
+    "timestamp": "2025-12-14T11:34:04.085612",
+    "provider": "openai",
+    "record_count": 3,
+    "parent_batch_id": null,
+    "retry_attempt": 0,
+    "retry_for_records": null,
+    "has_retry_batch": false
+  }
+}
