@@ -22,6 +22,9 @@ from typing import Dict, Any, List, Optional
 
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.logging import CorrelationContext
+import os
+import shutil
+from agent_actions.io.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 from agent_actions.prompt_generation.output_processor import OutputProcessor
@@ -59,7 +62,8 @@ class AgentWorkflow:
         use_tools: bool,
         parent_output: Optional[str] = None,
         parent_source: Optional[str] = None,
-        parent_pipeline: Optional[str] = None
+        parent_pipeline: Optional[str] = None,
+        run_upstream: bool = False
     ):
         """Initialize workflow with configuration and dependencies."""
         # Store configuration
@@ -70,6 +74,7 @@ class AgentWorkflow:
         self.parent_output = parent_output
         self.parent_source = parent_source
         self.parent_pipeline = parent_pipeline
+        self.run_upstream = run_upstream
 
         # Initialize state
         self.previous_agent_type = None
@@ -218,6 +223,133 @@ class AgentWorkflow:
         for agent_name, agent_config in self.agent_configs.items():
             agent_config['workflow_session_id'] = self.workflow_session_id
 
+    def _resolve_upstream_workflows(self):
+        """Recursively resolve and execute upstream dependencies."""
+        if not self.run_upstream:
+            return
+
+        logger.info(f"Checking upstream dependencies for {self.agent_name}...", extra={'operation': 'resolve_upstream'})
+        processed_upstreams = set()
+
+        for agent_name, config in self.agent_configs.items():
+            for dep in config.get('dependencies', []):
+                if isinstance(dep, dict) and 'workflow' in dep:
+                    upstream_name = dep['workflow']
+                    if upstream_name in processed_upstreams:
+                        continue
+                    
+                    self._execute_upstream_workflow(upstream_name)
+                    processed_upstreams.add(upstream_name)
+
+    def _execute_upstream_workflow(self, upstream_name: str):
+        """Execute a single upstream workflow and link artifacts."""
+        self.console.print(f"[bold cyan]>> Recursive: Executing upstream workflow '{upstream_name}'...[/bold cyan]")
+        
+        # 1. Locate Upstream Config (Heuristic: Same parent directory structure)
+        # Assumes: .../workflows/CURRENT/agent_config/current.yml
+        # Target:  .../workflows/UPSTREAM/agent_config/upstream.yml
+        try:
+            current_config_path = Path(self.constructor_path)
+            workflows_root = current_config_path.parents[2] # .../samples/agent_workflow
+            upstream_config_path = workflows_root / upstream_name / 'agent_config' / f'{upstream_name}.yml'
+            
+            if not upstream_config_path.exists():
+                raise FileNotFoundError(f"Could not locate upstream config at {upstream_config_path}")
+
+            # 2. Run Upstream Workflow
+            upstream_wf = self.__class__(
+                constructor_path=str(upstream_config_path),
+                user_code_path=self.user_code_path,
+                default_path=self.default_path,
+                use_tools=self.use_tools,
+                run_upstream=self.run_upstream # Propagate flag
+            )
+            upstream_wf.run() # Execute synchronously
+
+            # 3. Symlink Artifacts (The "Symlink Strategy")
+            self._link_upstream_artifacts(upstream_name)
+            
+            self.console.print(f"[bold green]>> Recursive: Completed upstream workflow '{upstream_name}'[/bold green]")
+
+        except Exception as e:
+            logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
+            raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
+
+    def _link_upstream_artifacts(self, upstream_name: str):
+        """Link upstream source/target to downstream source/staging."""
+        fh = FileHandler()
+        upstream_paths = fh.get_agent_paths(upstream_name)
+        downstream_paths = fh.get_agent_paths(self.agent_name)
+
+        # A. Link Source -> Source (Lineage)
+        self._safe_symlink_folder(upstream_paths['source'], downstream_paths['source'])
+        
+        # B. Link Target -> Staging (Execution)
+        # Find the final node in upstream target
+        target_dir = upstream_paths['target']
+        if target_dir.exists():
+            # Heuristic: Find directory starting with 'node_' with highest index/latest time?
+            # Or just link all of them? Staging usually processes files.
+            # If we link the CONTENTS of the latest node to staging.
+            latest_node = self._find_latest_node_dir(target_dir)
+            if latest_node:
+                self._safe_symlink_contents(latest_node, downstream_paths['staging'])
+            else:
+                logger.warning(f"No output nodes found in {target_dir} for upstream {upstream_name}")
+
+    def _find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
+        """Find the most recent node directory in target."""
+        nodes = [p for p in target_dir.iterdir() if p.is_dir() and p.name.startswith('node_')]
+        if not nodes:
+            return None
+        # Sort by creation time or name? Name usually has index 'node_0', 'node_1'.
+        # Let's sort by modification time to be safe for 'latest' run.
+        return max(nodes, key=lambda p: p.stat().st_mtime)
+
+    def _safe_symlink_folder(self, src: Path, dst: Path):
+        """Symlink a folder, falling back to copy."""
+        if not src.exists():
+            return
+        
+        # Clear destination if it exists
+        if dst.exists():
+            if dst.is_symlink() or dst.is_file():
+                dst.unlink()
+            else:
+                shutil.rmtree(dst)
+        
+        try:
+            os.symlink(src, dst)
+            logger.debug(f"Symlinked {src} -> {dst}")
+        except OSError:
+            logger.warning(f"Symlink failed, falling back to copy: {src} -> {dst}")
+            shutil.copytree(src, dst)
+
+    def _safe_symlink_contents(self, src_dir: Path, dst_dir: Path):
+        """Symlink all files from src_dir into dst_dir."""
+        if not dst_dir.exists():
+            dst_dir.mkdir(parents=True)
+            
+        for item in src_dir.iterdir():
+            if item.name.startswith('.'): continue
+            
+            src_item = item
+            dst_item = dst_dir / item.name
+            
+            if dst_item.exists():
+                if dst_item.is_symlink() or dst_item.is_file():
+                    dst_item.unlink()
+                else:
+                    shutil.rmtree(dst_item)
+            
+            try:
+                os.symlink(src_item, dst_item)
+            except OSError:
+                if src_item.is_dir():
+                    shutil.copytree(src_item, dst_item)
+                else:
+                    shutil.copy2(src_item, dst_item)
+
     async def async_run(self, concurrency_limit: int = 5):
         """
         Execute workflow level-by-level with parallelism within each level.
@@ -226,7 +358,16 @@ class AgentWorkflow:
             concurrency_limit: Maximum concurrent agents within a level (default 5)
         """
         # Initialize correlation context
-        CorrelationContext.start_workflow(self.agent_name)
+        previous_context = CorrelationContext.get_context()
+        try:
+            CorrelationContext.start_workflow(self.agent_name)
+            self._resolve_upstream_workflows()
+        except Exception as e:
+            if previous_context:
+                CorrelationContext.set_context(previous_context)
+            else:
+                CorrelationContext.clear_context()
+            raise e
         workflow_start = datetime.now()
 
         # Log session separator for file-based logging
@@ -301,13 +442,26 @@ class AgentWorkflow:
             self._handle_workflow_error(e)
             raise
         finally:
-            # Clear correlation context
-            CorrelationContext.clear_context()
+            # Restore previous context
+            if previous_context:
+                CorrelationContext.set_context(previous_context)
+            else:
+                CorrelationContext.clear_context()
 
     def run(self):
         """Execute workflow sequentially."""
         # Initialize correlation context
-        CorrelationContext.start_workflow(self.agent_name)
+        previous_context = CorrelationContext.get_context()
+        try:
+            CorrelationContext.start_workflow(self.agent_name)
+            self._resolve_upstream_workflows()
+        except Exception as e:
+            if previous_context:
+                CorrelationContext.set_context(previous_context)
+            else:
+                CorrelationContext.clear_context()
+            raise e
+
         workflow_start = datetime.now()
 
         # Log session separator for file-based logging
@@ -371,8 +525,11 @@ class AgentWorkflow:
             self._handle_workflow_error(e)
             raise
         finally:
-            # Clear correlation context
-            CorrelationContext.clear_context()
+            # Restore previous context
+            if previous_context:
+                CorrelationContext.set_context(previous_context)
+            else:
+                CorrelationContext.clear_context()
 
     def _run_single_agent(self, idx: int, agent_name: str, total_agents: int) -> bool:
         """
