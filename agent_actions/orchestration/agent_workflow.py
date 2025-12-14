@@ -226,11 +226,11 @@ class AgentWorkflow:
     def _resolve_upstream_workflows(self):
         """Recursively resolve and execute upstream dependencies."""
         if not self.run_upstream:
-            return
-
+            return True  # Continue execution
+        
         logger.info(f"Checking upstream dependencies for {self.agent_name}...", extra={'operation': 'resolve_upstream'})
         processed_upstreams = set()
-
+        
         for agent_name, config in self.agent_configs.items():
             for dep in config.get('dependencies', []):
                 if isinstance(dep, dict) and 'workflow' in dep:
@@ -238,12 +238,17 @@ class AgentWorkflow:
                     if upstream_name in processed_upstreams:
                         continue
                     
-                    self._execute_upstream_workflow(upstream_name)
+                    result = self._execute_upstream_workflow(upstream_name)
+                    if result is None:
+                        # Upstream has pending batch jobs, exit gracefully
+                        return False  # Signal to stop execution
                     processed_upstreams.add(upstream_name)
+        
+        return True  # All upstreams resolved successfully
 
     def _execute_upstream_workflow(self, upstream_name: str):
         """Execute a single upstream workflow and link artifacts."""
-        self.console.print(f"[bold cyan]>> Recursive: Executing upstream workflow '{upstream_name}'...[/bold cyan]")
+        self.console.print(f"[bold cyan]>> Recursive: Checking upstream workflow '{upstream_name}'...[/bold cyan]")
         
         # 1. Locate Upstream Config (Heuristic: Same parent directory structure)
         # Assumes: .../workflows/CURRENT/agent_config/current.yml
@@ -256,20 +261,51 @@ class AgentWorkflow:
             if not upstream_config_path.exists():
                 raise FileNotFoundError(f"Could not locate upstream config at {upstream_config_path}")
 
-            # 2. Run Upstream Workflow
-            upstream_wf = self.__class__(
+            # 2. Check if upstream workflow is already complete
+            from agent_actions.orchestration.state_manager import AgentStateManager
+            
+            # Get upstream agent folder
+            upstream_agent_folder = workflows_root / upstream_name / 'agent_io'
+            upstream_status_file = upstream_agent_folder / '.agent_status.json'
+            
+            # Load upstream config to get agent list
+            upstream_wf_temp = self.__class__(
                 constructor_path=str(upstream_config_path),
                 user_code_path=self.user_code_path,
                 default_path=self.default_path,
                 use_tools=self.use_tools,
-                run_upstream=self.run_upstream # Propagate flag
+                run_upstream=False  # Don't trigger recursive check
             )
-            upstream_wf.run() # Execute synchronously
+            
+            # Initialize state manager with execution order
+            upstream_state_manager = AgentStateManager(upstream_status_file, upstream_wf_temp.execution_order)
+            
+            # Check if all agents are completed
+            all_completed = all(
+                upstream_state_manager.is_completed(agent_name) 
+                for agent_name in upstream_wf_temp.execution_order
+            )
+            
+            if all_completed:
+                self.console.print(f"[bold green]>> Upstream workflow '{upstream_name}' already completed, using existing data[/bold green]")
+            else:
+                # 3. Run Upstream Workflow
+                self.console.print(f"[bold cyan]>> Recursive: Executing upstream workflow '{upstream_name}'...[/bold cyan]")
+                result = upstream_wf_temp.run() # Execute synchronously
+                
+                # Handle batch job submission (returns None when incomplete)
+                if result is None:
+                    self.console.print(f"[blue]⏳ Upstream workflow '{upstream_name}' has pending batch jobs.[/blue]")
+                    self.console.print(f"[blue]Please wait for batch completion and run this command again:[/blue]")
+                    self.console.print(f"[blue]  agac run -a {self.agent_name} --upstream[/blue]")
+                    return None  # Signal to caller that we should exit gracefully
+                
+                status, summary = result # Unpack tuple
 
-            # 3. Symlink Artifacts (The "Symlink Strategy")
+            # 4. Symlink Artifacts (The "Symlink Strategy")
             self._link_upstream_artifacts(upstream_name)
             
-            self.console.print(f"[bold green]>> Recursive: Completed upstream workflow '{upstream_name}'[/bold green]")
+            self.console.print(f"[bold green]>> Recursive: Ready to use upstream data from '{upstream_name}'[/bold green]")
 
         except Exception as e:
             logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
@@ -277,9 +313,22 @@ class AgentWorkflow:
 
     def _link_upstream_artifacts(self, upstream_name: str):
         """Link upstream source/target to downstream source/staging."""
-        fh = FileHandler()
-        upstream_paths = fh.get_agent_paths(upstream_name)
-        downstream_paths = fh.get_agent_paths(self.agent_name)
+        # Get workflow root
+        current_config_path = Path(self.constructor_path)
+        workflows_root = current_config_path.parents[2]
+        
+        # Construct paths directly
+        upstream_io = workflows_root / upstream_name / 'agent_io'
+        downstream_io = workflows_root / self.agent_name / 'agent_io'
+        
+        upstream_paths = {
+            'source': upstream_io / 'source',
+            'target': upstream_io / 'target'
+        }
+        downstream_paths = {
+            'source': downstream_io / 'source',
+            'staging': downstream_io / 'staging'
+        }
 
         # A. Link Source -> Source (Lineage)
         self._safe_symlink_folder(upstream_paths['source'], downstream_paths['source'])
@@ -454,7 +503,14 @@ class AgentWorkflow:
         previous_context = CorrelationContext.get_context()
         try:
             CorrelationContext.start_workflow(self.agent_name)
-            self._resolve_upstream_workflows()
+            should_continue = self._resolve_upstream_workflows()
+            if not should_continue:
+                # Upstream has pending batch jobs, exit gracefully
+                if previous_context:
+                    CorrelationContext.set_context(previous_context)
+                else:
+                    CorrelationContext.clear_context()
+                return None  # Return None to indicate incomplete workflow
         except Exception as e:
             if previous_context:
                 CorrelationContext.set_context(previous_context)

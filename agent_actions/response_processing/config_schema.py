@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any, Literal, Union
 from enum import Enum
 
 class FilterScope(str, Enum):
@@ -109,7 +109,7 @@ class AgentConfig(BaseModel):
     model_vendor: Optional[str] = Field(default=None, description="Model vendor/provider: 'openai', 'gemini', 'anthropic', 'groq', or 'tool'")
     api_key: Optional[str] = None
     code_path: Optional[str] = None
-    dependencies: List[str] = Field(default_factory=list)
+    dependencies: List[Union[str, Dict[str, Any]]] = Field(default_factory=list)
     prompt: Optional[str] = None
     schema_name: Optional[str] = None
     chunk_config: Dict[str, Any] = Field(default_factory=dict)

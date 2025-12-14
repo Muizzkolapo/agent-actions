@@ -53,7 +53,24 @@ class ConfigValidationError(ConfigurationError):
 
 class DuplicateFunctionError(ConfigurationError):
     """Raised when duplicate @udf_tool function names are detected."""
-    pass
+    
+    def __init__(self, message: str = None, *, function_name: str = None, existing_location: str = None, existing_file: str = None, new_location: str = None, new_file: str = None, context: dict = None, cause: Exception = None):
+        if function_name:
+            msg = f"Duplicate UDF function name detected: '{function_name}'"
+            if existing_location and new_location:
+                msg += f"\n  Existing: {existing_location} (in {existing_file})"
+                msg += f"\n  New:      {new_location} (in {new_file})"
+            ctx = context or {}
+            ctx.update({
+                'function_name': function_name,
+                'existing_location': existing_location,
+                'existing_file': existing_file,
+                'new_location': new_location,
+                'new_file': new_file
+            })
+            super().__init__(msg, context=ctx, cause=cause)
+        else:
+            super().__init__(message, context=context, cause=cause)
 
 
 class FunctionNotFoundError(ConfigurationError):
@@ -63,7 +80,17 @@ class FunctionNotFoundError(ConfigurationError):
 
 class UDFLoadError(ConfigurationError):
     """Raised when a UDF module fails to load."""
-    pass
+    
+    def __init__(self, message: str = None, *, module: str = None, file: str = None, error: str = None, context: dict = None, cause: Exception = None):
+        if module and error:
+            msg = f"Failed to load UDF module '{module}': {error}"
+            if file:
+                msg += f" (file: {file})"
+            ctx = context or {}
+            ctx.update({'module': module, 'file': file, 'error': error})
+            super().__init__(msg, context=ctx, cause=cause)
+        else:
+            super().__init__(message, context=context, cause=cause)
 
 
 class AgentNotFoundError(ConfigurationError):

@@ -163,7 +163,7 @@ class ConfigManager:
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
-                dependencies = [dep for dep in config.dependencies if dep in self.agent_configs and self.agent_configs[dep].is_operational]
+                dependencies = [dep for dep in config.dependencies if isinstance(dep, str) and dep in self.agent_configs and self.agent_configs[dep].is_operational]
                 dependency_graph[agent_type] = dependencies
         self.execution_order = topological_sort(dependency_graph)
 
