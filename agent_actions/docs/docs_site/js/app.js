@@ -959,6 +959,52 @@ function renderWorkflowsView(workflows, containerId, viewType) {
     }
 }
 
+function renderActionsView(actions, containerId, viewType) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (viewType === 'list') {
+        // Render list view with cards (single column)
+        container.className = 'workflows-list';
+        actions.forEach(action => {
+            const card = createActionCard(action, action.workflowName, action.workflowId);
+            container.appendChild(card);
+        });
+    } else {
+        // Render grid view with cards (multi-column)
+        container.className = 'workflows-grid';
+        actions.forEach(action => {
+            const card = createActionCard(action, action.workflowName, action.workflowId);
+            container.appendChild(card);
+        });
+    }
+}
+
+function renderPromptsView(prompts, containerId, viewType) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    if (viewType === 'list') {
+        // Render list view with cards (single column)
+        container.className = 'workflows-list';
+        prompts.forEach(prompt => {
+            const card = createPromptCard(prompt);
+            container.appendChild(card);
+        });
+    } else {
+        // Render grid view with cards (multi-column)
+        container.className = 'workflows-grid';
+        prompts.forEach(prompt => {
+            const card = createPromptCard(prompt);
+            container.appendChild(card);
+        });
+    }
+}
+
 function createWorkflowsTable(workflows) {
     const table = document.createElement('table');
     table.className = 'workflows-table';
@@ -1160,6 +1206,8 @@ function showAllWorkflows(pushHistory = true) {
 // ALL PROMPTS LIST VIEW
 // ============================================
 
+let promptsFilterManager = null;
+
 function showAllPrompts() {
     state.currentView = 'prompts-list';
     updateNavigation();
@@ -1171,16 +1219,67 @@ function showAllPrompts() {
     // Update header
     document.getElementById('prompts-list-subtitle').textContent = `Browse all ${totalPrompts} prompts in the catalog`;
 
-    // Render prompt cards
-    const grid = document.getElementById('prompts-list-grid');
-    grid.innerHTML = '';
+    // Get saved view preference
+    const savedView = localStorage.getItem('promptsView') || 'grid';
 
-    prompts.sort((a, b) => a.name.localeCompare(b.name));
+    // Initialize FilterManager if not already created
+    if (!promptsFilterManager) {
+        promptsFilterManager = new FilterManager('prompts', {
+            // Default sort
+            defaultSort: {
+                id: 'name-asc',
+                label: 'Name (A-Z)',
+                field: 'name',
+                direction: 'asc'
+            },
 
-    prompts.forEach(prompt => {
-        const card = createPromptCard(prompt);
-        grid.appendChild(card);
-    });
+            // Sort options
+            sortOptions: [
+                { id: 'name-asc', label: 'Name (A-Z)', field: 'name', direction: 'asc' },
+                { id: 'name-desc', label: 'Name (Z-A)', field: 'name', direction: 'desc' }
+            ],
+
+            // Filter groups (can add more later if needed)
+            filterGroups: [],
+
+            // Search fields
+            searchFields: ['name', 'id'],
+
+            // Filter functions (empty for now, can add later)
+            filterFunctions: {},
+
+            // Callback when filters change
+            onFilter: (filteredPrompts) => {
+                // Read current view preference
+                const currentView = localStorage.getItem('promptsView') || 'grid';
+
+                // Render filtered prompts
+                renderPromptsView(filteredPrompts, 'prompts-list-grid', currentView);
+
+                // Update heading with count
+                document.getElementById('prompts-list-heading').textContent = `${filteredPrompts.length} Prompts`;
+            }
+        });
+    }
+
+    // Set items and trigger initial render
+    promptsFilterManager.setItems(prompts);
+
+    // Update view toggle buttons
+    const container = document.getElementById('prompts-list-grid').closest('.content-view');
+    if (container) {
+        const gridBtn = container.querySelector('[data-view="grid"][data-target="prompts"]');
+        const listBtn = container.querySelector('[data-view="list"][data-target="prompts"]');
+        if (gridBtn && listBtn) {
+            if (savedView === 'list') {
+                gridBtn.classList.remove('active');
+                listBtn.classList.add('active');
+            } else {
+                gridBtn.classList.add('active');
+                listBtn.classList.remove('active');
+            }
+        }
+    }
 }
 
 function createPromptCard(prompt) {
@@ -1418,6 +1517,8 @@ function renderRunsListTable(runsToShow) {
 // FILTERED ACTIONS LIST VIEW
 // ============================================
 
+let actionsFilterManager = null;
+
 function showFilteredActions(filterType, pushHistory = true) {
     state.currentView = 'actions-list';
 
@@ -1441,54 +1542,128 @@ function showFilteredActions(filterType, pushHistory = true) {
         });
     });
 
-    // Filter actions based on type
-    let filteredActions = allActions;
-    let title, subtitle, heading;
+    // Determine initial filter and title based on filterType
+    let title, subtitle;
+    const initialFilters = {};
 
     switch(filterType) {
         case 'all-actions':
             title = 'All Actions';
             subtitle = `Browse all ${allActions.length} actions across workflows`;
-            heading = `${allActions.length} Actions`;
             break;
         case 'llm':
-            filteredActions = allActions.filter(a => a.type === 'llm');
             title = 'LLM Actions';
-            subtitle = `${filteredActions.length} actions that use language models`;
-            heading = `${filteredActions.length} LLM Actions`;
+            subtitle = `${allActions.filter(a => a.type === 'llm').length} actions that use language models`;
+            initialFilters['type-llm'] = true;
             break;
         case 'tool':
-            filteredActions = allActions.filter(a => a.type === 'tool');
             title = 'Tool Actions';
-            subtitle = `${filteredActions.length} actions that use tool implementations`;
-            heading = `${filteredActions.length} Tool Actions`;
+            subtitle = `${allActions.filter(a => a.type === 'tool').length} actions that use tool implementations`;
+            initialFilters['type-tool'] = true;
             break;
         default:
             title = 'Actions';
             subtitle = 'Browse actions';
-            heading = 'Actions';
     }
 
     // Update header
     document.getElementById('filter-type-breadcrumb').textContent = title;
     document.getElementById('filter-type-title').textContent = title;
     document.getElementById('filter-type-subtitle').textContent = subtitle;
-    document.getElementById('actions-list-heading').textContent = heading;
 
-    // Render action cards
-    const grid = document.getElementById('actions-filtered-grid');
-    grid.innerHTML = '';
+    // Get saved view preference
+    const savedView = localStorage.getItem('actionsView') || 'grid';
 
-    filteredActions.forEach(action => {
-        const card = createActionCard(action, action.workflowName, action.workflowId);
-        grid.appendChild(card);
-    });
+    // Initialize FilterManager if not already created
+    if (!actionsFilterManager) {
+        actionsFilterManager = new FilterManager('actions', {
+            // Default sort
+            defaultSort: {
+                id: 'name-asc',
+                label: 'Name (A-Z)',
+                field: 'name',
+                direction: 'asc'
+            },
 
-    // Restore saved view preference for actions
-    const savedView = localStorage.getItem('actionsView');
-    if (savedView === 'list') {
-        grid.classList.remove('workflows-grid');
-        grid.classList.add('workflows-list');
+            // Sort options
+            sortOptions: [
+                { id: 'name-asc', label: 'Name (A-Z)', field: 'name', direction: 'asc' },
+                { id: 'name-desc', label: 'Name (Z-A)', field: 'name', direction: 'desc' },
+                { id: 'type-asc', label: 'Type (LLM First)', field: 'type', direction: 'asc' },
+                { id: 'type-desc', label: 'Type (Tool First)', field: 'type', direction: 'desc' },
+                { id: 'workflow-asc', label: 'Workflow (A-Z)', field: 'workflowName', direction: 'asc' },
+                { id: 'workflow-desc', label: 'Workflow (Z-A)', field: 'workflowName', direction: 'desc' }
+            ],
+
+            // Filter groups
+            filterGroups: [
+                {
+                    label: 'TYPE',
+                    options: [
+                        { id: 'type-llm', label: 'LLM Actions' },
+                        { id: 'type-tool', label: 'Tool Actions' }
+                    ]
+                },
+                {
+                    label: 'DEPENDENCIES',
+                    options: [
+                        { id: 'has-dependencies', label: 'Has Dependencies' },
+                        { id: 'no-dependencies', label: 'No Dependencies' }
+                    ]
+                }
+            ],
+
+            // Search fields
+            searchFields: ['name', 'intent', 'workflowName'],
+
+            // Filter functions
+            filterFunctions: {
+                'type-llm': (action) => action.type === 'llm',
+                'type-tool': (action) => action.type === 'tool',
+                'has-dependencies': (action) => {
+                    return action.dependencies && Object.keys(action.dependencies).length > 0;
+                },
+                'no-dependencies': (action) => {
+                    return !action.dependencies || Object.keys(action.dependencies).length === 0;
+                }
+            },
+
+            // Callback when filters change
+            onFilter: (filteredActions) => {
+                // Read current view preference (may have changed from toggle buttons)
+                const currentView = localStorage.getItem('actionsView') || 'grid';
+
+                // Render filtered actions
+                renderActionsView(filteredActions, 'actions-filtered-grid', currentView);
+
+                // Update heading with count
+                document.getElementById('actions-list-heading').textContent = `${filteredActions.length} Actions`;
+            }
+        });
+    }
+
+    // Apply initial filters if specified (for LLM/Tool filter links)
+    if (Object.keys(initialFilters).length > 0) {
+        actionsFilterManager.activeFilters = initialFilters;
+    }
+
+    // Set items and trigger initial render
+    actionsFilterManager.setItems(allActions);
+
+    // Update view toggle buttons
+    const container = document.getElementById('actions-filtered-grid').closest('.content-view');
+    if (container) {
+        const gridBtn = container.querySelector('[data-view="grid"][data-target="actions"]');
+        const listBtn = container.querySelector('[data-view="list"][data-target="actions"]');
+        if (gridBtn && listBtn) {
+            if (savedView === 'list') {
+                gridBtn.classList.remove('active');
+                listBtn.classList.add('active');
+            } else {
+                gridBtn.classList.add('active');
+                listBtn.classList.remove('active');
+            }
+        }
     }
 }
 
@@ -2954,24 +3129,42 @@ function setupEventListeners() {
             if (target === 'actions') {
                 containerId = 'actions-filtered-grid';
                 storageKey = 'actionsView';
-                // For actions, we'll keep the old behavior for now
-                const container = document.getElementById(containerId);
-                if (!container) return;
 
+                // Update active button
                 const parentSection = button.closest('.section-header');
                 if (parentSection) {
                     parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
                 }
                 button.classList.add('active');
 
-                if (view === 'list') {
-                    container.classList.remove('workflows-grid');
-                    container.classList.add('workflows-list');
-                } else {
-                    container.classList.remove('workflows-list');
-                    container.classList.add('workflows-grid');
-                }
+                // Save preference BEFORE applying filters (so renderActionsView reads the correct view)
                 localStorage.setItem(storageKey, view);
+
+                // Use the same pattern as workflows
+                if (actionsFilterManager) {
+                    actionsFilterManager.applyFilters();
+                }
+
+                return;
+            } else if (target === 'prompts') {
+                containerId = 'prompts-list-grid';
+                storageKey = 'promptsView';
+
+                // Update active button
+                const parentSection = button.closest('.section-header');
+                if (parentSection) {
+                    parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                }
+                button.classList.add('active');
+
+                // Save preference BEFORE applying filters
+                localStorage.setItem(storageKey, view);
+
+                // Use FilterManager pattern
+                if (promptsFilterManager) {
+                    promptsFilterManager.applyFilters();
+                }
+
                 return;
             } else if (target === 'workflows-list') {
                 containerId = 'workflows-list-grid';
