@@ -1,0 +1,452 @@
+[
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "Cross-project refs ({{ ref() }}) work across dbt projects on Enterprise and Enterprise+ plans, enabling references to models in other projects to support multi-project deployments.",
+      "quote": "\"Cross-project references ... is the foundational feature that enables the multi-project deployments. `{{ ref() }}`s now work across dbt projects\"",
+      "technical_level": "implementation",
+      "supports_objective": "Setting up additional dbt projects",
+      "semantic_unique_id": "6570fbeb-c994-4a15-b318-6e95898d0856",
+      "similarity_group_id": "84237c26-b5ee-4fa5-9178-6ca86f6fd157"
+    },
+    "target_id": "0b12971c-e7bc-4c0f-b0a2-103d13f05b8e",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_0",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_0"
+    ]
+  },
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "dbt Catalog provides full, cross-project lineage to discover dependencies across multiple projects.",
+      "quote": "\"Catalog ... complete with full, cross-project lineage.\"",
+      "technical_level": "integration",
+      "supports_objective": "Setting up additional dbt projects",
+      "semantic_unique_id": "efeeb77d-f6bb-4792-8f62-45a6a33a8152",
+      "similarity_group_id": "84237c26-b5ee-4fa5-9178-6ca86f6fd157"
+    },
+    "target_id": "4378102c-68eb-4ebf-8c59-f4272afbd409",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_1",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_1"
+    ]
+  },
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "Groups let you organize DAG nodes by logical area and assign an owner to the entire group for governance.",
+      "quote": "\"With groups, you can organize nodes in your dbt DAG that share a logical connection ... and assign an owner to the entire group.\"",
+      "technical_level": "configuration",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "437de635-b445-4d1f-b941-a78e1ee9d240",
+      "similarity_group_id": "e6a58985-6da8-4976-a8d8-4aa59f7068a9"
+    },
+    "target_id": "a3add38a-6583-41dd-b137-36246aaa33c7",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_2",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_2"
+    ]
+  },
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "Access configs allow you to control who can reference models, enforcing cross-project reference permissions.",
+      "quote": "\"Access configs allow you to control who can reference models.\"",
+      "technical_level": "configuration",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "988e6464-09ad-478b-ac6b-c1553dfd1511",
+      "similarity_group_id": "0d143360-8fbf-4554-83a1-4df6c7a9525b"
+    },
+    "target_id": "171a2db2-caf8-44d2-9520-1f009e4c996a",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_3",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_3"
+    ]
+  },
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "Model Versions provide versioning so teams can treat models as stable APIs for cross-project adoption and deprecation.",
+      "quote": "\"Model versioning is the mechanism to allow graceful adoption and deprecation of models as they evolve.\"",
+      "technical_level": "procedure",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "eeb2c874-e1fd-42f5-993e-d27e547bd732",
+      "similarity_group_id": "20412b32-f288-4e94-84aa-94a4fc144c2f"
+    },
+    "target_id": "48c8d241-d562-4035-aa24-f716d1c23bbb",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_4",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_4"
+    ]
+  },
+  {
+    "source_guid": "017c3d1e-c090-5533-b056-81d05d246fb2",
+    "content": {
+      "fact": "Model Contracts let you set explicit expectations on data shape to prevent upstream changes breaking downstream consumers.",
+      "quote": "\"Model Contracts \u0014 data contracts set explicit expectations on the shape of the data to ensure data changes upstream ... don't break downstream consumers' data products.\"",
+      "technical_level": "configuration",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "1b220340-f576-4f22-bc41-d9c8b45314bc",
+      "similarity_group_id": "2d9549a7-6d46-4cd5-a4e1-42319401d187"
+    },
+    "target_id": "b339e912-0ee8-4c5b-911d-c25ef470c4dd",
+    "node_id": "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_5",
+    "lineage": [
+      "node_0_b5084f0a-496d-4935-b910-4e1d1f4ede57",
+      "node_1_7a63a82d-6c31-47d9-b086-b2d81b5648eb",
+      "node_2_90deb723-e89f-4b1d-94f4-de6bdef0404f_5"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Cross-project refs resolve to Production by default; if a project defines both Production and Staging, refs from development and Staging environments resolve to Staging while refs from Production resolve to Production.",
+      "quote": "By default, cross-project references resolve to the \"Production\" deployment environment... If a project defines both a \"Production\" environment and a \"Staging\" environment, then cross-project references from development and \"Staging\" environments will resolve to \"Staging,\" whereas only references coming from \"Production\" environments will resolve to \"Production.\"",
+      "technical_level": "configuration",
+      "supports_objective": "Understanding how environment types relate to cross-project references",
+      "semantic_unique_id": "4acdf999-7fc5-4803-808c-a76a6f78f8a8",
+      "similarity_group_id": "ee665198-a74c-4999-bcc7-701b39fd79bb"
+    },
+    "target_id": "135a2a58-eed1-4984-9d3d-3f3c2afb646c",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_0",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_0"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Contracts can only be applied at the model level and apply to the entire model, including all output columns; you cannot apply contracts to sources or to part of a model.",
+      "quote": "No, contracts can only be applied at the model level. No. A contract applies to an entire model, including all columns in the model\u2019s output.",
+      "technical_level": "constraint",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "d2575967-1df0-4345-a7af-7462e5260ec7",
+      "similarity_group_id": "2d9549a7-6d46-4cd5-a4e1-42319401d187"
+    },
+    "target_id": "f27c1f92-19dc-4a67-94e3-9d11132a4d3e",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_1",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_1"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Protected is the default access: protected models can be referenced by any model within the same dbt project or when the project is installed as a package.",
+      "quote": "Protected: Models with a protected access modifier can be referenced by any other model within the same dbt project or when the project is installed as a package. This is the default setting for all models...",
+      "technical_level": "configuration",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "bb95b74d-4e6e-49d2-bc85-419a34afd77c",
+      "similarity_group_id": "e2f6fbb8-1b9a-4305-9a04-b5a9ba04bc03"
+    },
+    "target_id": "1aca3b2f-c764-4a45-8aaf-f0ed7bd3b8fa",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_2",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_2"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Private models are referenceable only by models within the same group.",
+      "quote": "Private: A model with a private access modifier is only referenceable by models within the same group.",
+      "technical_level": "configuration",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "1d820b1d-e9fd-4c32-baee-d0ca4250ba09",
+      "similarity_group_id": "e2f6fbb8-1b9a-4305-9a04-b5a9ba04bc03"
+    },
+    "target_id": "4c6abdf0-eb56-40d8-8482-7b79f0259b1e",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_3",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_3"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "To deprecate a model (or downgrade its access), mark it with deprecation_date to deliver a warning to all downstream consumers.",
+      "quote": "they should mark that model for deprecation (using deprecation_date), which will deliver a warning to all downstream consumers of that model.",
+      "technical_level": "procedure",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "12a1f4d1-3314-4b76-b6c9-b2d5e98ed7dd",
+      "similarity_group_id": "20412b32-f288-4e94-84aa-94a4fc144c2f"
+    },
+    "target_id": "d2bf2967-a365-427c-91ac-aa42eb0e8397",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_4",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_4"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Cross-project references require each project name to be unique in your dbt account.",
+      "quote": "Cross-project references require that each project `name` be unique in your dbt account.",
+      "technical_level": "constraint",
+      "supports_objective": "Understanding how environment types relate to cross-project references",
+      "semantic_unique_id": "331b8cd1-9398-4648-b9ce-24e7100e0180",
+      "similarity_group_id": "84237c26-b5ee-4fa5-9178-6ca86f6fd157"
+    },
+    "target_id": "bfea3be7-0e85-4fb3-91fe-154936978252",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_5",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_5"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "To enable bidirectional project dependencies, each project must run and produce public models before the other can take a dependency on it.",
+      "quote": "Each project must run and produce public models before the original producer project can take a dependency on the original consumer project.",
+      "technical_level": "procedure",
+      "supports_objective": "Understanding how environment types relate to cross-project references",
+      "semantic_unique_id": "7d68a646-6472-4874-962b-b2dfd58c957b",
+      "similarity_group_id": "41c1b3d5-3cfb-4e59-afc0-43fec7c45ae7"
+    },
+    "target_id": "1921d66d-74c4-4b6b-98dc-f4944d2c559c",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_6",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_6"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "Running `dbt build --select +model` will not run upstream models in other projects unless those upstream projects are installed as packages (source code).",
+      "quote": "No, unless upstream projects are installed as packages (source code). In that case, the models in project installed as a project become \"your\" models, and you can select or run them.",
+      "technical_level": "implementation",
+      "supports_objective": "Understanding how environment types relate to cross-project references",
+      "semantic_unique_id": "5dd0dcaa-2d1f-43c3-bf3e-9536f9ca3757",
+      "similarity_group_id": "e2f6fbb8-1b9a-4305-9a04-b5a9ba04bc03"
+    },
+    "target_id": "b7485dc2-a39a-485b-9124-eb658860d34b",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_7",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_7"
+    ]
+  },
+  {
+    "source_guid": "027c0513-063a-5704-a89c-c029c32dd14f",
+    "content": {
+      "fact": "A dbt Enterprise-tier plan is required to set up multiple projects and reference models across them.",
+      "quote": "Yes, a dbt Enterprise-tier plan is required to set up multiple projects and reference models across them.",
+      "technical_level": "constraint",
+      "supports_objective": "Utilizing model governance",
+      "semantic_unique_id": "8fd0b6c0-d26b-46fb-9a10-f69dca6221f2",
+      "similarity_group_id": "84237c26-b5ee-4fa5-9178-6ca86f6fd157"
+    },
+    "target_id": "46bc9d27-5adb-4622-8630-a6d2675cc644",
+    "node_id": "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_8",
+    "lineage": [
+      "node_0_87789437-ce5d-4886-9dd7-354615f0d622",
+      "node_1_ab84a104-9cd8-43d2-97fb-24170cce85f3",
+      "node_2_3a111f65-2e7c-4f48-9891-e3d8c4403950_8"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Built-in job commands are chained; if one run step fails the entire job fails with an \"Error\" status.",
+      "quote": "During a job run, built-in commands are \"chained\" together and if one run step fails, the entire job fails with an \"Error\" status.",
+      "technical_level": "implementation",
+      "supports_objective": "Understanding steps within a dbt job",
+      "semantic_unique_id": "969f4e3b-c89f-4a44-8eb1-713b48f01e53",
+      "similarity_group_id": "4aff4135-d7c1-4174-b55c-a51767330039"
+    },
+    "target_id": "bc909ae9-b8a5-4514-ac8d-2c538bed4d16",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_0",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_0"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Checkbox steps like 'Generate docs on run' or 'Run source freshness' can fail without failing the whole job if subsequent steps pass.",
+      "quote": "If the step fails, the job can succeed if subsequent steps pass.",
+      "technical_level": "implementation",
+      "supports_objective": "Understanding steps within a dbt job",
+      "semantic_unique_id": "4bfc02f7-75e6-4d0d-a5c3-9ea5a1aa3cc6",
+      "similarity_group_id": "c9d5efe8-6b63-4e67-9c51-f146de2dc8d9"
+    },
+    "target_id": "27e78470-16f3-4ca7-ad65-863a448f2a91",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_1",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_1"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "By default a deploy job's Commands section includes the dbt build command.",
+      "quote": "By default, it includes the `dbt build` command.",
+      "technical_level": "configuration",
+      "supports_objective": "Creating a new dbt job",
+      "semantic_unique_id": "308d728c-d851-49fd-b1f5-b8811304c17d",
+      "similarity_group_id": "76df4c7b-949b-4dc1-b495-ce1d9a09a092"
+    },
+    "target_id": "eca2ad6a-730a-442c-b1b5-41f413db108f",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_2",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_2"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Intervals scheduling runs every N hours from midnight UTC; subsequent runs keep the same offset (e.g., 00:04 -> 02:04 for Every 2 hours).",
+      "quote": "If you choose **Every 2 hours**, the job will run every 2 hours from midnight UTC. ... if the previous scheduled pipeline ran at 00:04 UTC, the next run will be at 02:04 UTC.",
+      "technical_level": "constraint",
+      "supports_objective": "Scheduling a job to run on schedule",
+      "semantic_unique_id": "e0c18690-3d89-4f3a-9b34-d0b21b4f3483",
+      "similarity_group_id": "abf7a0e6-f7ff-4bba-9d94-05864c2c9246"
+    },
+    "target_id": "91659c6b-073f-4eb5-8179-a7fd769d63ce",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_3",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_3"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "dbt job schedules use UTC and do not translate to local time or account for daylight savings.",
+      "quote": "dbt uses Coordinated Universal Time (UTC) and does not account for translations to your specific timezone or take into consideration daylight savings time.",
+      "technical_level": "constraint",
+      "supports_objective": "Scheduling a job to run on schedule",
+      "semantic_unique_id": "2e019f9b-b0dd-4829-8609-493fed8204d1",
+      "similarity_group_id": "270cb2bf-0b53-49c9-ab71-604eff7f9d1a"
+    },
+    "target_id": "1b3f1d44-b8a4-42b5-a0f9-f6d80f523cb5",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_4",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_4"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Developer plans enforce a minimum cron scheduling interval of 10 minutes; Starter/Enterprise plans have no execution-frequency restrictions.",
+      "quote": "Developer plans: dbt sets a minimum interval of every 10 minutes for scheduling jobs. ... Starter, Enterprise, and Enterprise+ plans: No restrictions on job execution frequency.",
+      "technical_level": "constraint",
+      "supports_objective": "Scheduling a job to run on schedule",
+      "semantic_unique_id": "dd900300-a411-4c2c-a398-3ad170621949",
+      "similarity_group_id": "eeb58c22-e86b-48c1-8492-038a42e1c32b"
+    },
+    "target_id": "7f4ef039-cf79-4505-bb31-7c1806f80fa4",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_5",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_5"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "The 'Run when another job finishes' trigger (job chaining) requires a Starter or Enterprise-tier dbt plan.",
+      "quote": "For the [Trigger on job completion] feature, your dbt account must be on the [Starter or an Enterprise-tier] plan.",
+      "technical_level": "constraint",
+      "supports_objective": "Configuring jobs to be triggered after other dbt jobs (job chaining)",
+      "semantic_unique_id": "b4d7a004-e2b0-4320-a5c4-382664044685",
+      "similarity_group_id": "eeb58c22-e86b-48c1-8492-038a42e1c32b"
+    },
+    "target_id": "25d98bb7-a3d1-4118-9920-c279dd6cf917",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_6",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_6"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "By default a job inherits the dbt version from its environment; changing the job-level version is discouraged except for upgrades.",
+      "quote": "By default, it\u0019s set to inherit the dbt version from the environment. dbt Labs strongly recommends that you don't change the default setting.",
+      "technical_level": "configuration",
+      "supports_objective": "Configuring optional settings such as environment variable overrides, threads, deferral, target name, and dbt version override",
+      "semantic_unique_id": "642cb837-976d-484f-82a7-69a9a4c1f3a2",
+      "similarity_group_id": "76df4c7b-949b-4dc1-b495-ce1d9a09a092"
+    },
+    "target_id": "bb09b872-d38e-4d57-86f4-00ed3835e2e4",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_7",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_7"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Job 'Threads' defaults to 4; increasing threads raises model execution concurrency.",
+      "quote": "By default, it\u0019s set to 4 threads. Increase the thread count to increase model execution concurrency.",
+      "technical_level": "configuration",
+      "supports_objective": "Configuring optional settings such as environment variable overrides, threads, deferral, target name, and dbt version override",
+      "semantic_unique_id": "6c8ae193-3cbb-46e0-be3a-7cf9ed92c321",
+      "similarity_group_id": "a5839ca3-3060-4b4e-82b0-2d7e0fe258a4"
+    },
+    "target_id": "c0cf9820-84a6-4dbf-9582-9d9e9372e9be",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_8",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_8"
+    ]
+  },
+  {
+    "source_guid": "2e21003d-b108-532d-bf04-2bc794ec528e",
+    "content": {
+      "fact": "Compare changes 'No deferral' is default; options are 'Environment' or 'This Job' and deferral-to-environment compares against the environment's manifest.json.",
+      "quote": "By default, it\u0019s set to **No deferral**. Select either **Environment** or **This Job**... deferral to an environment is more efficient as dbt will compare against the project representation (which is stored in the `manifest.json`) of the last successful deploy job run that executed in the deferred environment.",
+      "technical_level": "implementation",
+      "supports_objective": "Understanding when to use which type of job deferral",
+      "semantic_unique_id": "2352e178-e0a9-4cc4-99ba-345f5d84db44",
+      "similarity_group_id": "e8d4ca7b-7f11-4d6e-a093-3b4e0bb30e19"
+    },
+    "target_id": "3f7912f5-d8ca-4213-b08c-e5793afcf8a3",
+    "node_id": "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_9",
+    "lineage": [
+      "node_0_cddac832-5266-4a45-b4a9-bd3ac574961f",
+      "node_1_39a5dd6c-0547-41b0-9adc-cc3feb5b3ab0",
+      "node_2_b97616f9-77c5-4f6f-a8c9-a6f5b4801264_9"
+    ]
+  }
+]

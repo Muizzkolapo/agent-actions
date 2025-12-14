@@ -1,0 +1,94 @@
+name: code_options_quiz
+description: "Generate code options quizzes where users select the best implementation from multiple working alternatives"
+version: "1.0.0"
+
+# Global defaults applied to all actions unless overridden
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  api_key: OPENAI_API_KEY
+  prompt_debug: false
+  few_shot: 0
+  observe: [id, url, page_content, bloom_details, topic, summary]
+  drops: [id, url]
+
+
+actions:
+  - name: code_extractor
+    intent: "Extract code blocks from technical documentation"
+    schema: candidate_code_list
+    prompt: $drop_down_quiz.Code_extraction
+    drops: [id, url, topic]
+
+  - name: flatten_code
+    kind: tool
+    impl: flatten_code
+    intent: "Flatten extracted code blocks for processing"
+    observe: [topic, summary]
+
+  - name: code_usage_scenario
+    intent: "Generate realistic usage scenarios for code comparison"
+    schema: {sample_usage_scenario: string, code_for_scenario: string, scenario_complexity: string, key_considerations: string}
+    prompt: $drop_down_quiz.Scenario_generation
+    observe: [code_for_scenario]
+
+  - name: generate_optimal_code
+    intent: "Generate the BEST implementation following industry best practices"
+    #schema: {optimal_code: string, optimization_areas: array[string], best_practices_applied: array[string]}
+    schema: {optimal_code: string}
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations]
+    prompt: $code_options_quiz.generate_optimal_code
+
+  - name: generate_scenario_question
+    intent: "Generate a scenario-based quiz question from the code scenario and optimal implementation"
+    schema: {question: string, answer_explanation: string}
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations, optimal_code]
+    prompt: $code_options_quiz.generate_scenario_question
+
+  - name: generate_code_alternatives
+    intent: "Generate 3 suboptimal but working code alternatives with different issues"
+    loop:
+      param: alternative_num
+      range: [1, 2, 3]
+    schema:
+      alternative_code_${alternative_num}: string
+      issue_type_${alternative_num}: string
+      issue_description_${alternative_num}: string
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations, optimal_code,question,answer_explanation]
+    prompt: $code_options_quiz.generate_code_alternatives
+
+
+  - name: merge_alternatives
+    kind: tool
+    loop_consumption:
+      source: "generate_code_alternatives"
+      pattern: "merge"
+    impl: merge_alternatives
+    intent: "Merge all code alternatives into single record"
+    granularity: Record
+
+
+  - name: clean_quiz_data
+    kind: tool
+    impl: format_for_lms
+    intent: "Randomize the order of code options (A, B, C, D) and track correct answer"
+
+
+  - name: transform_code_quiz_thinkific_compatible_structure
+    kind: tool
+    impl: transform_code_quiz_thinkific_compatible_structure
+    intent: "transform_code_quiz_thinkific_compatible_structure"
+
+plan:
+  - code_extractor
+  - flatten_code <- code_extractor
+  - code_usage_scenario <- flatten_code
+  - generate_optimal_code <- code_usage_scenario
+  - generate_scenario_question <- generate_optimal_code
+  - generate_code_alternatives <- generate_scenario_question
+  - merge_alternatives <- generate_code_alternatives
+  - clean_quiz_data <- merge_alternatives
+  - transform_code_quiz_thinkific_compatible_structure <- clean_quiz_data

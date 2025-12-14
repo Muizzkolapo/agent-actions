@@ -1,0 +1,20 @@
+{
+    "fix_code_snippets": {
+        "status": "completed"
+    },
+    "add_asterisk_to_correct_answer": {
+        "status": "completed"
+    },
+    "prettify_html": {
+        "status": "completed"
+    },
+    "convert_html_json_to_thinkific": {
+        "status": "completed"
+    },
+    "format_quiz_object": {
+        "status": "completed"
+    },
+    "improve_readability": {
+        "status": "completed"
+    }
+}

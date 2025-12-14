@@ -1,0 +1,476 @@
+################################################################################
+# QanaLabs Quiz Generation Workflow
+################################################################################
+# Description: Educational quiz generation workflow with fact extraction,
+#              deduplication, clustering, validation, and distractor generation
+# Version: 2.0.0
+# Workflow Phases:
+#   1. Fact Extraction, Deduplication & Validation
+#   2. Summary Generation & Code Cleanup
+#   3. Question Generation & Validation
+#   4. Explanation & Distractor Generation
+#   5. Quiz Validation
+#
+# See workflow plan at bottom of file for execution order
+################################################################################
+name: qanalabs_quiz_gen
+description: "Educational quiz generation workflow with fact extraction, clustering, validation, and distractor generation"
+version: "2.0.0"
+# Global defaults applied to all actions unless overridden
+defaults:
+  json_mode: true
+  granularity: Record
+  run_mode: batch
+  is_operational: true
+  prompt_debug: false
+  few_shot: 0
+  context_scope:
+    seed_data:
+        exam_syllabus: $file:azure_ds_associate_syllabus.json  
+actions:
+  # ============================================================================
+  # PHASE 1: FACT EXTRACTION & VALIDATION
+  # ============================================================================
+  - name: fact_extractor
+    intent: "Extract candidate facts from educational content"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: candidate_facts_list
+    prompt: $qanalabs_quiz_gen.Fact_extraction
+    context_scope:
+      drop:
+        - source.syllabus  # Reference data for validation
+        - source.url  # Reference data for validation
+    prompt_debug: true
+
+  - name: canonicalize_facts
+    dependencies: [fact_extractor]
+    intent: "Deduplicate and canonicalize facts extracted from the same source document using LLM-based semantic analysis"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: candidate_facts_list
+    prompt: $qanalabs_quiz_gen.Canonicalize_Facts
+    guard:
+      condition: 'candidate_facts_list != []'
+      on_false: "filter"
+
+  - name: flatten_the_facts
+    dependencies: [canonicalize_facts]
+    kind: tool
+    impl: flatten_quotes
+    intent: "Flatten deduplicated facts for clustering pipeline"
+    guard:
+      condition:  'candidate_facts_list != []'  # overrides default guard
+      on_false: "filter"  # Options: "skip" | "filter"
+
+  - name: cluster_list
+    dependencies: [flatten_the_facts]
+    kind: tool
+    impl: run_dedup
+    intent: "Group extracted facts into logical clusters"
+    granularity: file
+
+  - name: group_by_similarity
+    dependencies: [cluster_list]
+    kind: tool
+    impl: group_by_similarity
+    intent: "Group extracted facts into logical clusters"
+    granularity: file
+
+  - name: Cluster_Validation_Agent
+    dependencies: [group_by_similarity]
+    dependencies: [group_by_similarity,cluster_list]
+    intent: "Validate and regroup facts based on semantic_unique_id to ensure semantically identical facts are clustered together"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: cluster_validation
+    context_scope:
+      observe:
+        - canonicalize_facts.candidate_facts_list  # Reference data for validation
+        - cluster_list.semantic_unique_id  # Reference data for validation
+        - group_by_similarity.num_similar_facts
+        - group_by_similarity.similarity_group_id
+      passthrough:
+        - group_by_similarity.grouped_facts
+    prompt: $qanalabs_quiz_gen.Cluster_Validation_Agent
+    granularity: record
+    prompt_debug: False
+    guard:
+      condition:  'num_similar_facts != 1'  # overrides default guard
+      on_false: "skip"  # Options: "skip" | "filter"
+
+  - name: flatten_clusters
+    dependencies: [Cluster_Validation_Agent]
+    kind: tool
+    impl: flatten_clusters
+    intent: "Group extracted facts into logical clusters"
+    granularity: record
+    guard: 
+      condition:  'should_keep_cluster == false'  # overrides default guard
+      on_false: "skip"  # Options: "skip" | "filter"
+
+  # ============================================================================
+  # PHASE 2: SUMMARY GENERATION & CODE CLEANUP
+  # ============================================================================
+  - name: generate_summary
+    dependencies: [flatten_clusters]
+    intent: "Generate quiz-type specific summaries synthesizing multiple flagged items with appropriate technical details and code snippets"
+    schema: {
+      summary_title: string,
+      summary_content: string,
+      key_concepts: array,
+      technical_details: string,
+      code_snippets: array,
+      learning_objectives: array
+    }
+    context_scope:
+      observe:
+        - source.page_content
+      drop:
+        - flatten_clusters.should_keep_cluster
+        - flatten_clusters.reasoning
+        - flatten_clusters.num_similar_facts
+    prompt: $qanalabs_quiz_gen.Summary_Generator
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    prompt_debug: True
+
+  - name: review_code_snippets
+    dependencies: [generate_summary]
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    intent: "Review code snippets and filter out non-code documentation"
+    schema: {"code_snippets": "array", "removed_snippets": "array", "removal_reasoning": "string"}
+    prompt: $qanalabs_quiz_gen.Review_Code_Snippets
+    prompt_debug: True
+    guard:
+      condition: 'code_snippets != []'
+      on_false: "skip" 
+
+  - name: fix_code_snippets
+    dependencies: [review_code_snippets]
+    kind: tool
+    impl: fix_code_snippets
+    intent: "Fix double-escaped code snippets in content.code_snippets field"
+    granularity: Record
+
+  # ============================================================================
+  # LLM-based scoring (0-100) using specific learning objectives, followed by LLM review for borderline cases
+  - name: score_summary_quality
+    dependencies: [fix_code_snippets]
+    intent: "Score summary quality based on alignment with specific learning objectives using LLM evaluation"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: summary_quality_score
+    prompt: $qanalabs_quiz_gen.Score_Summary_Quality
+    prompt_debug: True
+    context_scope:
+      observe:
+        - generate_summary.summary_title
+        - generate_summary.summary_content
+        - generate_summary.key_concepts
+        - generate_summary.technical_details
+        - generate_summary.code_snippets
+        - generate_summary.learning_objectives
+        - source.referenced_in  # CRITICAL: Pass learning objectives to scoring
+
+
+
+  - name: review_borderline_summaries
+    dependencies: [score_summary_quality]
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-haiku-4-5-20251001"
+    intent: "LLM review for borderline quality summaries (scores 45-64)"
+    schema: borderline_summary_review
+    context_scope:
+      observe:
+        - generate_summary.summary_content
+        - generate_summary.key_concepts
+        - generate_summary.technical_details
+        - generate_summary.code_snippets
+        - score_summary_quality.quality_score
+        - score_summary_quality.objective_alignment
+        - score_summary_quality.primary_skill_area
+        - score_summary_quality.reasoning
+        - source.referenced_in  # CRITICAL: Pass learning objectives to review
+    prompt: $qanalabs_quiz_gen.Review_Borderline_Summary
+    prompt_debug: True
+    guard:
+      condition: 'quality_tier == "borderline"'
+      on_false: "skip"
+
+  - name: filter_low_quality_summaries
+    dependencies: [review_borderline_summaries]
+    kind: tool
+    impl: apply_quality_filter
+    intent: "Filter out low-quality summaries (keep only score >= 65 or LLM-approved borderline)"
+    context_scope:
+      passthrough:
+        - generate_summary.code_snippets # We had to passthrough because filtering wont have been able to work for this
+
+
+
+  # ============================================================================
+  # PHASE 3: QUESTION GENERATION & VALIDATION
+  # ============================================================================
+  - name: generate_scenarios
+    dependencies: [filter_low_quality_summaries]
+    intent: "Generate quiz scenarios based on classified facts and learning objectives"
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-haiku-4-5-20251001"
+    schema: ScenarioGenerator_schema
+    context_scope:
+      observe:
+        - generate_summary.summary_title
+        - generate_summary.summary_content
+        - generate_summary.key_concepts
+      drop:
+        - filter_low_quality_summaries.quality_score
+        - filter_low_quality_summaries.quality_tier
+        - filter_low_quality_summaries.score_breakdown
+        - filter_low_quality_summaries.filter_decision
+    prompt: $feynman.ScenarioGenerator_prompt
+    prompt_debug: true
+
+
+  - name: flatten_questions
+    dependencies: [generate_scenarios]
+    kind: tool
+    impl: flatten_questions
+    intent: "Flatten nested question structures for processing"
+    granularity: Record
+
+  - name: fix_options_format
+    dependencies: [flatten_questions]
+    kind: tool
+    impl: fix_options_formatting
+    intent: "Convert options field from JSON string to array format"
+    granularity: Record
+
+
+  - name: score_question_quality
+    dependencies: [fix_options_format]
+    intent: "Score question alignment with specific learning objectives - keep only questions scoring >= 85"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema: question_quality_score
+    prompt: $qanalabs_quiz_gen.Score_Question_Quality
+    prompt_debug: True
+    context_scope:
+      observe:
+        - source.referenced_in  # CRITICAL: Pass learning objectives to question scoring
+      passthrough:
+        - generate_scenarios.question
+        - generate_scenarios.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+
+  - name: filter_low_quality_questions
+    dependencies: [score_question_quality]
+    kind: tool
+    impl: filter_questions_by_score
+    intent: "Filter out questions with syllabus_alignment_score < 85"
+    granularity: Record
+
+  # ============================================================================
+  # PHASE 4: EXPLANATION & DISTRACTOR GENERATION
+  # ============================================================================
+  - name: suggest_distractor_counts
+    dependencies: [filter_low_quality_questions]
+    kind: tool
+    impl: suggest_word_counts
+    intent: "Suggest word counts for answer distractors"
+    context_scope:
+      passthrough:
+        - generate_scenarios.question
+        - generate_scenarios.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+    guard:  
+      condition:  'question_status == "KEEP"'  # overrides default guard
+      on_false: "filter"  # Options: "skip" | "filter"
+
+  - name: add_answer_text
+    dependencies: [suggest_distractor_counts]
+    kind: tool
+    impl: add_answer_text
+    granularity: Record
+    intent: "Add structured answer text to questions"
+
+
+  # ============================================================================
+  # SEQUENTIAL DISTRACTOR GENERATION (replaces parallel loop)
+  # ============================================================================
+  # Each distractor sees previous ones to ensure variety and avoid duplicates
+  - name: generate_distractor_1
+    dependencies: [add_answer_text]
+    intent: "Generate first distractor - focus on wrong technology/service"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_1: string
+      explanation_why_it_is_incorrect_1: string
+      thinking_process_1: string 
+    context_scope:
+      passthrough:
+        - generate_scenarios.question
+        - generate_scenarios.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+        - add_answer_text.answer_text
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_1
+    prompt_debug: true
+
+  - name: generate_distractor_2
+    dependencies: [generate_distractor_1]
+    intent: "Generate second distractor - focus on wrong approach/concept - MUST differ from distractor_1"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_2: string
+      explanation_why_it_is_incorrect_2: string
+      thinking_process_2: string 
+    context_scope:
+      observe:
+        - add_answer_text.answer_text
+      passthrough:
+        - generate_scenarios.question
+        - generate_scenarios.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_1.thinking_process_1
+        - add_answer_text.answer_text
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_2
+    prompt_debug: true
+
+  - name: generate_distractor_3
+    dependencies: [generate_distractor_2]
+    intent: "Generate third distractor - focus on edge case/misconception - MUST differ from both previous"
+    model_vendor: openai
+    model_name: gpt-5-mini
+    api_key: OPENAI_API_KEY
+    schema:
+      distractor_3: string
+      explanation_why_it_is_incorrect_3: string
+      thinking_process_3: string
+    context_scope:
+      passthrough:
+        - generate_scenarios.question
+        - generate_scenarios.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_1.thinking_process_1
+        - generate_distractor_2.distractor_2
+        - generate_distractor_2.explanation_why_it_is_incorrect_2
+        - generate_distractor_2.thinking_process_2
+        - add_answer_text.answer_text
+    prompt: $qanalabs_quiz_gen.Generate_Distractor_3
+    prompt_debug: true
+
+  - name: reconstruct_options
+    dependencies: [generate_distractor_3]
+    kind: tool
+    impl: apply_edited_distractors
+    intent: "Reconstruct final answer options from correct answer and distractors"
+    granularity: Record
+    context_scope:
+      observe:
+        - add_answer_text.answer_text
+
+
+
+  - name: generate_feynman_explanation
+    dependencies: [reconstruct_options]
+    intent: "Generate Feynman-style explanations for why the quiz answer is correct"
+    schema: {
+      question_explanation: string,
+      answer_reasoning: string,
+      key_concept_analogy: string,
+      memorable_takeaway: string
+    }
+    api_key: CLAUDE_API_KEY
+    model_vendor: "anthropic"
+    model_name: "claude-haiku-4-5-20251001"
+    prompt: $qanalabs_quiz_gen.Feynman_Explanation_Generator
+    prompt_debug: true
+    context_scope:
+      observe:
+        - generate_summary.summary_content
+        - generate_summary.key_concepts
+        - generate_summary.technical_details
+      passthrough:
+        - generate_scenarios.question
+        - reconstruct_options.options
+        - generate_scenarios.answer
+        - generate_scenarios.answer_explanation
+        - add_answer_text.answer_text
+        - generate_summary.summary_content
+        - generate_summary.key_concepts
+        - generate_summary.technical_details
+        - generate_summary.code_snippets
+        - generate_distractor_1.distractor_1
+        - generate_distractor_1.explanation_why_it_is_incorrect_1
+        - generate_distractor_1.thinking_process_1
+        - generate_distractor_2.distractor_2
+        - generate_distractor_2.explanation_why_it_is_incorrect_2
+        - generate_distractor_3.distractor_3
+        - generate_distractor_3.explanation_why_it_is_incorrect_3
+        - source.url
+        - flatten_clusters.url_list
+        - filter_low_quality_questions.status_reason
+        - filter_low_quality_questions.question_status
+      drop:
+        - reconstruct_options.distractor_3
+        - reconstruct_options.explanation_why_it_is_incorrect_3
+        - reconstruct_options.thinking_process_3
+        - reconstruct_options.distractor_1
+        - reconstruct_options.explanation_why_it_is_incorrect_1
+        - reconstruct_options.thinking_process_1
+        - reconstruct_options.distractor_2
+        - reconstruct_options.explanation_why_it_is_incorrect_2
+        - reconstruct_options.thinking_process_2
+        - reconstruct_options.syllabus_alignment_score
+        - reconstruct_options.aligned_skill_area
+        - reconstruct_options.explanation_reasoningwhy_it_is_incorrect_2
+        - filter_low_quality_questions.status_reason
+
+  # ============================================================================
+  # PHASE 5: FINAL PROCESSING
+  # ============================================================================
+  - name: OptionsCombiner
+    dependencies: [generate_feynman_explanation]
+    kind: tool
+    impl: merge_correct_answer_with_distractors
+    intent: "Format the quiz"
+    granularity: Record
+    #guard:  
+    #  condition:  'fact_extractor.question_status == "KEEP"'  we should be able to do this
+    #  on_false: "filter"  # Options: "skip" | "filter"
+    # for now, we move everything and use passthrough to get the question status
+
+
+  - name: format_quiz_text
+    dependencies: [OptionsCombiner]
+    kind: tool
+    impl: format_quiz_object
+    intent: "Format the quiz"
+    granularity: Record
+
+
+################################################################################
+# WORKFLOW EXECUTION PLAN REMOVED - Using Explicit Dependencies in Actions

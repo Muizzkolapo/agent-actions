@@ -1,0 +1,98 @@
+name: drop_down_quiz
+description: "Code-centered quiz generation workflow with code extraction, scenario generation, and fill-in-the-blank questions"
+version: "2.0.0"
+
+# Global defaults applied to all actions unless overridden
+# code quiz 1) missing line, instead of blank we have a missing line this can work for terraform  
+# 1. Visual Code Comparison -> select the best code implementations so you have 4 diff code you select the best one they all can be correct
+# Drag-and-Drop Sequence Quiz
+
+
+
+defaults:
+  model_vendor: openai
+  model_name: gpt-4o-mini
+  json_mode: true
+  granularity: Record
+  run_mode: online
+  api_key: OPENAI_API_KEY
+  few_shot: 0
+  observe: [id, url, page_content, bloom_details]
+  drops: [id, url, topic]
+  prompt_debug: True 
+
+
+
+actions:
+  - name: code_extractor
+    intent: "Extract code blocks from technical documentation"
+    schema: candidate_code_list
+    prompt: $drop_down_quiz.Code_extraction
+    prompt_debug: False 
+
+  - name: flatten_quotes
+    kind: tool
+    impl: flatten_code
+    intent: "Flatten extracted code blocks for processing"
+    observe: [topic, summary]  # only unique additions
+
+  - name: code_usage_scenario
+    intent: "Generate usage scenarios for extracted code"
+    schema: {sample_usage_scenario: string, code_for_scenario: string, scenario_complexity: string, key_considerations: string}
+    prompt: $drop_down_quiz.Scenario_generation
+    prompt_debug: True
+
+  - name: Blank_Recommendations
+    intent: "Recommend code sections to blank out for quiz questions"
+    # schema: {Blank_Recommendations: array[string]} -> this schema method not working for some reason
+    schema: Blank_Recommendations
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations]  # only unique additions
+    prompt: "This is a data build tool(dbt) based exam so we are solely testing dbt knowledge. You have been provided a sample code for our scenario in code_for_scenario, we are going to blank out part of the code to create a scenario based code quiz, but we need you to recommend a list of items that makes sense for us to blank, we need to be code aware and contextually intelligent. We need to blank things that are not subjective, only objective code blocks that would be the same no matter the organizations design approach. Things we cannot blank, external functions or tools not related to dbt in the code, comments and code explanations"
+    prompt_debug: True
+
+  - name: select_random_blanks
+    kind: tool
+    impl: select_random_blanks
+    intent: "Select random subset of recommended blanks (70%)"
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations]  # only unique additions
+
+  - name: FillInTheBlank_Generator
+    intent: "Generate fill-in-the-blank quiz questions from code"
+    schema: BlankifiedCode
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations]  # only unique additions
+    prompt: $drop_down_quiz.FillInTheBlank_Generator_v1
+    prompt_debug: True
+
+  - name: Wrong_Answer_Generator
+    intent: "Generate wrong answer options for code quiz"
+    schema: CodeWrongAnswers
+    observe: [code_segments, sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations, user_prompt, url, id, CodeExplanation, hints]  # only unique additions
+    # adding unused config like this makes us fail drops: []  # overrides defaults to keep everything
+    prompt: $drop_down_quiz.Wrong_Answer_Generator
+    prompt_debug: True
+
+
+  - name: code_answer_explainer
+    intent: "Recommend code sections to blank out for quiz questions"
+    schema: {code_answer_explainer: string} 
+    observe: [sample_usage_scenario, code_for_scenario, scenario_complexity, key_considerations,wrong_answers,code_segments]  # only unique additions
+    prompt: "Write a short and concise summary of how this code_segments and code_for_scenario answers the scenario painted"
+    drops: [id, url, topic,page_content]
+    prompt_debug: True
+
+  - name: generate_thinkific_format
+    kind: tool
+    impl: generate_thinkific_quiz
+    intent: "Generate Thinkific-compatible quiz with embedded HTML"
+
+
+plan:
+  - code_extractor
+  - flatten_quotes <- code_extractor
+  - code_usage_scenario <- flatten_quotes
+  - Blank_Recommendations <- code_usage_scenario
+  - select_random_blanks <- Blank_Recommendations
+  - FillInTheBlank_Generator <- select_random_blanks
+  - Wrong_Answer_Generator <- FillInTheBlank_Generator
+  - code_answer_explainer <- Wrong_Answer_Generator
+  - generate_thinkific_format <- code_answer_explainer

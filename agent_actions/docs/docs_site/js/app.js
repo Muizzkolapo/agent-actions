@@ -943,10 +943,12 @@ function renderWorkflowsView(workflows, containerId, viewType) {
     container.innerHTML = '';
 
     if (viewType === 'list') {
-        // Render table view
-        const table = createWorkflowsTable(workflows);
-        container.appendChild(table);
-        container.className = 'workflows-table-container';
+        // Render list view with cards (single column)
+        container.className = 'workflows-list';
+        workflows.forEach(workflow => {
+            const card = createWorkflowCard(workflow);
+            container.appendChild(card);
+        });
     } else {
         // Render grid view with cards
         container.className = 'workflows-grid';

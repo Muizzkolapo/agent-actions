@@ -1,0 +1,83 @@
+{
+    "fact_extractor": {
+        "status": "completed"
+    },
+    "canonicalize_facts": {
+        "status": "completed"
+    },
+    "flatten_the_facts": {
+        "status": "completed"
+    },
+    "cluster_list": {
+        "status": "completed"
+    },
+    "group_by_similarity": {
+        "status": "completed"
+    },
+    "Cluster_Validation_Agent": {
+        "status": "batch_submitted"
+    },
+    "flatten_clusters": {
+        "status": "pending"
+    },
+    "generate_summary": {
+        "status": "pending"
+    },
+    "review_code_snippets": {
+        "status": "pending"
+    },
+    "fix_code_snippets": {
+        "status": "pending"
+    },
+    "score_summary_quality": {
+        "status": "pending"
+    },
+    "review_borderline_summaries": {
+        "status": "pending"
+    },
+    "filter_low_quality_summaries": {
+        "status": "pending"
+    },
+    "generate_scenarios": {
+        "status": "pending"
+    },
+    "flatten_questions": {
+        "status": "pending"
+    },
+    "fix_options_format": {
+        "status": "pending"
+    },
+    "score_question_quality": {
+        "status": "pending"
+    },
+    "filter_low_quality_questions": {
+        "status": "pending"
+    },
+    "suggest_distractor_counts": {
+        "status": "pending"
+    },
+    "add_answer_text": {
+        "status": "pending"
+    },
+    "generate_distractor_1": {
+        "status": "pending"
+    },
+    "generate_distractor_2": {
+        "status": "pending"
+    },
+    "generate_distractor_3": {
+        "status": "pending"
+    },
+    "reconstruct_options": {
+        "status": "pending"
+    },
+    "generate_feynman_explanation": {
+        "status": "pending"
+    },
+    "OptionsCombiner": {
+        "status": "pending"
+    },
+    "format_quiz_text": {
+        "status": "pending"
+    }
+}
