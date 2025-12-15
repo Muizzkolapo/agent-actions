@@ -184,7 +184,11 @@ function buildNodesAndEdges(workflow) {
                 target: action.name,
                 type: 'smoothstep',
                 animated: true,
-                style: { stroke: '#3b82f6', strokeWidth: 2 }
+                style: {
+                    stroke: '#00d9ff',
+                    strokeWidth: 3.5,
+                    filter: 'drop-shadow(0 0 4px #00d9ff)'
+                }
             });
         });
     });
@@ -277,10 +281,11 @@ function buildFieldToFieldEdges(actions) {
                         target: action.name,
                         targetHandle: `input-${mapping.displayField}`,
                         type: 'smoothstep',
-                        animated: false,
+                        animated: true,
                         style: {
-                            stroke: '#f59e0b',
-                            strokeWidth: 2.5
+                            stroke: '#00ff88',
+                            strokeWidth: 3.5,
+                            filter: 'drop-shadow(0 0 3px #00ff88)'
                         },
                         label: mapping.sourceField,
                         labelStyle: {
@@ -311,10 +316,11 @@ function buildFieldToFieldEdges(actions) {
                                 target: action.name,
                                 targetHandle: `input-${inputField}`,
                                 type: 'smoothstep',
-                                animated: false,
+                                animated: true,
                                 style: {
-                                    stroke: '#f59e0b',
-                                    strokeWidth: 2
+                                    stroke: '#00ff88',
+                                    strokeWidth: 3,
+                                    filter: 'drop-shadow(0 0 3px #00ff88)'
                                 },
                                 label: inputField,
                                 labelStyle: {
@@ -339,11 +345,12 @@ function buildFieldToFieldEdges(actions) {
                                     target: action.name,
                                     targetHandle: `input-${inputField}`,
                                     type: 'smoothstep',
-                                    animated: false,
+                                    animated: true,
                                     style: {
-                                        stroke: '#f59e0b',
-                                        strokeWidth: 2,
-                                        strokeDasharray: '5,5'
+                                        stroke: '#ff00ff',
+                                        strokeWidth: 3,
+                                        strokeDasharray: '8,4',
+                                        filter: 'drop-shadow(0 0 3px #ff00ff)'
                                     },
                                     label: fieldName,
                                     labelStyle: {
