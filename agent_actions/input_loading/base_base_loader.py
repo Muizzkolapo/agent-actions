@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Optional, TypeVar, Generic
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
+from agent_actions.utilities.retry import retry
 from agent_actions.configuration.interfaces import IDataLoader, ProcessingMode
 __version__ = '0.1.0'
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
     def load_file(self, file_path: str) -> str:
         """Safely load a file's content with retry logic."""
 
-        @self.with_retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
+        @retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
         def _load_file() -> str:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
