@@ -19,13 +19,14 @@
                         </svg>
                         <span>Agent-Actions</span>
                     </a>
-                    <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar">
+                    <button class="sidebar-toggle" id="sidebar-toggle" title="Collapse sidebar" aria-label="Collapse sidebar">
                         <svg class="sidebar-panel-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
                             <rect x="2" y="3" width="16" height="14" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
                             <line class="panel-divider" x1="8" y1="3" x2="8" y2="17" stroke="currentColor" stroke-width="1.5"/>
                         </svg>
                     </button>
                 </div>
+                <label for="search-input" class="sr-only">Search</label>
                 <input type="text" id="search-input" placeholder="Search workflows & actions..." class="search-input">
             </div>
 
@@ -134,7 +135,7 @@
         </aside>
 
         <!-- Floating Sidebar Toggle (shown when sidebar is collapsed) -->
-        <button class="floating-sidebar-toggle" id="floating-sidebar-toggle" title="Show sidebar" style="display: none;">
+        <button class="floating-sidebar-toggle" id="floating-sidebar-toggle" title="Show sidebar" style="display: none;" aria-label="Show sidebar">
             <svg class="sidebar-panel-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
                 <rect x="2" y="3" width="16" height="14" rx="1.5" stroke="currentColor" stroke-width="1.5" fill="none"/>
                 <line class="panel-divider" x1="8" y1="3" x2="8" y2="17" stroke="currentColor" stroke-width="1.5"/>
@@ -414,11 +415,12 @@
                             <circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.5"/>
                             <path d="M11 11l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                         </svg>
+                        <label for="runs-filter-search" class="sr-only">Search runs</label>
                         <input type="text" placeholder="Search runs..." class="filter-search-input" id="runs-filter-search">
                     </div>
 
                     <!-- Filter Button -->
-                    <button class="filter-button" id="runs-filter-button">
+                    <button class="filter-button" id="runs-filter-button" aria-label="Show filters">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                             <path d="M2 4h12M4 8h8M6 12h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                         </svg>
@@ -428,7 +430,7 @@
 
                     <!-- Sort Dropdown -->
                     <div class="sort-dropdown">
-                        <button class="sort-button" id="runs-sort-button">
+                        <button class="sort-button" id="runs-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                                 <path d="M3 6l3-3 3 3M9 10l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
@@ -448,7 +450,7 @@
                     </div>
 
                     <!-- Clear All -->
-                    <button class="filter-clear-all" id="runs-filter-clear-all" style="display: none;">
+                    <button class="filter-clear-all" id="runs-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                         Clear all
                     </button>
                 </div>
@@ -491,9 +493,9 @@
                 </div>
 
                 <div class="tabs">
-                    <button class="tab-button active" data-tab="details">Details</button>
-                    <button class="tab-button" data-tab="field-lineage">Lineage</button>
-                    <button class="tab-button" data-tab="runs">Runs</button>
+                    <button class="tab-button active" data-tab="details" aria-label="View details">Details</button>
+                    <button class="tab-button" data-tab="field-lineage" aria-label="View lineage">Lineage</button>
+                    <button class="tab-button" data-tab="runs" aria-label="View runs">Runs</button>
                 </div>
 
                 <div class="tab-content">
@@ -645,7 +647,7 @@
                         <span>/</span>
                         <span>All Workflows</span>
                     </div>
-                    <h1>All Workflows</h1>
+                    <h2>All Workflows</h2>
                     <p class="subtitle" id="workflows-list-subtitle"></p>
                 </div>
 
@@ -657,8 +659,9 @@
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
+                            <label for="workflows-filter-search" class="sr-only">Search workflows</label>
                             <input type="text" placeholder="Search by name or description..." id="workflows-filter-search" />
-                            <button class="search-clear-btn" id="workflows-search-clear" style="display: none;" title="Clear search">
+                            <button class="search-clear-btn" id="workflows-search-clear" style="display: none;" title="Clear search" aria-label="Clear search">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                     <path d="M3 3l8 8M11 3l-8 8"></path>
                                 </svg>
@@ -666,14 +669,14 @@
                         </div>
                         <div class="search-results-count" id="workflows-results-count" style="display: none;"></div>
 
-                        <button class="filter-button" id="workflows-filter-button">
+                        <button class="filter-button" id="workflows-filter-button" aria-label="Show filters">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h10M5 10h6M7 14h2"></path>
                             </svg>
                             Filters
                         </button>
 
-                        <button class="sort-button" id="workflows-sort-button">
+                        <button class="sort-button" id="workflows-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
@@ -695,7 +698,7 @@
                 <div class="filter-panel" id="workflows-filter-panel" style="display: none;">
                     <div class="filter-panel-content" id="workflows-filter-panel-content"></div>
                     <div class="filter-panel-footer">
-                        <button class="filter-clear-all" id="workflows-filter-clear-all" style="display: none;">
+                        <button class="filter-clear-all" id="workflows-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                             Clear all
                         </button>
                     </div>
@@ -704,7 +707,7 @@
                 <div class="section-header">
                     <h2 class="section-heading" id="workflows-list-heading"></h2>
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="grid" data-target="workflows-list" title="Grid View">
+                        <button class="view-btn active" data-view="grid" data-target="workflows-list" title="Grid View" aria-label="Switch to grid view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="2" width="6" height="6" rx="1"/>
                                 <rect x="12" y="2" width="6" height="6" rx="1"/>
@@ -712,7 +715,7 @@
                                 <rect x="12" y="12" width="6" height="6" rx="1"/>
                             </svg>
                         </button>
-                        <button class="view-btn" data-view="list" data-target="workflows-list" title="List View">
+                        <button class="view-btn" data-view="list" data-target="workflows-list" title="List View" aria-label="Switch to list view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="2" y1="5" x2="18" y2="5"/>
                                 <line x1="2" y1="10" x2="18" y2="10"/>
@@ -735,7 +738,7 @@
                         <span>/</span>
                         <span id="filter-type-breadcrumb"></span>
                     </div>
-                    <h1 id="filter-type-title"></h1>
+                    <h2 id="filter-type-title"></h2>
                     <p class="subtitle" id="filter-type-subtitle"></p>
                 </div>
 
@@ -748,8 +751,9 @@
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
+                            <label for="actions-filter-search" class="sr-only">Search actions</label>
                             <input type="text" placeholder="Search actions by name or description..." id="actions-filter-search" />
-                            <button class="search-clear-btn" id="actions-search-clear" style="display: none;" title="Clear search">
+                            <button class="search-clear-btn" id="actions-search-clear" style="display: none;" title="Clear search" aria-label="Clear search">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                     <path d="M3 3l8 8M11 3l-8 8"></path>
                                 </svg>
@@ -758,7 +762,7 @@
                         <div class="search-results-count" id="actions-results-count" style="display: none;"></div>
 
                         <!-- Filter Button -->
-                        <button class="filter-button" id="actions-filter-button">
+                        <button class="filter-button" id="actions-filter-button" aria-label="Show filters">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h10M5 10h6M7 14h2"></path>
                             </svg>
@@ -766,7 +770,7 @@
                         </button>
 
                         <!-- Sort Button -->
-                        <button class="sort-button" id="actions-sort-button">
+                        <button class="sort-button" id="actions-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
@@ -788,7 +792,7 @@
                 <div class="filter-panel" id="actions-filter-panel" style="display: none;">
                     <div class="filter-panel-content" id="actions-filter-panel-content"></div>
                     <div class="filter-panel-footer">
-                        <button class="filter-clear-all" id="actions-filter-clear-all" style="display: none;">
+                        <button class="filter-clear-all" id="actions-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                             Clear all
                         </button>
                     </div>
@@ -797,7 +801,7 @@
                 <div class="section-header">
                     <h2 class="section-heading" id="actions-list-heading"></h2>
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="grid" data-target="actions" title="Grid View">
+                        <button class="view-btn active" data-view="grid" data-target="actions" title="Grid View" aria-label="Switch to grid view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="2" width="6" height="6" rx="1"/>
                                 <rect x="12" y="2" width="6" height="6" rx="1"/>
@@ -805,7 +809,7 @@
                                 <rect x="12" y="12" width="6" height="6" rx="1"/>
                             </svg>
                         </button>
-                        <button class="view-btn" data-view="list" data-target="actions" title="List View">
+                        <button class="view-btn" data-view="list" data-target="actions" title="List View" aria-label="Switch to list view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="2" y1="5" x2="18" y2="5"/>
                                 <line x1="2" y1="10" x2="18" y2="10"/>
@@ -828,7 +832,7 @@
                         <span>/</span>
                         <span>All Prompts</span>
                     </div>
-                    <h1 id="prompts-list-title">All Prompts</h1>
+                    <h2 id="prompts-list-title">All Prompts</h2>
                     <p class="subtitle" id="prompts-list-subtitle"></p>
                 </div>
 
@@ -841,8 +845,9 @@
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
+                            <label for="prompts-filter-search" class="sr-only">Search prompts</label>
                             <input type="text" placeholder="Search prompts..." id="prompts-filter-search" />
-                            <button class="search-clear-btn" id="prompts-search-clear" style="display: none;" title="Clear search">
+                            <button class="search-clear-btn" id="prompts-search-clear" style="display: none;" title="Clear search" aria-label="Clear search">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                     <path d="M3 3l8 8M11 3l-8 8"></path>
                                 </svg>
@@ -851,7 +856,7 @@
                         <div class="search-results-count" id="prompts-results-count" style="display: none;"></div>
 
                         <!-- Filter Button (hidden, but required by FilterManager) -->
-                        <button class="filter-button" id="prompts-filter-button" style="display: none;">
+                        <button class="filter-button" id="prompts-filter-button" style="display: none;" aria-label="Show filters">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h10M5 10h6M7 14h2"></path>
                             </svg>
@@ -859,7 +864,7 @@
                         </button>
 
                         <!-- Sort Button -->
-                        <button class="sort-button" id="prompts-sort-button">
+                        <button class="sort-button" id="prompts-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
@@ -881,7 +886,7 @@
                 <div class="filter-panel" id="prompts-filter-panel" style="display: none;">
                     <div class="filter-panel-content" id="prompts-filter-panel-content"></div>
                     <div class="filter-panel-footer">
-                        <button class="filter-clear-all" id="prompts-filter-clear-all" style="display: none;">
+                        <button class="filter-clear-all" id="prompts-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                             Clear all
                         </button>
                     </div>
@@ -891,7 +896,7 @@
                 <div class="section-header">
                     <h2 class="section-heading" id="prompts-list-heading"></h2>
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="grid" data-target="prompts" title="Grid View">
+                        <button class="view-btn active" data-view="grid" data-target="prompts" title="Grid View" aria-label="Switch to grid view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="2" width="6" height="6" rx="1"/>
                                 <rect x="12" y="2" width="6" height="6" rx="1"/>
@@ -899,7 +904,7 @@
                                 <rect x="12" y="12" width="6" height="6" rx="1"/>
                             </svg>
                         </button>
-                        <button class="view-btn" data-view="list" data-target="prompts" title="List View">
+                        <button class="view-btn" data-view="list" data-target="prompts" title="List View" aria-label="Switch to list view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="2" y1="5" x2="18" y2="5"/>
                                 <line x1="2" y1="10" x2="18" y2="10"/>
@@ -922,7 +927,7 @@
                         <span>/</span>
                         <span>All Schemas</span>
                     </div>
-                    <h1 id="schemas-list-title">All Schemas</h1>
+                    <h2 id="schemas-list-title">All Schemas</h2>
                     <p class="subtitle" id="schemas-list-subtitle"></p>
                 </div>
 
@@ -935,8 +940,9 @@
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
+                            <label for="schemas-filter-search" class="sr-only">Search schemas</label>
                             <input type="text" placeholder="Search schemas..." id="schemas-filter-search" />
-                            <button class="search-clear-btn" id="schemas-search-clear" style="display: none;" title="Clear search">
+                            <button class="search-clear-btn" id="schemas-search-clear" style="display: none;" title="Clear search" aria-label="Clear search">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                     <path d="M3 3l8 8M11 3l-8 8"></path>
                                 </svg>
@@ -945,7 +951,7 @@
                         <div class="search-results-count" id="schemas-results-count" style="display: none;"></div>
 
                         <!-- Filter Button (hidden, but required by FilterManager) -->
-                        <button class="filter-button" id="schemas-filter-button" style="display: none;">
+                        <button class="filter-button" id="schemas-filter-button" style="display: none;" aria-label="Show filters">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h10M5 10h6M7 14h2"></path>
                             </svg>
@@ -953,7 +959,7 @@
                         </button>
 
                         <!-- Sort Button -->
-                        <button class="sort-button" id="schemas-sort-button">
+                        <button class="sort-button" id="schemas-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
@@ -975,7 +981,7 @@
                 <div class="filter-panel" id="schemas-filter-panel" style="display: none;">
                     <div class="filter-panel-content" id="schemas-filter-panel-content"></div>
                     <div class="filter-panel-footer">
-                        <button class="filter-clear-all" id="schemas-filter-clear-all" style="display: none;">
+                        <button class="filter-clear-all" id="schemas-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                             Clear all
                         </button>
                     </div>
@@ -985,7 +991,7 @@
                 <div class="section-header">
                     <h2 class="section-heading" id="schemas-list-heading"></h2>
                     <div class="view-toggle">
-                        <button class="view-btn active" data-view="grid" data-target="schemas" title="Grid View">
+                        <button class="view-btn active" data-view="grid" data-target="schemas" title="Grid View" aria-label="Switch to grid view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <rect x="2" y="2" width="6" height="6" rx="1"/>
                                 <rect x="12" y="2" width="6" height="6" rx="1"/>
@@ -993,7 +999,7 @@
                                 <rect x="12" y="12" width="6" height="6" rx="1"/>
                             </svg>
                         </button>
-                        <button class="view-btn" data-view="list" data-target="schemas" title="List View">
+                        <button class="view-btn" data-view="list" data-target="schemas" title="List View" aria-label="Switch to list view">
                             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
                                 <line x1="2" y1="5" x2="18" y2="5"/>
                                 <line x1="2" y1="10" x2="18" y2="10"/>
@@ -1016,7 +1022,7 @@
                         <span>/</span>
                         <span>All Runs</span>
                     </div>
-                    <h1 id="runs-list-title">All Runs</h1>
+                    <h2 id="runs-list-title">All Runs</h2>
                     <p class="subtitle" id="runs-list-subtitle"></p>
                 </div>
 
@@ -1028,8 +1034,9 @@
                                 <circle cx="7" cy="7" r="6"></circle>
                                 <path d="m11 11 4 4"></path>
                             </svg>
+                            <label for="runs-list-filter-search" class="sr-only">Search runs</label>
                             <input type="text" placeholder="Search by workflow, status, or date..." id="runs-list-filter-search" />
-                            <button class="search-clear-btn" id="runs-list-search-clear" style="display: none;" title="Clear search">
+                            <button class="search-clear-btn" id="runs-list-search-clear" style="display: none;" title="Clear search" aria-label="Clear search">
                                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
                                     <path d="M3 3l8 8M11 3l-8 8"></path>
                                 </svg>
@@ -1037,14 +1044,14 @@
                         </div>
                         <div class="search-results-count" id="runs-list-results-count" style="display: none;"></div>
 
-                        <button class="filter-button" id="runs-list-filter-button">
+                        <button class="filter-button" id="runs-list-filter-button" aria-label="Show filters">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 6h10M5 10h6M7 14h2"></path>
                             </svg>
                             Filters
                         </button>
 
-                        <button class="sort-button" id="runs-list-sort-button">
+                        <button class="sort-button" id="runs-list-sort-button" aria-label="Sort options">
                             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M3 8h8M3 4h10M3 12h6"></path>
                             </svg>
@@ -1066,7 +1073,7 @@
                 <div class="filter-panel" id="runs-list-filter-panel" style="display: none;">
                     <div class="filter-panel-content" id="runs-list-filter-panel-content"></div>
                     <div class="filter-panel-footer">
-                        <button class="filter-clear-all" id="runs-list-filter-clear-all" style="display: none;">
+                        <button class="filter-clear-all" id="runs-list-filter-clear-all" style="display: none;" aria-label="Clear all filters">
                             Clear all
                         </button>
                     </div>

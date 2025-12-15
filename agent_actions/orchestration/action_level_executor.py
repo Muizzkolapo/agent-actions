@@ -59,7 +59,7 @@ class ActionLevelOrchestrator:
 
         # Build dependency map
         deps_map = {
-            agent: self.agent_configs[agent].get('dependencies', [])
+            agent: [d for d in self.agent_configs[agent].get('dependencies', []) if isinstance(d, str)]
             for agent in self.execution_order
         }
 

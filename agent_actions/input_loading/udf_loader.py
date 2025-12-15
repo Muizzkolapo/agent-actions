@@ -51,6 +51,8 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
         try:
             relative_path = py_file.relative_to(user_code_path)
             module_name = str(relative_path.with_suffix('')).replace('/', '.').replace('\\', '.')
+            if module_name in sys.modules:
+                continue
             spec = importlib.util.spec_from_file_location(module_name, py_file)
             if spec and spec.loader:
                 module = importlib.util.module_from_spec(spec)
@@ -59,6 +61,7 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
         except DuplicateFunctionError:
             raise
         except Exception as e:
+            from agent_actions.errors import UDFLoadError  # Avoid circular import
             raise UDFLoadError(module=module_name, file=str(py_file), error=str(e), context={'error_type': type(e).__name__}, cause=e)
     return UDF_REGISTRY
 

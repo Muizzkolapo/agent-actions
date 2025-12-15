@@ -347,16 +347,16 @@ class PromptPreparationService:
             formatted_prompt = raw_prompt
             logger.debug("No prompt_context, using raw prompt")
 
-        # Step 6: Inject function outputs (batch mode only)
-        if mode == 'batch' and tools_path:
-            # In batch mode, inject llm_context as JSON for dispatch_task() functions
+        # Step 6: Inject function outputs (all modes)
+        if tools_path:
+            # Inject llm_context as JSON for dispatch_task() functions
             formatted_prompt, _ = PromptUtils.inject_function_outputs_into_prompt(
                 formatted_prompt,
                 tools_path,
                 json.dumps(llm_context, ensure_ascii=False),
                 agent_config=agent_config
             )
-            logger.debug("Injected function outputs (batch mode)")
+            logger.debug("Injected function outputs for dispatch_task()")
 
         # Step 7: Append few-shot samples
         formatted_prompt = SampleEnricher.append_few_shot_samples(

@@ -149,9 +149,10 @@ class InterceptorService:
             # Get current prompt from execution context
             current_prompt = execution_context.get('prompt')
 
-            # Setup tools_path
+            # Setup tools_path using shared utility
             if not tools_path:
-                tools_path = agent_config.get('tools', {}).get('path')
+                from agent_actions.utilities.tools_resolver import resolve_tools_path
+                tools_path = resolve_tools_path(agent_config)
             if tools_path and tools_path not in sys.path:
                 sys.path.insert(0, tools_path)
 
@@ -167,8 +168,7 @@ class InterceptorService:
             )
 
             # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
-            # The fallback field reference replacement was removed to enforce single point of change.
-            # All callers must use PromptPreparationService.prepare_prompt_with_context() first.
+            # dispatch_task() injection now happens in PromptPreparationService
             if formatted_prompt is None:
                 raise ValueError(
                     "formatted_prompt is required. "
@@ -177,21 +177,11 @@ class InterceptorService:
                     "See agent_actions/prompt_generation/data_generator.py for an example."
                 )
 
-            # Prepare tool context for injection
-            tool_context_json = ContextService.prepare_tool_context(
-                context_data_str,
-                original_context
-            )
+            # Use the prompt directly (dispatch already injected)
+            prompt_config = current_prompt
 
-            # Inject tool outputs into prompt
-            prompt_config, captured_results = (
-                PromptUtils.inject_function_outputs_into_prompt(
-                    current_prompt,
-                    tools_path,
-                    tool_context_json,
-                    agent_config=agent_config
-                )
-            )
+            # TODO: captured_results (add_dispatch feature) needs to be returned from PromptPreparationService
+            captured_results = {}
 
             # Append additional_context if provided (context_scope.observe fields)
             if additional_context:

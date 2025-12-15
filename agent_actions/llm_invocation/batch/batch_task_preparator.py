@@ -106,7 +106,8 @@ class BatchTaskPreparator:
 
         # 2. Setup context
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
-        tools_path = self._resolve_tools_path(agent_config)
+        from agent_actions.utilities.tools_resolver import resolve_tools_path
+        tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
         # 3. Get WHERE clause handler
@@ -314,24 +315,6 @@ class BatchTaskPreparator:
             vendor = type(provider).__name__.replace('BatchProvider', '').lower()
 
         return prepare_schema_unified(agent_config, vendor)
-
-    def _resolve_tools_path(self, agent_config: Dict[str, Any]) -> Optional[str]:
-        """Resolve tools path from agent config."""
-        tools = agent_config.get('tools', [])
-        for tool in tools:
-            if isinstance(tool, dict) and tool.get('type') == 'function':
-                function_def = tool.get('function', {})
-                if 'file' in function_def:
-                    import yaml
-                    try:
-                        tool_file_path = function_def['file']
-                        with open(tool_file_path, 'r', encoding='utf-8') as f:
-                            tool_config = yaml.safe_load(f)
-                            if tool_config and 'module_path' in tool_config:
-                                return tool_config['module_path']
-                    except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
-                        logger.warning("Failed to load tool config from %s: %s", tool_file_path, e)
-        return None
 
     def _add_tools_to_path(self, tools_path: Optional[str]) -> None:
         """Add tools path to sys.path if not already present."""

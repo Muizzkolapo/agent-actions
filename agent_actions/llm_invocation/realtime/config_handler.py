@@ -141,6 +141,9 @@ class ConfigManager:
             agent_type = agent_model.agent_type
             agent_dict = agent_model.model_dump(exclude_unset=True)
             merged_dict = {**default_agent_config}
+            # Add root-level tool_path to agent config for dispatch_task() support
+            if self.tool_path:
+                merged_dict['tool_path'] = self.tool_path
             for key, value in agent_dict.items():
                 if key == 'chunk_config' and isinstance(value, dict):
                     default_chunk = merged_dict.get(key)
@@ -163,7 +166,7 @@ class ConfigManager:
         dependency_graph = {}
         for agent_type, config in self.agent_configs.items():
             if config.is_operational:
-                dependencies = [dep for dep in config.dependencies if dep in self.agent_configs and self.agent_configs[dep].is_operational]
+                dependencies = [dep for dep in config.dependencies if isinstance(dep, str) and dep in self.agent_configs and self.agent_configs[dep].is_operational]
                 dependency_graph[agent_type] = dependencies
         self.execution_order = topological_sort(dependency_graph)
 

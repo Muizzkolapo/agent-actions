@@ -75,7 +75,13 @@ class RunCommand:
         click.echo('Rendering and loading configuration...')
         ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir)
         click.echo('Initializing agent workflow...')
-        workflow = AgentWorkflow(constructor_path=str(full_path), user_code_path=str(self.args.user_code) if self.args.user_code else None, default_path=str(paths.default_config_path), use_tools=self.args.use_tools)
+        workflow = AgentWorkflow(
+            constructor_path=str(full_path),
+            user_code_path=str(self.args.user_code) if self.args.user_code else None,
+            default_path=str(paths.default_config_path),
+            use_tools=self.args.use_tools,
+            run_upstream=self.args.upstream
+        )
 
         # Initialize run tracker
         tracker = RunTracker()
@@ -144,9 +150,10 @@ class RunCommand:
 @click.option('--parallel', is_flag=True, help='Force parallel execution (overrides auto-detection)')
 @click.option('--no-parallel', is_flag=True, help='Force sequential execution (overrides auto-detection)')
 @click.option('--concurrency-limit', type=int, default=5, help='Maximum number of agents to run concurrently (default: 5, range: 1-50)')
+@click.option('--upstream', is_flag=True, help='Recursively execute upstream dependent workflows')
 @handles_user_errors('run')
 @requires_project
-def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False, parallel: bool=False, no_parallel: bool=False, concurrency_limit: int=5) -> None:
+def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False, parallel: bool=False, no_parallel: bool=False, concurrency_limit: int=5, upstream: bool=False) -> None:
     """
     Run agents with a specified agent configuration.
 
@@ -156,9 +163,9 @@ def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False
 
     Examples:
         agent-actions run -a my_agent
-        agent-actions run -a my_agent -u ./user_code --use-tools
+        agent-actions run -a my_agent --upstream
     """
     # Let @handles_user_errors decorator handle all exceptions for consistent error formatting
-    args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit)
+    args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit, upstream=upstream)
     command = RunCommand(args)
     command.execute()

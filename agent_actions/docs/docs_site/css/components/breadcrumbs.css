@@ -34,3 +34,30 @@
     color: #111827 !important;            /* Enhanced - darker for current page */
     font-weight: 600 !important;          /* Enhanced - bold for current page */
 }
+
+/* Breadcrumb Separator */
+.breadcrumb-separator {
+    color: #9ca3af !important;
+    margin: 0 0.25rem !important;
+    user-select: none;
+}
+
+/* Breadcrumb Link */
+.breadcrumb-link {
+    color: #6b7280 !important;
+    font-weight: 500 !important;
+    text-decoration: none !important;
+    transition: color 0.15s ease;
+}
+
+.breadcrumb-link:hover {
+    color: var(--accent) !important;
+    text-decoration: underline !important;
+    text-underline-offset: 2px !important;
+}
+
+/* Breadcrumb Current Page */
+.breadcrumb-current {
+    color: #111827 !important;
+    font-weight: 600 !important;
+}

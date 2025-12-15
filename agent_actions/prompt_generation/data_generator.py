@@ -58,6 +58,10 @@ class DataGenerator(IGenerator):
         try:
             # Prepare prompt using unified PromptPreparationService (Phase 2: Issue #487)
             from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+            from agent_actions.utilities.tools_resolver import resolve_tools_path
+
+            # Resolve tools_path for dispatch_task() injection
+            tools_path = resolve_tools_path(self.agent_config)
 
             prep_result = PromptPreparationService.prepare_prompt_with_context(
                 agent_config=self.agent_config,
@@ -70,7 +74,8 @@ class DataGenerator(IGenerator):
                 loop_context=loop_context,
                 workflow_metadata=workflow_metadata,
                 current_item=current_item,
-                file_path=file_path
+                file_path=file_path,
+                tools_path=tools_path
             )
 
             # Execute agent with prepared prompt and context
@@ -83,8 +88,8 @@ class DataGenerator(IGenerator):
                 self.agent_config,
                 self.agent_name,
                 contents,  # Original contents for guards/tools/UDFs
-                prep_result.formatted_prompt,  # Already has few-shot samples
-                tools_path=self.agent_config.get('tools', {}).get('path'),
+                prep_result.formatted_prompt,  # Already has few-shot samples and dispatch injected
+                tools_path=tools_path,  # Use resolved tools_path
                 tool_args=tool_args,
                 source_content=source_content,
                 llm_context=prep_result.llm_context  # Transformed context for LLM
