@@ -69,7 +69,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             style: {
                 width: '350px',                   // Increased from 280px
                 minHeight: '110px',               // Increased from 90px
-                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
+                maxHeight: data.fieldsExpanded ? '600px' : '180px',  // Fixed: increased from 140px to prevent button clipping
                 background: isInactive
                     ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
                     : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
@@ -282,6 +282,32 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                             }, field)
                         )
                     ])
+                ]),
+
+                // Collapsed view - show summary
+                !data.fieldsExpanded && h('div', {
+                    key: 'collapsed',
+                    style: {
+                        marginTop: '6px',
+                        fontSize: '0.7rem',
+                        color: '#94a3b8',
+                        display: 'flex',
+                        gap: '8px',
+                        alignItems: 'center'
+                    }
+                }, [
+                    data.inputFields && data.inputFields.length > 0 && h('span', {
+                        key: 'inputs',
+                        style: { color: '#60a5fa' }
+                    }, `${data.inputFields.length} input${data.inputFields.length !== 1 ? 's' : ''}`),
+                    data.inputFields && data.inputFields.length > 0 && data.outputFields && data.outputFields.length > 0 && h('span', {
+                        key: 'sep',
+                        style: { color: '#475569' }
+                    }, '•'),
+                    data.outputFields && data.outputFields.length > 0 && h('span', {
+                        key: 'outputs',
+                        style: { color: '#34d399' }
+                    }, `${data.outputFields.length} output${data.outputFields.length !== 1 ? 's' : ''}`)
                 ])
             ]) : null,
 
@@ -306,7 +332,7 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
             style: {
                 width: '350px',                   // Increased from 280px
                 minHeight: '110px',               // Increased from 90px
-                maxHeight: data.fieldsExpanded ? '600px' : '140px',  // Increased heights
+                maxHeight: data.fieldsExpanded ? '600px' : '180px',  // Fixed: increased from 140px to prevent button clipping
                 background: isInactive
                     ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
                     : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
@@ -517,6 +543,32 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                             }, field)
                         )
                     ])
+                ]),
+
+                // Collapsed view - show summary
+                !data.fieldsExpanded && h('div', {
+                    key: 'collapsed',
+                    style: {
+                        marginTop: '6px',
+                        fontSize: '0.7rem',
+                        color: '#94a3b8',
+                        display: 'flex',
+                        gap: '8px',
+                        alignItems: 'center'
+                    }
+                }, [
+                    data.inputFields && data.inputFields.length > 0 && h('span', {
+                        key: 'inputs',
+                        style: { color: '#60a5fa' }
+                    }, `${data.inputFields.length} input${data.inputFields.length !== 1 ? 's' : ''}`),
+                    data.inputFields && data.inputFields.length > 0 && data.outputFields && data.outputFields.length > 0 && h('span', {
+                        key: 'sep',
+                        style: { color: '#475569' }
+                    }, '•'),
+                    data.outputFields && data.outputFields.length > 0 && h('span', {
+                        key: 'outputs',
+                        style: { color: '#34d399' }
+                    }, `${data.outputFields.length} output${data.outputFields.length !== 1 ? 's' : ''}`)
                 ])
             ]) : null,
 
