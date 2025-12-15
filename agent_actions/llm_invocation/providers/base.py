@@ -23,6 +23,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 from pathlib import Path
 import json
+from agent_actions.utilities.retry import retry
 
 @dataclass
 class BatchTask:
@@ -256,11 +257,12 @@ class BatchProvider(ABC):
 
         # Fetch raw results with retry
         logger.info(f'Retrieving results for batch {batch_id}...')
-        raw_results = self._retry_with_backoff(
-            lambda: self._fetch_raw_results(batch_id),
-            max_attempts=3,
-            initial_delay=2.0
-        )
+        
+        @retry(max_attempts=3, delay=2.0)
+        def _fetch_safe():
+            return self._fetch_raw_results(batch_id)
+
+        raw_results = _fetch_safe()
 
         # Optionally write to file
         if output_directory:
@@ -593,66 +595,6 @@ class BatchProvider(ABC):
         except json.JSONDecodeError:
             return content_str
 
-    def _retry_with_backoff(
-        self,
-        operation: callable,
-        max_attempts: int = 3,
-        initial_delay: float = 1.0
-    ) -> Any:
-        """
-        Retry operation with exponential backoff.
-
-        This helper eliminates duplicated retry logic in OpenAI and Gemini providers.
-
-        Args:
-            operation: Callable to execute (should take no arguments)
-            max_attempts: Maximum number of retry attempts (default: 3)
-            initial_delay: Initial delay in seconds (default: 1.0)
-
-        Returns:
-            Result from successful operation execution
-
-        Raises:
-            Exception from last failed attempt if all retries exhausted
-        """
-        import time
-        import logging
-        logger = logging.getLogger(__name__)
-
-        for attempt in range(max_attempts):
-            try:
-                return operation()
-            except Exception as e:
-                if attempt == max_attempts - 1:
-                    # Log final failure after all retries exhausted
-                    logger.error(
-                        "All retry attempts exhausted",
-                        extra={
-                            'operation': 'retry_exhausted',
-                            'total_attempts': max_attempts,
-                            'final_error': str(e),
-                            'error_type': type(e).__name__
-                        }
-                    )
-                    raise
-
-                delay = initial_delay * (2 ** attempt)
-
-                # Log retry attempt with configuration and wait time
-                logger.warning(
-                    f"Retry attempt {attempt + 1}/{max_attempts} after failure",
-                    extra={
-                        'operation': 'retry_attempt',
-                        'attempt': attempt + 1,
-                        'max_attempts': max_attempts,
-                        'wait_time': delay,
-                        'initial_delay': initial_delay,
-                        'backoff_base': 2,
-                        'error': str(e),
-                        'error_type': type(e).__name__
-                    }
-                )
-                time.sleep(delay)
 
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """
