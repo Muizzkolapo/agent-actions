@@ -158,6 +158,34 @@ tasks:
     cmds:
       - uv run pylint {{.PACKAGE}}
 
+  pylint:
+    desc: Run pylint on entire codebase for code review
+    cmds:
+      - uv run pylint {{.PACKAGE}} --output-format=colorized
+
+  pylint:verbose:
+    desc: Run pylint with detailed output and scores
+    cmds:
+      - uv run pylint {{.PACKAGE}} --output-format=colorized --reports=y --score=y
+
+  pylint:report:
+    desc: Generate pylint HTML report
+    cmds:
+      - uv run pylint {{.PACKAGE}} --output-format=html > pylint-report.html
+      - echo "Pylint report generated at pylint-report.html"
+
+  pylint:file:
+    desc: Run pylint on specific file or directory
+    vars:
+      FILE: '{{default "" .FILE}}'
+    cmds:
+      - |
+        if [ -z "{{.FILE}}" ]; then
+          echo "Usage: task pylint:file FILE=path/to/file.py"
+        else
+          uv run pylint {{.FILE}} --output-format=colorized
+        fi
+
   mypy:
     desc: Run type checking with mypy
     cmds:
