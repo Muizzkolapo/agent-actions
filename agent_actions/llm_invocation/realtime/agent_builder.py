@@ -86,9 +86,10 @@ def create_dynamic_agent(
             "See agent_actions/prompt_generation/data_generator.py for an example."
         )
 
-    prompt_config_base = formatted_prompt
+    # Dispatch already handled by PromptPreparationService
+    prompt_config = formatted_prompt
 
-    # Setup tools_path using shared utility
+    # Setup tools_path for sys.path (still needed for function imports)
     if not tools_path:
         from agent_actions.utilities.tools_resolver import resolve_tools_path
         tools_path = resolve_tools_path(agent_config)
@@ -106,19 +107,10 @@ def create_dynamic_agent(
         is_tool
     )
 
-    # Prepare tool context for injection
-    tool_context_json = ContextService.prepare_tool_context(
-        context_data_str,
-        original_context
-    )
-
-    # Inject tool outputs into prompt
-    prompt_config, captured_results = PromptUtils.inject_function_outputs_into_prompt(
-        prompt_config_base,
-        tools_path,
-        tool_context_json,
-        agent_config=agent_config
-    )
+    # Note: dispatch_task() injection now happens in PromptPreparationService
+    # No need to call inject_function_outputs_into_prompt here anymore
+    # TODO: captured_results (add_dispatch feature) needs to be returned from PromptPreparationService
+    captured_results = {}
 
     # Append additional_context if provided (context_scope.observe fields)
     if additional_context:
