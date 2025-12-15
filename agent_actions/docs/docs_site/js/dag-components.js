@@ -71,12 +71,14 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 minHeight: '110px',               // Increased from 90px
                 maxHeight: data.fieldsExpanded ? '600px' : '180px',  // Fixed: increased from 140px to prevent button clipping
                 background: isInactive
-                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
-                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#3b82f6' : '#6b7280')}`,
+                    ? 'linear-gradient(135deg, #0a0e1a 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#00d9ff' : '#6b7280')}`,
                 borderRadius: '8px',
                 padding: '14px',                  // Increased from 10px
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                boxShadow: data.isOperational
+                    ? '0 0 20px rgba(0, 217, 255, 0.5), 0 0 40px rgba(0, 217, 255, 0.2), inset 0 0 20px rgba(0, 217, 255, 0.1)'
+                    : '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',
@@ -334,12 +336,14 @@ console.log('Window keys with "flow":', Object.keys(window).filter(k => k.toLowe
                 minHeight: '110px',               // Increased from 90px
                 maxHeight: data.fieldsExpanded ? '600px' : '180px',  // Fixed: increased from 140px to prevent button clipping
                 background: isInactive
-                    ? 'linear-gradient(135deg, #1a1f2e 0%, #16191f 100%)'
-                    : 'linear-gradient(135deg, #1e293b 0%, #1a2332 100%)',
-                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#10b981' : '#6b7280')}`,
+                    ? 'linear-gradient(135deg, #0a0e1a 0%, #16191f 100%)'
+                    : 'linear-gradient(135deg, #0a0e1a 0%, #1a1f2e 100%)',
+                border: `2px solid ${isInactive ? '#4a5568' : (data.isOperational ? '#00ff88' : '#6b7280')}`,
                 borderRadius: '8px',
                 padding: '14px',                  // Increased from 10px
-                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+                boxShadow: data.isOperational
+                    ? '0 0 20px rgba(0, 255, 136, 0.5), 0 0 40px rgba(0, 255, 136, 0.2), inset 0 0 20px rgba(0, 255, 136, 0.1)'
+                    : '0 4px 12px rgba(0, 0, 0, 0.3)',
                 display: 'flex',
                 flexDirection: 'column',
                 overflow: 'hidden',

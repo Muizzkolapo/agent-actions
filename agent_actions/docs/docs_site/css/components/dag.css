@@ -178,3 +178,83 @@
 .dag-container-wrapper {
     margin-bottom: var(--space-8);
 }
+
+/* ============================================
+   Neon/Cyberpunk Enhancements
+   ============================================ */
+
+/* Animated glow pulse for edges */
+@keyframes edgeGlowPulse {
+    0%, 100% {
+        filter: drop-shadow(0 0 3px currentColor);
+    }
+    50% {
+        filter: drop-shadow(0 0 8px currentColor) drop-shadow(0 0 12px currentColor);
+    }
+}
+
+/* Apply to ReactFlow edges */
+.react-flow__edge-path {
+    animation: edgeGlowPulse 3s ease-in-out infinite;
+}
+
+/* Node hover effect */
+.rf-node-card {
+    transition: all 0.3s ease;
+    position: relative;
+}
+
+.rf-node-card:hover {
+    transform: translateY(-3px) scale(1.02);
+}
+
+/* Neon border pulse animation */
+@keyframes neonBorderPulse {
+    0%, 100% {
+        box-shadow:
+            0 0 10px rgba(0, 217, 255, 0.3),
+            0 0 20px rgba(0, 217, 255, 0.2),
+            inset 0 0 10px rgba(0, 217, 255, 0.1);
+    }
+    50% {
+        box-shadow:
+            0 0 20px rgba(0, 217, 255, 0.6),
+            0 0 40px rgba(0, 217, 255, 0.4),
+            inset 0 0 20px rgba(0, 217, 255, 0.2);
+    }
+}
+
+@keyframes neonGreenPulse {
+    0%, 100% {
+        box-shadow:
+            0 0 10px rgba(0, 255, 136, 0.3),
+            0 0 20px rgba(0, 255, 136, 0.2),
+            inset 0 0 10px rgba(0, 255, 136, 0.1);
+    }
+    50% {
+        box-shadow:
+            0 0 20px rgba(0, 255, 136, 0.6),
+            0 0 40px rgba(0, 255, 136, 0.4),
+            inset 0 0 20px rgba(0, 255, 136, 0.2);
+    }
+}
+
+/* Apply neon pulse to LLM nodes */
+.rf-model-node {
+    animation: neonBorderPulse 4s ease-in-out infinite;
+}
+
+/* Apply neon pulse to Tool nodes */
+.rf-tool-node {
+    animation: neonGreenPulse 4s ease-in-out infinite;
+}
+
+/* Connection handles with glow */
+.react-flow__handle {
+    transition: all 0.2s ease;
+}
+
+.react-flow__handle:hover {
+    transform: scale(1.3);
+    filter: drop-shadow(0 0 6px currentColor);
+}
