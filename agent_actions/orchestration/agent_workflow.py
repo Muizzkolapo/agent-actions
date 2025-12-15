@@ -299,8 +299,11 @@ class AgentWorkflow:
 
             # 4. Symlink Artifacts (The "Symlink Strategy")
             self._link_upstream_artifacts(upstream_name)
-            
+
             self.console.print(f"[bold green]>> Recursive: Ready to use upstream data from '{upstream_name}'[/bold green]")
+
+            # Return success to signal upstream is ready
+            return True
 
         except Exception as e:
             logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
