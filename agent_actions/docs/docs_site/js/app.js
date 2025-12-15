@@ -55,46 +55,6 @@ function convertToYAML(obj, indent = 0) {
     return yaml;
 }
 
-// Page title management
-function setPageTitle(title) {
-    const baseTitle = 'Agent-Actions';
-    document.title = title ? `${title} | ${baseTitle}` : baseTitle;
-}
-
-// Breadcrumb navigation management
-function updateBreadcrumb(crumbs) {
-    // Update all breadcrumb containers in all views
-    const breadcrumbContainers = document.querySelectorAll('.breadcrumb');
-
-    breadcrumbContainers.forEach(container => {
-        container.innerHTML = '';
-
-        crumbs.forEach((crumb, index) => {
-            if (index > 0) {
-                const separator = document.createElement('span');
-                separator.textContent = '/';
-                separator.className = 'breadcrumb-separator';
-                container.appendChild(separator);
-            }
-
-            if (index === crumbs.length - 1) {
-                // Last item (current page) - not clickable
-                const span = document.createElement('span');
-                span.textContent = crumb.label;
-                span.className = 'breadcrumb-current';
-                container.appendChild(span);
-            } else {
-                // Clickable items
-                const link = document.createElement('a');
-                link.href = crumb.url;
-                link.textContent = crumb.label;
-                link.className = 'breadcrumb-link';
-                container.appendChild(link);
-            }
-        });
-    });
-}
-
 // State
 const state = {
     currentView: 'overview',
@@ -431,14 +391,6 @@ function renderSidebar() {
 function showOverview(pushHistory = true) {
     state.currentView = 'overview';
     state.currentWorkflow = null;
-
-    // Update page title
-    setPageTitle('Dashboard');
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' }
-    ]);
 
     // Push to history
     if (pushHistory) {
@@ -1161,36 +1113,15 @@ function createActionCard(action, workflowName, workflowId) {
         <div class="workflow-card-header">
             <div>
                 <h3>${action.name}</h3>
-                <span class="workflow-context-badge" data-workflow-id="${workflowId}" title="Part of ${workflowName} workflow">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M2 8h3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                        <rect x="5" y="6" width="3" height="4" rx="0.8" fill="currentColor"/>
-                        <path d="M8 8h2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-                        <path d="M10 8 L10 5 L13 5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M10 8 L10 11 L13 11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
-                        <circle cx="13" cy="5" r="1.2" fill="currentColor"/>
-                        <circle cx="13" cy="11" r="1.2" fill="currentColor"/>
-                        <circle cx="2" cy="8" r="1" fill="currentColor"/>
-                    </svg>
-                    ${workflowName}
-                </span>
             </div>
             <span class="action-badge ${action.type}">${action.type}</span>
         </div>
         <p>${action.intent || 'No description'}</p>
         <div class="workflow-meta">
+            <span>${workflowName}</span>
             <span>${depsText}</span>
         </div>
     `;
-
-    // Add click handler for workflow badge
-    const badge = card.querySelector('.workflow-context-badge');
-    if (badge) {
-        badge.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent card click
-            showWorkflow(workflowId);
-        });
-    }
 
     return card;
 }
@@ -1203,15 +1134,6 @@ let workflowsFilterManager = null;
 
 function showAllWorkflows(pushHistory = true) {
     state.currentView = 'workflows-list';
-
-    // Update page title
-    setPageTitle('All Workflows');
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'All Workflows', url: '#/workflows' }
-    ]);
 
     // Push to history
     if (pushHistory) {
@@ -1311,16 +1233,6 @@ let promptsFilterManager = null;
 
 function showAllPrompts() {
     state.currentView = 'prompts-list';
-
-    // Update page title
-    setPageTitle('All Prompts');
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'All Prompts', url: '#/prompts' }
-    ]);
-
     updateNavigation();
     switchView('prompts-list-view');
 
@@ -1425,16 +1337,6 @@ let schemasFilterManager = null;
 
 function showAllSchemas() {
     state.currentView = 'schemas-list';
-
-    // Update page title
-    setPageTitle('All Schemas');
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'All Schemas', url: '#/schemas' }
-    ]);
-
     updateNavigation();
     switchView('schemas-list-view');
 
@@ -1546,15 +1448,6 @@ let runsListFilterManager = null;
 
 function showAllRuns(pushHistory = true) {
     state.currentView = 'runs-list';
-
-    // Update page title
-    setPageTitle('All Runs');
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'All Runs', url: '#/runs' }
-    ]);
 
     // Push to history
     if (pushHistory) {
@@ -1749,15 +1642,6 @@ function showFilteredActions(filterType, pushHistory = true) {
             subtitle = 'Browse actions';
     }
 
-    // Update page title
-    setPageTitle(title);
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: title, url: '#/actions' }
-    ]);
-
     // Update header
     document.getElementById('filter-type-breadcrumb').textContent = title;
     document.getElementById('filter-type-title').textContent = title;
@@ -1871,16 +1755,6 @@ function showWorkflow(workflowId, pushHistory = true) {
     state.currentView = 'workflow';
     state.currentTab = 'details';
 
-    // Update page title
-    setPageTitle(workflow.name);
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'Workflows', url: '#/workflows' },
-        { label: workflow.name, url: `#/workflows/${workflowId}` }
-    ]);
-
     // Push to history
     if (pushHistory) {
         pushHistoryState('workflow', { workflowId }, workflow.name);
@@ -1891,6 +1765,7 @@ function showWorkflow(workflowId, pushHistory = true) {
     switchView('workflow-view');
 
     // Update header
+    document.getElementById('workflow-name').textContent = workflow.name;
     document.getElementById('workflow-title').textContent = workflow.name;
     document.getElementById('workflow-description').textContent = workflow.description;
 
@@ -2544,18 +2419,6 @@ function showRunDetails(run) {
     // Hide all views
     document.querySelectorAll('.content-view').forEach(v => v.classList.remove('active'));
 
-    // Update page title
-    setPageTitle(`Run ${run.id}`);
-
-    // Update breadcrumb
-    const workflowName = run.workflow_name || run.workflow_id;
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'Runs', url: '#/runs' },
-        { label: workflowName, url: `#/workflows/${run.workflow_id}` },
-        { label: `Run ${run.id}`, url: '#' }
-    ]);
-
     // Show run detail view
     const view = document.getElementById('run-detail-view');
     view.classList.add('active');
@@ -2648,26 +2511,6 @@ function showAction(actionNameOrWorkflowId, actionName, navigationContext = null
     state.currentWorkflow = fromWorkflowId;
     state.navigationContext = navigationContext;
 
-    // Update page title
-    setPageTitle(action.name);
-
-    // Update breadcrumb based on navigation context
-    if (navigationContext === 'workflow' && fromWorkflowId) {
-        const workflow = catalog.workflows[fromWorkflowId];
-        updateBreadcrumb([
-            { label: 'Dashboard', url: '#/' },
-            { label: 'Workflows', url: '#/workflows' },
-            { label: workflow.name, url: `#/workflows/${fromWorkflowId}` },
-            { label: action.name, url: '#' }
-        ]);
-    } else {
-        updateBreadcrumb([
-            { label: 'Dashboard', url: '#/' },
-            { label: 'All Actions', url: '#/actions' },
-            { label: action.name, url: '#' }
-        ]);
-    }
-
     // Update navigation
     updateNavigation();
     switchView('action-view');
@@ -2676,6 +2519,7 @@ function showAction(actionNameOrWorkflowId, actionName, navigationContext = null
     updateActionBreadcrumb(navigationContext, fromWorkflowId);
 
     // Update header
+    document.getElementById('action-name').textContent = action.name;
     document.getElementById('action-title').textContent = action.name;
 
     const badge = document.getElementById('action-type-badge');
@@ -2935,21 +2779,12 @@ function showPrompt(promptId) {
 
     state.currentView = 'prompt';
 
-    // Update page title
-    setPageTitle(prompt.name);
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'Prompts', url: '#/prompts' },
-        { label: prompt.name, url: '#' }
-    ]);
-
     // Update navigation
     updateNavigation();
     switchView('prompt-view');
 
     // Update header
+    document.getElementById('prompt-name').textContent = prompt.name;
     document.getElementById('prompt-title').textContent = prompt.name;
 
     // Render details
@@ -2992,21 +2827,12 @@ function showSchema(schemaId) {
 
     state.currentView = 'schema';
 
-    // Update page title
-    setPageTitle(schema.name);
-
-    // Update breadcrumb
-    updateBreadcrumb([
-        { label: 'Dashboard', url: '#/' },
-        { label: 'Schemas', url: '#/schemas' },
-        { label: schema.name, url: '#' }
-    ]);
-
     // Update navigation
     updateNavigation();
     switchView('schema-view');
 
     // Update header
+    document.getElementById('schema-name').textContent = schema.name;
     document.getElementById('schema-title').textContent = schema.name;
 
     // Render details
