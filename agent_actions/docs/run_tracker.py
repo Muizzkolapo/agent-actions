@@ -8,6 +8,7 @@ import portalocker
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
+from agent_actions.utilities.retry import retry
 
 
 class RunTracker:
@@ -309,6 +310,7 @@ class RunTracker:
 
         return run_id
 
+    @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def record_action_start(
         self,
         run_id: str,
@@ -325,53 +327,44 @@ class RunTracker:
             action_type: 'llm' or 'tool'
             agent_config: Full agent configuration (for extracting model info)
         """
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                # Atomic read-modify-write with exclusive lock and retry
-                with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+        # Atomic read-modify-write with exclusive lock and retry
+        with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+            f.seek(0)
+            runs_data = json.load(f)
+
+            # Find the run
+            for run in runs_data['executions']:
+                if run['id'] == run_id:
+                    # Create action entry
+                    action_entry = {
+                        'status': 'running',
+                        'started_at': datetime.now().isoformat(),
+                        'ended_at': None,
+                        'duration_seconds': 0,
+                        'type': action_type
+                    }
+
+                    # Add model info for LLM actions
+                    if action_type == 'llm':
+                        action_entry['model_vendor'] = agent_config.get('model_vendor')
+                        action_entry['model_name'] = agent_config.get('model_name')
+                    elif action_type == 'tool':
+                        action_entry['impl'] = agent_config.get('model_name')  # For tools, model_name contains impl
+
+                    # Add action to run
+                    run['actions'][action_name] = action_entry
+
+                    # Write back
                     f.seek(0)
-                    runs_data = json.load(f)
+                    f.truncate()
+                    json.dump(runs_data, f, indent=2)
+                    return
 
-                    # Find the run
-                    for run in runs_data['executions']:
-                        if run['id'] == run_id:
-                            # Create action entry
-                            action_entry = {
-                                'status': 'running',
-                                'started_at': datetime.now().isoformat(),
-                                'ended_at': None,
-                                'duration_seconds': 0,
-                                'type': action_type
-                            }
+            # Run not found
+            # If we get here, the run wasn't found - we don't retry for this logic error
+            return
 
-                            # Add model info for LLM actions
-                            if action_type == 'llm':
-                                action_entry['model_vendor'] = agent_config.get('model_vendor')
-                                action_entry['model_name'] = agent_config.get('model_name')
-                            elif action_type == 'tool':
-                                action_entry['impl'] = agent_config.get('model_name')  # For tools, model_name contains impl
-
-                            # Add action to run
-                            run['actions'][action_name] = action_entry
-
-                            # Write back
-                            f.seek(0)
-                            f.truncate()
-                            json.dump(runs_data, f, indent=2)
-                            return
-
-                    # Run not found
-                    break
-
-            except portalocker.exceptions.LockException:
-                if attempt == max_attempts - 1:
-                    # Final attempt failed, log and raise
-                    raise
-                # Wait before retry (exponential backoff)
-                import time
-                time.sleep(2 ** attempt)
-
+    @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def record_action_complete(
         self,
         run_id: str,
@@ -396,64 +389,55 @@ class RunTracker:
             skip_reason: Reason for skip (if status='skipped')
             error: Error message (if status='failed')
         """
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                # Atomic read-modify-write with exclusive lock and retry
-                with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+        # Atomic read-modify-write with exclusive lock and retry
+        with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+            f.seek(0)
+            runs_data = json.load(f)
+
+            # Find the run
+            for run in runs_data['executions']:
+                if run['id'] == run_id:
+                    # Update action entry
+                    if action_name in run['actions']:
+                        action_entry = run['actions'][action_name]
+                        action_entry['status'] = status
+                        action_entry['ended_at'] = datetime.now().isoformat()
+                        action_entry['duration_seconds'] = duration_seconds
+
+                        # Add optional fields
+                        if tokens:
+                            action_entry['tokens'] = tokens
+                            # Aggregate tokens to workflow level
+                            run['total_tokens'] = run.get('total_tokens', 0) + tokens.get('total_tokens', 0)
+
+                        if files_processed > 0:
+                            action_entry['files_processed'] = files_processed
+
+                        if skip_reason:
+                            action_entry['skip_reason'] = skip_reason
+
+                        if error:
+                            action_entry['error'] = error
+
+                    # Update workflow-level counters
+                    if status == 'success':
+                        run['successful_actions'] = run.get('successful_actions', 0) + 1
+                    elif status == 'failed':
+                        run['failed_actions'] = run.get('failed_actions', 0) + 1
+                    elif status == 'skipped':
+                        run['skipped_actions'] = run.get('skipped_actions', 0) + 1
+
+                    # Write back
                     f.seek(0)
-                    runs_data = json.load(f)
+                    f.truncate()
+                    json.dump(runs_data, f, indent=2)
+                    return
 
-                    # Find the run
-                    for run in runs_data['executions']:
-                        if run['id'] == run_id:
-                            # Update action entry
-                            if action_name in run['actions']:
-                                action_entry = run['actions'][action_name]
-                                action_entry['status'] = status
-                                action_entry['ended_at'] = datetime.now().isoformat()
-                                action_entry['duration_seconds'] = duration_seconds
+            # Run not found
+            # No retry needed if logic falls through
+            return
 
-                                # Add optional fields
-                                if tokens:
-                                    action_entry['tokens'] = tokens
-                                    # Aggregate tokens to workflow level
-                                    run['total_tokens'] = run.get('total_tokens', 0) + tokens.get('total_tokens', 0)
-
-                                if files_processed > 0:
-                                    action_entry['files_processed'] = files_processed
-
-                                if skip_reason:
-                                    action_entry['skip_reason'] = skip_reason
-
-                                if error:
-                                    action_entry['error'] = error
-
-                            # Update workflow-level counters
-                            if status == 'success':
-                                run['successful_actions'] = run.get('successful_actions', 0) + 1
-                            elif status == 'failed':
-                                run['failed_actions'] = run.get('failed_actions', 0) + 1
-                            elif status == 'skipped':
-                                run['skipped_actions'] = run.get('skipped_actions', 0) + 1
-
-                            # Write back
-                            f.seek(0)
-                            f.truncate()
-                            json.dump(runs_data, f, indent=2)
-                            return
-
-                    # Run not found
-                    break
-
-            except portalocker.exceptions.LockException:
-                if attempt == max_attempts - 1:
-                    # Final attempt failed, log and raise
-                    raise
-                # Wait before retry (exponential backoff)
-                import time
-                time.sleep(2 ** attempt)
-
+    @retry(max_attempts=3, backoff=2.0, exceptions=(portalocker.exceptions.LockException,))
     def finalize_workflow_run(
         self,
         run_id: str,
@@ -468,52 +452,42 @@ class RunTracker:
             status: 'SUCCESS', 'FAILED', 'PAUSED'
             error_message: Error description (if status='FAILED')
         """
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                # Atomic read-modify-write with exclusive lock and retry
-                with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+        # Atomic read-modify-write with exclusive lock and retry
+        with portalocker.Lock(self.runs_file, 'r+', timeout=10, flags=portalocker.LOCK_EX) as f:
+            f.seek(0)
+            runs_data = json.load(f)
+
+            # Find the run
+            for run in runs_data['executions']:
+                if run['id'] == run_id:
+                    # Update run status
+                    run['status'] = status
+                    run['ended_at'] = datetime.now().isoformat()
+
+                    # Calculate duration
+                    try:
+                        start = datetime.fromisoformat(run['started_at'].replace('Z', '+00:00'))
+                        end = datetime.fromisoformat(run['ended_at'].replace('Z', '+00:00'))
+                        run['duration_seconds'] = (end - start).total_seconds()
+                    except (ValueError, AttributeError):
+                        pass
+
+                    # Add error message if provided
+                    if error_message:
+                        run['error_message'] = error_message
+
+                    # Recalculate workflow metrics
+                    runs_data['workflow_metrics'] = self._calculate_workflow_metrics(runs_data)
+
+                    # Write back
                     f.seek(0)
-                    runs_data = json.load(f)
+                    f.truncate()
+                    json.dump(runs_data, f, indent=2)
+                    return
 
-                    # Find the run
-                    for run in runs_data['executions']:
-                        if run['id'] == run_id:
-                            # Update run status
-                            run['status'] = status
-                            run['ended_at'] = datetime.now().isoformat()
-
-                            # Calculate duration
-                            try:
-                                start = datetime.fromisoformat(run['started_at'].replace('Z', '+00:00'))
-                                end = datetime.fromisoformat(run['ended_at'].replace('Z', '+00:00'))
-                                run['duration_seconds'] = (end - start).total_seconds()
-                            except (ValueError, AttributeError):
-                                pass
-
-                            # Add error message if provided
-                            if error_message:
-                                run['error_message'] = error_message
-
-                            # Recalculate workflow metrics
-                            runs_data['workflow_metrics'] = self._calculate_workflow_metrics(runs_data)
-
-                            # Write back
-                            f.seek(0)
-                            f.truncate()
-                            json.dump(runs_data, f, indent=2)
-                            return
-
-                    # Run not found
-                    break
-
-            except portalocker.exceptions.LockException:
-                if attempt == max_attempts - 1:
-                    # Final attempt failed, log and raise
-                    raise
-                # Wait before retry (exponential backoff)
-                import time
-                time.sleep(2 ** attempt)
+            # Run not found
+            # Logic fallthrough
+            return
 
     def _calculate_workflow_metrics(self, runs_data: Dict[str, Any]) -> Dict[str, Any]:
         """

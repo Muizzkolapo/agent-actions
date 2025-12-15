@@ -159,6 +159,8 @@ class ProcessorErrorHandlerMixin:
     def with_retry(self, max_attempts: int=3, delay: float=1.0, backoff: float=2.0, max_delay: float=60.0, exceptions: tuple=(IOError, OSError, ConnectionError)) -> Callable:
         """
         Decorator for adding retry logic to methods.
+
+        DEPRECATED: Use agent_actions.utilities.retry.retry instead.
         
         Args:
             max_attempts: Maximum number of retry attempts
@@ -170,6 +172,12 @@ class ProcessorErrorHandlerMixin:
         Returns:
             Decorated function with retry logic
         """
+        import warnings
+        warnings.warn(
+            "ProcessorErrorHandlerMixin.with_retry is deprecated. Use agent_actions.utilities.retry.retry instead.",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
         def decorator(func: Callable) -> Callable:
 
