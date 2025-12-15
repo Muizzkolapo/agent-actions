@@ -149,9 +149,10 @@ class InterceptorService:
             # Get current prompt from execution context
             current_prompt = execution_context.get('prompt')
 
-            # Setup tools_path
+            # Setup tools_path using shared utility
             if not tools_path:
-                tools_path = agent_config.get('tools', {}).get('path')
+                from agent_actions.utilities.tools_resolver import resolve_tools_path
+                tools_path = resolve_tools_path(agent_config)
             if tools_path and tools_path not in sys.path:
                 sys.path.insert(0, tools_path)
 
