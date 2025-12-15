@@ -285,59 +285,55 @@ class AgentWorkflow:
                     run_upstream=False  # Don't trigger recursive check
                 )
                 result = upstream_wf.run() # Execute synchronously
-                
-                # Handle batch job submission (returns None when incomplete)
+
+                # Handle batch job submission
+                # Returns: ('success', {}) when complete, None when batch jobs pending
                 if result is None:
                     self.console.print(f"[blue]⏳ Upstream workflow '{upstream_name}' has pending batch jobs.[/blue]")
                     self.console.print(f"[blue]Please wait for batch completion and run this command again:[/blue]")
                     self.console.print(f"[blue]  agac run -a {self.agent_name} --upstream[/blue]")
                     return None  # Signal to caller that we should exit gracefully
-                
-                status, summary = result # Unpack tuple
+
+                # Upstream completed successfully - continue to link artifacts
+                status, summary = result
 
             # 4. Symlink Artifacts (The "Symlink Strategy")
             self._link_upstream_artifacts(upstream_name)
-            
+
             self.console.print(f"[bold green]>> Recursive: Ready to use upstream data from '{upstream_name}'[/bold green]")
+
+            # Return success to signal upstream is ready
+            return True
 
         except Exception as e:
             logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
             raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
 
     def _link_upstream_artifacts(self, upstream_name: str):
-        """Link upstream source/target to downstream source/staging."""
+        """Link upstream final action output to downstream staging."""
         # Get workflow root
         current_config_path = Path(self.constructor_path)
         workflows_root = current_config_path.parents[2]
-        
+
         # Construct paths directly
         upstream_io = workflows_root / upstream_name / 'agent_io'
         downstream_io = workflows_root / self.agent_name / 'agent_io'
-        
-        upstream_paths = {
-            'source': upstream_io / 'source',
-            'target': upstream_io / 'target'
-        }
-        downstream_paths = {
-            'source': downstream_io / 'source',
-            'staging': downstream_io / 'staging'
-        }
 
-        # A. Link Source -> Source (Lineage)
-        self._safe_symlink_folder(upstream_paths['source'], downstream_paths['source'])
-        
-        # B. Link Target -> Staging (Execution)
-        # Find the final node in upstream target
-        target_dir = upstream_paths['target']
-        if target_dir.exists():
-            # Heuristic: Find directory starting with 'node_' with highest index/latest time?
-            # Or just link all of them? Staging usually processes files.
-            # If we link the CONTENTS of the latest node to staging.
-            latest_node = self._find_latest_node_dir(target_dir)
+        upstream_target = upstream_io / 'target'
+        downstream_staging = downstream_io / 'staging'
+
+        # Link upstream final action output (target) to downstream staging
+        # This makes the upstream workflow's output available as input to downstream
+        if upstream_target.exists():
+            # Find the final action's output directory (node_X with highest index/latest time)
+            latest_node = self._find_latest_node_dir(upstream_target)
             if latest_node:
-                self._safe_symlink_contents(latest_node, downstream_paths['staging'])
+                self._safe_symlink_contents(latest_node, downstream_staging)
+                logger.info(f"Linked {latest_node} -> {downstream_staging}")
             else:
-                logger.warning(f"No output nodes found in {target_dir} for upstream {upstream_name}")
+                logger.warning(f"No output nodes found in {upstream_target} for upstream {upstream_name}")
+        else:
+            logger.warning(f"Upstream target directory does not exist: {upstream_target}")
 
     def _find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
         """Find the most recent node directory in target."""
@@ -467,6 +463,9 @@ class AgentWorkflow:
                 }
             )
 
+            # Return success tuple to distinguish from batch pending (None)
+            return ('success', {})
+
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
             logger.error(
@@ -556,6 +555,9 @@ class AgentWorkflow:
                         'success': True
                     }
                 )
+
+                # Return success tuple to distinguish from batch pending (None)
+                return ('success', {})
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
