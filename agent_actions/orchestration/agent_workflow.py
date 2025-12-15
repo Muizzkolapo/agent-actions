@@ -1,15 +1,5 @@
 """
-Agent workflow orchestration - Refactored version.
-
-This is the refactored version of agent_workflow.py with reduced complexity.
-Original: 733 lines, CC 176, MI 7.8
-Target: <200 lines, CC <50, MI >20
-
-Key improvements:
-- Extracted specialized modules for state, skip logic, batch handling, etc.
-- Reduced method complexity through delegation
-- Eliminated duplicate code
-- Improved maintainability and testability
+Agent workflow orchestration 
 """
 
 import sys
@@ -262,36 +252,39 @@ class AgentWorkflow:
                 raise FileNotFoundError(f"Could not locate upstream config at {upstream_config_path}")
 
             # 2. Check if upstream workflow is already complete
-            from agent_actions.orchestration.state_manager import AgentStateManager
-            
-            # Get upstream agent folder
+            # Optimization: Read status file directly instead of initializing full workflow
             upstream_agent_folder = workflows_root / upstream_name / 'agent_io'
             upstream_status_file = upstream_agent_folder / '.agent_status.json'
             
-            # Load upstream config to get agent list
-            upstream_wf_temp = self.__class__(
-                constructor_path=str(upstream_config_path),
-                user_code_path=self.user_code_path,
-                default_path=self.default_path,
-                use_tools=self.use_tools,
-                run_upstream=False  # Don't trigger recursive check
-            )
-            
-            # Initialize state manager with execution order
-            upstream_state_manager = AgentStateManager(upstream_status_file, upstream_wf_temp.execution_order)
-            
-            # Check if all agents are completed
-            all_completed = all(
-                upstream_state_manager.is_completed(agent_name) 
-                for agent_name in upstream_wf_temp.execution_order
-            )
+            all_completed = False
+            if upstream_status_file.exists():
+                try:
+                    import json
+                    with open(upstream_status_file, 'r') as f:
+                        status_data = json.load(f)
+                    # Check if all agents are completed
+                    all_completed = all(
+                        details.get('status') == 'completed'
+                        for details in status_data.values()
+                    )
+                except Exception:
+                    # If we can't read status, assume not complete
+                    all_completed = False
             
             if all_completed:
                 self.console.print(f"[bold green]>> Upstream workflow '{upstream_name}' already completed, using existing data[/bold green]")
             else:
                 # 3. Run Upstream Workflow
+                # Only initialize workflow if we need to run it
                 self.console.print(f"[bold cyan]>> Recursive: Executing upstream workflow '{upstream_name}'...[/bold cyan]")
-                result = upstream_wf_temp.run() # Execute synchronously
+                upstream_wf = self.__class__(
+                    constructor_path=str(upstream_config_path),
+                    user_code_path=self.user_code_path,
+                    default_path=self.default_path,
+                    use_tools=self.use_tools,
+                    run_upstream=False  # Don't trigger recursive check
+                )
+                result = upstream_wf.run() # Execute synchronously
                 
                 # Handle batch job submission (returns None when incomplete)
                 if result is None:
