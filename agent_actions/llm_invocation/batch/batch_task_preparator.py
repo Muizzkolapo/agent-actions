@@ -105,7 +105,7 @@ class BatchTaskPreparator:
         self._validate_config(agent_config, provider)
 
         # 2. Setup context
-        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
+        _ = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
@@ -146,7 +146,8 @@ class BatchTaskPreparator:
                     tasks_builder.append(result)
                     stats.included_items += 1
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                # Catch all exceptions to avoid one bad row stopping entire batch
                 logger.debug("Failed to prepare task for row: %s", e, exc_info=True)
                 stats.error_items += 1
 
