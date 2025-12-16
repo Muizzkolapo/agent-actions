@@ -1,20 +1,21 @@
+# pylint: disable=duplicate-code
 """Base classes for artifact system."""
 
 from __future__ import annotations
 
+import json
+import logging
+import re
+import uuid
 from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
-import json
-import uuid
-import re
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-class ArtifactMetadata:
+class ArtifactMetadata:  # pylint: disable=too-few-public-methods
     """Standard metadata for all artifacts."""
 
     def __init__(self) -> None:
@@ -25,17 +26,19 @@ class ArtifactMetadata:
 
     def _get_version(self) -> str:
         try:
-            import agent_actions  # type: ignore
+            import agent_actions  # type: ignore  # pylint: disable=import-outside-toplevel
             return getattr(agent_actions, "__version__")
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             logger.warning(
-                f"Failed to retrieve agent_actions version, using fallback: {e}",
+                "Failed to retrieve agent_actions version, using fallback: %s",
+                e,
                 exc_info=True,
                 extra={'operation': 'version_retrieval'}
             )
             return "1.2.0"
 
     def to_dict(self) -> Dict[str, Any]:
+        """Convert metadata to dictionary format."""
         return {
             "generated_at": self.generated_at,
             "agent_actions_version": self.agent_actions_version,
@@ -46,12 +49,11 @@ class ArtifactMetadata:
 
 class SecurityError(Exception):
     """Security-related artifact errors."""
-    pass
 
 
 class BaseArtifact(ABC):
     """Base class for all artifacts."""
-    
+
     # Security limits
     MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
     MAX_FILENAME_LENGTH = 255
@@ -69,21 +71,21 @@ class BaseArtifact(ABC):
         """Validate file path for security."""
         # Resolve the path to handle .. and . components
         resolved_path = path.resolve()
-        
+
         # Check file extension
         if resolved_path.suffix not in self.ALLOWED_EXTENSIONS:
             raise SecurityError(f"File extension {resolved_path.suffix} not allowed")
-        
+
         # Check filename length
         if len(resolved_path.name) > self.MAX_FILENAME_LENGTH:
             raise SecurityError(f"Filename too long (max {self.MAX_FILENAME_LENGTH} chars)")
-        
+
         # Sanitize filename
         if not re.match(r'^[\w\-_./]+$', str(resolved_path)):
             raise SecurityError("Path contains invalid characters")
-        
+
         return resolved_path
-    
+
     def _validate_content_size(self, content: str) -> None:
         """Validate content size for security."""
         if len(content.encode('utf-8')) > self.MAX_FILE_SIZE:
@@ -92,80 +94,82 @@ class BaseArtifact(ABC):
     def save(self, path: Path) -> None:
         """Persist artifact to a JSON file."""
         try:
-            self._logger.debug(f"Saving {self.__class__.__name__} to {path}")
-            
+            self._logger.debug("Saving %s to %s", self.__class__.__name__, path)
+
             # CRITICAL SECURITY FIX: Validate path for security
             validated_path = self._validate_path(path)
-            
+
             # Serialize and validate content size
             content = json.dumps(self.to_dict(), indent=2, default=str)
             self._validate_content_size(content)
-            
+
             validated_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             # Use secure file permissions (readable/writable by owner only)
             with open(validated_path, "w", encoding="utf-8") as fh:
                 fh.write(content)
-            
+
             # Set secure file permissions (0o600 = rw-------)
             validated_path.chmod(0o600)
-            
-            self._logger.info(f"Successfully saved {self.__class__.__name__} to {validated_path}")
-            
+
+            self._logger.info(
+                "Successfully saved %s to %s", self.__class__.__name__, validated_path
+            )
+
         except SecurityError:
-            self._logger.error(f"Security validation failed for path: {path}")
+            self._logger.error("Security validation failed for path: %s", path)
             raise
         except Exception as e:
-            self._logger.error(f"Failed to save {self.__class__.__name__} to {path}: {e}")
+            self._logger.error("Failed to save %s to %s: %s", self.__class__.__name__, path, e)
             raise
 
     @classmethod
     def load(cls, path: Path) -> "BaseArtifact":
         """Load artifact from JSON file with security validation."""
-        logger = logging.getLogger(f"{__name__}.{cls.__name__}")
-        
+        load_logger = logging.getLogger(f"{__name__}.{cls.__name__}")
+
         try:
-            logger.debug(f"Loading {cls.__name__} from {path}")
-            
+            load_logger.debug("Loading %s from %s", cls.__name__, path)
+
             # Validate path
             resolved_path = path.resolve()
-            
+
             # Check file exists
             if not resolved_path.exists():
                 raise SecurityError(f"Artifact file not found: {resolved_path}")
-            
+
             # Check file extension
             if resolved_path.suffix not in cls.ALLOWED_EXTENSIONS:
                 raise SecurityError(f"File extension {resolved_path.suffix} not allowed")
-            
+
             # Check file size before loading
             if resolved_path.stat().st_size > cls.MAX_FILE_SIZE:
                 raise SecurityError(f"File too large (max {cls.MAX_FILE_SIZE} bytes)")
-            
+
             try:
                 with open(resolved_path, encoding="utf-8") as fh:
                     data = json.load(fh)
             except json.JSONDecodeError as e:
-                raise SecurityError(f"Invalid JSON format: {e}")
+                raise SecurityError(f"Invalid JSON format: {e}") from e
             except Exception as e:
-                raise SecurityError(f"Failed to load artifact: {e}")
-            
+                raise SecurityError(f"Failed to load artifact: {e}") from e
+
             # Validate JSON structure
             if not isinstance(data, dict):
                 raise SecurityError("Artifact must be a JSON object")
-            
+
             if "metadata" not in data:
                 raise SecurityError("Artifact missing required metadata")
-            
+
             artifact = cls.from_dict(data)
-            logger.info(f"Successfully loaded {cls.__name__} from {resolved_path}")
+            load_logger.info("Successfully loaded %s from %s", cls.__name__, resolved_path)
             return artifact
-            
+
         except SecurityError:
-            logger.error(f"Security validation failed when loading from: {path}")
+            load_logger.error("Security validation failed when loading from: %s", path)
             raise
         except Exception as e:
-            logger.error(f"Failed to load {cls.__name__} from {path}: {e}")
+            load_logger.error("Failed to load %s from %s: %s", cls.__name__, path, e)
             raise
 
     @classmethod
