@@ -61,7 +61,10 @@ class BatchProviderResolver:
                 context={
                     "missing_fields": missing,
                     "agent_type": agent_config.get("agent_type", "unknown"),
-                    "hint": "Caller must resolve config hierarchy (project → workflow → action) before calling batch service",
+                    "hint": (
+                        "Caller must resolve config hierarchy "
+                        "(project → workflow → action) before calling batch service"
+                    ),
                 },
             )
 
@@ -69,7 +72,8 @@ class BatchProviderResolver:
         if not provider_type:
             raise ConfigValidationError(
                 "model_vendor",
-                "Missing required field 'model_vendor' for batch processing. Specify the LLM provider (e.g., openai, anthropic, gemini).",
+                "Missing required field 'model_vendor' for batch processing. "
+                "Specify the LLM provider (e.g., openai, anthropic, gemini).",
             )
 
         provider_type = provider_type.lower()
@@ -128,7 +132,8 @@ class BatchProviderResolver:
         Args:
             batch_id: The batch job ID
             registry_manager: BatchRegistryManager instance to lookup batch info
-            output_directory: Output directory (for compatibility, can be None if registry_manager provided)
+            output_directory: Output directory (for compatibility, can be None if
+                registry_manager provided)
 
         Returns:
             BatchProvider instance
@@ -145,9 +150,9 @@ class BatchProviderResolver:
                 # Check cache
                 if provider_type in self._provider_cache:
                     return self._provider_cache[provider_type]
-                else:
-                    # Create new provider (will not be cached)
-                    return BatchProviderFactory.create_provider(provider_type)
+
+                # Create new provider (will not be cached)
+                return BatchProviderFactory.create_provider(provider_type)
 
         # Fallback to default provider if available
         if self._default_provider:
