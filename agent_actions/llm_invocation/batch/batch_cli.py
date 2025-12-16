@@ -1,8 +1,10 @@
+"""CLI commands for batch processing operations."""
 import click
+from pydantic import ValidationError
+
+from agent_actions.cli.cli_decorators import requires_project
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.validation.batch_validator import BatchCommandArgs
-from agent_actions.cli.cli_decorators import requires_project
-from pydantic import ValidationError
 
 
 @click.group()
@@ -13,13 +15,15 @@ def batch():
     Manages the lifecycle of batch processing jobs including submission,
     status checking, and result retrieval.
     """
-    pass
 
 
 @batch.command()
 @click.option(
     "--batch-id",
-    help="The ID of the batch job to check. If not provided, the last submitted job ID will be used.",
+    help=(
+        "The ID of the batch job to check. "
+        "If not provided, the last submitted job ID will be used."
+    ),
 )
 @requires_project
 def status(batch_id: str = None):
@@ -28,18 +32,18 @@ def status(batch_id: str = None):
         args = BatchCommandArgs(batch_id=batch_id)
         service = BatchService()
         if not args.batch_id:
-            args.batch_id = service._get_last_batch_job_id()
+            args.batch_id = service._get_last_batch_job_id()  # pylint: disable=protected-access
             if not args.batch_id:
                 click.echo("No batch ID provided and no previous batch job found.")
                 return
-        status = service.check_status(args.batch_id)
-        click.echo(f"Batch job status: {status}")
+        batch_status = service.check_status(args.batch_id)
+        click.echo(f"Batch job status: {batch_status}")
     except ValidationError as e:
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch status"})
-        raise click.ClickException(error_message)
-    except Exception as e:
+        raise click.ClickException(error_message) from e
+    except Exception as e:  # pylint: disable=broad-exception-caught
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch status"})
@@ -49,7 +53,10 @@ def status(batch_id: str = None):
 @batch.command()
 @click.option(
     "--batch-id",
-    help="The ID of the batch job to retrieve. If not provided, the last submitted job ID will be used.",
+    help=(
+        "The ID of the batch job to retrieve. "
+        "If not provided, the last submitted job ID will be used."
+    ),
 )
 @click.option(
     "--output-dir",
@@ -65,7 +72,7 @@ def retrieve(batch_id: str = None, output_dir: str = "."):
         args = BatchCommandArgs(batch_id=batch_id, output_dir=output_dir)
         service = BatchService()
         if not args.batch_id:
-            args.batch_id = service._get_last_batch_job_id()
+            args.batch_id = service._get_last_batch_job_id()  # pylint: disable=protected-access
             if not args.batch_id:
                 click.echo("No batch ID provided and no previous batch job found.")
                 return
@@ -75,8 +82,8 @@ def retrieve(batch_id: str = None, output_dir: str = "."):
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch retrieve"})
-        raise click.ClickException(error_message)
-    except Exception as e:
+        raise click.ClickException(error_message) from e
+    except Exception as e:  # pylint: disable=broad-exception-caught
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch retrieve"})
