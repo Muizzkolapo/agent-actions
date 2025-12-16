@@ -25,6 +25,7 @@ class BatchJobEntry:
         retry_for_records: List of custom_ids being retried
         has_retry_batch: Whether this batch has a retry batch
     """
+
     batch_id: str
     status: str
     timestamp: str
@@ -36,7 +37,7 @@ class BatchJobEntry:
     has_retry_batch: bool = False
 
     @classmethod
-    def from_dict(cls, data: dict) -> 'BatchJobEntry':
+    def from_dict(cls, data: dict) -> "BatchJobEntry":
         """Create BatchJobEntry from dictionary (JSON deserialization)."""
         return cls(**data)
 
@@ -47,12 +48,12 @@ class BatchJobEntry:
     @property
     def is_terminal(self) -> bool:
         """Check if batch is in terminal state (completed/failed/cancelled)."""
-        return self.status in ['completed', 'failed', 'cancelled']
+        return self.status in ["completed", "failed", "cancelled"]
 
     @property
     def is_in_flight(self) -> bool:
         """Check if batch is still in progress."""
-        return self.status in ['validating', 'in_progress', 'finalizing']
+        return self.status in ["validating", "in_progress", "finalizing"]
 
 
 @dataclass
@@ -62,6 +63,7 @@ class BatchRegistryStats:
 
     Used by get_overall_status() and reporting.
     """
+
     total_jobs: int
     completed: int
     failed: int
@@ -77,21 +79,22 @@ class BatchRegistryStats:
             'no_batches', 'completed', 'in_progress', 'partial_failed', 'error'
         """
         if self.total_jobs == 0:
-            return 'no_batches'
+            return "no_batches"
 
         if self.completed == self.total_jobs:
-            return 'completed'
+            return "completed"
 
         if self.failed > 0:
-            return 'partial_failed'
+            return "partial_failed"
 
         if self.in_progress > 0:
-            return 'in_progress'
+            return "in_progress"
 
-        return 'error'
+        return "error"
 
 
 # Phase 4 Models: Task Preparation
+
 
 @dataclass
 class BatchFilterResult:
@@ -104,6 +107,7 @@ class BatchFilterResult:
         reason: Reason for the filtering decision
         metadata: Additional filtering metadata
     """
+
     status: str
     should_include: bool
     reason: Optional[str] = None
@@ -124,6 +128,7 @@ class BatchTaskPreparationStats:
         skipped_items: Items skipped (WHERE clause with behavior='skip')
         error_items: Items that failed during preparation
     """
+
     total_items: int = 0
     included_items: int = 0
     filtered_items: int = 0
@@ -152,6 +157,7 @@ class PreparedBatchTasks:
         stats: Preparation statistics
         config: Agent configuration used for preparation
     """
+
     tasks: List[Dict[str, Any]]
     context_map: Dict[str, Any]
     stats: BatchTaskPreparationStats

@@ -137,7 +137,7 @@ class BatchRegistryManager:
                         parent_batch_id=entry.parent_batch_id,
                         retry_attempt=entry.retry_attempt,
                         retry_for_records=entry.retry_for_records,
-                        has_retry_batch=entry.has_retry_batch
+                        has_retry_batch=entry.has_retry_batch,
                     )
                     self._cache[file_name] = updated_entry
                     self._persist_registry(self._cache)
@@ -169,21 +169,17 @@ class BatchRegistryManager:
             self._ensure_cache_loaded()
 
             stats = BatchRegistryStats(
-                total_jobs=len(self._cache),
-                completed=0,
-                failed=0,
-                in_progress=0,
-                cancelled=0
+                total_jobs=len(self._cache), completed=0, failed=0, in_progress=0, cancelled=0
             )
 
             for entry in self._cache.values():
-                if entry.status == 'completed':
+                if entry.status == "completed":
                     stats.completed += 1
-                elif entry.status in ['failed']:
+                elif entry.status in ["failed"]:
                     stats.failed += 1
-                elif entry.status in ['validating', 'in_progress', 'finalizing']:
+                elif entry.status in ["validating", "in_progress", "finalizing"]:
                     stats.in_progress += 1
-                elif entry.status == 'cancelled':
+                elif entry.status == "cancelled":
                     stats.cancelled += 1
 
             return stats
@@ -235,14 +231,13 @@ class BatchRegistryManager:
                                 parent_batch_id=entry.parent_batch_id,
                                 retry_attempt=entry.retry_attempt,
                                 retry_for_records=entry.retry_for_records,
-                                has_retry_batch=entry.has_retry_batch
+                                has_retry_batch=entry.has_retry_batch,
                             )
                             self._cache[file_name] = updated_entry
                             cache_modified = True
                             entry = updated_entry
                     except Exception as e:
-                        logger.warning("Failed to check status for %s: %s",
-                                      entry.batch_id, e)
+                        logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
                         # Assume not complete on error
                         return False
 
@@ -287,7 +282,7 @@ class BatchRegistryManager:
             return {}
 
         try:
-            with open(self._registry_path, 'r', encoding='utf-8') as f:
+            with open(self._registry_path, "r", encoding="utf-8") as f:
                 raw_data = json.load(f)
 
             # Convert raw dict to BatchJobEntry objects
@@ -296,8 +291,7 @@ class BatchRegistryManager:
                 try:
                     registry[file_name] = BatchJobEntry.from_dict(entry_dict)
                 except (TypeError, ValueError) as e:
-                    logger.warning("Invalid entry for %s in registry: %s",
-                                  file_name, e)
+                    logger.warning("Invalid entry for %s in registry: %s", file_name, e)
                     # Skip invalid entries
                     continue
 
@@ -308,8 +302,7 @@ class BatchRegistryManager:
             logger.error("Corrupted registry file %s: %s", self._registry_path, e)
             return {}
         except Exception as e:
-            logger.error("Failed to load registry from %s: %s",
-                        self._registry_path, e)
+            logger.error("Failed to load registry from %s: %s", self._registry_path, e)
             return {}
 
     def _persist_registry(self, registry: Dict[str, BatchJobEntry]) -> None:
@@ -329,17 +322,14 @@ class BatchRegistryManager:
         ensure_directory_exists(self._registry_path, is_file=True)
 
         # Convert BatchJobEntry objects to dicts for JSON
-        raw_data = {
-            file_name: entry.to_dict()
-            for file_name, entry in registry.items()
-        }
+        raw_data = {file_name: entry.to_dict() for file_name, entry in registry.items()}
 
         # Atomic write pattern
-        tmp_path = self._registry_path.with_suffix('.json.tmp')
+        tmp_path = self._registry_path.with_suffix(".json.tmp")
 
         try:
             # Write to temp file
-            with open(tmp_path, 'w', encoding='utf-8') as f:
+            with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(raw_data, f, indent=2, ensure_ascii=False)
                 f.flush()
                 os.fsync(f.fileno())  # Force write to disk
@@ -347,8 +337,9 @@ class BatchRegistryManager:
             # Atomic rename (POSIX guarantees atomicity)
             tmp_path.replace(self._registry_path)
 
-            logger.debug("Registry persisted to %s (%d entries)",
-                        self._registry_path, len(registry))
+            logger.debug(
+                "Registry persisted to %s (%d entries)", self._registry_path, len(registry)
+            )
 
         except Exception as e:
             # Clean up temp file on error

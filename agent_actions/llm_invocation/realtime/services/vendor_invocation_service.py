@@ -14,25 +14,19 @@ from agent_actions.llm_invocation.providers.tools.vendor import ToolHandler
 
 # Vendor handler registry
 VENDOR_HANDLERS: Dict[str, Any] = {
-    'openai': OpenAIHandler,
-    'ollama': OllamaHandler,
-    'gemini': GeminiHandler,
-    'cohere': CohereHandler,
-    'mistral': MistralHandler,
-    'anthropic': ClaudeHandler,
-    'groq': GroqLlama3Handler,
-    'deepseek': DeepSeekHandler,
-    'tool': ToolHandler
+    "openai": OpenAIHandler,
+    "ollama": OllamaHandler,
+    "gemini": GeminiHandler,
+    "cohere": CohereHandler,
+    "mistral": MistralHandler,
+    "anthropic": ClaudeHandler,
+    "groq": GroqLlama3Handler,
+    "deepseek": DeepSeekHandler,
+    "tool": ToolHandler,
 }
 
 # Vendors that return single response (need wrapping in list)
-SINGLE_RESPONSE_VENDORS: set = {
-    'cohere',
-    'mistral',
-    'anthropic',
-    'groq',
-    'deepseek'
-}
+SINGLE_RESPONSE_VENDORS: set = {"cohere", "mistral", "anthropic", "groq", "deepseek"}
 
 
 class VendorInvocationService:
@@ -48,7 +42,7 @@ class VendorInvocationService:
         granularity: str,
         formatted_prompt: Optional[str] = None,
         tool_args: Optional[Dict[str, Any]] = None,
-        source_content: Optional[Any] = None
+        source_content: Optional[Any] = None,
     ) -> List[Any]:
         """
         Delegate to the specific vendor handler and normalize the response.
@@ -76,39 +70,26 @@ class VendorInvocationService:
             ValueError: If vendor is not supported
         """
         if model_vendor not in VENDOR_HANDLERS:
-            raise ValueError(f'Unsupported model vendor: {model_vendor}')
+            raise ValueError(f"Unsupported model vendor: {model_vendor}")
 
         handler = VENDOR_HANDLERS[model_vendor]
 
         # Groq vendor has special invocation signature
-        if model_vendor == 'groq':
-            response_data = handler.invoke(
-                agent_config,
-                formatted_prompt,
-                context_data,
-                schema
-            )
+        if model_vendor == "groq":
+            response_data = handler.invoke(agent_config, formatted_prompt, context_data, schema)
 
         # Tool vendor has different parameters and early return for file granularity
-        elif model_vendor == 'tool':
+        elif model_vendor == "tool":
             response_data = handler.invoke(
-                agent_config,
-                context_data,
-                tool_args=tool_args,
-                source_content=source_content
+                agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
             # Tool handler with file granularity returns immediately
-            if granularity == 'file':
+            if granularity == "file":
                 return response_data
 
         # Standard vendor invocation
         else:
-            response_data = handler.invoke(
-                agent_config,
-                prompt_config,
-                context_data,
-                schema
-            )
+            response_data = handler.invoke(agent_config, prompt_config, context_data, schema)
 
         # Single-response vendors return single item, wrap in list for consistency
         if model_vendor in SINGLE_RESPONSE_VENDORS:

@@ -29,6 +29,7 @@ class BatchProcessingContext:
     Contains all data needed for processing batch results, accumulated
     across pipeline stages.
     """
+
     # Input data
     batch_results: List[BatchResult]
     context_map: Dict[str, Any]
@@ -38,7 +39,7 @@ class BatchProcessingContext:
     # Extracted configuration
     node_idx: Optional[int] = None
     json_mode: bool = True
-    output_field: str = 'content'
+    output_field: str = "content"
 
     # Reconciliation
     reconciler: Optional[BatchResultReconciler] = None
@@ -89,7 +90,7 @@ class BatchResultProcessor:
         batch_results: List[BatchResult],
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
-        agent_config: Optional[Dict[str, Any]] = None
+        agent_config: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Process batch results through the pipeline.
@@ -119,7 +120,9 @@ class BatchResultProcessor:
 
         logger.debug(
             "Batch result processing complete: %d success, %d errors, %d passthrough",
-            ctx.success_count, ctx.error_count, ctx.passthrough_count
+            ctx.success_count,
+            ctx.error_count,
+            ctx.passthrough_count,
         )
 
         return ctx.processed_data
@@ -129,7 +132,7 @@ class BatchResultProcessor:
         batch_results: List[BatchResult],
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
-        agent_config: Optional[Dict[str, Any]]
+        agent_config: Optional[Dict[str, Any]],
     ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
@@ -143,10 +146,10 @@ class BatchResultProcessor:
 
         # Extract agent config values
         json_mode = True
-        output_field = 'content'
+        output_field = "content"
         if agent_config:
-            json_mode = agent_config.get('json_mode', True)
-            output_field = agent_config.get('output_field', 'content')
+            json_mode = agent_config.get("json_mode", True)
+            output_field = agent_config.get("output_field", "content")
 
         ctx = BatchProcessingContext(
             batch_results=batch_results,
@@ -155,11 +158,14 @@ class BatchResultProcessor:
             agent_config=agent_config,
             node_idx=node_idx,
             json_mode=json_mode,
-            output_field=output_field
+            output_field=output_field,
         )
 
-        logger.debug("Initialized processing context: %d batch results, %d context records",
-                    len(batch_results), len(context_map))
+        logger.debug(
+            "Initialized processing context: %d batch results, %d context records",
+            len(batch_results),
+            len(context_map),
+        )
 
         return ctx
 
@@ -194,18 +200,21 @@ class BatchResultProcessor:
                     logger.debug(
                         "Processed batch result item",
                         extra={
-                            'operation': 'process_batch_item',
-                            'custom_id': custom_id,
-                            'items_generated': len(items),
-                            'success': True
-                        }
+                            "operation": "process_batch_item",
+                            "custom_id": custom_id,
+                            "items_generated": len(items),
+                            "success": True,
+                        },
                     )
 
                 except Exception as e:
                     # Processing exception - create error item
                     error_item = self._create_error_item(
-                        ctx, custom_id, f'Processing error: {str(e)}',
-                        batch_result.metadata, batch_result.content
+                        ctx,
+                        custom_id,
+                        f"Processing error: {str(e)}",
+                        batch_result.metadata,
+                        batch_result.content,
                     )
                     ctx.processed_data.append(error_item)
                     ctx.error_count += 1
@@ -215,19 +224,20 @@ class BatchResultProcessor:
                     logger.debug(
                         "Batch result item processing failed",
                         extra={
-                            'operation': 'process_batch_item',
-                            'custom_id': custom_id,
-                            'success': False,
-                            'error': str(e)
-                        }
+                            "operation": "process_batch_item",
+                            "custom_id": custom_id,
+                            "success": False,
+                            "error": str(e),
+                        },
                     )
 
             else:
                 # Stage 4: Process error result
                 error_item = self._create_error_item(
-                    ctx, custom_id,
-                    batch_result.error or 'Batch processing failed',
-                    batch_result.metadata
+                    ctx,
+                    custom_id,
+                    batch_result.error or "Batch processing failed",
+                    batch_result.metadata,
                 )
                 ctx.processed_data.append(error_item)
                 ctx.error_count += 1
@@ -237,20 +247,17 @@ class BatchResultProcessor:
                 logger.debug(
                     "Batch result item had error",
                     extra={
-                        'operation': 'process_batch_item',
-                        'custom_id': custom_id,
-                        'success': False,
-                        'error': batch_result.error or 'Batch processing failed'
-                    }
+                        "operation": "process_batch_item",
+                        "custom_id": custom_id,
+                        "success": False,
+                        "error": batch_result.error or "Batch processing failed",
+                    },
                 )
 
         return ctx
 
     def _process_successful_result(
-        self,
-        ctx: BatchProcessingContext,
-        batch_result: BatchResult,
-        custom_id: str
+        self, ctx: BatchProcessingContext, batch_result: BatchResult, custom_id: str
     ) -> List[Dict[str, Any]]:
         """
         Stage 5: Build agent output from successful batch result.
@@ -289,21 +296,21 @@ class BatchResultProcessor:
         # Step 6: Add metadata, lineage, IDs to each item
         for idx, item in enumerate(structured_items):
             # Metadata
-            item['metadata'] = batch_result.metadata or {}
+            item["metadata"] = batch_result.metadata or {}
 
             # Lineage tracking (if node_idx available)
             if ctx.node_idx is not None:
                 item_node_id = IDGenerator.generate_node_id(ctx.node_idx)
-                item['node_id'] = item_node_id
-                item['lineage'] = LineageBuilder.build_lineage(original_row, item_node_id)
+                item["node_id"] = item_node_id
+                item["lineage"] = LineageBuilder.build_lineage(original_row, item_node_id)
 
             # Target ID (ensure present)
-            if 'target_id' not in item or not item['target_id']:
-                item['target_id'] = original_row.get('target_id', IDGenerator.generate_target_id())
+            if "target_id" not in item or not item["target_id"]:
+                item["target_id"] = original_row.get("target_id", IDGenerator.generate_target_id())
 
             # Source GUID (ensure present)
-            if 'source_guid' not in item or not item['source_guid']:
-                item['source_guid'] = original_source_guid
+            if "source_guid" not in item or not item["source_guid"]:
+                item["source_guid"] = original_source_guid
 
             # Loop correlation ID (if agent_config present)
             if ctx.agent_config:
@@ -320,7 +327,7 @@ class BatchResultProcessor:
         ctx: BatchProcessingContext,
         custom_id: str,
         generated_list: List[Any],
-        original_row: Dict[str, Any]
+        original_row: Dict[str, Any],
     ) -> List[Any]:
         """
         Apply context_scope.passthrough fields to generated items.
@@ -328,23 +335,29 @@ class BatchResultProcessor:
         Handles both pre-computed passthrough fields and fallback behavior.
         """
         # Check for pre-computed passthrough fields
-        stored_passthrough = ctx.context_map[custom_id].get('_passthrough_fields', {})
+        stored_passthrough = ctx.context_map[custom_id].get("_passthrough_fields", {})
 
         if stored_passthrough:
             # Use pre-computed passthrough
-            from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+            from agent_actions.utilities.context_scope.context_scope_processor import (
+                ContextScopeProcessor,
+            )
+
             generated_list = ContextScopeProcessor.merge_passthrough_fields(
                 generated_list, stored_passthrough
             )
 
-        elif ctx.agent_config.get('context_scope', {}).get('passthrough'):
+        elif ctx.agent_config.get("context_scope", {}).get("passthrough"):
             # Fallback: old behavior for backward compatibility
-            passthrough_refs = ctx.agent_config.get('context_scope', {}).get('passthrough', [])
+            passthrough_refs = ctx.agent_config.get("context_scope", {}).get("passthrough", [])
             passthrough_fields = []
 
             for field_ref in passthrough_refs:
                 try:
-                    from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+                    from agent_actions.utilities.context_scope.context_scope_processor import (
+                        ContextScopeProcessor,
+                    )
+
                     _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
                     passthrough_fields.append(field_name)
                 except ValueError:
@@ -352,12 +365,17 @@ class BatchResultProcessor:
                     passthrough_fields.append(field_ref)
 
             # Get original content
-            original_content = original_row.get('content', original_row)
+            original_content = original_row.get("content", original_row)
 
             # Merge passthrough fields
             generated_list = [
-                DataTransformer.update_schema_objects(original_content, item, passthrough_fields)
-                if isinstance(item, dict) else item
+                (
+                    DataTransformer.update_schema_objects(
+                        original_content, item, passthrough_fields
+                    )
+                    if isinstance(item, dict)
+                    else item
+                )
                 for item in generated_list
             ]
 
@@ -369,7 +387,7 @@ class BatchResultProcessor:
         custom_id: str,
         error_message: str,
         metadata: Optional[Dict[str, Any]] = None,
-        raw_content: Any = None
+        raw_content: Any = None,
     ) -> Dict[str, Any]:
         """
         Create an error item for failed batch results.
@@ -384,17 +402,17 @@ class BatchResultProcessor:
         Returns:
             Error item dict
         """
-        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or 'unknown')
+        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
         error_item = {
-            'source_guid': source_guid,
-            'error': error_message,
-            'metadata': metadata or {}
+            "source_guid": source_guid,
+            "error": error_message,
+            "metadata": metadata or {},
         }
 
         # Include raw_content for processing errors (helps debugging)
         if raw_content is not None:
-            error_item['raw_content'] = raw_content
+            error_item["raw_content"] = raw_content
 
         return error_item
 
@@ -415,12 +433,12 @@ class BatchResultProcessor:
             for custom_id, original_row in reconciliation.passthrough_records:
                 # Legacy behavior: Always use 'conditional_clause_failed' reason
                 # This ensures 'skipped_by_conditional' metadata flag (matches legacy)
-                reason = 'conditional_clause_failed'
+                reason = "conditional_clause_failed"
 
                 # Build passthrough item
                 passthrough_item = builder._build_item(original_row, reason, custom_id)
                 # Remove internal tracking field
-                passthrough_item.pop('_batch_filter_status', None)
+                passthrough_item.pop("_batch_filter_status", None)
 
                 ctx.processed_data.append(passthrough_item)
                 ctx.passthrough_count += 1
