@@ -29,9 +29,10 @@ logger = logging.getLogger(__name__)
 
 
 @registry.register_service("batch_service")
-class BatchService:
+class BatchService:  # pylint: disable=too-many-instance-attributes
     """Pure orchestrator for batch processing. Delegates to specialized services for all operations."""
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         provider: Optional[BatchProvider] = None,
@@ -87,7 +88,9 @@ class BatchService:
         )
         return prepared.tasks, prepared.context_map
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def submit_batch_job(self, agent_config, batch_name, data, output_directory=None, force=False):
+        """Submit a batch job for processing."""
         force_submission = force or self.force_batch
         if not force_submission and output_directory:
             # Check for existing in-flight batch
@@ -110,14 +113,13 @@ class BatchService:
             behavior = where_config.get("behavior", "filter")
             if behavior == "filter":
                 return {"type": "passthrough", "data": [], "output_directory": output_directory}
-            elif behavior == "skip":
+            if behavior == "skip":
                 return BatchPassthroughBuilder(output_directory).from_context(
                     context_map, reason="where_clause_not_matched"
                 )
-            else:
-                return BatchPassthroughBuilder(output_directory).from_data(
-                    data, reason="conditional_clause_failed"
-                )
+            return BatchPassthroughBuilder(output_directory).from_data(
+                data, reason="conditional_clause_failed"
+            )
 
         self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
         try:
@@ -166,6 +168,7 @@ class BatchService:
             raise ExternalServiceError(provider_type, f"Failed to submit batch job: {e}", cause=e) from e
 
     def check_status(self, batch_id: str, output_directory: str = None):
+        """Check the status of a batch job."""
         try:
             manager = self._get_registry_manager(output_directory) if output_directory else None
             provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_directory)
@@ -177,6 +180,7 @@ class BatchService:
             ) from e
 
     def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
+        """Retrieve and save results from a completed batch job."""
         try:
             manager = self._get_registry_manager(output_dir)
             provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_dir)
@@ -578,12 +582,11 @@ class BatchService:
             total_jobs = len(registry)
             if completed_count == total_jobs:
                 return "completed"
-            elif failed_count > 0:
+            if failed_count > 0:
                 return "partial_failed"
-            elif in_progress_count > 0:
+            if in_progress_count > 0:
                 return "in_progress"
-            else:
-                return "unknown"
+            return "unknown"
         except (json.JSONDecodeError, KeyError):
             return "error"
 
