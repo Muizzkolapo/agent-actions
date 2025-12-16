@@ -171,8 +171,9 @@ class BatchService:
             provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_directory)
             return provider.check_status(batch_id)
         except Exception as e:
+            vendor = getattr(provider, 'vendor_type', 'unknown') if 'provider' in locals() else 'unknown'
             raise ExternalServiceError(
-                self.vendor_type or "unknown", f"Failed to check batch status: {e}", cause=e
+                vendor, f"Failed to check batch status: {e}", cause=e
             ) from e
 
     def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
@@ -224,8 +225,9 @@ class BatchService:
                         f.write(json.dumps(raw_format) + "\n")
             return result_file
         except Exception as e:
+            vendor = getattr(provider, 'vendor_type', 'unknown') if 'provider' in locals() else 'unknown'
             raise ExternalServiceError(
-                self.vendor_type or "unknown", f"Failed to retrieve batch results: {e}", cause=e
+                vendor, f"Failed to retrieve batch results: {e}", cause=e
             ) from e
 
     def process_batch_results(
