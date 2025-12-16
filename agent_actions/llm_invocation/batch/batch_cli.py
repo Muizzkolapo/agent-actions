@@ -32,18 +32,21 @@ def status(batch_id: str = None):
         args = BatchCommandArgs(batch_id=batch_id)
         service = BatchService()
         if not args.batch_id:
-            args.batch_id = service._get_last_batch_job_id()  # pylint: disable=protected-access
+            # pylint: disable=protected-access,no-member
+            args.batch_id = service._get_last_batch_job_id()
             if not args.batch_id:
                 click.echo("No batch ID provided and no previous batch job found.")
                 return
         batch_status = service.check_status(args.batch_id)
         click.echo(f"Batch job status: {batch_status}")
     except ValidationError as e:
+        # pylint: disable=import-outside-toplevel
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch status"})
         raise click.ClickException(error_message) from e
     except Exception as e:  # pylint: disable=broad-exception-caught
+        # pylint: disable=import-outside-toplevel
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch status"})
@@ -72,18 +75,21 @@ def retrieve(batch_id: str = None, output_dir: str = "."):
         args = BatchCommandArgs(batch_id=batch_id, output_dir=output_dir)
         service = BatchService()
         if not args.batch_id:
-            args.batch_id = service._get_last_batch_job_id()  # pylint: disable=protected-access
+            # pylint: disable=protected-access,no-member
+            args.batch_id = service._get_last_batch_job_id()
             if not args.batch_id:
                 click.echo("No batch ID provided and no previous batch job found.")
                 return
         result = service.retrieve_results(args.batch_id, str(args.output_dir))
         click.echo(result)
     except ValidationError as e:
+        # pylint: disable=import-outside-toplevel
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch retrieve"})
         raise click.ClickException(error_message) from e
     except Exception as e:  # pylint: disable=broad-exception-caught
+        # pylint: disable=import-outside-toplevel
         from agent_actions.shared.user_errors import format_user_error
 
         error_message = format_user_error(e, {"command": "batch retrieve"})
