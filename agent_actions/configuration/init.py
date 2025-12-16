@@ -1,13 +1,21 @@
 """
 Module for initializing new Agent Actions projects.
 """
-from pathlib import Path
-import yaml
 import logging
-from agent_actions.utilities.constants import API_KEY_KEY, MODEL_NAME_KEY, CHUNK_CONFIG_KEY
+from pathlib import Path
+
+import yaml
+
+from agent_actions.utilities.constants import (
+    API_KEY_KEY,
+    CHUNK_CONFIG_KEY,
+    MODEL_NAME_KEY,
+)
+
 logger = logging.getLogger(__name__)
 
 class ProjectInitializer:
+    """Initialize new Agent Actions projects with standard structure."""
 
     def __init__(self, project_name: str, base_path: Path=Path.cwd()) -> None:
         """
@@ -51,6 +59,12 @@ class ProjectInitializer:
         """
         for directory in [self.project_dir, self.config_dir, self.schema_dir, self.io_dir]:
             self.create_directory(directory)
-        config_data = {'default_agent_config': {API_KEY_KEY: 'OPENAI_API_KEY', MODEL_NAME_KEY: 'gpt-3.5-turbo', CHUNK_CONFIG_KEY: {'chunk_size': 300, 'overlap': 10}}}
+        config_data = {
+            'default_agent_config': {
+                API_KEY_KEY: 'OPENAI_API_KEY',
+                MODEL_NAME_KEY: 'gpt-3.5-turbo',
+                CHUNK_CONFIG_KEY: {'chunk_size': 300, 'overlap': 10}
+            }
+        }
         self.create_file(self.config_file, yaml.dump(config_data))
-        logger.info(f'Successfully initialized project: {self.project_name}')
+        logger.info('Successfully initialized project: %s', self.project_name)

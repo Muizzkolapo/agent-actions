@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """
 Bootstrap factory for initializing the application with dependency injection.
 
@@ -6,10 +7,11 @@ with existing workflows while maintaining backward compatibility.
 """
 
 import logging
-from typing import Dict, Any, Optional
 from contextlib import contextmanager
-from agent_actions.orchestration.application_container import ApplicationContainer
+from typing import Any, Dict, Optional
+
 from agent_actions.orchestration.agent_runner import AgentRunner
+from agent_actions.orchestration.application_container import ApplicationContainer
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +43,12 @@ def application_container_context(config: Optional[Dict[str, Any]] = None):
         pass
 
 
-def create_agent_runner(config: Optional[Dict[str, Any]] = None,
-                       use_tools: bool = True,
-                       constructor_path: Optional[str] = None,
-                       default_path: Optional[str] = None) -> AgentRunner:
+def create_agent_runner(
+    config: Optional[Dict[str, Any]] = None,
+    use_tools: bool = True,
+    constructor_path: Optional[str] = None,  # pylint: disable=unused-argument
+    default_path: Optional[str] = None  # pylint: disable=unused-argument
+) -> AgentRunner:
     """
     Create an AgentRunner with proper dependency injection.
 
@@ -61,11 +65,13 @@ def create_agent_runner(config: Optional[Dict[str, Any]] = None,
         return container.get_agent_runner(use_tools)
 
 
-def create_target_content_processor(config: Optional[Dict[str, Any]] = None,
-                                  agent_config: Dict = None,
-                                  agent_name: str = None,
-                                  idx: int = None,
-                                  agent_configs: Optional[Dict[str, Dict]] = None):
+def create_target_content_processor(
+    config: Optional[Dict[str, Any]] = None,
+    agent_config: Dict = None,
+    agent_name: str = None,
+    idx: int = None,
+    agent_configs: Optional[Dict[str, Dict]] = None
+):
     """
     Create a TargetContentProcessor with proper dependency injection.
 
@@ -80,4 +86,6 @@ def create_target_content_processor(config: Optional[Dict[str, Any]] = None,
         TargetContentProcessor instance with injected dependencies
     """
     with application_container_context(config) as container:
-        return container.create_target_content_processor(agent_config, agent_name, idx, agent_configs)
+        return container.create_target_content_processor(
+            agent_config, agent_name, idx, agent_configs
+        )

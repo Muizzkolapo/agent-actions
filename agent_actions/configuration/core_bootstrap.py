@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """
 Dependency Injection Configuration for Agent Actions.
 
@@ -5,13 +6,18 @@ This module configures the DI container with all application dependencies
 based on configuration settings.
 """
 
-from typing import Dict, Any
-from agent_actions.orchestration.dependency_injection import DependencyContainer, ProcessorFactory, registry
+from typing import Any, Dict
+
 from agent_actions.configuration.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
     ISourceDataLoader,
+)
+from agent_actions.orchestration.dependency_injection import (
+    DependencyContainer,
+    ProcessorFactory,
+    registry,
 )
 
 
@@ -35,8 +41,11 @@ class DIConfigurator:
         return container
 
     @staticmethod
-    def _register_core_services(container: DependencyContainer, config: Dict[str, Any]):
+    def _register_core_services(
+        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+    ):
         """Register core application services."""
+        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
         from agent_actions.state_management.path_manager import PathManager
 
@@ -45,9 +54,12 @@ class DIConfigurator:
         container.register_singleton(BatchService, BatchService)
 
     @staticmethod
-    def _register_processors(container: DependencyContainer, config: Dict[str, Any]):
+    def _register_processors(
+        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+    ):
         """Register processor implementations."""
         # Data processors
+        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
 
@@ -55,11 +67,12 @@ class DIConfigurator:
         container.register_transient(IGenerator, DataGenerator)
 
     @staticmethod
-    def _register_utilities(container: DependencyContainer, config: Dict[str, Any]):
+    def _register_utilities(
+        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+    ):
         """Register utility services."""
         # Note: These imports may need to be updated based on the new structure
         # Temporarily commenting out to avoid import errors
-        pass
 
     @staticmethod
     def create_processor_factory(container: DependencyContainer) -> ProcessorFactory:
@@ -69,6 +82,7 @@ class DIConfigurator:
     @staticmethod
     def configure_for_testing() -> DependencyContainer:
         """Configure container for testing with mocks."""
+        # pylint: disable=import-outside-toplevel
         from unittest.mock import Mock
 
         container = DependencyContainer()
@@ -97,8 +111,9 @@ class DIConfigurator:
         container.register_factory(IGenerator, generator_factory)
 
         # Mock core services
-        from agent_actions.state_management.path_manager import PathManager
+        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
+        from agent_actions.state_management.path_manager import PathManager
 
         container.register_instance(PathManager, Mock(spec=PathManager))
         container.register_instance(BatchService, Mock(spec=BatchService))
