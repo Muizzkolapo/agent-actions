@@ -112,7 +112,7 @@ function stopPolling() {
 
 async function fetchUpdates() {
     const cacheBuster = `?v=${Date.now()}`;
-    const response = await fetch(`sample_artefact/runs.json${cacheBuster}`);
+    const response = await fetch(`artefact/runs.json${cacheBuster}`);
 
     if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
