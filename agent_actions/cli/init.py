@@ -4,16 +4,21 @@ Initialize command for the Agent Actions CLI.
 This module provides the implementation of the 'init' command,
 which handles creating new Agent Actions projects.
 """
-import click
+import shutil
 from pathlib import Path
 from typing import Optional, List
-from agent_actions.configuration.init import ProjectInitializer
-from agent_actions.validation.project_validator import ProjectValidator
-from agent_actions.errors import ValidationError, FileSystemError, ConfigurationError  # New modular pattern!
-from agent_actions.validation.init_validator import InitCommandArgs
-from agent_actions.cli.cli_decorators import handles_user_errors
 
-class InitCommand:
+import click
+
+from agent_actions.cli.cli_decorators import handles_user_errors
+from agent_actions.configuration.init import ProjectInitializer
+from agent_actions.errors import (
+    ValidationError, FileSystemError, ConfigurationError
+)  # New modular pattern!
+from agent_actions.validation.init_validator import InitCommandArgs
+from agent_actions.validation.project_validator import ProjectValidator
+
+class InitCommand:  # pylint: disable=too-few-public-methods
     """Implementation of the init command."""
 
     def __init__(self, args: InitCommandArgs):
@@ -45,26 +50,54 @@ class InitCommand:
         """
         try:
             if self.project_dir.exists() and self.args.force:
-                import shutil
                 shutil.rmtree(self.project_dir)
             self.project_dir.mkdir(exist_ok=self.args.force)
         except FileSystemError as e:
-            raise FileSystemError('Permission denied when creating project directory', context={'project_dir': str(self.project_dir), 'project_name': self.args.project_name, 'operation': '_create_project_directory'}, cause=e) from e
+            raise FileSystemError(
+                'Permission denied when creating project directory',
+                context={
+                    'project_dir': str(self.project_dir),
+                    'project_name': self.args.project_name,
+                    'operation': '_create_project_directory'
+                },
+                cause=e
+            ) from e
         except Exception as e:
-            raise ValidationError('Failed to create project directory', context={'project_dir': str(self.project_dir), 'project_name': self.args.project_name, 'operation': '_create_project_directory'}, cause=e) from e
+            raise ValidationError(
+                'Failed to create project directory',
+                context={
+                    'project_dir': str(self.project_dir),
+                    'project_name': self.args.project_name,
+                    'operation': '_create_project_directory'
+                },
+                cause=e
+            ) from e
 
     def _initialize_project(self) -> None:
         """
         Initialize the project using ProjectInitializer.
-        
+
         Raises:
             ConfigurationError: If project initialization fails.
         """
         try:
-            initializer = ProjectInitializer(project_name=self.args.project_name, project_dir=str(self.project_dir), template=self.args.template)
+            # ProjectInitializer takes project_name and base_path (parent dir)
+            initializer = ProjectInitializer(
+                project_name=self.args.project_name,
+                base_path=self.output_dir
+            )
             initializer.init_project()
         except Exception as e:
-            raise ConfigurationError('Failed to initialize project', context={'project_name': self.args.project_name, 'project_dir': str(self.project_dir), 'template': self.args.template, 'operation': '_initialize_project'}, cause=e) from e
+            raise ConfigurationError(
+                'Failed to initialize project',
+                context={
+                    'project_name': self.args.project_name,
+                    'project_dir': str(self.project_dir),
+                    'template': self.args.template,
+                    'operation': '_initialize_project'
+                },
+                cause=e
+            ) from e
 
     def execute(self) -> None:
         """
@@ -73,9 +106,22 @@ class InitCommand:
         Raises:
             Various exceptions depending on what fails.
         """
-        ProjectValidator.validate_project_name(self.args.project_name)
-        ProjectValidator.validate_project_directory(self.output_dir, self.project_dir, self.args.force)
-        ProjectValidator.validate_template(self.args.template, self._get_available_templates())
+        # Use ProjectValidator.validate() with data dict
+        validator = ProjectValidator()
+        validation_data = {
+            'project_name': self.args.project_name,
+            'output_dir': self.output_dir,
+            'project_dir': self.project_dir,
+            'template': self.args.template,
+            'available_templates': self._get_available_templates(),
+            'force': self.args.force
+        }
+        if not validator.validate(validation_data):
+            errors = validator.get_errors()
+            raise ValidationError(
+                'Project validation failed',
+                context={'errors': errors}
+            )
         self._create_project_directory()
         self._initialize_project()
         click.echo(f'Successfully initialized project: {self.args.project_name}')
@@ -86,11 +132,25 @@ class InitCommand:
 
 @click.command()
 @click.argument('project_name')
-@click.option('-o', '--output-dir', help='Directory to create the project in (default: current directory)')
-@click.option('-t', '--template', default='default', help='Template to use for project initialization')
-@click.option('-f', '--force', is_flag=True, default=False, help='Force project creation even if directory exists')
+@click.option(
+    '-o', '--output-dir',
+    help='Directory to create the project in (default: current directory)'
+)
+@click.option(
+    '-t', '--template', default='default',
+    help='Template to use for project initialization'
+)
+@click.option(
+    '-f', '--force', is_flag=True, default=False,
+    help='Force project creation even if directory exists'
+)
 @handles_user_errors('init')
-def init(project_name: str, output_dir: Optional[str]=None, template: str='default', force: bool=False) -> None:
+def init(
+    project_name: str,
+    output_dir: Optional[str]=None,
+    template: str='default',
+    force: bool=False
+) -> None:
     """
     Initialize a new Agent Actions project.
 
@@ -103,6 +163,9 @@ def init(project_name: str, output_dir: Optional[str]=None, template: str='defau
         agent-actions init my_project --template minimal
         agent-actions init my_project --output-dir /path/to/dir
     """
-    args = InitCommandArgs(project_name=project_name, output_dir=output_dir, template=template, force=force)
+    args = InitCommandArgs(
+        project_name=project_name, output_dir=output_dir,
+        template=template, force=force
+    )
     command = InitCommand(args)
     command.execute()

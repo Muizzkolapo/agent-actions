@@ -4,27 +4,28 @@ Run command for the Agent Actions CLI.
 This module provides the implementation of the 'run' command,
 which executes agent workflows based on configuration files.
 """
-import click
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
-from agent_actions.validation.prompt_validator import PromptValidator
-from agent_actions.prompt_generation.config_renderer import ConfigRenderer
-from agent_actions.cli.project_paths_factory import ProjectPathsFactory
-from agent_actions.orchestration.agent_workflow import AgentWorkflow
-from agent_actions.errors import FileLoadError  # New modular pattern!
-from agent_actions.validation.run_validator import RunCommandArgs
-from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
-from agent_actions.docs import track_workflow_run
-from agent_actions.docs.run_tracker import RunTracker
 
-class RunCommand:
+import asyncio
+import click
+
+from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
+from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.docs.run_tracker import RunTracker
+from agent_actions.errors import FileLoadError  # New modular pattern!
+from agent_actions.orchestration.agent_workflow import AgentWorkflow
+from agent_actions.prompt_generation.config_renderer import ConfigRenderer
+from agent_actions.validation.prompt_validator import PromptValidator
+from agent_actions.validation.run_validator import RunCommandArgs
+
+class RunCommand:  # pylint: disable=too-few-public-methods
     """Implementation of the run command."""
 
     def __init__(self, args: RunCommandArgs):
         """
         Initialize the run command.
-        
+
         Args:
             args: Pydantic model containing the command arguments.
         """
@@ -53,16 +54,50 @@ class RunCommand:
                     'agent_name': self.agent_name,
                     'alternatives_checked': [str(p) for p in alternatives_checked],
                     'found_alternatives': existing_alternatives if existing_alternatives else None,
-                    'suggestion': f"File not found at {full_path}. Check if the file exists or use an absolute path." +
-                                 (f" Found similar file at: {existing_alternatives[0]}" if existing_alternatives else "")
+                    'suggestion': (
+                        f"File not found at {full_path}. "
+                        f"Check if the file exists or use an absolute path."
+                        + (f" Found similar file at: {existing_alternatives[0]}"
+                           if existing_alternatives else "")
+                    )
                 }
             )
         return full_path
 
+    def _determine_execution_mode(self, workflow: AgentWorkflow) -> bool:
+        """Determine if parallel execution should be used."""
+        if hasattr(self.args, 'parallel') and self.args.parallel:
+            click.echo(
+                '🔀 Using parallel execution (forced via --parallel flag)...'
+            )
+            return True
+        if hasattr(self.args, 'no_parallel') and self.args.no_parallel:
+            click.echo(
+                'Using sequential execution (forced via --no-parallel flag)...'
+            )
+            return False
+        if workflow.action_level_orchestrator.should_use_parallel_execution():
+            click.echo('🔀 Using parallel execution (auto-detected)...')
+            return True
+
+        click.echo('Using sequential execution...')
+        return False
+
+    def _run_workflow_execution(self, workflow: AgentWorkflow, use_parallel: bool) -> None:
+        """Run the actual workflow execution."""
+        if use_parallel:
+            asyncio.run(
+                workflow.async_run(
+                    concurrency_limit=self.args.concurrency_limit
+                )
+            )
+        else:
+            workflow.run()
+
     def execute(self) -> None:
         """
         Execute the run command.
-        
+
         Raises:
             Various exceptions depending on the stage that fails
         """
@@ -73,7 +108,10 @@ class RunCommand:
         filename = f'{self.agent_name}.yml'
         full_path = self._find_config_file(paths.agent_config_dir, filename)
         click.echo('Rendering and loading configuration...')
-        ConfigRenderer.render_and_load_config(self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir)
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir,
+            paths.rendered_workflows_dir
+        )
         click.echo('Initializing agent workflow...')
         workflow = AgentWorkflow(
             constructor_path=str(full_path),
@@ -101,25 +139,9 @@ class RunCommand:
         status = 'FAILED'  # Default to failed, update on success
         error_message = None
 
-        use_parallel = False
-        if hasattr(self.args, 'parallel') and self.args.parallel:
-            use_parallel = True
-            click.echo('🔀 Using parallel execution (forced via --parallel flag)...')
-        elif hasattr(self.args, 'no_parallel') and self.args.no_parallel:
-            use_parallel = False
-            click.echo('Using sequential execution (forced via --no-parallel flag)...')
-        elif workflow.action_level_orchestrator.should_use_parallel_execution():
-            use_parallel = True
-            click.echo('🔀 Using parallel execution (auto-detected)...')
-        else:
-            click.echo('Using sequential execution...')
-
         try:
-            if use_parallel:
-                import asyncio
-                asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
-            else:
-                workflow.run()
+            use_parallel = self._determine_execution_mode(workflow)
+            self._run_workflow_execution(workflow, use_parallel)
 
             # Determine final status
             if workflow.state_manager.is_workflow_complete():
@@ -127,9 +149,12 @@ class RunCommand:
                 click.echo(f'Successfully completed agent run for: {self.args.agent}')
             else:
                 status = 'PAUSED'
-                click.echo(f'Workflow paused - batch job(s) submitted. Run again to check status and continue.')
+                click.echo(
+                    'Workflow paused - batch job(s) submitted. '
+                    'Run again to check status and continue.'
+                )
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             status = 'FAILED'
             error_message = str(e)
             raise  # Re-raise to maintain existing error handling
@@ -138,34 +163,81 @@ class RunCommand:
             # Finalize run tracking
             try:
                 tracker.finalize_workflow_run(run_id, status, error_message)
-            except Exception as track_error:
+            except Exception as track_error:  # pylint: disable=broad-exception-caught
                 # Don't fail the workflow if tracking fails
-                click.echo(f"Warning: Could not finalize workflow run tracking: {track_error}", err=True)
+                click.echo(
+                    f"Warning: Could not finalize workflow run tracking: "
+                    f"{track_error}",
+                    err=True
+                )
 
 @click.command()
-@click.option('-a', '--agent', required=True, help='Agent configuration file name without path or extension')
-@click.option('-u', '--user_code', required=False, type=click.Path(exists=True, file_okay=False, dir_okay=True), help="Path to the user's code folder containing UDFs")
+@click.option(
+    '-a', '--agent', required=True,
+    help='Agent configuration file name without path or extension'
+)
+@click.option(
+    '-u', '--user_code', required=False,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Path to the user's code folder containing UDFs"
+)
 @click.option('--use-tools', is_flag=True, help='Enable tool usage for agents')
-@click.option('--force', is_flag=True, help='Force execution even if validation warnings occur')
-@click.option('--parallel', is_flag=True, help='Force parallel execution (overrides auto-detection)')
-@click.option('--no-parallel', is_flag=True, help='Force sequential execution (overrides auto-detection)')
-@click.option('--concurrency-limit', type=int, default=5, help='Maximum number of agents to run concurrently (default: 5, range: 1-50)')
-@click.option('--upstream', is_flag=True, help='Recursively execute upstream dependent workflows')
+@click.option(
+    '--force', is_flag=True,
+    help='Force execution even if validation warnings occur'
+)
+@click.option(
+    '--parallel', is_flag=True,
+    help='Force parallel execution (overrides auto-detection)'
+)
+@click.option(
+    '--no-parallel', is_flag=True,
+    help='Force sequential execution (overrides auto-detection)'
+)
+@click.option(
+    '--concurrency-limit', type=int, default=5,
+    help='Maximum number of agents to run concurrently (default: 5, range: 1-50)'
+)
+@click.option(
+    '--upstream', is_flag=True,
+    help='Recursively execute upstream dependent workflows'
+)
 @handles_user_errors('run')
 @requires_project
-def run(agent: str, user_code: Optional[str], use_tools: bool, force: bool=False, parallel: bool=False, no_parallel: bool=False, concurrency_limit: int=5, upstream: bool=False) -> None:
+# pylint: disable=too-many-arguments,too-many-positional-arguments
+# Click decorators require explicit params
+def run(
+    agent: str,
+    user_code: Optional[str],
+    use_tools: bool,
+    force: bool=False,
+    parallel: bool=False,
+    no_parallel: bool=False,
+    concurrency_limit: int=5,
+    upstream: bool=False
+) -> None:
     """
     Run agents with a specified agent configuration.
 
     The run command executes agent workflows based on the specified configuration.
-    It handles the entire lifecycle from loading configuration to executing 
+    It handles the entire lifecycle from loading configuration to executing
     the workflow and processing results.
 
     Examples:
         agent-actions run -a my_agent
         agent-actions run -a my_agent --upstream
     """
-    # Let @handles_user_errors decorator handle all exceptions for consistent error formatting
-    args = RunCommandArgs(agent=agent, user_code=user_code, use_tools=use_tools, force=force, parallel=parallel, no_parallel=no_parallel, concurrency_limit=concurrency_limit, upstream=upstream)
+    # Let @handles_user_errors decorator handle all exceptions
+    # for consistent error formatting
+    args = RunCommandArgs(
+        agent=agent,
+        user_code=user_code,
+        use_tools=use_tools,
+        force=force,
+        parallel=parallel,
+        no_parallel=no_parallel,
+        concurrency_limit=concurrency_limit,
+        upstream=upstream
+    )
     command = RunCommand(args)
     command.execute()

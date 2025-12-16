@@ -65,7 +65,13 @@ def ensure_in_project() -> Path:
     """
     project_root = find_project_root()
     if project_root is None:
-        raise ProjectNotFoundError(marker_file=PROJECT_MARKER_FILE, search_path=os.getcwd())
+        raise ProjectNotFoundError(
+            'Project not found',
+            context={
+                'marker_file': PROJECT_MARKER_FILE,
+                'search_path': os.getcwd()
+            }
+        )
     return project_root
 
 def get_project_root_or_cwd() -> Path:

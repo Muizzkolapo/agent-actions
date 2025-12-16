@@ -1,5 +1,11 @@
+"""
+Error wrapping utilities for validation errors.
+
+This module provides decorators for wrapping exceptions.
+"""
 from functools import wraps
 from typing import Callable, Type
+
 from agent_actions.errors import ConfigurationError  # New modular pattern!
 
 def as_validation_error(exc_cls: Type[ConfigurationError]=ConfigurationError) -> Callable:
@@ -14,8 +20,6 @@ def as_validation_error(exc_cls: Type[ConfigurationError]=ConfigurationError) ->
         def _wrapper(*a, **k):
             try:
                 return fn(*a, **k)
-            except KeyboardInterrupt:
-                raise
             except Exception as exc:
                 raise exc_cls(str(exc)) from None
         return _wrapper
