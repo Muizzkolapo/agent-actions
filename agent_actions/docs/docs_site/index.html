@@ -1181,8 +1181,8 @@
         // Load both JSON files with cache-busting to ensure fresh data
         const cacheBuster = `?v=${Date.now()}`;
         Promise.all([
-            fetch(`sample_artefact/catalog.json${cacheBuster}`).then(r => r.json()),
-            fetch(`sample_artefact/runs.json${cacheBuster}`).then(r => r.json())
+            fetch(`artefact/catalog.json${cacheBuster}`).then(r => r.json()),
+            fetch(`artefact/runs.json${cacheBuster}`).then(r => r.json())
         ]).then(([catalogData, runsData]) => {
             catalog = window.catalog = catalogData;
             runs = window.runs = runsData;

@@ -346,8 +346,8 @@ class RunTracker:
 
                     # Add model info for LLM actions
                     if action_type == 'llm':
-                        action_entry['model_vendor'] = agent_config.get('model_vendor')
-                        action_entry['model_name'] = agent_config.get('model_name')
+                        action_entry['vendor'] = agent_config.get('model_vendor')
+                        action_entry['model'] = agent_config.get('model_name')
                     elif action_type == 'tool':
                         action_entry['impl'] = agent_config.get('model_name')  # For tools, model_name contains impl
 
