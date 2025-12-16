@@ -4,17 +4,19 @@ list-udfs command for the Agent Actions CLI.
 This module provides the implementation of the 'list-udfs' command,
 which displays all discovered UDFs with their metadata.
 """
-import click
 import json as json_lib
 from pathlib import Path
 from typing import List, Dict, Any
+
+import click
 from rich.console import Console
 from rich.table import Table
+
+from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.input_loading.udf_loader import discover_udfs
 from agent_actions.utilities.udf_management.udf_registry import list_udfs, clear_registry
-from agent_actions.cli.cli_decorators import handles_user_errors
 
-class ListUDFsCommand:
+class ListUDFsCommand:  # pylint: disable=too-few-public-methods
     """Implementation of the list-udfs command."""
 
     def __init__(self, user_code: str, json_output: bool, verbose: bool):
@@ -60,7 +62,12 @@ class ListUDFsCommand:
         """
         output = []
         for udf in udfs:
-            entry = {'name': udf['name'], 'module': udf['module'], 'file': udf['file'], 'signature': udf['signature']}
+            entry = {
+                'name': udf['name'],
+                'module': udf['module'],
+                'file': udf['file'],
+                'signature': udf['signature']
+            }
             if self.verbose or udf.get('docstring'):
                 entry['docstring'] = udf.get('docstring') or ''
             output.append(entry)
@@ -84,7 +91,10 @@ class ListUDFsCommand:
             docstring = udf.get('docstring') or ''
             description = docstring.split('\n')[0].strip() if docstring else ''
             if self.verbose:
-                table.add_row(udf['name'], udf['module'], udf['file'], udf['signature'], description)
+                table.add_row(
+                    udf['name'], udf['module'], udf['file'],
+                    udf['signature'], description
+                )
             else:
                 file_info = udf['file']
                 if description:
@@ -94,7 +104,11 @@ class ListUDFsCommand:
         self.console.print(f'\n[bold]Total: {len(udfs)} function(s)[/bold]')
 
 @click.command(name='list-udfs')
-@click.option('-u', '--user-code', required=True, type=click.Path(exists=True, file_okay=False, dir_okay=True), help='Path to user code directory containing UDFs')
+@click.option(
+    '-u', '--user-code', required=True,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help='Path to user code directory containing UDFs'
+)
 @click.option('--json', 'json_output', is_flag=True, help='Output as JSON for programmatic use')
 @click.option('--verbose', is_flag=True, help='Show full signatures and docstrings')
 @handles_user_errors('list-udfs')

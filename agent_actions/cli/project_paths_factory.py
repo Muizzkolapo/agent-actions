@@ -4,18 +4,22 @@ Project paths factory service.
 This module provides services for creating and validating project directory paths.
 """
 import logging
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Tuple
+
+from agent_actions.errors import (
+    DirectoryError, ValidationError, FileLoadError
+)  # New modular pattern!
 from agent_actions.io.file_handler import FileHandler
-from agent_actions.errors import DirectoryError, ValidationError, FileLoadError  # New modular pattern!
-from agent_actions.validation.path_validator import PathValidator
 from agent_actions.state_management.path_manager import PathManager, PathType
 from agent_actions.utilities.path_utils import resolve_absolute_path
+from agent_actions.validation.path_validator import PathValidator
+
 logger = logging.getLogger(__name__)
 
 @dataclass
-class ProjectPaths:
+class ProjectPaths:  # pylint: disable=too-many-instance-attributes
     """Container for project directory paths."""
     current_dir: Path
     prompt_dir: Path
@@ -29,11 +33,20 @@ class ProjectPaths:
     def to_dict(self) -> Dict[str, str]:
         """
         Convert paths to a dictionary of strings.
-        
+
         Returns:
             Dictionary of path names to string paths.
         """
-        return {'current_dir': str(self.current_dir), 'prompt_dir': str(self.prompt_dir), 'agent_config_dir': str(self.agent_config_dir), 'io_dir': str(self.io_dir), 'schema_dir': str(self.schema_dir), 'default_config_path': str(self.default_config_path), 'template_dir': str(self.template_dir), 'rendered_workflows_dir': str(self.rendered_workflows_dir)}
+        return {
+            'current_dir': str(self.current_dir),
+            'prompt_dir': str(self.prompt_dir),
+            'agent_config_dir': str(self.agent_config_dir),
+            'io_dir': str(self.io_dir),
+            'schema_dir': str(self.schema_dir),
+            'default_config_path': str(self.default_config_path),
+            'template_dir': str(self.template_dir),
+            'rendered_workflows_dir': str(self.rendered_workflows_dir)
+        }
 
     def __str__(self) -> str:
         """
@@ -69,14 +82,26 @@ class ProjectPathsFactory:
             ValidationError: If getting agent paths fails.
         """
         try:
-            agent_config_dir_str, io_dir_str, unknown_path_str = FileHandler.get_agent_paths(agent_name)
-            return (Path(agent_config_dir_str), Path(io_dir_str), Path(unknown_path_str or ''))
+            agent_config_dir_str, io_dir_str, unknown_path_str = (
+                FileHandler.get_agent_paths(agent_name)
+            )
+            return (
+                Path(agent_config_dir_str),
+                Path(io_dir_str),
+                Path(unknown_path_str or '')
+            )
         except Exception as e:
-            error_msg = f'Failed to get agent paths for {agent_name}: {str(e)}'
-            logger.error(error_msg)
-            raise ValidationError('Failed to get agent paths', context={'agent_name': agent_name, 'operation': 'get_agent_paths'}, cause=e)
+            logger.error(
+                'Failed to get agent paths for %s: %s', agent_name, str(e)
+            )
+            raise ValidationError(
+                'Failed to get agent paths',
+                context={'agent_name': agent_name, 'operation': 'get_agent_paths'},
+                cause=e
+            ) from e
 
     @classmethod
+    # pylint: disable=too-many-locals
     def create_project_paths(cls, agent_name: str, filename: str) -> ProjectPaths:
         """
         Create project paths for the given agent.
@@ -91,18 +116,33 @@ class ProjectPathsFactory:
         Raises:
             Various exceptions if validation fails.
         """
-        logger.debug(f'Creating project paths for agent: {agent_name}')
+        logger.debug('Creating project paths for agent: %s', agent_name)
         factory = cls()
         try:
             project_root = factory.path_manager.get_project_root()
-            prompt_dir = factory.path_manager.get_standard_path(PathType.PROMPT_STORE)
+            prompt_dir = factory.path_manager.get_standard_path(
+                PathType.PROMPT_STORE
+            )
             schema_dir = factory.path_manager.get_standard_path(PathType.SCHEMA)
-            template_dir = factory.path_manager.get_standard_path(PathType.TEMPLATES)
-            rendered_workflows_dir = factory.path_manager.get_standard_path(PathType.RENDERED_WORKFLOWS)
+            template_dir = factory.path_manager.get_standard_path(
+                PathType.TEMPLATES
+            )
+            rendered_workflows_dir = factory.path_manager.get_standard_path(
+                PathType.RENDERED_WORKFLOWS
+            )
             agent_config_dir, io_dir, _ = cls.get_agent_paths(agent_name)
             current_dir = resolve_absolute_path(project_root)
             default_config_path = project_root / 'agent_actions.yml'
-            paths = ProjectPaths(current_dir=current_dir, prompt_dir=prompt_dir, agent_config_dir=agent_config_dir, io_dir=io_dir, schema_dir=schema_dir, default_config_path=default_config_path, template_dir=template_dir, rendered_workflows_dir=rendered_workflows_dir)
+            paths = ProjectPaths(
+                current_dir=current_dir,
+                prompt_dir=prompt_dir,
+                agent_config_dir=agent_config_dir,
+                io_dir=io_dir,
+                schema_dir=schema_dir,
+                default_config_path=default_config_path,
+                template_dir=template_dir,
+                rendered_workflows_dir=rendered_workflows_dir
+            )
             path_validator = PathValidator()
             for dir_name in cls.REQUIRED_DIRECTORIES:
                 path = getattr(paths, dir_name)
@@ -117,7 +157,14 @@ class ProjectPathsFactory:
             logger.debug('All project paths created successfully')
             return paths
         except Exception as e:
-            logger.error(f'Failed to create project paths for agent {agent_name}: {str(e)}')
+            logger.error(
+                'Failed to create project paths for agent %s: %s',
+                agent_name, str(e)
+            )
             if isinstance(e, (DirectoryError, ValidationError, FileLoadError)):
                 raise
-            raise ValidationError('Failed to create project paths', context={'agent_name': agent_name, 'filename': filename}, cause=e)
+            raise ValidationError(
+                'Failed to create project paths',
+                context={'agent_name': agent_name, 'filename': filename},
+                cause=e
+            ) from e

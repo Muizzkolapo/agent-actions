@@ -3,10 +3,10 @@ Documentation commands for agent-actions CLI.
 
 Provides commands for generating and serving interactive workflow documentation.
 """
-import click
 import subprocess
-import sys
 from pathlib import Path
+
+import click
 
 from agent_actions.docs.generator import generate_docs
 from agent_actions.docs.server import serve_docs
@@ -15,7 +15,6 @@ from agent_actions.docs.server import serve_docs
 @click.group()
 def docs():
     """Generate and serve workflow documentation."""
-    pass
 
 
 @docs.command()
@@ -64,13 +63,13 @@ def serve(port: int):
         raise click.Abort()
 
 
-@docs.command()
-@click.option('--test', '-t', type=click.Choice(['schemas', 'actions', 'all']),
+@docs.command(name='test')
+@click.option('--test', '-t', 'test_suite', type=click.Choice(['schemas', 'actions', 'all']),
               default='all',
               help='Which test suite to run (default: all)')
 @click.option('--port', '-p', default=8890,
               help='Port where docs server is running (default: 8890)')
-def test(test: str, port: int):
+def run_tests(test_suite: str, port: int):
     """
     Run Playwright tests to verify documentation site.
 
@@ -87,10 +86,10 @@ def test(test: str, port: int):
     try:
         subprocess.run(['node', '--version'],
                       capture_output=True, check=True)
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         click.echo("❌ Error: Node.js is not installed!")
         click.echo("   Install from: https://nodejs.org/")
-        raise click.Abort()
+        raise click.Abort() from exc
 
     # Check if test files exist
     project_root = Path.cwd()
@@ -103,7 +102,7 @@ def test(test: str, port: int):
         'all': ['test-all-schemas.js', 'test-run-actions-complete.js']
     }
 
-    files_to_run = test_files.get(test, test_files['all'])
+    files_to_run = test_files.get(test_suite, test_files['all'])
 
     # Check if test files exist
     missing_files = [f for f in files_to_run if not (test_dir / f).exists()]
@@ -114,13 +113,13 @@ def test(test: str, port: int):
         raise click.Abort()
 
     # Run each test file
-    click.echo(f"\n🧪 Running {test} tests against http://localhost:{port}\n")
+    click.echo(f"\n🧪 Running {test_suite} tests against http://localhost:{port}\n")
 
     failed = []
     for test_file in files_to_run:
         click.echo(f"▶️  Running {test_file}...")
         try:
-            result = subprocess.run(
+            subprocess.run(
                 ['node', str(test_dir / test_file)],
                 capture_output=False,
                 check=True
@@ -133,8 +132,7 @@ def test(test: str, port: int):
     if failed:
         click.echo(f"\n❌ {len(failed)} test(s) failed: {', '.join(failed)}")
         raise click.Abort()
-    else:
-        click.echo(f"\n✅ All tests passed!")
+    click.echo("\n✅ All tests passed!")
 
 
 @docs.command()

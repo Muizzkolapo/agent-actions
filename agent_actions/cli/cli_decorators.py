@@ -68,6 +68,7 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                 # Don't double-wrap ClickExceptions - pass through unchanged
                 raise
             except Exception as e:
+                # pylint: disable=import-outside-toplevel
                 from agent_actions.shared.user_errors import format_user_error
                 # Merge command context with extra context and all kwargs
                 context = {

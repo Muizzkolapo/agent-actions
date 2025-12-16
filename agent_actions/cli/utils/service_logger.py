@@ -11,16 +11,22 @@ from pathlib import Path
 
 class ServiceLogger:
     """Utility class for service logging."""
-    
+
     @staticmethod
-    def log_operation_start(logger: logging.Logger, operation: str, user_facing: bool = False, **context: Any) -> None:
+    def log_operation_start(
+        logger: logging.Logger,
+        operation: str,
+        user_facing: bool = False,
+        **context: Any
+    ) -> None:
         """
         Log the start of an operation.
 
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
-            user_facing: Whether this is a user-facing operation (INFO) or internal (DEBUG). Default False.
+            user_facing: Whether this is a user-facing operation (INFO)
+                or internal (DEBUG). Default False.
             **context: Additional context to log.
         """
         log_func = logger.info if user_facing else logger.debug
@@ -28,16 +34,22 @@ class ServiceLogger:
             'operation': operation,
             **context
         })
-    
+
     @staticmethod
-    def log_operation_success(logger: logging.Logger, operation: str, user_facing: bool = False, **context: Any) -> None:
+    def log_operation_success(
+        logger: logging.Logger,
+        operation: str,
+        user_facing: bool = False,
+        **context: Any
+    ) -> None:
         """
         Log the successful completion of an operation.
 
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
-            user_facing: Whether this is a user-facing operation (INFO) or internal (DEBUG). Default False.
+            user_facing: Whether this is a user-facing operation (INFO)
+                or internal (DEBUG). Default False.
             **context: Additional context to log.
         """
         log_func = logger.info if user_facing else logger.debug
@@ -45,7 +57,7 @@ class ServiceLogger:
             'operation': operation,
             **context
         })
-    
+
     @staticmethod
     def log_operation_error(
         logger: logging.Logger,
@@ -55,7 +67,7 @@ class ServiceLogger:
     ) -> None:
         """
         Log an error that occurred during an operation.
-        
+
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
@@ -67,12 +79,16 @@ class ServiceLogger:
             'error': str(error),
             **context
         }, exc_info=True)
-    
+
     @staticmethod
-    def log_validation_start(logger: logging.Logger, target: str, **context: Any) -> None:
+    def log_validation_start(
+        logger: logging.Logger,
+        target: str,
+        **context: Any
+    ) -> None:
         """
         Log the start of a validation operation.
-        
+
         Args:
             logger: Logger instance to use.
             target: Name of the target being validated.
@@ -82,12 +98,16 @@ class ServiceLogger:
             'target': target,
             **context
         })
-    
+
     @staticmethod
-    def log_validation_success(logger: logging.Logger, target: str, **context: Any) -> None:
+    def log_validation_success(
+        logger: logging.Logger,
+        target: str,
+        **context: Any
+    ) -> None:
         """
         Log the successful completion of a validation operation.
-        
+
         Args:
             logger: Logger instance to use.
             target: Name of the target that was validated.
@@ -97,7 +117,7 @@ class ServiceLogger:
             'target': target,
             **context
         })
-    
+
     @staticmethod
     def log_validation_error(
         logger: logging.Logger,
@@ -107,7 +127,7 @@ class ServiceLogger:
     ) -> None:
         """
         Log an error that occurred during validation.
-        
+
         Args:
             logger: Logger instance to use.
             target: Name of the target being validated.
@@ -119,12 +139,16 @@ class ServiceLogger:
             'error': str(error),
             **context
         }, exc_info=True)
-    
+
     @staticmethod
-    def log_file_operation(logger: logging.Logger, operation: str, path: Path) -> None:
+    def log_file_operation(
+        logger: logging.Logger,
+        operation: str,
+        path: Path
+    ) -> None:
         """
         Log a file operation.
-        
+
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
@@ -134,7 +158,7 @@ class ServiceLogger:
             'operation': operation,
             'path': str(path)
         })
-    
+
     @staticmethod
     def log_config_operation(
         logger: logging.Logger,
@@ -143,7 +167,7 @@ class ServiceLogger:
     ) -> None:
         """
         Log a configuration operation.
-        
+
         Args:
             logger: Logger instance to use.
             operation: Name of the operation.
@@ -152,4 +176,4 @@ class ServiceLogger:
         logger.debug(f"{operation} configuration", extra={
             'operation': operation,
             'config_data': config_data
-        }) 
+        })
