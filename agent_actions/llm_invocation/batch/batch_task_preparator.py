@@ -23,7 +23,7 @@ from agent_actions.llm_invocation.batch.batch_models import (
 logger = logging.getLogger(__name__)
 
 
-class BatchTaskPreparator:
+class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
     """
     Prepares batch tasks from raw data.
 
@@ -55,7 +55,8 @@ class BatchTaskPreparator:
         Initialize task preparator.
 
         Args:
-            filter_service: Optional filter service (defaults to global) - DEPRECATED, use where_clause_handler
+            filter_service: Optional filter service (defaults to global) - DEPRECATED,
+                use where_clause_handler
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
             where_clause_handler: Optional WHERE clause handler (defaults to global)
@@ -65,6 +66,7 @@ class BatchTaskPreparator:
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
+    # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     def prepare_tasks(
         self,
         agent_config: Dict[str, Any],
@@ -106,6 +108,7 @@ class BatchTaskPreparator:
 
         # 2. Setup context
         _ = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
+        # pylint: disable=import-outside-toplevel
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
@@ -161,6 +164,7 @@ class BatchTaskPreparator:
             tasks=final_tasks, context_map=context_map_builder, stats=stats, config=agent_config
         )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _process_single_item(
         self,
         row: Dict[str, Any],
@@ -219,7 +223,7 @@ class BatchTaskPreparator:
 
         # 8. Prepare prompt for this item
         return self._prepare_single_task(
-            row=row,
+            _row=row,
             row_content=row_content,
             custom_id=custom_id,
             agent_config=agent_config,
@@ -229,9 +233,10 @@ class BatchTaskPreparator:
             context_map_builder=context_map_builder,
         )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _prepare_single_task(
         self,
-        row: Dict[str, Any],
+        _row: Dict[str, Any],
         row_content: Any,
         custom_id: str,
         agent_config: Dict[str, Any],
@@ -241,6 +246,7 @@ class BatchTaskPreparator:
         context_map_builder: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Prepare a single batch task using PromptPreparationService."""
+        # pylint: disable=import-outside-toplevel
         from agent_actions.prompt_generation.prompt_preparation_service import (
             PromptPreparationService,
         )
@@ -288,6 +294,7 @@ class BatchTaskPreparator:
             return self.where_clause_handler
 
         # Create handler with filter service
+        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.filtering.where_clause_handler import (
             get_where_clause_handler,
         )
@@ -311,6 +318,7 @@ class BatchTaskPreparator:
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
         """Prepare and compile schema for provider (resolves schema references from registry)."""
+        # pylint: disable=import-outside-toplevel
         from agent_actions.response_processing.schema_change import prepare_schema_unified
         from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 
@@ -330,6 +338,7 @@ class BatchTaskPreparator:
         if self.filter_service:
             return self.filter_service
         # Fall back to global filter service
+        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
         return get_filter_service()
