@@ -272,10 +272,6 @@ class BatchResultReconciler:
             received_count: Number of results received from batch API
             file_name: Optional file name for better labeling (preferred over batch_id)
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         if expected_count == 0:
             return
 
