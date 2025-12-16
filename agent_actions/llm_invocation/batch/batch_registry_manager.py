@@ -236,7 +236,8 @@ class BatchRegistryManager:
                             self._cache[file_name] = updated_entry
                             cache_modified = True
                             entry = updated_entry
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        # Catch all exceptions to avoid one status check failure from breaking workflow
                         logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
                         # Assume not complete on error
                         return False
@@ -301,7 +302,8 @@ class BatchRegistryManager:
         except json.JSONDecodeError as e:
             logger.error("Corrupted registry file %s: %s", self._registry_path, e)
             return {}
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
+            # Catch all exceptions to gracefully handle file system errors
             logger.error("Failed to load registry from %s: %s", self._registry_path, e)
             return {}
 
