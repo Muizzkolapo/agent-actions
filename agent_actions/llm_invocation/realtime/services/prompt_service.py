@@ -8,10 +8,7 @@ class PromptService:
     """Handles prompt loading and preparation for agents."""
 
     @staticmethod
-    def prepare_prompt(
-        agent_config: Dict[str, Any],
-        formatted_prompt: Optional[str]
-    ) -> str:
+    def prepare_prompt(agent_config: Dict[str, Any], formatted_prompt: Optional[str]) -> str:
         """
         Return an actual prompt string.
 
@@ -30,11 +27,12 @@ class PromptService:
             Prepared prompt string
         """
         import warnings
+
         warnings.warn(
             "PromptService.prepare_prompt() is deprecated. "
             "Use PromptPreparationService.prepare_prompt_with_context() instead.",
             DeprecationWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
         if formatted_prompt is not None:
@@ -45,9 +43,7 @@ class PromptService:
 
     @staticmethod
     def debug_print_prompt(
-        agent_config: Dict[str, Any],
-        prompt_config: str,
-        context_data: str = ''
+        agent_config: Dict[str, Any], prompt_config: str, context_data: str = ""
     ) -> None:
         """
         Print prompt for debugging if enabled.
@@ -57,13 +53,13 @@ class PromptService:
             prompt_config: The prompt to display
             context_data: Context data preview (optional)
         """
-        if agent_config.get('prompt_debug', False):
-            divider = '=' * 50
-            print(f'\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}')
+        if agent_config.get("prompt_debug", False):
+            divider = "=" * 50
+            print(f"\n{divider}\nDEBUG MODE: Prompt being sent to the agent\n{divider}")
             print(prompt_config)
 
             if context_data:
-                print('\n[Context Data Preview]\n' + '-' * 50)
+                print("\n[Context Data Preview]\n" + "-" * 50)
                 print(context_data)
 
-            print(f'{divider}\n')
+            print(f"{divider}\n")

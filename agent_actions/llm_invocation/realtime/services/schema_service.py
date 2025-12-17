@@ -8,10 +8,7 @@ class SchemaService:
     """Handles schema preparation for agents."""
 
     @staticmethod
-    def prepare_schema(
-        agent_config: Dict[str, Any],
-        model_vendor: str
-    ) -> Optional[Dict[str, Any]]:
+    def prepare_schema(agent_config: Dict[str, Any], model_vendor: str) -> Optional[Dict[str, Any]]:
         """
         Prepare schema for the given vendor.
 

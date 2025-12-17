@@ -22,6 +22,7 @@ class BatchReconciliationResult:
         missing_ids: Set of custom_ids that were expected but not processed
         passthrough_records: List of (custom_id, original_row) tuples that need passthrough
     """
+
     processed_ids: Set[str]
     missing_ids: Set[str]
     passthrough_records: List[Tuple[str, Dict[str, Any]]]
@@ -48,7 +49,7 @@ class BatchResultReconciler:
 
         # Handle missing records
         if result.missing_ids:
-            logger.warning(f"Missing {len(result.missing_ids)} records")
+            logger.warning("Missing %s records", len(result.missing_ids))
 
         # Create passthrough for unprocessed records
         for custom_id, original_row in result.passthrough_records:
@@ -89,7 +90,7 @@ class BatchResultReconciler:
         expected_ids = {
             str(custom_id)
             for custom_id, original_row in self.context_map.items()
-            if original_row.get('_batch_filter_status', 'included') == 'included'
+            if original_row.get("_batch_filter_status", "included") == "included"
         }
         return expected_ids
 
@@ -126,14 +127,14 @@ class BatchResultReconciler:
             if custom_id in self._processed_ids:
                 continue
 
-            filter_status = original_row.get('_batch_filter_status', 'included')
+            filter_status = original_row.get("_batch_filter_status", "included")
 
             # Skip filtered records (they should not appear in output)
-            if filter_status == 'filtered':
+            if filter_status == "filtered":
                 continue
 
             # Include skipped and included (but missing) records
-            if filter_status in ['skipped', 'included']:
+            if filter_status in ["skipped", "included"]:
                 passthrough_records.append((custom_id, original_row))
 
         return passthrough_records
@@ -154,7 +155,7 @@ class BatchResultReconciler:
         if missing_ids:
             logger.info(
                 "Missing %d records in batch results. Continuing with available data.",
-                len(missing_ids)
+                len(missing_ids),
             )
             logger.debug("Missing custom_ids: %s", sorted(missing_ids))
 
@@ -163,7 +164,7 @@ class BatchResultReconciler:
         return BatchReconciliationResult(
             processed_ids=self._processed_ids.copy(),
             missing_ids=missing_ids,
-            passthrough_records=passthrough_records
+            passthrough_records=passthrough_records,
         )
 
     def get_record_by_id(self, custom_id: str) -> Dict[str, Any]:
@@ -190,7 +191,7 @@ class BatchResultReconciler:
             Source GUID for the record
         """
         original_row = self.get_record_by_id(custom_id)
-        return original_row.get('source_guid', fallback or custom_id)
+        return original_row.get("source_guid", fallback or custom_id)
 
     def get_record_index(self, custom_id: str) -> int:
         """
@@ -227,7 +228,7 @@ class BatchResultReconciler:
         return {
             str(custom_id)
             for custom_id, original_row in (context_map or {}).items()
-            if original_row.get('_batch_filter_status', 'included') == 'included'
+            if original_row.get("_batch_filter_status", "included") == "included"
         }
 
     @staticmethod
@@ -246,22 +247,18 @@ class BatchResultReconciler:
         """
         result_ids: set = set()
         for batch_result in batch_results or []:
-            custom_id = getattr(batch_result, 'custom_id', None)
+            custom_id = getattr(batch_result, "custom_id", None)
             if not custom_id:
                 continue
             custom_id_str = str(custom_id)
-            if custom_id_str.startswith('error_line_'):
+            if custom_id_str.startswith("error_line_"):
                 continue
             result_ids.add(custom_id_str)
         return result_ids
 
     @staticmethod
     def log_batch_reconciliation(
-        *,
-        batch_id: str,
-        expected_count: int,
-        received_count: int,
-        file_name: Optional[str] = None
+        *, batch_id: str, expected_count: int, received_count: int, file_name: Optional[str] = None
     ) -> None:
         """
         Log batch reconciliation status with visual indicators.
@@ -275,20 +272,21 @@ class BatchResultReconciler:
             received_count: Number of results received from batch API
             file_name: Optional file name for better labeling (preferred over batch_id)
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         if expected_count == 0:
             return
 
         label = file_name or batch_id
         if expected_count == received_count:
             logger.info(
-                'Batch reconciliation for %s: expected %d result(s), received %d',
-                label, expected_count, received_count
+                "Batch reconciliation for %s: expected %d result(s), received %d",
+                label,
+                expected_count,
+                received_count,
             )
         else:
             logger.warning(
-                'Batch reconciliation for %s: expected %d result(s), received %d',
-                label, expected_count, received_count
+                "Batch reconciliation for %s: expected %d result(s), received %d",
+                label,
+                expected_count,
+                received_count,
             )

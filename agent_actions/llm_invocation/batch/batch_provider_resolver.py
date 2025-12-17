@@ -25,7 +25,11 @@ class BatchProviderResolver:
         provider2 = resolver.get_for_batch_id('batch_123', output_dir, registry_manager)
     """
 
-    def __init__(self, provider_cache: Optional[Dict[str, BatchProvider]] = None, default_provider: Optional[BatchProvider] = None):
+    def __init__(
+        self,
+        provider_cache: Optional[Dict[str, BatchProvider]] = None,
+        default_provider: Optional[BatchProvider] = None,
+    ):
         """
         Initialize provider resolver.
 
@@ -49,34 +53,38 @@ class BatchProviderResolver:
         Raises:
             ConfigurationError: If config is invalid or provider creation fails
         """
-        required_fields = ['model_vendor', 'model_name', 'api_key']
+        required_fields = ["model_vendor", "model_name", "api_key"]
         missing = [f for f in required_fields if not agent_config.get(f)]
         if missing:
             raise ConfigurationError(
                 f"Batch service received incomplete config (missing: {', '.join(missing)})",
                 context={
-                    'missing_fields': missing,
-                    'agent_type': agent_config.get('agent_type', 'unknown'),
-                    'hint': 'Caller must resolve config hierarchy (project → workflow → action) before calling batch service'
-                }
+                    "missing_fields": missing,
+                    "agent_type": agent_config.get("agent_type", "unknown"),
+                    "hint": (
+                        "Caller must resolve config hierarchy "
+                        "(project → workflow → action) before calling batch service"
+                    ),
+                },
             )
 
-        provider_type = agent_config.get('model_vendor')
+        provider_type = agent_config.get("model_vendor")
         if not provider_type:
             raise ConfigValidationError(
-                'model_vendor',
-                "Missing required field 'model_vendor' for batch processing. Specify the LLM provider (e.g., openai, anthropic, gemini)."
+                "model_vendor",
+                "Missing required field 'model_vendor' for batch processing. "
+                "Specify the LLM provider (e.g., openai, anthropic, gemini).",
             )
 
         provider_type = provider_type.lower()
 
-        if provider_type == 'tool':
+        if provider_type == "tool":
             raise ConfigurationError(
                 "'tool' vendor does not support batch processing",
                 context={
-                    'provider_type': provider_type,
-                    'supported_vendors': ['openai', 'gemini', 'anthropic']
-                }
+                    "provider_type": provider_type,
+                    "supported_vendors": ["openai", "gemini", "anthropic"],
+                },
             )
 
         # Check cache
@@ -86,10 +94,10 @@ class BatchProviderResolver:
         # Create new provider
         try:
             provider_config = {}
-            if provider_type == 'gemini' and agent_config.get('google_api_key'):
-                provider_config['api_key'] = agent_config['google_api_key']
-            elif provider_type == 'openai' and agent_config.get('openai_api_key'):
-                provider_config['api_key'] = agent_config['openai_api_key']
+            if provider_type == "gemini" and agent_config.get("google_api_key"):
+                provider_config["api_key"] = agent_config["google_api_key"]
+            elif provider_type == "openai" and agent_config.get("openai_api_key"):
+                provider_config["api_key"] = agent_config["openai_api_key"]
 
             provider = BatchProviderFactory.create_provider(provider_type, provider_config)
 
@@ -97,8 +105,8 @@ class BatchProviderResolver:
             is_valid, error_msg = provider.validate_config(agent_config)
             if not is_valid:
                 raise ConfigurationError(
-                    'Provider configuration validation failed',
-                    context={'provider_type': provider_type, 'error_message': error_msg}
+                    "Provider configuration validation failed",
+                    context={"provider_type": provider_type, "error_message": error_msg},
                 )
 
             # Cache and return
@@ -107,12 +115,14 @@ class BatchProviderResolver:
 
         except Exception as e:
             raise ConfigurationError(
-                f'Failed to create provider for batch_provider_{provider_type}: {e}',
-                context={'provider_type': provider_type},
-                cause=e
-            )
+                f"Failed to create provider for batch_provider_{provider_type}: {e}",
+                context={"provider_type": provider_type},
+                cause=e,
+            ) from e
 
-    def get_for_batch_id(self, batch_id: str, registry_manager, output_directory: Optional[str] = None) -> BatchProvider:
+    def get_for_batch_id(
+        self, batch_id: str, registry_manager, output_directory: Optional[str] = None
+    ) -> BatchProvider:
         """
         Get the provider that was used for a specific batch ID.
 
@@ -122,7 +132,8 @@ class BatchProviderResolver:
         Args:
             batch_id: The batch job ID
             registry_manager: BatchRegistryManager instance to lookup batch info
-            output_directory: Output directory (for compatibility, can be None if registry_manager provided)
+            output_directory: Output directory (for compatibility, can be None if
+                registry_manager provided)
 
         Returns:
             BatchProvider instance
@@ -139,15 +150,15 @@ class BatchProviderResolver:
                 # Check cache
                 if provider_type in self._provider_cache:
                     return self._provider_cache[provider_type]
-                else:
-                    # Create new provider (will not be cached)
-                    return BatchProviderFactory.create_provider(provider_type)
+
+                # Create new provider (will not be cached)
+                return BatchProviderFactory.create_provider(provider_type)
 
         # Fallback to default provider if available
         if self._default_provider:
             return self._default_provider
 
         raise ConfigurationError(
-            f'Cannot determine provider for batch_id {batch_id}',
-            context={'batch_id': batch_id, 'output_directory': output_directory}
+            f"Cannot determine provider for batch_id {batch_id}",
+            context={"batch_id": batch_id, "output_directory": output_directory},
         )

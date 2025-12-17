@@ -19,6 +19,7 @@ Usage Pattern:
         if tokens:
             track_action_tokens(tokens)
 """
+
 import threading
 from typing import Dict, Optional
 
@@ -71,7 +72,7 @@ def get_last_usage() -> Optional[Dict[str, int]]:
                 tokens=tokens
             )
     """
-    return getattr(_thread_local, 'last_usage', None)
+    return getattr(_thread_local, "last_usage", None)
 
 
 def clear_usage() -> None:
@@ -88,5 +89,5 @@ def clear_usage() -> None:
         # Run test
         # Verify results
     """
-    if hasattr(_thread_local, 'last_usage'):
-        delattr(_thread_local, 'last_usage')
+    if hasattr(_thread_local, "last_usage"):
+        delattr(_thread_local, "last_usage")

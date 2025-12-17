@@ -42,8 +42,8 @@ class BatchSideOutputHandler:
         """
         main_output, side_output = ([], [])
         for item in items:
-            content = item.get('content', {})
-            if isinstance(content, dict) and content.get('side_output', False):
+            content = item.get("content", {})
+            if isinstance(content, dict) and content.get("side_output", False):
                 side_output.append(item)
             else:
                 main_output.append(item)
@@ -61,18 +61,19 @@ class BatchSideOutputHandler:
         ensure_directory_exists(file_path, is_file=True)
         existing = []
         if file_path.exists():
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 try:
                     existing = json.load(f)
                 except json.JSONDecodeError as e:
                     logger.warning(
                         "Corrupted side output file %s, starting fresh: %s",
-                        file_path, e,
+                        file_path,
+                        e,
                         extra={
-                            'file_path': str(file_path),
-                            'operation': 'side_output_load',
-                            'error_position': f'line {e.lineno}, col {e.colno}'
-                        }
+                            "file_path": str(file_path),
+                            "operation": "side_output_load",
+                            "error_position": f"line {e.lineno}, col {e.colno}",
+                        },
                     )
                     existing = []
         if not isinstance(existing, list):
@@ -80,5 +81,5 @@ class BatchSideOutputHandler:
         if not isinstance(data, list):
             data = [data]
         existing.extend(data)
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=4)

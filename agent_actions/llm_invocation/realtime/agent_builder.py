@@ -15,7 +15,7 @@ from .services import (
     ContextService,
     SchemaService,
     VendorInvocationService,
-    InterceptorService
+    InterceptorService,
 )
 
 
@@ -28,7 +28,7 @@ def create_dynamic_agent(
     tool_args: Optional[Dict[str, Any]] = None,
     source_content: Optional[Any] = None,
     additional_context: Optional[Dict] = None,
-    original_context: Optional[Union[str, Dict]] = None
+    original_context: Optional[Union[str, Dict]] = None,
 ) -> List[Any]:
     """
     Build and execute a prompt against the selected vendor.
@@ -55,7 +55,7 @@ def create_dynamic_agent(
         List of response items from the LLM
     """
     # If interceptors configured, use interceptor service
-    interceptor_configs = agent_config.get('interceptors', [])
+    interceptor_configs = agent_config.get("interceptors", [])
     if interceptor_configs:
         return InterceptorService.execute_with_interceptors(
             agent_config,
@@ -67,7 +67,7 @@ def create_dynamic_agent(
             source_content,
             interceptor_configs,
             additional_context,
-            original_context
+            original_context,
         )
 
     # Standard (non-interceptor) agent execution
@@ -92,20 +92,17 @@ def create_dynamic_agent(
     # Setup tools_path for sys.path (still needed for function imports)
     if not tools_path:
         from agent_actions.utilities.tools_resolver import resolve_tools_path
+
         tools_path = resolve_tools_path(agent_config)
     if tools_path and tools_path not in sys.path:
         sys.path.insert(0, tools_path)
 
     # Get model vendor and check if tool
-    model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or '').lower()
-    is_tool = model_vendor == 'tool'
+    model_vendor = (agent_config.get(MODEL_VENDOR_KEY) or "").lower()
+    is_tool = model_vendor == "tool"
 
     # Prepare context data (critical: preserve context separation)
-    context_data = ContextService.prepare_context_data(
-        context_data_str,
-        original_context,
-        is_tool
-    )
+    context_data = ContextService.prepare_context_data(context_data_str, original_context, is_tool)
 
     # Note: dispatch_task() injection now happens in PromptPreparationService
     # No need to call inject_function_outputs_into_prompt here anymore
@@ -115,8 +112,9 @@ def create_dynamic_agent(
     # Append additional_context if provided (context_scope.observe fields)
     if additional_context:
         from agent_actions.utilities.context_scope.context_scope_processor import (
-            ContextScopeProcessor
+            ContextScopeProcessor,
         )
+
         context_msg = ContextScopeProcessor.format_llm_context(additional_context)
         if context_msg:
             prompt_config = f"{prompt_config}\n\n{context_msg}"
@@ -125,15 +123,18 @@ def create_dynamic_agent(
     PromptService.debug_print_prompt(
         agent_config,
         prompt_config,
-        context_data if isinstance(context_data, str)
-        else json.dumps(context_data, ensure_ascii=False)
+        (
+            context_data
+            if isinstance(context_data, str)
+            else json.dumps(context_data, ensure_ascii=False)
+        ),
     )
 
     # Prepare schema
     schema = SchemaService.prepare_schema(agent_config, model_vendor)
 
     # Get granularity
-    granularity = (agent_config.get('granularity') or 'record').lower()
+    granularity = (agent_config.get("granularity") or "record").lower()
 
     # Invoke vendor
     response_data = VendorInvocationService.invoke_vendor(
@@ -145,7 +146,7 @@ def create_dynamic_agent(
         granularity,
         formatted_prompt,
         tool_args,
-        source_content
+        source_content,
     )
 
     # Merge captured results if any

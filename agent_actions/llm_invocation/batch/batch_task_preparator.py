@@ -17,13 +17,13 @@ from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
-    BatchTaskPreparationStats
+    BatchTaskPreparationStats,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class BatchTaskPreparator:
+class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
     """
     Prepares batch tasks from raw data.
 
@@ -49,13 +49,14 @@ class BatchTaskPreparator:
         filter_service=None,
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
-        where_clause_handler: Optional[WhereClauseHandler] = None
+        where_clause_handler: Optional[WhereClauseHandler] = None,
     ):
         """
         Initialize task preparator.
 
         Args:
-            filter_service: Optional filter service (defaults to global) - DEPRECATED, use where_clause_handler
+            filter_service: Optional filter service (defaults to global) - DEPRECATED,
+                use where_clause_handler
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
             where_clause_handler: Optional WHERE clause handler (defaults to global)
@@ -65,13 +66,14 @@ class BatchTaskPreparator:
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
+    # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     def prepare_tasks(
         self,
         agent_config: Dict[str, Any],
         data: List[Dict[str, Any]],
         provider,
         output_directory: Optional[str] = None,
-        batch_name: Optional[str] = None
+        batch_name: Optional[str] = None,
     ) -> PreparedBatchTasks:
         """
         Prepare batch tasks from raw data.
@@ -98,15 +100,17 @@ class BatchTaskPreparator:
                 "agent_config is None in batch task preparation. "
                 "This usually means the agent is not defined in the workflow configuration or "
                 "the configuration failed to load properly. Please check your workflow YAML file.",
-                context={'batch_name': batch_name, 'output_directory': output_directory}
+                context={"batch_name": batch_name, "output_directory": output_directory},
             )
 
         # 1. Validate configuration
         self._validate_config(agent_config, provider)
 
         # 2. Setup context
-        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
+        _ = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
+        # pylint: disable=import-outside-toplevel
         from agent_actions.utilities.tools_resolver import resolve_tools_path
+
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
@@ -114,8 +118,8 @@ class BatchTaskPreparator:
         where_clause_handler = self._get_where_clause_handler()
 
         # 4. Extract filter configuration
-        conditional_clause = agent_config.get('conditional_clause', '')
-        where_clause_config = agent_config.get('where_clause')
+        conditional_clause = agent_config.get("conditional_clause", "")
+        where_clause_config = agent_config.get("where_clause")
 
         # 5. Prepare schema
         schema = self._prepare_schema(agent_config, provider)
@@ -138,30 +142,29 @@ class BatchTaskPreparator:
                     batch_name=batch_name,
                     tools_path=tools_path,
                     context_map_builder=context_map_builder,
-                    stats=stats
+                    stats=stats,
                 )
 
                 if result:
                     tasks_builder.append(result)
                     stats.included_items += 1
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught
+                # Catch all exceptions to avoid one bad row stopping entire batch
                 logger.debug("Failed to prepare task for row: %s", e, exc_info=True)
                 stats.error_items += 1
 
         # 8. Finalize tasks with provider
         provider_config = agent_config.copy()
-        provider_config['compiled_schema'] = schema
+        provider_config["compiled_schema"] = schema
         final_tasks = provider.prepare_tasks(tasks_builder, provider_config)
 
         # 9. Return immutable result
         return PreparedBatchTasks(
-            tasks=final_tasks,
-            context_map=context_map_builder,
-            stats=stats,
-            config=agent_config
+            tasks=final_tasks, context_map=context_map_builder, stats=stats, config=agent_config
         )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _process_single_item(
         self,
         row: Dict[str, Any],
@@ -173,7 +176,7 @@ class BatchTaskPreparator:
         batch_name: Optional[str],
         tools_path: Optional[str],
         context_map_builder: Dict[str, Any],
-        stats: BatchTaskPreparationStats
+        stats: BatchTaskPreparationStats,
     ) -> Optional[Dict[str, Any]]:
         """
         Process a single data item.
@@ -182,36 +185,36 @@ class BatchTaskPreparator:
         Updates context_map_builder and stats as side effects.
         """
         # 1. Generate target_id if missing
-        custom_id = row.get('target_id')
+        custom_id = row.get("target_id")
         if not custom_id:
             custom_id = IDGenerator.generate_target_id()
-            row['target_id'] = custom_id
+            row["target_id"] = custom_id
 
         # 2. Store row in context map with initial status
         row_with_meta = row.copy()
-        row_with_meta['_batch_filter_status'] = 'included'
+        row_with_meta["_batch_filter_status"] = "included"
         context_map_builder[custom_id] = row_with_meta
 
         # 3. Extract row content for filtering
-        if 'source_guid' in row and 'content' in row:
-            row_content = row['content']
+        if "source_guid" in row and "content" in row:
+            row_content = row["content"]
         else:
             row_content = row
 
         # 4. Apply filtering using unified WhereClauseHandler
         should_include, status = where_clause_handler.filter_single_item(
-            {'content': row_content} if 'content' in row else row,
+            {"content": row_content} if "content" in row else row,
             where_clause_config,
-            conditional_clause if conditional_clause else None
+            conditional_clause if conditional_clause else None,
         )
 
         # 5. Update context map with filter status
-        context_map_builder[custom_id]['_batch_filter_status'] = status
+        context_map_builder[custom_id]["_batch_filter_status"] = status
 
         # 6. Update stats based on filter result
-        if status == 'filtered':
+        if status == "filtered":
             stats.filtered_items += 1
-        elif status == 'skipped':
+        elif status == "skipped":
             stats.skipped_items += 1
 
         # 7. Skip if not included
@@ -220,31 +223,35 @@ class BatchTaskPreparator:
 
         # 8. Prepare prompt for this item
         return self._prepare_single_task(
-            row=row,
+            _row=row,
             row_content=row_content,
             custom_id=custom_id,
             agent_config=agent_config,
             output_directory=output_directory,
             batch_name=batch_name,
             tools_path=tools_path,
-            context_map_builder=context_map_builder
+            context_map_builder=context_map_builder,
         )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _prepare_single_task(
         self,
-        row: Dict[str, Any],
+        _row: Dict[str, Any],
         row_content: Any,
         custom_id: str,
         agent_config: Dict[str, Any],
         output_directory: Optional[str],
         batch_name: Optional[str],
         tools_path: Optional[str],
-        context_map_builder: Dict[str, Any]
+        context_map_builder: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Prepare a single batch task using PromptPreparationService."""
-        from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.prompt_generation.prompt_preparation_service import (
+            PromptPreparationService,
+        )
 
-        agent_name = agent_config.get('agent_type', agent_config.get('name', 'unknown'))
+        agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
 
         # Construct file path for history
         file_path_for_history = None
@@ -256,24 +263,24 @@ class BatchTaskPreparator:
             agent_config=agent_config,
             agent_name=agent_name,
             contents=row_content if isinstance(row_content, dict) else {},
-            mode='batch',
+            mode="batch",
             agent_indices=self.agent_indices,
             dependency_configs=self.dependency_configs,
             current_item=context_map_builder.get(custom_id),
             file_path=file_path_for_history,
-            tools_path=tools_path
+            tools_path=tools_path,
         )
 
         # Store passthrough_fields for later merging
         if prep_result.passthrough_fields and custom_id in context_map_builder:
-            context_map_builder[custom_id]['_passthrough_fields'] = prep_result.passthrough_fields
+            context_map_builder[custom_id]["_passthrough_fields"] = prep_result.passthrough_fields
 
         # Create and return task
         cleaned_row = prep_result.llm_context
         return {
-            'target_id': custom_id,
-            'content': cleaned_row,
-            'prompt': prep_result.formatted_prompt
+            "target_id": custom_id,
+            "content": cleaned_row,
+            "prompt": prep_result.formatted_prompt,
         }
 
     def _get_where_clause_handler(self) -> WhereClauseHandler:
@@ -287,7 +294,11 @@ class BatchTaskPreparator:
             return self.where_clause_handler
 
         # Create handler with filter service
-        from agent_actions.preprocessing.filtering.where_clause_handler import get_where_clause_handler
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.preprocessing.filtering.where_clause_handler import (
+            get_where_clause_handler,
+        )
+
         return get_where_clause_handler()
 
     def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
@@ -297,22 +308,23 @@ class BatchTaskPreparator:
 
         if not schema and json_mode:
             raise ConfigurationError(
-                'Schema is required for batch processing when json_mode is enabled',
+                "Schema is required for batch processing when json_mode is enabled",
                 context={
-                    'agent_config': agent_config.get('agent_type', 'unknown'),
-                    'json_mode': json_mode,
-                    'hint': 'Either provide a schema or set json_mode: false'
-                }
+                    "agent_config": agent_config.get("agent_type", "unknown"),
+                    "json_mode": json_mode,
+                    "hint": "Either provide a schema or set json_mode: false",
+                },
             )
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
         """Prepare and compile schema for provider (resolves schema references from registry)."""
+        # pylint: disable=import-outside-toplevel
         from agent_actions.response_processing.schema_change import prepare_schema_unified
         from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 
-        vendor = agent_config.get(MODEL_VENDOR_KEY, '').lower()
+        vendor = agent_config.get(MODEL_VENDOR_KEY, "").lower()
         if not vendor:
-            vendor = type(provider).__name__.replace('BatchProvider', '').lower()
+            vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
         return prepare_schema_unified(agent_config, vendor)
 
@@ -326,5 +338,7 @@ class BatchTaskPreparator:
         if self.filter_service:
             return self.filter_service
         # Fall back to global filter service
+        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.filtering.filter_service import get_filter_service
+
         return get_filter_service()

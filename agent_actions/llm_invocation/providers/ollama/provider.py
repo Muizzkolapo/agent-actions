@@ -36,12 +36,13 @@ class OllamaLocalBatchProvider(BatchProvider):
             base_url: Ollama server URL (default: http://localhost:11434)
         """
         import os
+
         self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
         self.client = Client(host=self.base_url)
 
-    def format_task_for_provider(self,
-                                batch_task: BatchTask,
-                                schema: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def format_task_for_provider(
+        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Format task as OpenAI-compatible JSONL (for consistency).
         """
@@ -50,8 +51,8 @@ class OllamaLocalBatchProvider(BatchProvider):
             "model": model_name,
             "messages": [
                 {"role": "system", "content": batch_task.prompt},
-                {"role": "user", "content": batch_task.user_content}
-            ]
+                {"role": "user", "content": batch_task.user_content},
+            ],
         }
 
         # Add optional parameters
@@ -65,16 +66,13 @@ class OllamaLocalBatchProvider(BatchProvider):
 
         # Add schema if provided
         if schema:
-            body["response_format"] = {
-                "type": "json_schema",
-                "json_schema": schema
-            }
+            body["response_format"] = {"type": "json_schema", "json_schema": schema}
 
         return {
             "custom_id": batch_task.custom_id,
             "method": "POST",
             "url": "/v1/chat/completions",
-            "body": body
+            "body": body,
         }
 
     def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
@@ -104,10 +102,12 @@ class OllamaLocalBatchProvider(BatchProvider):
         return {
             "model": response_body.get("model"),
             "finish_reason": response_body.get("choices", [{}])[0].get("finish_reason"),
-            "status_code": response_data.get("status_code")
+            "status_code": response_data.get("status_code"),
         }
 
-    def _extract_usage_from_response(self, raw_response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _extract_usage_from_response(
+        self, raw_response: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """Extract usage from Ollama response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
@@ -115,13 +115,15 @@ class OllamaLocalBatchProvider(BatchProvider):
 
     def _get_default_model(self) -> str:
         """Return Ollama's default model."""
-        return 'llama2'
+        return "llama2"
 
     def _get_default_temperature(self) -> float:
         """Return Ollama's default temperature. Ollama defaults to 1.0, not 0.1."""
         return 1.0
 
-    def _prepare_batch_input_file(self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str) -> Path:
+    def _prepare_batch_input_file(
+        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+    ) -> Path:
         """Write tasks to JSONL file for Ollama."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
@@ -132,7 +134,7 @@ class OllamaLocalBatchProvider(BatchProvider):
 
         # Read tasks from input file
         tasks = []
-        with open(input_file, 'r') as f:
+        with open(input_file, 'r', encoding='utf-8') as f:
             for line in f:
                 if line.strip():
                     tasks.append(json.loads(line))
@@ -153,7 +155,9 @@ class OllamaLocalBatchProvider(BatchProvider):
 
                 # Build options dict
                 options = {
-                    "temperature": body.get("temperature") if body.get("temperature") is not None else 1.0
+                    "temperature": (
+                        body.get("temperature") if body.get("temperature") is not None else 1.0
+                    )
                 }
                 max_tokens = body.get("max_tokens")
                 if max_tokens is not None:
@@ -168,17 +172,12 @@ class OllamaLocalBatchProvider(BatchProvider):
 
                 # Call Ollama
                 ollama_response = self.client.chat(
-                    model=model,
-                    messages=messages,
-                    options=options,
-                    format=format_param
+                    model=model, messages=messages, options=options, format=format_param
                 )
 
                 # Transform to OpenAI format
                 openai_response = self._transform_ollama_response(
-                    ollama_response,
-                    task["custom_id"],
-                    model
+                    ollama_response, task["custom_id"], model
                 )
 
                 results.append(openai_response)
@@ -189,11 +188,7 @@ class OllamaLocalBatchProvider(BatchProvider):
                 error_response = {
                     "custom_id": task["custom_id"],
                     "response": None,
-                    "error": {
-                        "message": str(e),
-                        "type": "ollama_error",
-                        "code": "inference_error"
-                    }
+                    "error": {"message": str(e), "type": "ollama_error", "code": "inference_error"},
                 }
                 results.append(error_response)
                 failed += 1
@@ -202,15 +197,15 @@ class OllamaLocalBatchProvider(BatchProvider):
         batch_dir = input_file.parent
         output_file_path = batch_dir / f"{batch_id}_results.jsonl"
 
-        with open(output_file_path, 'w') as f:
+        with open(output_file_path, 'w', encoding='utf-8') as f:
             for result in results:
-                f.write(json.dumps(result) + '\n')
+                f.write(json.dumps(result) + "\n")
 
         print(f"Ollama batch output file: {output_file_path}")
         print(f"Batch completed: {completed} succeeded, {failed} failed")
 
         # Return 'submitted' to mimic async providers
-        return (batch_id, 'submitted')
+        return (batch_id, "submitted")
 
     def _fetch_status(self, batch_id: str) -> str:
         """Fetch raw status. Ollama processes synchronously, so always completed."""
@@ -220,7 +215,9 @@ class OllamaLocalBatchProvider(BatchProvider):
         """Ollama statuses are already in standard format."""
         return raw_status
 
-    def retrieve_results(self, batch_id: str, output_directory: Optional[str] = None) -> List[BatchResult]:
+    def retrieve_results(
+        self, batch_id: str, output_directory: Optional[str] = None
+    ) -> List[BatchResult]:
         """
         Retrieve results from output JSONL file.
 
@@ -239,10 +236,7 @@ class OllamaLocalBatchProvider(BatchProvider):
         """Not used by Ollama (overrides retrieve_results)."""
         raise NotImplementedError("Ollama uses custom file-based retrieve_results()")
 
-    def _transform_ollama_response(self,
-                                   ollama_response: dict,
-                                   custom_id: str,
-                                   model: str) -> dict:
+    def _transform_ollama_response(self, ollama_response: dict, custom_id: str, model: str) -> dict:
         """
         Transform Ollama response to OpenAI batch output format.
 
@@ -290,24 +284,26 @@ class OllamaLocalBatchProvider(BatchProvider):
                     "object": "chat.completion",
                     "created": int(time.time()),
                     "model": model,
-                    "choices": [{
-                        "index": 0,
-                        "message": {
-                            "role": ollama_response["message"]["role"],
-                            "content": ollama_response["message"]["content"]
-                        },
-                        "finish_reason": "stop" if ollama_response.get("done") else "length"
-                    }],
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": ollama_response["message"]["role"],
+                                "content": ollama_response["message"]["content"],
+                            },
+                            "finish_reason": "stop" if ollama_response.get("done") else "length",
+                        }
+                    ],
                     "usage": {
                         "prompt_tokens": ollama_response.get("prompt_eval_count", 0),
                         "completion_tokens": ollama_response.get("eval_count", 0),
                         "total_tokens": (
-                            ollama_response.get("prompt_eval_count", 0) +
-                            ollama_response.get("eval_count", 0)
-                        )
+                            ollama_response.get("prompt_eval_count", 0)
+                            + ollama_response.get("eval_count", 0)
+                        ),
                     },
-                    "system_fingerprint": None
-                }
+                    "system_fingerprint": None,
+                },
             },
-            "error": None
+            "error": None,
         }

@@ -18,6 +18,7 @@ Flow:
 
 This allows us to add new providers without changing the core workflow logic.
 """
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
@@ -25,18 +26,22 @@ from pathlib import Path
 import json
 from agent_actions.utilities.retry import retry
 
+
 @dataclass
 class BatchTask:
     """Provider-agnostic representation of a batch task."""
+
     custom_id: str
     prompt: str
     user_content: str
     model_config: Dict[str, Any]
     metadata: Optional[Dict[str, Any]] = None
 
+
 @dataclass
 class BatchResult:
     """Provider-agnostic representation of a batch result."""
+
     custom_id: str
     content: Any
     success: bool
@@ -44,15 +49,18 @@ class BatchResult:
     metadata: Optional[Dict[str, Any]] = None
     usage: Optional[Dict[str, Any]] = None
 
+
 class BatchProvider(ABC):
     """
     Abstract base class for batch processing providers.
-    
+
     This interface defines the contract that all batch providers must implement
     to integrate with the agent-actions batch processing system.
     """
 
-    def prepare_tasks(self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def prepare_tasks(
+        self, data: List[Dict[str, Any]], agent_config: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         """
         Convert agent-actions data format to provider-specific task format (Template Method).
 
@@ -67,20 +75,20 @@ class BatchProvider(ABC):
             List of provider-specific task dictionaries ready for submission
         """
         tasks = []
-        json_mode = agent_config.get('json_mode', True)
-        schema = agent_config.get('compiled_schema') if json_mode else None
+        json_mode = agent_config.get("json_mode", True)
+        schema = agent_config.get("compiled_schema") if json_mode else None
 
         for row in data:
             batch_task = BatchTask(
-                custom_id=row.get('target_id', row.get('id', '')),
-                prompt=row.get('prompt', agent_config.get('prompt', '')),
-                user_content=json.dumps(row.get('content', row)),
+                custom_id=row.get("target_id", row.get("id", "")),
+                prompt=row.get("prompt", agent_config.get("prompt", "")),
+                user_content=json.dumps(row.get("content", row)),
                 model_config={
-                    'model_name': agent_config.get('model_name', self._get_default_model()),
-                    'temperature': agent_config.get('temperature', self._get_default_temperature()),
-                    'max_tokens': agent_config.get('max_tokens')
+                    "model_name": agent_config.get("model_name", self._get_default_model()),
+                    "temperature": agent_config.get("temperature", self._get_default_temperature()),
+                    "max_tokens": agent_config.get("max_tokens"),
                 },
-                metadata=row
+                metadata=row,
             )
             provider_task = self.format_task_for_provider(batch_task, schema)
             tasks.append(provider_task)
@@ -111,23 +119,25 @@ class BatchProvider(ABC):
         return 0.1
 
     @abstractmethod
-    def format_task_for_provider(self, batch_task: BatchTask, schema: Optional[Dict[str, Any]]=None) -> Dict[str, Any]:
+    def format_task_for_provider(
+        self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """
         Transform standardized BatchTask to provider-specific format.
-        
+
         This method handles the conversion from our internal representation
         to whatever format the provider's API expects.
-        
+
         Args:
             batch_task: Standardized BatchTask object
             schema: Optional compiled schema for structured output
-            
+
         Returns:
             Provider-specific task dictionary
-            
+
         Example:
             BatchTask(custom_id="123", prompt="...", user_content="...")
-            
+
             OpenAI expects:
             {
                 "custom_id": "123",
@@ -135,7 +145,7 @@ class BatchProvider(ABC):
                 "url": "/v1/chat/completions",
                 "body": {"messages": [...]}
             }
-            
+
             Another provider might expect:
             {
                 "id": "123",
@@ -147,7 +157,9 @@ class BatchProvider(ABC):
         """
         pass
 
-    def submit_batch(self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str]=None) -> Tuple[str, str]:
+    def submit_batch(
+        self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str] = None
+    ) -> Tuple[str, str]:
         """
         Submit a batch job to the provider (Template Method).
 
@@ -171,11 +183,12 @@ class BatchProvider(ABC):
             - initial_status: Initial status from provider (e.g., 'in_progress', 'completed', 'submitted')
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
-        logger.info(f'Submitting batch with {len(tasks)} tasks to {self.__class__.__name__}...')
+        logger.info("Submitting batch with {len(tasks)} tasks to %s...", self.__class__.__name__)
         return self._submit_to_provider_api(input_file, batch_name)
 
     def check_status(self, batch_id: str) -> str:
@@ -192,13 +205,14 @@ class BatchProvider(ABC):
             Normalized status string (e.g., 'validating', 'in_progress', 'completed', 'failed')
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         try:
             raw_status = self._fetch_status(batch_id)
             return self._normalize_status(raw_status)
         except Exception as e:
-            logger.error(f"Error checking batch {batch_id}: {e}")
+            logger.error("Error checking batch {batch_id}: %s", e)
             raise
 
     @abstractmethod
@@ -232,7 +246,9 @@ class BatchProvider(ABC):
         """
         pass
 
-    def retrieve_results(self, batch_id: str, output_directory: Optional[str]=None) -> List[BatchResult]:
+    def retrieve_results(
+        self, batch_id: str, output_directory: Optional[str] = None
+    ) -> List[BatchResult]:
         """
         Retrieve and parse results from a completed batch job (Template Method).
 
@@ -253,11 +269,12 @@ class BatchProvider(ABC):
             List of BatchResult objects containing the processed results
         """
         import logging
+
         logger = logging.getLogger(__name__)
 
         # Fetch raw results with retry
-        logger.info(f'Retrieving results for batch {batch_id}...')
-        
+        logger.info("Retrieving results for batch %s...", batch_id)
+
         @retry(max_attempts=3, delay=2.0)
         def _fetch_safe():
             return self._fetch_raw_results(batch_id)
@@ -272,7 +289,7 @@ class BatchProvider(ABC):
         else:
             # Parse from memory
             batch_results = []
-            lines = raw_results.decode('utf-8').strip().split('\n')
+            lines = raw_results.decode("utf-8").strip().split("\n")
             for line_num, line in enumerate(lines, 1):
                 if line.strip():
                     try:
@@ -280,14 +297,16 @@ class BatchProvider(ABC):
                         batch_result = self.parse_provider_response(raw_result)
                         batch_results.append(batch_result)
                     except json.JSONDecodeError as e:
-                        logger.error(f'JSON parsing error on line {line_num}: {e}')
-                        batch_results.append(BatchResult(
-                            custom_id=f'error_line_{line_num}',
-                            content=None,
-                            success=False,
-                            error=f'JSON parsing error: {e}',
-                            metadata={'line_number': line_num, 'raw_line': line[:500]}
-                        ))
+                        logger.error("JSON parsing error on line {line_num}: %s", e)
+                        batch_results.append(
+                            BatchResult(
+                                custom_id=f"error_line_{line_num}",
+                                content=None,
+                                success=False,
+                                error=f"JSON parsing error: {e}",
+                                metadata={"line_number": line_num, "raw_line": line[:500]},
+                            )
+                        )
             return batch_results
 
     def parse_provider_response(self, raw_response: Any) -> BatchResult:
@@ -323,12 +342,7 @@ class BatchProvider(ABC):
         # Check for errors first
         error = self._extract_error_from_response(raw_response)
         if error:
-            return BatchResult(
-                custom_id=custom_id,
-                content=None,
-                success=False,
-                error=error
-            )
+            return BatchResult(custom_id=custom_id, content=None, success=False, error=error)
 
         # Extract successful response data
         content = self._extract_content_from_response(raw_response)
@@ -346,7 +360,7 @@ class BatchProvider(ABC):
             success=True,
             error=None,
             metadata=metadata,
-            usage=usage
+            usage=usage,
         )
 
     def _extract_custom_id(self, raw_response: Any) -> str:
@@ -362,7 +376,7 @@ class BatchProvider(ABC):
         Returns:
             Custom ID string, or 'unknown' if not found
         """
-        return self._get_attribute_or_key(raw_response, 'custom_id', 'unknown')
+        return self._get_attribute_or_key(raw_response, "custom_id", "unknown")
 
     @abstractmethod
     def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
@@ -445,7 +459,7 @@ class BatchProvider(ABC):
     def get_supported_models(self) -> List[str]:
         """
         Get list of model names supported by this provider.
-        
+
         Returns:
             List of supported model names
         """
@@ -468,11 +482,13 @@ class BatchProvider(ABC):
             Tuple of (is_valid, error_message)
         """
         if not agent_config:
-            return (False, 'agent_config is required')
+            return (False, "agent_config is required")
 
         return self._validate_provider_specific_config(agent_config)
 
-    def _validate_provider_specific_config(self, agent_config: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
+    def _validate_provider_specific_config(
+        self, agent_config: Dict[str, Any]
+    ) -> Tuple[bool, Optional[str]]:
         """
         Perform provider-specific configuration validation.
 
@@ -487,7 +503,7 @@ class BatchProvider(ABC):
         """
         return (True, None)
 
-    def _get_batch_directory(self, output_directory: Optional[str]=None) -> Path:
+    def _get_batch_directory(self, output_directory: Optional[str] = None) -> Path:
         """
         Get or create the batch directory.
 
@@ -500,14 +516,17 @@ class BatchProvider(ABC):
             Path to batch directory
         """
         from agent_actions.utilities.path_utils import ensure_directory_exists
+
         if output_directory:
-            batch_dir = Path(output_directory) / 'batch'
+            batch_dir = Path(output_directory) / "batch"
         else:
-            batch_dir = Path.cwd() / 'batch'
+            batch_dir = Path.cwd() / "batch"
         ensure_directory_exists(batch_dir)
         return batch_dir
 
-    def _write_jsonl_file(self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str, provider_name: str) -> Path:
+    def _write_jsonl_file(
+        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str, provider_name: str
+    ) -> Path:
         """
         Write tasks to JSONL file.
 
@@ -522,12 +541,12 @@ class BatchProvider(ABC):
         Returns:
             Path to created file
         """
-        file_name = f'{Path(batch_name).stem}_{provider_name}_batch_input.jsonl'
+        file_name = f"{Path(batch_name).stem}_{provider_name}_batch_input.jsonl"
         file_path = batch_dir / file_name
-        with open(file_path, 'w') as file:
+        with open(file_path, 'w', encoding='utf-8') as file:
             for task in tasks:
-                file.write(json.dumps(task) + '\n')
-        print(f'{provider_name.title()} batch input file: {file_path}')
+                file.write(json.dumps(task) + "\n")
+        print(f"{provider_name.title()} batch input file: {file_path}")
         return file_path
 
     def _read_jsonl_file(self, file_path: Path) -> List[BatchResult]:
@@ -544,9 +563,14 @@ class BatchProvider(ABC):
         """
         if not file_path.exists():
             from agent_actions.errors import VendorAPIError  # New modular pattern!
-            raise VendorAPIError(vendor=self.__class__.__name__, endpoint='retrieve_results', context={'message': 'Batch output file not found', 'expected_path': str(file_path)})
+
+            raise VendorAPIError(
+                vendor=self.__class__.__name__,
+                endpoint="retrieve_results",
+                context={"message": "Batch output file not found", "expected_path": str(file_path)},
+            )
         batch_results = []
-        with open(file_path, 'r') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             for line_num, line in enumerate(f, 1):
                 if line.strip():
                     try:
@@ -554,11 +578,21 @@ class BatchProvider(ABC):
                         batch_result = self.parse_provider_response(raw_result)
                         batch_results.append(batch_result)
                     except json.JSONDecodeError as e:
-                        print(f'[ERROR] JSON parsing error on line {line_num}: {e}')
-                        batch_results.append(BatchResult(custom_id=f'error_line_{line_num}', content=None, success=False, error=f'JSON parsing error: {e}', metadata={'line_number': line_num, 'raw_line': line[:100]}))
+                        print(f"[ERROR] JSON parsing error on line {line_num}: {e}")
+                        batch_results.append(
+                            BatchResult(
+                                custom_id=f"error_line_{line_num}",
+                                content=None,
+                                success=False,
+                                error=f"JSON parsing error: {e}",
+                                metadata={"line_number": line_num, "raw_line": line[:100]},
+                            )
+                        )
         return batch_results
 
-    def _add_optional_param(self, target: Dict[str, Any], key: str, value: Any, default: Any=None) -> None:
+    def _add_optional_param(
+        self, target: Dict[str, Any], key: str, value: Any, default: Any = None
+    ) -> None:
         """
         Add parameter to target dict only if value is not None.
 
@@ -595,7 +629,6 @@ class BatchProvider(ABC):
         except json.JSONDecodeError:
             return content_str
 
-
     def _get_attribute_or_key(self, obj: Any, key: str, default: Any = None) -> Any:
         """
         Get value from object attribute or dict key.
@@ -617,7 +650,9 @@ class BatchProvider(ABC):
             return obj.get(key, default)
         return default
 
-    def _write_results_to_file(self, batch_id: str, raw_results: bytes, output_directory: Optional[str] = None) -> Path:
+    def _write_results_to_file(
+        self, batch_id: str, raw_results: bytes, output_directory: Optional[str] = None
+    ) -> Path:
         """
         Write raw results to JSONL file.
 
@@ -635,10 +670,10 @@ class BatchProvider(ABC):
         result_file_name = self._get_result_file_name(batch_id)
         result_file_path = batch_dir / result_file_name
 
-        with open(result_file_path, 'wb') as f:
+        with open(result_file_path, "wb") as f:
             f.write(raw_results)
 
-        print(f'Saved raw results to: {result_file_path}')
+        print(f"Saved raw results to: {result_file_path}")
         return result_file_path
 
     @abstractmethod
@@ -672,7 +707,9 @@ class BatchProvider(ABC):
         pass
 
     @abstractmethod
-    def _prepare_batch_input_file(self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str) -> Path:
+    def _prepare_batch_input_file(
+        self, tasks: List[Dict[str, Any]], batch_dir: Path, batch_name: str
+    ) -> Path:
         """
         Prepare batch input file.
 

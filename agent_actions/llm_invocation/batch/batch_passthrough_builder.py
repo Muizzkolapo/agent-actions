@@ -13,7 +13,7 @@ from typing import Dict, List, Optional, Any
 from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 
 # Import the constant from batch_service (or define here if needed)
-NODE_DIRECTORY_PATTERN = r'node_(\d+)_(\w+)'
+NODE_DIRECTORY_PATTERN = r"node_(\d+)_(\w+)"
 
 
 class BatchPassthroughBuilder:
@@ -84,9 +84,9 @@ class BatchPassthroughBuilder:
             processed_data.append(item)
 
         return {
-            'type': 'passthrough',
-            'data': processed_data,
-            'output_directory': self.output_directory
+            "type": "passthrough",
+            "data": processed_data,
+            "output_directory": self.output_directory,
         }
 
     def from_context(self, context_map: Dict[str, Any], reason: str) -> Dict[str, Any]:
@@ -105,22 +105,23 @@ class BatchPassthroughBuilder:
         """
         processed_data = []
         for custom_id, original_row in context_map.items():
-            filter_status = original_row.get('_batch_filter_status', 'included')
-            if filter_status == 'skipped':
+            filter_status = original_row.get("_batch_filter_status", "included")
+            if filter_status == "skipped":
                 # Use custom_id as fallback for target_id
                 item = self._build_item(original_row, reason, custom_id)
                 # Remove internal tracking field
-                item.pop('_batch_filter_status', None)
+                item.pop("_batch_filter_status", None)
                 processed_data.append(item)
 
         return {
-            'type': 'passthrough',
-            'data': processed_data,
-            'output_directory': self.output_directory
+            "type": "passthrough",
+            "data": processed_data,
+            "output_directory": self.output_directory,
         }
 
-    def _build_item(self, row: Dict[str, Any], reason: str,
-                    custom_id: Optional[str] = None) -> Dict[str, Any]:
+    def _build_item(
+        self, row: Dict[str, Any], reason: str, custom_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Build a single passthrough item using unified PassthroughItemBuilder.
 
@@ -140,7 +141,7 @@ class BatchPassthroughBuilder:
             row=row,
             reason=reason,
             idx=self.node_idx if self.node_idx is not None else 0,
-            source_guid=row.get('source_guid'),
+            source_guid=row.get("source_guid"),
             custom_id=custom_id,
-            mode='batch'
+            mode="batch",
         )
