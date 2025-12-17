@@ -46,12 +46,21 @@ class StringProcessor:
         """
         try:
             args = [arg.strip().strip('\'"') for arg in call_args.split(',')]
-            function_name = args[0]
+            full_function_name = args[0]
             function_args = args[1:]
+            
+            if '.' in full_function_name:
+                module_name, function_name = full_function_name.rsplit('.', 1)
+            else:
+                module_name = full_function_name
+                function_name = full_function_name
+
             if tools_path and tools_path not in sys.path:
                 sys.path.insert(0, str(Path(tools_path).resolve()))
-            module = importlib.import_module(function_name)
+            
+            module = importlib.import_module(module_name)
             function = getattr(module, function_name)
+            
             if context_data_str:
                 result = function(context_data_str, *function_args)
             else:

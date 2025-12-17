@@ -1,5 +1,7 @@
-from typing import Tuple, Dict, Any, Optional
+from typing import Tuple, Dict, Any, Optional, Union
+import json
 import logging
+from agent_actions.prompt_generation.prompt_utils import PromptUtils
 logger = logging.getLogger(__name__)
 
 def _convert_json_schema_to_unified(json_schema: Dict[str, Any]) -> Dict[str, Any]:
@@ -155,7 +157,59 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
         raise ConfigValidationError('target_system', f'Unknown target system: {target}', context={'target_system': target, 'valid_systems': ['openai', 'anthropic', 'gemini', 'ollama'], 'operation': 'compile_unified_schema'})
     return compiled
 
-def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optional[Dict[str, Any]]:
+
+def _inject_functions_into_schema(
+    schema: Any,
+    tools_path: Optional[str],
+    context_data_str: Optional[str],
+    agent_config: Optional[Dict[str, Any]],
+    captured_results: Dict[str, Any]
+) -> Any:
+    """
+    Recursively traverse schema and replace dispatch_task() calls.
+
+    Args:
+        schema: The schema object (dict, list, or primitive)
+        tools_path: Path to tools directory
+        context_data_str: Context data for functions
+        agent_config: Agent configuration
+        captured_results: Dictionary to collect function outputs (add_dispatch)
+
+    Returns:
+        The processed schema with function outputs injected
+    """
+    if isinstance(schema, dict):
+        return {
+            k: _inject_functions_into_schema(v, tools_path, context_data_str, agent_config, captured_results)
+            for k, v in schema.items()
+        }
+    elif isinstance(schema, list):
+        return [
+            _inject_functions_into_schema(item, tools_path, context_data_str, agent_config, captured_results)
+            for item in schema
+        ]
+    elif isinstance(schema, str):
+        # Only process strings containing dispatch_task
+        if 'dispatch_task(' in schema:
+            return PromptUtils.process_dispatch_in_text(
+                schema,
+                tools_path=tools_path,
+                context_data_str=context_data_str,
+                agent_config=agent_config,
+                captured_results=captured_results,
+                preserve_type_on_exact_match=True
+            )
+        return schema
+    else:
+        return schema
+
+
+def prepare_schema_unified(
+    agent_config: Dict[str, Any],
+    vendor: str,
+    tools_path: Optional[str] = None,
+    context_data: Optional[Union[Dict, str]] = None
+) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
     """
     Unified schema preparation for both online and batch modes.
 
@@ -166,12 +220,13 @@ def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optiona
     Args:
         agent_config: Agent configuration dictionary containing schema settings
         vendor: Vendor name (e.g., 'openai', 'anthropic', 'gemini', 'ollama')
+        tools_path: Path to tools directory (optional, for dispatch_task)
+        context_data: Context data for dispatch_task (optional)
 
     Returns:
-        Compiled schema in vendor-specific format, or None if:
-        - No schema is configured
-        - Vendor is 'tool' (special case)
-        - Vendor doesn't support schema validation
+        Tuple containing:
+        1. Compiled schema in vendor-specific format (or None)
+        2. Captured results from dispatch_task (if add_dispatch is enabled)
 
     Side Effects:
         Logs a WARNING if schema is requested but vendor doesn't support it
@@ -179,19 +234,73 @@ def prepare_schema_unified(agent_config: Dict[str, Any], vendor: str) -> Optiona
     from agent_actions.utilities.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
     from agent_actions.response_processing.schema_loader import SchemaLoader
     from agent_actions.errors import ConfigValidationError  # New modular pattern!
+
+    captured_results = {}
+
     if vendor == 'tool':
-        return None
+        return None, captured_results
+
+    # Prepare context_data_str if tools_path is provided, as it might be needed early
+    if tools_path:
+        if isinstance(context_data, (dict, list)):
+            context_data_str = json.dumps(context_data, ensure_ascii=False)
+        else:
+            context_data_str = str(context_data or "{}")
+
     inline_schema = agent_config.get(SCHEMA_KEY)
+
     if inline_schema:
-        base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+        # Resolve dispatch if the top-level schema itself is a dispatch call
+        if isinstance(inline_schema, str) and 'dispatch_task(' in inline_schema:
+             try:
+                 inline_schema = PromptUtils.process_dispatch_in_text(
+                    inline_schema,
+                    tools_path=tools_path,
+                    context_data_str=context_data_str,
+                    agent_config=agent_config,
+                    captured_results=captured_results,
+                    preserve_type_on_exact_match=True
+                )
+             except Exception:
+                 pass # Let downstream validation handle it if it fails or returns None
+        
+        # Check if the resolved schema is already in unified format (has 'fields' list)
+        if isinstance(inline_schema, dict) and 'fields' in inline_schema and isinstance(inline_schema['fields'], list):
+            base_schema = inline_schema
+        else:
+            base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
+        
         schema_name = agent_config.get('name', 'inline_schema')
     else:
         schema_name = agent_config.get(SCHEMA_NAME_KEY)
         if not schema_name:
-            return None
+            return None, captured_results
         base_schema = SchemaLoader.load_schema(schema_name)
+
+    # Inject functions into the constructed schema
+    # (This handles recursion and fields within the loaded/constructed schema)
+    if tools_path: # Only inject if tools_path is provided
+        base_schema = _inject_functions_into_schema(
+            base_schema,
+            tools_path=tools_path,
+            context_data_str=context_data_str,
+            agent_config=agent_config,
+            captured_results=captured_results
+        )
+
+    # Unwrap schema if it is nested (common pattern in loaded yaml files with 'schema' key)
+    # E.g. {name: '...', schema: {name: '...', fields: [...]}} -> {name: '...', fields: [...]}
+    if isinstance(base_schema, dict) and SCHEMA_KEY in base_schema and isinstance(base_schema[SCHEMA_KEY], dict):
+        nested_schema = base_schema[SCHEMA_KEY]
+        # Verify if nested schema looks like a unified schema (has fields) or a JSON schema (type: object/array)
+        if 'fields' in nested_schema or 'type' in nested_schema:
+             # Merge top-level metadata (name, description) if missing in nested
+             if 'name' not in nested_schema and 'name' in base_schema:
+                 nested_schema['name'] = base_schema['name']
+             base_schema = nested_schema
+
     try:
-        return compile_unified_schema(base_schema, vendor)
+        return compile_unified_schema(base_schema, vendor), captured_results
     except ConfigValidationError:
         logger.warning(f"Vendor '{vendor}' does not support schema validation. Schema '{schema_name}' will be ignored. For schema support, use one of: openai, anthropic, gemini, ollama")
-        return None
+        return None, captured_results
