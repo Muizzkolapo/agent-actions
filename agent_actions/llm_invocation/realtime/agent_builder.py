@@ -119,6 +119,17 @@ def create_dynamic_agent(
         if context_msg:
             prompt_config = f"{prompt_config}\n\n{context_msg}"
 
+    # Prepare schema with dispatch support
+    schema, schema_results = SchemaService.prepare_schema(
+        agent_config,
+        model_vendor,
+        tools_path=tools_path,
+        context_data=context_data
+    )
+    
+    if schema_results:
+        captured_results.update(schema_results)
+
     # Debug print
     PromptService.debug_print_prompt(
         agent_config,
@@ -128,10 +139,8 @@ def create_dynamic_agent(
             if isinstance(context_data, str)
             else json.dumps(context_data, ensure_ascii=False)
         ),
+        schema
     )
-
-    # Prepare schema
-    schema = SchemaService.prepare_schema(agent_config, model_vendor)
 
     # Get granularity
     granularity = (agent_config.get("granularity") or "record").lower()

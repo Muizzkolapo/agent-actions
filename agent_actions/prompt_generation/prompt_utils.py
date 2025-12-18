@@ -10,6 +10,71 @@ class PromptUtils:
     """
 
     @staticmethod
+    def process_dispatch_in_text(text: str, tools_path: str, context_data_str: str, agent_config: dict = None, captured_results: dict = None, preserve_type_on_exact_match: bool = False):
+        """
+        Process dispatch_task() calls in a single string.
+
+        Args:
+            text: The text to process
+            tools_path: Path to tools directory
+            context_data_str: Context data string to pass to functions
+            agent_config: Agent configuration
+            captured_results: Dictionary to aggregate results into (modified in-place)
+            preserve_type_on_exact_match: If True and the text is exactly one dispatch call, return the raw result.
+
+        Returns:
+            Processed text (str) or raw result (Any) if preserve_type_on_exact_match is True
+        """
+        if captured_results is None:
+            captured_results = {}
+            
+        pattern = r"dispatch_task\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
+        
+        # Optimization: Check for exact match first if type preservation is requested
+        if preserve_type_on_exact_match:
+            # We strip whitespace to be lenient, but strictly it should match the pattern
+            stripped = text.strip()
+            match = re.fullmatch(pattern, stripped)
+            if match:
+                function_name = match.group(1)
+                try:
+                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                    if agent_config and agent_config.get('add_dispatch'):
+                        captured_results[function_name] = transformed_text
+                    if transformed_text is None:
+                         # Decide behavior for None. If preserving type, return None or Error string?
+                         # Usually schema field might be optional, so proper None might be better than string error.
+                         # But consistency with string replacement suggests error string OR None.
+                         # Let's return None if None, user handles it.
+                         return None 
+                    return transformed_text
+                except (AgentActionsException, ConfigurationError) as e:
+                    raise e
+                except Exception as e:
+                    raise AgentActionsException(f"An unexpected error occurred in function '{function_name}': {str(e)}") from e
+
+        matches = re.finditer(pattern, text)
+        replacements = []
+        for match in matches:
+            full_match = match.group(0)
+            function_name = match.group(1)
+            replacements.append((match.start(), match.end(), function_name, full_match))
+            
+        for start, end, function_name, full_match in reversed(replacements):
+            try:
+                transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                if agent_config and agent_config.get('add_dispatch'):
+                    captured_results[function_name] = transformed_text
+                if transformed_text is None:
+                    transformed_text = 'Error: No valid return from function.'
+                text = text[:start] + str(transformed_text) + text[end:]
+            except (AgentActionsException, ConfigurationError) as e:
+                raise e
+            except Exception as e:
+                raise AgentActionsException(f"An unexpected error occurred in function '{function_name}': {str(e)}") from e
+        return text
+
+    @staticmethod
     def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None, agent_config=None):
         """
         Replace multiple dispatch_task() calls in prompt_config with the result of their
@@ -28,42 +93,13 @@ class PromptUtils:
         """
         captured_results = {}
 
-        def process_single_text(single_text):
-            """
-            Process dispatch_task('function_name') calls.
-
-            Simple design:
-            - dispatch_task() takes only a function name (no other arguments)
-            - The function receives the same context_data as the LLM
-            - No complex parsing needed - just extract function name from quotes
-            """
-            nonlocal captured_results
-            if not isinstance(single_text, str):
-                single_text = str(single_text)
-            pattern = 'dispatch_task\\([\'\\"]([^\'\\"]+)[\'\\"]\\)'
-            matches = re.finditer(pattern, single_text)
-            replacements = []
-            for match in matches:
-                full_match = match.group(0)
-                function_name = match.group(1)
-                replacements.append((match.start(), match.end(), function_name, full_match))
-            for start, end, function_name, full_match in reversed(replacements):
-                try:
-                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
-                    if agent_config and agent_config.get('add_dispatch'):
-                        captured_results[function_name] = transformed_text
-                    if transformed_text is None:
-                        transformed_text = 'Error: No valid return from function.'
-                    single_text = single_text[:start] + transformed_text + single_text[end:]
-                except (AgentActionsException, ConfigurationError) as e:
-                    raise e
-                except Exception as e:
-                    raise AgentActionsException(f"An unexpected error occurred in function '{function_name}': {str(e)}") from e
-            return single_text
         if isinstance(prompt_config, list):
-            processed_prompt = [process_single_text(str(item)) for item in prompt_config]
+            processed_prompt = [
+                PromptUtils.process_dispatch_in_text(str(item), tools_path, context_data_str, agent_config, captured_results)
+                for item in prompt_config
+            ]
         elif isinstance(prompt_config, str):
-            processed_prompt = process_single_text(prompt_config)
+            processed_prompt = PromptUtils.process_dispatch_in_text(prompt_config, tools_path, context_data_str, agent_config, captured_results)
         else:
             processed_prompt = prompt_config
         return (processed_prompt, captured_results)
