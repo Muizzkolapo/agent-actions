@@ -65,7 +65,8 @@ class BatchProvider(ABC):
         Convert agent-actions data format to provider-specific task format (Template Method).
 
         This template method provides the common implementation for all providers.
-        Providers only need to implement _get_default_model() and optionally _get_default_temperature().
+        Providers only need to implement _get_default_model() and optionally
+        _get_default_temperature().
 
         Args:
             data: List of data items to process, each containing target_id and content
@@ -105,7 +106,6 @@ class BatchProvider(ABC):
         Returns:
             Default model name for this provider
         """
-        pass
 
     def _get_default_temperature(self) -> float:
         """
@@ -155,7 +155,6 @@ class BatchProvider(ABC):
                 }
             }
         """
-        pass
 
     def submit_batch(
         self, tasks: List[Dict[str, Any]], batch_name: str, output_directory: Optional[str] = None
@@ -180,9 +179,10 @@ class BatchProvider(ABC):
         Returns:
             Tuple of (batch_id, initial_status) where:
             - batch_id: Provider-specific batch job ID
-            - initial_status: Initial status from provider (e.g., 'in_progress', 'completed', 'submitted')
+            - initial_status: Initial status from provider
+              (e.g., 'in_progress', 'completed', 'submitted')
         """
-        import logging
+        import logging  # pylint: disable=import-outside-toplevel
 
         logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class BatchProvider(ABC):
         Returns:
             Normalized status string (e.g., 'validating', 'in_progress', 'completed', 'failed')
         """
-        import logging
+        import logging  # pylint: disable=import-outside-toplevel
 
         logger = logging.getLogger(__name__)
 
@@ -228,7 +228,6 @@ class BatchProvider(ABC):
         Returns:
             Raw status string from provider
         """
-        pass
 
     @abstractmethod
     def _normalize_status(self, raw_status: str) -> str:
@@ -244,7 +243,6 @@ class BatchProvider(ABC):
         Returns:
             Normalized status string
         """
-        pass
 
     def retrieve_results(
         self, batch_id: str, output_directory: Optional[str] = None
@@ -268,7 +266,7 @@ class BatchProvider(ABC):
         Returns:
             List of BatchResult objects containing the processed results
         """
-        import logging
+        import logging  # pylint: disable=import-outside-toplevel
 
         logger = logging.getLogger(__name__)
 
@@ -286,19 +284,19 @@ class BatchProvider(ABC):
             result_file_path = self._write_results_to_file(batch_id, raw_results, output_directory)
             # Parse from file
             return self._read_jsonl_file(result_file_path)
-        else:
-            # Parse from memory
-            batch_results = []
-            lines = raw_results.decode("utf-8").strip().split("\n")
-            for line_num, line in enumerate(lines, 1):
-                if line.strip():
-                    try:
-                        raw_result = json.loads(line)
-                        batch_result = self.parse_provider_response(raw_result)
-                        batch_results.append(batch_result)
-                    except json.JSONDecodeError as e:
-                        logger.error("JSON parsing error on line {line_num}: %s", e)
-                        batch_results.append(
+
+        # Parse from memory
+        batch_results = []
+        lines = raw_results.decode("utf-8").strip().split("\n")
+        for line_num, line in enumerate(lines, 1):
+            if line.strip():
+                try:
+                    raw_result = json.loads(line)
+                    batch_result = self.parse_provider_response(raw_result)
+                    batch_results.append(batch_result)
+                except json.JSONDecodeError as e:
+                    logger.error("JSON parsing error on line {line_num}: %s", e)
+                    batch_results.append(
                             BatchResult(
                                 custom_id=f"error_line_{line_num}",
                                 content=None,
@@ -391,7 +389,6 @@ class BatchProvider(ABC):
         Returns:
             Error message string if error exists, None otherwise
         """
-        pass
 
     @abstractmethod
     def _extract_content_from_response(self, raw_response: Any) -> Any:
@@ -406,7 +403,6 @@ class BatchProvider(ABC):
         Returns:
             Content (can be dict, str, list, etc.)
         """
-        pass
 
     @abstractmethod
     def _extract_metadata_from_response(self, raw_response: Any) -> Dict[str, Any]:
@@ -422,7 +418,6 @@ class BatchProvider(ABC):
         Returns:
             Metadata dictionary
         """
-        pass
 
     @abstractmethod
     def _extract_usage_from_response(self, raw_response: Any) -> Optional[Dict[str, Any]]:
@@ -437,7 +432,6 @@ class BatchProvider(ABC):
         Returns:
             Usage dictionary with token counts, or None if not available
         """
-        pass
 
     def compile_schema(self, schema_dict: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -487,7 +481,7 @@ class BatchProvider(ABC):
         return self._validate_provider_specific_config(agent_config)
 
     def _validate_provider_specific_config(
-        self, agent_config: Dict[str, Any]
+        self, _agent_config: Dict[str, Any]
     ) -> Tuple[bool, Optional[str]]:
         """
         Perform provider-specific configuration validation.
@@ -496,7 +490,7 @@ class BatchProvider(ABC):
         Default implementation accepts all configurations.
 
         Args:
-            agent_config: Agent configuration to validate
+            _agent_config: Agent configuration to validate
 
         Returns:
             Tuple of (is_valid, error_message)
@@ -515,7 +509,7 @@ class BatchProvider(ABC):
         Returns:
             Path to batch directory
         """
-        from agent_actions.utilities.path_utils import ensure_directory_exists
+        from agent_actions.utilities.path_utils import ensure_directory_exists  # pylint: disable=import-outside-toplevel
 
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
@@ -562,7 +556,7 @@ class BatchProvider(ABC):
             List of BatchResult objects
         """
         if not file_path.exists():
-            from agent_actions.errors import VendorAPIError  # New modular pattern!
+            from agent_actions.errors import VendorAPIError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise VendorAPIError(
                 vendor=self.__class__.__name__,
@@ -646,7 +640,7 @@ class BatchProvider(ABC):
         """
         if hasattr(obj, key):
             return getattr(obj, key)
-        elif isinstance(obj, dict):
+        if isinstance(obj, dict):
             return obj.get(key, default)
         return default
 
@@ -689,7 +683,6 @@ class BatchProvider(ABC):
         Returns:
             File name for results (e.g., "batch_123_results.jsonl")
         """
-        pass
 
     @abstractmethod
     def _fetch_raw_results(self, batch_id: str) -> bytes:
@@ -704,7 +697,6 @@ class BatchProvider(ABC):
         Returns:
             Raw results as bytes
         """
-        pass
 
     @abstractmethod
     def _prepare_batch_input_file(
@@ -723,7 +715,6 @@ class BatchProvider(ABC):
         Returns:
             Path to created input file
         """
-        pass
 
     @abstractmethod
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
@@ -739,4 +730,3 @@ class BatchProvider(ABC):
         Returns:
             Tuple of (batch_id, initial_status)
         """
-        pass

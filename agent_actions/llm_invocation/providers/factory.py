@@ -47,30 +47,34 @@ class BatchProviderFactory:
         if provider_type == "openai":
             api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
             return OpenAIBatchProvider(api_key=api_key)
-        elif provider_type == "gemini":
+        if provider_type == "gemini":
             api_key = config.get("api_key") or os.getenv("GOOGLE_API_KEY")
             try:
                 return GeminiBatchProvider(api_key=api_key)
             except ImportError as e:
-                from agent_actions.errors import DependencyError  # New modular pattern!
+                from agent_actions.errors import DependencyError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "GeminiBatchProvider", "google-genai", {
+                    "GeminiBatchProvider requires google-genai package",
+                    context={
                         "provider_type": provider_type,
+                        "package": "google-genai",
                         "install_command": "pip install google-genai",
                     },
                     cause=e,
                 ) from e
-        elif provider_type == "ollama":
+        if provider_type == "ollama":
             base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
             return OllamaLocalBatchProvider(base_url=base_url)
-        elif provider_type == "anthropic":
+        if provider_type == "anthropic":
             if not ANTHROPIC_AVAILABLE:
                 from agent_actions.errors import DependencyError  # New modular pattern!
 
                 raise DependencyError(
-                    "AnthropicBatchProvider", "anthropic", {
+                    "AnthropicBatchProvider requires anthropic package",
+                    context={
                         "provider_type": provider_type,
+                        "package": "anthropic",
                         "install_command": "pip install anthropic",
                     },
                 )
@@ -84,20 +88,22 @@ class BatchProviderFactory:
                     enable_prompt_caching=enable_prompt_caching,
                 )
             except ImportError as e:
-                from agent_actions.errors import DependencyError  # New modular pattern!
+                from agent_actions.errors import DependencyError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "AnthropicBatchProvider", "anthropic", {
+                    "AnthropicBatchProvider requires anthropic package",
+                    context={
                         "provider_type": provider_type,
+                        "package": "anthropic",
                         "install_command": "pip install anthropic",
                     },
                     cause=e,
                 ) from e
-        else:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
 
-            supported = BatchProviderFactory.get_supported_providers()
-            raise ConfigurationError(
+        from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+
+        supported = BatchProviderFactory.get_supported_providers()
+        raise ConfigurationError(
                 "Unknown provider type",
                 context={
                     "provider_type": provider_type,

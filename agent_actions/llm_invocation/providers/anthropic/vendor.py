@@ -1,17 +1,26 @@
-import anthropic
+"""
+Anthropic Claude vendor handler for agent-actions.
+
+Provides implementation of call_json() and call_non_json() methods
+for Anthropic's Claude API integration.
+"""
 import logging
 from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
-from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+
+import anthropic  # pylint: disable=import-error
+
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
 
 class ClaudeHandler(BaseVendorHandler):
+    """Anthropic Claude API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(
@@ -82,7 +91,7 @@ class ClaudeHandler(BaseVendorHandler):
                 (block.text for block in response.content if hasattr(block, "text")),
                 "No text content available",
             )
-            from agent_actions.errors import VendorAPIError  # New modular pattern!
+            from agent_actions.errors import VendorAPIError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise VendorAPIError(
                 "No valid content with 'input' found in response",
@@ -103,7 +112,7 @@ class ClaudeHandler(BaseVendorHandler):
         context_data: Dict[str, Any],
     ) -> List[Dict[str, str]]:
         """Non-JSON mode is not implemented for Claude."""
-        from agent_actions.errors import ConfigurationError  # New modular pattern!
+        from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
         raise ConfigurationError(
             "Non-JSON mode not implemented for Claude",

@@ -1,16 +1,27 @@
-import json
+"""
+Mistral handler for agent-actions LLM invocation.
+
+Provides implementation of call_json() and call_non_json() methods
+for Mistral API integration.
+"""
+
 import logging
-from mistralai import Mistral
-from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from textwrap import dedent
+from mistralai import Mistral  # pylint: disable=import-error
+from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.mixins import (
+    JSONResponseMixin,
+    GenericErrorHandlerMixin
+)
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
 
-class MistralHandler(BaseVendorHandler):
+class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Mistral AI API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -26,60 +37,16 @@ class MistralHandler(BaseVendorHandler):
             )
             response_content = chat_response.choices[0].message.content
 
-            if not response_content:
-                logger.error(
-                    "Mistral returned empty response",
-                    extra={"operation": "mistral_call_json", "model": model_name},
-                )
-                raise VendorAPIError(
-                    "Mistral returned empty response", vendor="mistral", operation="call_json"
-                )
-
-            try:
-                data = json.loads(response_content)
-                logger.debug(
-                    "Mistral JSON response parsed successfully",
-                    extra={
-                        "operation": "mistral_call_json",
-                        "model": model_name,
-                        "response_length": len(response_content),
-                    },
-                )
-                return data
-            except json.JSONDecodeError as e:
-                logger.error(
-                    "Mistral returned invalid JSON",
-                    extra={
-                        "operation": "mistral_call_json",
-                        "model": model_name,
-                        "response_text": response_content[:200],
-                        "error": str(e),
-                        "line": e.lineno if hasattr(e, "lineno") else None,
-                    },
-                    exc_info=True,
-                )
-                raise VendorAPIError(
-                    f"Mistral returned invalid JSON: {e}",
-                    vendor="mistral",
-                    operation="call_json",
-                    cause=e,
-                ) from e
+            return MistralHandler.parse_json_response(
+                response_content=response_content,
+                vendor_name="Mistral",
+                operation="call_json",
+                model_name=model_name,
+            )
         except VendorAPIError:
             raise
         except Exception as e:
-            logger.error(
-                "Mistral API call failed",
-                extra={
-                    "operation": "mistral_call_json",
-                    "model": model_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            raise VendorAPIError(
-                f"Mistral API call failed: {e}", vendor="mistral", operation="call_json", cause=e
-            ) from e
+            MistralHandler.handle_generic_error(e, "Mistral", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
