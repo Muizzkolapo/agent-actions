@@ -187,7 +187,6 @@ class ActionExpander:
         granularity = action.get('granularity', defaults.get('granularity', 'record'))
         if granularity:
             agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
-        current_granularity = agent.get('granularity', 'Record')
         # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
         # Deep merge: action directives merge with defaults (not replace)
         context_scope_defaults = defaults.get('context_scope')
@@ -229,6 +228,7 @@ class ActionExpander:
         return agent
 
     @staticmethod
+    # pylint: disable=too-many-locals
     def expand_actions_to_agents(action_config: Dict[str, Any]) -> AgentConfigMap:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
@@ -248,7 +248,6 @@ class ActionExpander:
         
         agents: AgentConfigList = []
         for action in actions:
-            action_name = action.get('name')
             # Assuming all actions listed are operational unless specified otherwise,
             # or we could filter by some other logic. For now, we take all actions.
             is_operational = True 
@@ -266,18 +265,31 @@ class ActionExpander:
                 for idx, i in enumerate(range_values_list):
                     agent: AgentEntryDict = {}
 
-                    def replace_template_var(value):
+                    # Capture loop variables using default arguments
+                    def replace_template_var(
+                        value,
+                        param_name=param_name,
+                        i=i,
+                        idx=idx,
+                        range_values_list=range_values_list
+                    ):
                         if isinstance(value, str):
                             result = value.replace(f'${{{param_name}}}', str(i))
                             if idx > 0:
                                 prev_value = range_values_list[idx - 1]
-                                result = result.replace(f'${{{param_name}-1}}', str(prev_value))
+                                result = result.replace(
+                                    f'${{{param_name}-1}}', str(prev_value)
+                                )
                             else:
                                 result = result.replace(f'${{{param_name}-1}}', '')
                             return result
-                        elif isinstance(value, dict):
-                            return {replace_template_var(k) if isinstance(k, str) else k: replace_template_var(v) for k, v in value.items()}
-                        elif isinstance(value, list):
+                        if isinstance(value, dict):
+                            return {
+                                replace_template_var(k) if isinstance(k, str) else k:
+                                replace_template_var(v)
+                                for k, v in value.items()
+                            }
+                        if isinstance(value, list):
                             return [replace_template_var(item) for item in value]
                         return value
                     agent['agent_type'] = f"{action.get('name', 'unknown')}_{i}"
