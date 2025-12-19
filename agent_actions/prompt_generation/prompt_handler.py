@@ -1,3 +1,4 @@
+"""Module for loading and managing prompts from markdown files."""
 import re
 import json
 import random
@@ -5,6 +6,8 @@ import logging
 from collections import Counter
 from pathlib import Path
 from typing import Any, List
+from agent_actions.io.file_handler import FileHandler
+
 logger = logging.getLogger(__name__)
 
 class PromptLoader:
@@ -104,9 +107,9 @@ class PromptLoader:
 
         # Search for the .md file anywhere in the project tree
         # No requirement for a specific directory structure
-        # Import here to avoid circular import
-        from agent_actions.io.file_handler import FileHandler
-        prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
+        prompt_file_str = FileHandler.find_file_in_directory(
+            str(Path.cwd()), target_filename
+        )
 
         if not prompt_file_str:
             raise ValueError(
@@ -115,7 +118,7 @@ class PromptLoader:
                 f"Ensure the .md file exists anywhere in your project tree."
             )
 
-        logger.debug(f"Found prompt file at: {prompt_file_str}")
+        logger.debug("Found prompt file at: %s", prompt_file_str)
         prompt_file_path = Path(prompt_file_str)
         content = prompt_file_path.read_text(encoding='utf-8')
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
@@ -123,9 +126,13 @@ class PromptLoader:
         return PromptLoader.extract_prompt(content, prompt_key)
 
     @staticmethod
-    def load_few_shot_samples(few_shot_samples_path: str, agent_type: str, sample_count: int=3) -> List[Any]:
+    def load_few_shot_samples(
+        few_shot_samples_path: str,
+        agent_type: str,
+        sample_count: int = 3
+    ) -> List[Any]:
         """
-        Load random sample objects from the JSON files in the sample output directory for a specific agent type.
+        Load random sample objects from JSON files in the sample output directory.
 
         Parameters:
             few_shot_samples_path (str): Base path to the sample output directory.
@@ -151,7 +158,9 @@ class PromptLoader:
                 elif isinstance(data, dict):
                     all_samples.append(data)
             except Exception as e:
-                raise ValueError(f"Error reading sample file '{sample_file}': {e}")
+                raise ValueError(
+                    f"Error reading sample file '{sample_file}': {e}"
+                ) from e
         if sample_count > 0 and all_samples:
             return random.sample(all_samples, min(sample_count, len(all_samples)))
         return []

@@ -1,9 +1,14 @@
+"""Module for handling directory operations and combining JSON files."""
+
 from pathlib import Path
 from typing import Set
 from agent_actions.prompt_generation.json_file_handler import JsonFileHandler
 
+
 class DirectoryCombiner:
     """Handles combining JSON data from directories."""
+
+    # pylint: disable=too-few-public-methods
 
     def __init__(self):
         """Initialize the directory combiner."""
@@ -28,7 +33,9 @@ class DirectoryCombiner:
         self._copy_unique_files(dir_1, output_dir, files_only_in_dir_1, 'dir_1')
         self._copy_unique_files(dir_2, output_dir, files_only_in_dir_2, 'dir_2')
 
-    def _combine_common_files(self, dir_1: str, dir_2: str, output_dir: str, common_files: Set[str]) -> None:
+    def _combine_common_files(
+            self, dir_1: str, dir_2: str, output_dir: str,
+            common_files: Set[str]) -> None:
         """
         Combine files that exist in both directories.
         
@@ -47,7 +54,9 @@ class DirectoryCombiner:
             output_path = Path(output_dir) / filename
             self.file_handler.write_json_file(str(output_path), combined_data)
 
-    def _copy_unique_files(self, source_dir: str, output_dir: str, unique_files: Set[str], dir_name: str) -> None:
+    def _copy_unique_files(
+            self, source_dir: str, output_dir: str, unique_files: Set[str],
+            dir_name: str) -> None:
         """
         Copy files that only exist in one directory.
         

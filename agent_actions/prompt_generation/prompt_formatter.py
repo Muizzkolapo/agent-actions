@@ -12,7 +12,7 @@ PromptFormatter handles two key operations:
 
 ## Shared Usage
 
-**All Modes** (batch_service.py, data_generator.py, target_data_generator.py, agent_builder.py):
+**All Modes** (batch_service.py, data_generator.py, agent_builder.py):
 ```python
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 
@@ -112,18 +112,25 @@ class PromptFormatter:
                 raw_prompt = 'Process the following content: {content}'
             return raw_prompt
         except Exception as e:
+            # pylint: disable=import-outside-toplevel
             from agent_actions.errors import PromptValidationError  # New modular pattern!
-            raise PromptValidationError('raw_prompt', f'Failed to get raw prompt: {str(e)}', context={'agent_config': str(agent_config), 'operation': 'get_raw_prompt'}, cause=e)
+            raise PromptValidationError(
+                f'Failed to get raw prompt: {str(e)}',
+                context={
+                    'field': 'raw_prompt',
+                    'agent_config': str(agent_config),
+                    'operation': 'get_raw_prompt'
+                },
+                cause=e
+            ) from e
 
     @staticmethod
-    def format_prompt(raw_prompt, source_content=None, context_data=None, field_context=None):
+    def format_prompt(raw_prompt, field_context=None):
         """
         Replace {reference.field} patterns in the prompt.
 
         Parameters:
             raw_prompt: Template prompt with field references
-            source_content: Deprecated - kept for backward compatibility
-            context_data: Deprecated - kept for backward compatibility
             field_context: Dict with field references (source, agent outputs, loop, workflow)
 
         Returns:
@@ -137,5 +144,14 @@ class PromptFormatter:
                 return PromptUtils.replace_field_references(raw_prompt, field_context)
             return raw_prompt
         except Exception as e:
+            # pylint: disable=import-outside-toplevel
             from agent_actions.errors import PromptValidationError  # New modular pattern!
-            raise PromptValidationError('formatted_prompt', f'Failed to format prompt: {str(e)}', context={'raw_prompt': str(raw_prompt)[:100], 'operation': 'format_prompt'}, cause=e)
+            raise PromptValidationError(
+                f'Failed to format prompt: {str(e)}',
+                context={
+                    'field': 'formatted_prompt',
+                    'raw_prompt': str(raw_prompt)[:100],
+                    'operation': 'format_prompt'
+                },
+                cause=e
+            ) from e
