@@ -1,3 +1,11 @@
+"""
+SQL-like WHERE clause parser for data filtering and condition evaluation.
+
+This module provides utilities for parsing and evaluating SQL-like WHERE clauses,
+enabling flexible data filtering with support for various operators, nested fields,
+and pattern matching.
+"""
+import ast
 import re
 import json
 import logging
@@ -9,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class WhereCondition:
+    """Represents a single WHERE clause condition with field, operator, and value."""
     field: str
     operator: str
     value: Any
@@ -27,7 +36,7 @@ class WhereClauseParser:
         "<": lambda a, b: WhereClauseParser._safe_compare(a, b, lambda x, y: x < y),
         "IN": lambda a, b: a in b if isinstance(b, (list, tuple)) else False,
         "NOT IN": lambda a, b: a not in b if isinstance(b, (list, tuple)) else True,
-        "LIKE": lambda a, b: WhereClauseParser._like_match(a, b),
+        "LIKE": lambda a, b: WhereClauseParser._like_match(a, b),  # pylint: disable=unnecessary-lambda
         "CONTAINS": lambda a, b: str(b) in str(a) if a is not None else False,
         "NOT CONTAINS": lambda a, b: str(b) not in str(a) if a is not None else True,
         "IS NULL": lambda a, b: a is None,
@@ -79,7 +88,7 @@ class WhereClauseParser:
         return None
 
     @classmethod
-    def _parse_value(cls, value_str: str) -> Any:
+    def _parse_value(cls, value_str: str) -> Any:  # pylint: disable=too-many-return-statements
         """Parse value string into appropriate Python type"""
         value_str = value_str.strip()
         if (value_str.startswith("\"") and value_str.endswith("\"")) or (
@@ -105,7 +114,6 @@ class WhereClauseParser:
             except json.JSONDecodeError:
                 # Try Python literal evaluation for single-quoted arrays
                 try:
-                    import ast
                     return ast.literal_eval(value_str)
                 except (ValueError, SyntaxError):
                     pass
@@ -188,7 +196,7 @@ class SimpleWhereFilter:
             if not conditions:  # No valid conditions parsed
                 return True  # Default to including item on parse failure
             return self.parser.evaluate(data, conditions)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug(
                 "Where clause evaluation failed, defaulting to including item: %s",
                 e,
@@ -199,7 +207,9 @@ class SimpleWhereFilter:
             )
             return True  # Default to including item on error
 
-    def evaluate_safe_skip_condition(self, condition_config: Dict[str, Any], context: Dict[str, Any]) -> bool:
+    def evaluate_safe_skip_condition(
+        self, condition_config: Dict[str, Any], context: Dict[str, Any]
+    ) -> bool:
         """
         Safely evaluate a skip condition for legacy compatibility.
 
@@ -217,7 +227,7 @@ class SimpleWhereFilter:
                 conditions = self.parser.parse(where_clause)
                 return not self.parser.evaluate(context, conditions)
             return False
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             logger.debug(
                 "Skip condition evaluation failed, defaulting to not skipping: %s",
                 e,
@@ -231,12 +241,12 @@ class SimpleWhereFilter:
 
 
 # Global filter instance for backward compatibility
-_global_filter = None
+_global_filter = None  # pylint: disable=invalid-name
 
 
 def get_global_filter() -> SimpleWhereFilter:
     """Get the global WHERE clause filter instance."""
-    global _global_filter
+    global _global_filter  # pylint: disable=global-statement
     if _global_filter is None:
         _global_filter = SimpleWhereFilter()
     return _global_filter
@@ -274,5 +284,5 @@ def evaluate_safe_expression(expression: str, context: Dict[str, Any]) -> bool:
         if not conditions:  # No valid conditions parsed means invalid syntax
             return False
         return parser.evaluate(context, conditions)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return False
