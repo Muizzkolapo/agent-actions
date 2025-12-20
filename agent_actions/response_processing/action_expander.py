@@ -4,14 +4,27 @@ Workflow format converter for expanding action-based configurations.
 This module converts action-based workflow configurations into agent configurations,
 handling loop expansion, template variables, and dependency mapping.
 """
+import logging
 from typing import Dict, Any, Optional
+
+from agent_actions.errors import ConfigValidationError, ConfigurationError
+from agent_actions.llm_invocation.config.vendor_config import VendorType
+from agent_actions.response_processing.guard_parser import GuardParser
+from agent_actions.response_processing.consolidated_guard import (
+    GuardBehavior, parse_guard_config
+)
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_field_definitions import inherit_simple_fields
-import logging
+
 logger = logging.getLogger(__name__)
 
+# pylint: disable=too-few-public-methods
 class ActionExpander:
-    """Converts action-based workflow configurations to agent configurations with loop expansion support."""
+    """
+    Converts action-based workflow configurations to agent configurations.
+
+    Supports loop expansion for iterative action processing.
+    """
 
 
 
@@ -29,11 +42,18 @@ class ActionExpander:
         """
         if not vendor:
             return
-        from agent_actions.llm_invocation.config.vendor_config import VendorType
-        from agent_actions.errors import ConfigValidationError  # New modular pattern!
         valid_vendors = [v.value for v in VendorType]
         if vendor not in valid_vendors:
-            raise ConfigValidationError('model_vendor', f"Unknown vendor '{vendor}'", context={'action': action_name, 'vendor': vendor, 'supported_vendors': valid_vendors, 'hint': f"Valid vendors: {', '.join(valid_vendors)}"})
+            raise ConfigValidationError(
+                'model_vendor',
+                f"Unknown vendor '{vendor}'",
+                context={
+                    'action': action_name,
+                    'vendor': vendor,
+                    'supported_vendors': valid_vendors,
+                    'hint': f"Valid vendors: {', '.join(valid_vendors)}"
+                }
+            )
 
     @staticmethod
     def _validate_required_fields(agent: AgentEntryDict, action_name: str) -> None:
@@ -50,13 +70,33 @@ class ActionExpander:
         Raises:
             ConfigValidationError: If any required field is missing
         """
-        from agent_actions.errors import ConfigValidationError  # New modular pattern!
-        required_fields = {'model_vendor': agent.get('model_vendor'), 'model_name': agent.get('model_name'), 'api_key': agent.get('api_key')}
+        required_fields = {
+            'model_vendor': agent.get('model_vendor'),
+            'model_name': agent.get('model_name'),
+            'api_key': agent.get('api_key')
+        }
         missing_fields = [field for field, value in required_fields.items() if not value]
         if missing_fields:
-            field_display_names = {'model_vendor': 'vendor/model_vendor', 'model_name': 'model/model_name', 'api_key': 'api_key'}
+            field_display_names = {
+                'model_vendor': 'vendor/model_vendor',
+                'model_name': 'model/model_name',
+                'api_key': 'api_key'
+            }
             missing_display = [field_display_names.get(f, f) for f in missing_fields]
-            raise ConfigValidationError(config_key=', '.join(missing_fields), reason=f'Required configuration fields are missing after hierarchy resolution', context={'action_name': action_name, 'missing_fields': missing_fields, 'missing_display': missing_display, 'operation': 'expand_actions_to_agents', 'hint': 'Add missing fields to agent_actions.yml (project-level), workflow defaults, or action config'})
+            raise ConfigValidationError(
+                config_key=', '.join(missing_fields),
+                reason='Required configuration fields are missing after hierarchy resolution',
+                context={
+                    'action_name': action_name,
+                    'missing_fields': missing_fields,
+                    'missing_display': missing_display,
+                    'operation': 'expand_actions_to_agents',
+                    'hint': (
+                        'Add missing fields to agent_actions.yml (project-level), '
+                        'workflow defaults, or action config'
+                    )
+                }
+            )
 
     @staticmethod
     def _deep_merge_context_scope(
@@ -116,7 +156,231 @@ class ActionExpander:
         return merged
 
     @staticmethod
-    def _create_agent_from_action(action: Dict[str, Any], defaults: Dict[str, Any], agent: AgentEntryDict, template_replacer, is_operational: bool=True) -> AgentEntryDict:
+    def _process_schema_config(
+        agent: AgentEntryDict,
+        action: Dict[str, Any],
+        template_replacer
+    ) -> None:
+        """Process schema configuration for an agent."""
+        schema_value = action.get('schema') or action.get('output_schema')
+        if schema_value:
+            schema_value = template_replacer(schema_value)
+            if isinstance(schema_value, str):
+                agent['schema_name'] = schema_value
+            elif isinstance(schema_value, dict):
+                agent['schema'] = schema_value
+            else:
+                agent['schema'] = schema_value
+
+    @staticmethod
+    def _process_guard_config(
+        agent: AgentEntryDict,
+        action: Dict[str, Any]
+    ) -> None:
+        """Process guard configuration for an agent."""
+        if not action.get('guard'):
+            return
+
+        guard_data = action['guard']
+        if isinstance(guard_data, str):
+            guard_expr = GuardParser.parse(guard_data)
+            if guard_expr.type.value == 'udf':
+                agent['conditional_clause'] = guard_expr.expression
+            else:
+                agent['where_clause'] = {'clause': guard_expr.expression, 'scope': 'item'}
+        else:
+            guard_config = parse_guard_config(guard_data)
+            if guard_config.is_udf_condition():
+                if guard_config.on_false == GuardBehavior.FILTER:
+                    action_name = action.get('name', 'unknown')
+                    raise ConfigurationError(
+                        "UDF conditions cannot use 'filter' behavior. "
+                        "UDF conditions only support 'skip' behavior",
+                        context={
+                            'action_name': action_name,
+                            'guard_behavior': 'filter',
+                            'operation': 'expand_actions_to_agents'
+                        }
+                    )
+                agent['conditional_clause'] = guard_config.get_condition_expression()
+            else:
+                agent['where_clause'] = {
+                    'clause': guard_config.get_condition_expression(),
+                    'scope': 'item',
+                    'behavior': guard_config.on_false.value
+                }
+
+    @staticmethod
+    def _process_tool_action(
+        agent: AgentEntryDict,
+        action: Dict[str, Any],
+        run_mode: str
+    ) -> None:
+        """Process tool-specific action configuration."""
+        action_kind = action.get('kind', 'llm')
+        if action_kind != 'tool':
+            return
+
+        if not action.get('impl'):
+            raise ConfigValidationError(
+                'impl',
+                "Tool actions must specify 'impl' field",
+                context={
+                    'action': action.get('name', 'unknown'),
+                    'kind': 'tool',
+                    'hint': "Add 'impl: module.function_name' to your tool action"
+                }
+            )
+        agent['model_vendor'] = 'tool'
+        agent['model_name'] = action.get('impl', action.get('name'))
+        if run_mode == 'batch' and action.get('run_mode') == 'batch':
+            action_name = action.get('name', 'unknown')
+            raise ConfigurationError(
+                "Tool actions do not support batch processing. "
+                "Please set run_mode='online' or remove the run_mode "
+                "setting to use the default",
+                context={
+                    'action_name': action_name,
+                    'kind': 'tool',
+                    'run_mode': 'batch',
+                    'operation': 'expand_actions_to_agents'
+                }
+            )
+        if run_mode == 'batch':
+            agent['run_mode'] = 'online'
+
+    @staticmethod
+    def _process_chunk_config(
+        agent: AgentEntryDict,
+        action: Dict[str, Any],
+        defaults: Dict[str, Any]
+    ) -> None:
+        """Process chunk configuration for an agent."""
+        chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
+        if chunk_config:
+            agent['chunk_config'] = chunk_config
+        else:
+            agent['chunk_config'] = {}
+            if action.get('chunk_size') or defaults.get('chunk_size'):
+                agent['chunk_config']['chunk_size'] = action.get(
+                    'chunk_size', defaults.get('chunk_size', 300)
+                )
+            if action.get('chunk_overlap') or defaults.get('chunk_overlap'):
+                agent['chunk_config']['chunk_overlap'] = action.get(
+                    'chunk_overlap', defaults.get('chunk_overlap', 10)
+                )
+
+    @staticmethod
+    def _initialize_optional_fields(agent: AgentEntryDict) -> None:
+        """Initialize optional fields in agent configuration."""
+        agent['skip_if'] = None
+        agent['ephemeral'] = None
+        agent['add_dispatch'] = None
+        agent['anthropic_version'] = None
+        agent['enable_prompt_caching'] = None
+        if 'conditional_clause' not in agent:
+            agent['conditional_clause'] = None
+        if 'where_clause' not in agent:
+            agent['where_clause'] = None
+
+    @staticmethod
+    def _create_template_replacer(param_name: str, current_val, idx: int, values):
+        """
+        Create a template replacer function with captured loop variables.
+
+        Args:
+            param_name: Name of the loop parameter
+            current_val: Current iteration value
+            idx: Current index in the iteration
+            values: List of all iteration values
+
+        Returns:
+            Template replacer function
+        """
+        def replacer(value):
+            """Replace template variables in value."""
+            if isinstance(value, str):
+                result = value.replace(f'${{{param_name}}}', str(current_val))
+                if idx > 0:
+                    prev_value = values[idx - 1]
+                    result = result.replace(f'${{{param_name}-1}}', str(prev_value))
+                else:
+                    result = result.replace(f'${{{param_name}-1}}', '')
+                return result
+            if isinstance(value, dict):
+                return {
+                    replacer(k) if isinstance(k, str) else k: replacer(v)
+                    for k, v in value.items()
+                }
+            if isinstance(value, list):
+                return [replacer(item) for item in value]
+            return value
+        return replacer
+
+    @staticmethod
+    # pylint: disable=too-many-locals
+    def _expand_loop_action(
+        action: Dict[str, Any],
+        loop_config: Dict[str, Any],
+        defaults: Dict[str, Any],
+        is_operational: bool
+    ) -> AgentConfigList:
+        """
+        Expand a loop action into multiple agent configurations.
+
+        Args:
+            action: Action configuration with loop
+            loop_config: Loop configuration
+            defaults: Default settings
+            is_operational: Whether this action should run
+
+        Returns:
+            List of expanded agent configurations
+        """
+        agents: AgentConfigList = []
+        param_name = loop_config.get('param', 'i')
+        loop_range = loop_config.get('range', [1, 1])
+
+        if len(loop_range) == 2:
+            start, end = loop_range
+            range_values = range(start, end + 1)
+        else:
+            range_values = loop_range
+
+        range_values_list = list(range_values)
+        for idx, i in enumerate(range_values_list):
+            agent: AgentEntryDict = {}
+
+            # Create template replacer with captured loop variables
+            template_replacer = ActionExpander._create_template_replacer(
+                param_name, i, idx, range_values_list
+            )
+
+            agent['agent_type'] = f"{action.get('name', 'unknown')}_{i}"
+            agent['name'] = f"{action.get('name')}_{i}"
+            agent['is_loop_agent'] = True
+            agent['loop_base_name'] = action.get('name', 'unknown')
+            agent['loop_iteration'] = i
+            agent['loop_mode'] = loop_config.get('mode', 'parallel')
+
+            # Create agent
+            created_agent = ActionExpander._create_agent_from_action(
+                action, defaults, agent, template_replacer,
+                is_operational=is_operational
+            )
+
+            agents.append(created_agent)
+
+        return agents
+
+    @staticmethod
+    def _create_agent_from_action(
+        action: Dict[str, Any],
+        defaults: Dict[str, Any],
+        agent: AgentEntryDict,
+        template_replacer,
+        is_operational: bool = True
+    ) -> AgentEntryDict:
         """
         Create an agent configuration from an action.
 
@@ -130,63 +394,38 @@ class ActionExpander:
         Returns:
             Completed agent configuration
         """
+        # Inherit simple fields and set operational status
         inherit_simple_fields(agent, action, defaults)
         agent['is_operational'] = is_operational
+
+        # Validate configuration
         ActionExpander._validate_vendor_exists(agent['model_vendor'], action.get('name', 'unknown'))
         action_kind = action.get('kind', 'llm')
         if action_kind != 'tool':
             ActionExpander._validate_required_fields(agent, action.get('name', 'unknown'))
-        run_mode = agent['run_mode']
-        schema_value = action.get('schema') or action.get('output_schema')
-        if schema_value:
-            schema_value = template_replacer(schema_value)
-            if isinstance(schema_value, str):
-                agent['schema_name'] = schema_value
-            elif isinstance(schema_value, dict):
-                agent['schema'] = schema_value
-            else:
-                agent['schema'] = schema_value
-        if action.get('guard'):
-            from agent_actions.response_processing.guard_parser import GuardParser
-            from agent_actions.response_processing.consolidated_guard import GuardBehavior, parse_guard_config
-            guard_data = action['guard']
-            if isinstance(guard_data, str):
-                guard_expr = GuardParser.parse(guard_data)
-                if guard_expr.type.value == 'udf':
-                    agent['conditional_clause'] = guard_expr.expression
-                else:
-                    agent['where_clause'] = {'clause': guard_expr.expression, 'scope': 'item'}
-            else:
-                guard_config = parse_guard_config(guard_data)
-                if guard_config.is_udf_condition():
-                    if guard_config.on_false == GuardBehavior.FILTER:
-                        from agent_actions.errors import ConfigurationError  # New modular pattern!
-                        action_name = action.get('name', 'unknown')
-                        raise ConfigurationError("UDF conditions cannot use 'filter' behavior. UDF conditions only support 'skip' behavior", context={'action_name': action_name, 'guard_behavior': 'filter', 'operation': 'expand_actions_to_agents'})
-                    agent['conditional_clause'] = guard_config.get_condition_expression()
-                else:
-                    agent['where_clause'] = {'clause': guard_config.get_condition_expression(), 'scope': 'item', 'behavior': guard_config.on_false.value}
+
+        # Process schema configuration
+        ActionExpander._process_schema_config(agent, action, template_replacer)
+
+        # Process guard configuration
+        ActionExpander._process_guard_config(agent, action)
+
+        # Process prompt
         prompt = action.get('prompt')
-        if prompt:
-            agent['prompt'] = template_replacer(prompt)
-        else:
-            agent['prompt'] = None
-        action_kind = action.get('kind', 'llm')
-        if action_kind == 'tool':
-            if not action.get('impl'):
-                from agent_actions.errors import ConfigValidationError  # New modular pattern!
-                raise ConfigValidationError('impl', "Tool actions must specify 'impl' field", context={'action': action.get('name', 'unknown'), 'kind': 'tool', 'hint': "Add 'impl: module.function_name' to your tool action"})
-            agent['model_vendor'] = 'tool'
-            agent['model_name'] = action.get('impl', action.get('name'))
-            if run_mode == 'batch':
-                if action.get('run_mode') == 'batch':
-                    from agent_actions.errors import ConfigurationError  # New modular pattern!
-                    action_name = action.get('name', 'unknown')
-                    raise ConfigurationError("Tool actions do not support batch processing. Please set run_mode='online' or remove the run_mode setting to use the default", context={'action_name': action_name, 'kind': 'tool', 'run_mode': 'batch', 'operation': 'expand_actions_to_agents'})
-                agent['run_mode'] = 'online'
+        agent['prompt'] = template_replacer(prompt) if prompt else None
+
+        # Process tool actions
+        run_mode = agent['run_mode']
+        ActionExpander._process_tool_action(agent, action, run_mode)
+
+        # Process granularity
         granularity = action.get('granularity', defaults.get('granularity', 'record'))
         if granularity:
-            agent['granularity'] = granularity.capitalize() if isinstance(granularity, str) else granularity
+            agent['granularity'] = (
+                granularity.capitalize() if isinstance(granularity, str)
+                else granularity
+            )
+
         # Handle context_scope (complex field - not in SIMPLE_CONFIG_FIELDS)
         # Deep merge: action directives merge with defaults (not replace)
         context_scope_defaults = defaults.get('context_scope')
@@ -199,36 +438,31 @@ class ActionExpander:
 
         # Initialize dependencies from action if present, else empty list
         agent['dependencies'] = action.get('dependencies', [])
-        chunk_config = action.get('chunk_config', defaults.get('chunk_config', {}))
-        if chunk_config:
-            agent['chunk_config'] = chunk_config
-        else:
-            agent['chunk_config'] = {}
-            if action.get('chunk_size') or defaults.get('chunk_size'):
-                agent['chunk_config']['chunk_size'] = action.get('chunk_size', defaults.get('chunk_size', 300))
-            if action.get('chunk_overlap') or defaults.get('chunk_overlap'):
-                agent['chunk_config']['chunk_overlap'] = action.get('chunk_overlap', defaults.get('chunk_overlap', 10))
-        agent['skip_if'] = None
-        agent['ephemeral'] = None
-        agent['add_dispatch'] = None
-        agent['anthropic_version'] = None
-        agent['enable_prompt_caching'] = None
-        if 'conditional_clause' not in agent:
-            agent['conditional_clause'] = None
-        if 'where_clause' not in agent:
-            agent['where_clause'] = None
+
+        # Process chunk configuration
+        ActionExpander._process_chunk_config(agent, action, defaults)
+
+        # Initialize optional fields
+        ActionExpander._initialize_optional_fields(agent)
+
+        # Process loop consumption
         loop_consumption = action.get('loop_consumption')
         if loop_consumption:
-            agent['loop_consumption_config'] = {'source': loop_consumption.get('source'), 'pattern': loop_consumption.get('pattern', 'merge')}
+            agent['loop_consumption_config'] = {
+                'source': loop_consumption.get('source'),
+                'pattern': loop_consumption.get('pattern', 'merge')
+            }
         else:
             agent['loop_consumption_config'] = None
+
+        # Process interceptors
         interceptors = action.get('interceptors')
         if interceptors:
             agent['interceptors'] = interceptors
+
         return agent
 
     @staticmethod
-    # pylint: disable=too-many-locals
     def expand_actions_to_agents(action_config: Dict[str, Any]) -> AgentConfigMap:
         """
         Convert action-based configuration to agent-based configuration with loop expansion.
@@ -242,84 +476,39 @@ class ActionExpander:
         workflow_name = action_config.get('name', 'workflow')
         actions = action_config.get('actions', [])
         defaults = action_config.get('defaults', {})
-        
+
         # We no longer process 'plan' for dependencies.
         # Dependencies must be explicitly defined in the action config.
-        
+
         agents: AgentConfigList = []
         for action in actions:
             # Assuming all actions listed are operational unless specified otherwise,
             # or we could filter by some other logic. For now, we take all actions.
-            is_operational = True 
-            
+            is_operational = True
+
             loop_config = action.get('loop')
             if loop_config:
-                param_name = loop_config.get('param', 'i')
-                loop_range = loop_config.get('range', [1, 1])
-                if len(loop_range) == 2:
-                    start, end = loop_range
-                    range_values = range(start, end + 1)
-                else:
-                    range_values = loop_range
-                range_values_list = list(range_values)
-                for idx, i in enumerate(range_values_list):
-                    agent: AgentEntryDict = {}
-
-                    # Capture loop variables using default arguments
-                    def replace_template_var(
-                        value,
-                        param_name=param_name,
-                        i=i,
-                        idx=idx,
-                        range_values_list=range_values_list
-                    ):
-                        if isinstance(value, str):
-                            result = value.replace(f'${{{param_name}}}', str(i))
-                            if idx > 0:
-                                prev_value = range_values_list[idx - 1]
-                                result = result.replace(
-                                    f'${{{param_name}-1}}', str(prev_value)
-                                )
-                            else:
-                                result = result.replace(f'${{{param_name}-1}}', '')
-                            return result
-                        if isinstance(value, dict):
-                            return {
-                                replace_template_var(k) if isinstance(k, str) else k:
-                                replace_template_var(v)
-                                for k, v in value.items()
-                            }
-                        if isinstance(value, list):
-                            return [replace_template_var(item) for item in value]
-                        return value
-                    agent['agent_type'] = f"{action.get('name', 'unknown')}_{i}"
-                    agent['name'] = f"{action.get('name')}_{i}"
-                    agent['is_loop_agent'] = True
-                    agent['loop_base_name'] = action.get('name', 'unknown')
-                    agent['loop_iteration'] = i
-                    agent['loop_mode'] = loop_config.get('mode', 'parallel')
-                    
-                    # Create agent
-                    created_agent = ActionExpander._create_agent_from_action(action, defaults, agent, replace_template_var, is_operational=is_operational)
-                    
-                    # For loops, we might need to adjust dependencies if they refer to the previous iteration (sequential loop)
-                    # But if dependencies are explicit, we trust the YAML. 
-                    # If users want sequential loops, they should use the 'sequential' mode which the Runner/OutputManager handles,
-                    # or explicitly chain them.
-                    # With the new dynamic resolution, we assume dependencies are correct.
-                    
-                    agents.append(created_agent)
+                # Expand loop action into multiple agents
+                loop_agents = ActionExpander._expand_loop_action(
+                    action, loop_config, defaults, is_operational
+                )
+                agents.extend(loop_agents)
             else:
                 agent: AgentEntryDict = {}
                 agent['agent_type'] = action.get('name', 'unknown')
                 agent['name'] = action.get('name')
-                
+
+
                 # Check for explicit dependencies in action, defaulting to empty list
-                # This is handled inside _create_agent_from_action via inheritance, but we ensure it persists
-                created_agent = ActionExpander._create_agent_from_action(action, defaults, agent, lambda x: x, is_operational=is_operational)
+                # This is handled inside _create_agent_from_action via inheritance,
+                # but we ensure it persists
+                created_agent = ActionExpander._create_agent_from_action(
+                    action, defaults, agent, lambda x: x,
+                    is_operational=is_operational
+                )
                 if 'dependencies' not in created_agent and 'dependencies' in action:
-                     created_agent['dependencies'] = action['dependencies']
-                     
+                    created_agent['dependencies'] = action['dependencies']
+
                 agents.append(created_agent)
 
         return {workflow_name: agents}
