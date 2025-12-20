@@ -41,7 +41,11 @@ class ConfigurationErrorFormatter(ErrorFormatter):
     ) -> UserError:
         """Handle configuration errors."""
         # Check for missing required fields (hierarchy resolution)
-        if 'missing required field' in message.lower() or 'required configuration fields are missing' in message.lower():
+        missing_field_patterns = [
+            'missing required field',
+            'required configuration fields are missing'
+        ]
+        if any(pattern in message.lower() for pattern in missing_field_patterns):
             return self._format_missing_required_fields_error(message, context)
 
         # Check for missing environment variable
@@ -69,7 +73,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             docs_url="https://docs.agent-actions.com/config"
         )
 
-    def _format_missing_required_fields_error(self, message: str, context: Dict) -> UserError:
+    def _format_missing_required_fields_error(self, _message: str, context: Dict) -> UserError:
         """Format error for missing required configuration fields after hierarchy resolution."""
         action_name = context.get('action_name', context.get('agent', 'unknown'))
         missing_fields = context.get('missing_fields', [])
@@ -134,7 +138,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             docs_url="https://docs.agent-actions.com/core-concepts/configuration-hierarchy"
         )
 
-    def _format_missing_env_var_error(self, message: str, context: Dict) -> UserError:
+    def _format_missing_env_var_error(self, _message: str, context: Dict) -> UserError:
         """Format error for missing environment variable."""
         env_var = context.get('env_var', 'UNKNOWN')
         agent_name = context.get('agent', 'unknown')

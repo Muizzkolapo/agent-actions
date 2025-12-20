@@ -1,6 +1,7 @@
 """YAML syntax error formatter with code snippets."""
 
 from typing import Dict, Any
+from pathlib import Path
 import yaml
 
 from .error_formatter_base import ErrorFormatter
@@ -42,44 +43,61 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
         context: Dict[str, Any]
     ) -> UserError:
         """Format YAML syntax errors with code snippet and visual indicators."""
-        # Extract key info from context
-        file_path = context.get('file_path') or context.get('config_file') or context.get('yaml_path')
-        rendered_content = context.get('rendered_content')
-        line = context.get('line')
-        column = context.get('column')
-        problem = context.get('problem', 'syntax error')
-
-        # Get file name for title
-        from pathlib import Path
-        file_name = Path(file_path).name if file_path else 'configuration file'
+        # Extract and organize YAML context
+        yaml_context = self._extract_yaml_context(context)
 
         # Build title
-        title = f"YAML syntax error in {file_name}"
+        title = f"YAML syntax error in {yaml_context['file_name']}"
 
-        # Build details with just location and problem
+        # Build details with location and problem
         details_parts = []
-        if line and column:
-            details_parts.append(f"Line {line}, Column {column}: {problem}")
+        if yaml_context['line'] and yaml_context['column']:
+            details_parts.append(
+                f"Line {yaml_context['line']}, Column {yaml_context['column']}: "
+                f"{yaml_context['problem']}"
+            )
         else:
-            details_parts.append(problem)
+            details_parts.append(yaml_context['problem'])
 
         # Add code snippet if available
-        if rendered_content and line:
-            snippet = self._get_code_snippet(rendered_content, line, column)
+        if yaml_context['rendered_content'] and yaml_context['line']:
+            snippet = self._get_code_snippet(
+                yaml_context['rendered_content'],
+                yaml_context['line'],
+                yaml_context['column']
+            )
             if snippet:
                 details_parts.append("\n" + snippet)
 
         # Get fix suggestion
-        fix = self._get_fix_suggestion(problem)
+        fix = self._get_fix_suggestion(yaml_context['problem'])
 
         return UserError(
             category="YAML Syntax Error",
             title=title,
             details="\n".join(details_parts),
             fix=fix,
-            context={'file_path': file_path} if file_path else None,
+            context={'file_path': yaml_context['file_path']} if yaml_context['file_path'] else None,
             docs_url="https://docs.agent-actions.com/troubleshooting/yaml-errors"
         )
+
+    def _extract_yaml_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract and organize YAML error context from context dict."""
+        file_path = (
+            context.get('file_path') or
+            context.get('config_file') or
+            context.get('yaml_path')
+        )
+        file_name = Path(file_path).name if file_path else 'configuration file'
+
+        return {
+            'file_path': file_path,
+            'file_name': file_name,
+            'rendered_content': context.get('rendered_content'),
+            'line': context.get('line'),
+            'column': context.get('column'),
+            'problem': context.get('problem', 'syntax error')
+        }
 
     def _get_code_snippet(self, content: str, line_num: int, column_num: int) -> str:
         """Extract code snippet with visual indicator."""
@@ -119,22 +137,30 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
 
         problem_lower = problem.lower()
 
-        if "expected ':'" in problem_lower or "could not find expected ':'" in problem_lower:
-            return "Missing ':' after key. Use 'key: value' syntax."
+        # Map problem patterns to fix suggestions
+        fix_suggestions = {
+            "expected ':'": "Missing ':' after key. Use 'key: value' syntax.",
+            "could not find expected ':'": "Missing ':' after key. Use 'key: value' syntax.",
+            "mapping values are not allowed": (
+                "Check your indentation. Use spaces (not tabs), and ensure proper nesting."
+            ),
+            "expected <block end>": (
+                "Check for unclosed lists or dictionaries. List items (-) must align."
+            ),
+            "found unexpected end of stream": (
+                "File appears incomplete. Check for missing closing brackets or quotes."
+            ),
+            "found character '\\t'": "Remove tab characters. Use spaces for indentation.",
+        }
 
-        if "mapping values are not allowed" in problem_lower:
-            return "Check your indentation. Use spaces (not tabs), and ensure proper nesting."
+        # Check for pattern matches
+        for pattern, suggestion in fix_suggestions.items():
+            if pattern in problem_lower:
+                return suggestion
 
-        if "expected <block end>" in problem_lower:
-            return "Check for unclosed lists or dictionaries. List items (-) must align."
-
-        if "found unexpected end of stream" in problem_lower:
-            return "File appears incomplete. Check for missing closing brackets or quotes."
-
-        if "found character '\\t'" in problem_lower:
-            return "Remove tab characters. Use spaces for indentation."
-
+        # Special case for "could not find expected" with "key"
         if "could not find expected" in problem_lower and "key" in problem_lower:
             return "Invalid key format. Keys must be followed by a colon (:)."
 
+        # Default fallback
         return "Check the YAML syntax at the indicated location."

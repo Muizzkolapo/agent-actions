@@ -71,13 +71,13 @@ class ProjectPathsFactory:
     def get_agent_paths(agent_name: str) -> Tuple[Path, Path, Path]:
         """
         Get the agent paths using the FileHandler.
-        
+
         Args:
             agent_name: Name of the agent.
-            
+
         Returns:
             Tuple of (agent_config_dir, io_dir, unknown_path).
-            
+
         Raises:
             ValidationError: If getting agent paths fails.
         """
@@ -85,11 +85,43 @@ class ProjectPathsFactory:
             agent_config_dir_str, io_dir_str, unknown_path_str = (
                 FileHandler.get_agent_paths(agent_name)
             )
+
+            # Check if required paths are None and provide helpful error message
+            if agent_config_dir_str is None:
+                raise ValidationError(
+                    f"Agent '{agent_name}' not found. "
+                    f"The agent configuration directory '{agent_name}/agent_config' "
+                    "does not exist. Please create the agent directory structure "
+                    "or check the agent name.",
+                    context={
+                        'agent_name': agent_name,
+                        'operation': 'get_agent_paths',
+                        'missing_path': 'agent_config_dir',
+                        'expected_path': f'{agent_name}/agent_config'
+                    }
+                )
+
+            if io_dir_str is None:
+                raise ValidationError(
+                    f"Agent IO directory not found for '{agent_name}'. "
+                    f"The directory '{agent_name}/agent_io' does not exist. "
+                    f"Please create the required directory structure.",
+                    context={
+                        'agent_name': agent_name,
+                        'operation': 'get_agent_paths',
+                        'missing_path': 'io_dir',
+                        'expected_path': f'{agent_name}/agent_io'
+                    }
+                )
+
             return (
                 Path(agent_config_dir_str),
                 Path(io_dir_str),
                 Path(unknown_path_str or '')
             )
+        except ValidationError:
+            # Re-raise ValidationError with its original context
+            raise
         except Exception as e:
             logger.error(
                 'Failed to get agent paths for %s: %s', agent_name, str(e)
