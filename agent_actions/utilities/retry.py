@@ -9,7 +9,7 @@ import asyncio
 import time
 import logging
 import functools
-from typing import Type, Tuple, Optional, Callable, Any, Union, TypeVar
+from typing import Type, Tuple, Callable, Union, TypeVar
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -58,7 +58,7 @@ def retry(
     """
     if not isinstance(exceptions, tuple):
         exceptions = (exceptions,)
-        
+
     strategy = RetryStrategy(
         max_attempts=max_attempts,
         delay=delay,
@@ -68,67 +68,72 @@ def retry(
     )
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
-        
+
         # Check if function is a coroutine
         if asyncio.iscoroutinefunction(func):
             @functools.wraps(func)
             async def async_wrapper(*args, **kwargs) -> T:
                 last_exception = None
                 current_delay = strategy.delay
-                
+                # Extract exception tuple for proper except clause
+                exception_types = strategy.exceptions
+
                 for attempt in range(1, strategy.max_attempts + 1):
                     try:
                         return await func(*args, **kwargs)
-                    except strategy.exceptions as e:
+                    except exception_types as e:  # pylint: disable=catching-non-exception
                         last_exception = e
                         if attempt == strategy.max_attempts:
                             logger.warning(
-                                f"Retry failed after {attempt} attempts for {func.__name__}: {str(e)}"
+                                "Retry failed after %s attempts for %s: %s",
+                                attempt, func.__name__, str(e)
                             )
                             raise
-                        
+
                         logger.debug(
-                            f"Retry attempt {attempt}/{strategy.max_attempts} for {func.__name__} "
-                            f"after error: {str(e)}. Waiting {current_delay:.2f}s"
+                            "Retry attempt %s/%s for %s after error: %s. Waiting %.2fs",
+                            attempt, strategy.max_attempts, func.__name__, str(e), current_delay
                         )
-                        
+
                         await asyncio.sleep(current_delay)
                         current_delay = min(current_delay * strategy.backoff, strategy.max_delay)
-                
+
                 # Should be unreachable due to raise in loop, but for type safety
                 if last_exception:
                     raise last_exception
                 return None  # type: ignore
             return async_wrapper
-            
-        else:
-            @functools.wraps(func)
-            def sync_wrapper(*args, **kwargs) -> T:
+
+        @functools.wraps(func)
+        def sync_wrapper(*args, **kwargs) -> T:
                 last_exception = None
                 current_delay = strategy.delay
-                
+                # Extract exception tuple for proper except clause
+                exception_types = strategy.exceptions
+
                 for attempt in range(1, strategy.max_attempts + 1):
                     try:
                         return func(*args, **kwargs)
-                    except strategy.exceptions as e:
+                    except exception_types as e:  # pylint: disable=catching-non-exception
                         last_exception = e
                         if attempt == strategy.max_attempts:
                             logger.warning(
-                                f"Retry failed after {attempt} attempts for {func.__name__}: {str(e)}"
+                                "Retry failed after %s attempts for %s: %s",
+                                attempt, func.__name__, str(e)
                             )
                             raise
-                        
+
                         logger.debug(
-                            f"Retry attempt {attempt}/{strategy.max_attempts} for {func.__name__} "
-                            f"after error: {str(e)}. Waiting {current_delay:.2f}s"
+                            "Retry attempt %s/%s for %s after error: %s. Waiting %.2fs",
+                            attempt, strategy.max_attempts, func.__name__, str(e), current_delay
                         )
-                        
+
                         time.sleep(current_delay)
                         current_delay = min(current_delay * strategy.backoff, strategy.max_delay)
-                
+
                 if last_exception:
                     raise last_exception
                 return None  # type: ignore
-            return sync_wrapper
-            
+        return sync_wrapper
+
     return decorator

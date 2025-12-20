@@ -193,7 +193,8 @@ class ProcessorErrorHandlerMixin:
                         if attempt < max_attempts - 1:
                             # Log retry attempt with configuration and wait time
                             self.logger.warning(
-                                f"Retry attempt {attempt + 1}/{max_attempts} after failure",
+                                "Retry attempt %s/%s after failure",
+                                attempt + 1, max_attempts,
                                 extra={
                                     'operation': 'retry_attempt',
                                     'function': func.__name__,
@@ -211,7 +212,8 @@ class ProcessorErrorHandlerMixin:
                         else:
                             # Log final failure after all retries exhausted
                             self.logger.error(
-                                f"All retry attempts exhausted for {func.__name__}",
+                                "All retry attempts exhausted for %s",
+                                func.__name__,
                                 extra={
                                     'operation': 'retry_exhausted',
                                     'function': func.__name__,
@@ -222,6 +224,7 @@ class ProcessorErrorHandlerMixin:
                             )
                 if last_exception:
                     raise last_exception
+                return None  # Unreachable, but satisfies pylint
             return wrapper
         return decorator
 
@@ -315,4 +318,5 @@ class ProcessorErrorHandlerMixin:
         elif isinstance(error, KeyboardInterrupt):
             instructions['suggested_action'] = 'resume_from_checkpoint'
             instructions['can_retry'] = True
+
         return instructions

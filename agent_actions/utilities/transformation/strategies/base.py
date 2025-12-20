@@ -31,7 +31,6 @@ class IPassthroughTransformStrategy(ABC):
         Returns:
             True if this strategy can handle the transformation
         """
-        pass
 
     @abstractmethod
     def transform(
@@ -55,4 +54,3 @@ class IPassthroughTransformStrategy(ABC):
         Returns:
             Transformed data list
         """
-        pass

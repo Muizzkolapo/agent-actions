@@ -144,7 +144,7 @@ class StaticDataLoader:
                         'error_type': 'unexpected_error'
                     },
                     cause=e
-                )
+                ) from e
 
         logger.debug(f"Loaded {len(loaded_data)} static data fields: {list(loaded_data.keys())}")
         return loaded_data
@@ -162,8 +162,7 @@ class StaticDataLoader:
         """
         if file_spec.startswith('$file:'):
             return file_spec[6:]  # Remove '$file:' prefix
-        else:
-            return file_spec  # Use as-is
+        return file_spec  # Use as-is
 
     def _resolve_path(self, file_path: str, field_name: str) -> Path:
         """
@@ -223,7 +222,7 @@ class StaticDataLoader:
         try:
             # This will raise ValueError if path is outside static_data_dir
             resolved_path.relative_to(self.static_data_dir)
-        except ValueError:
+        except ValueError as exc:
             logger.error(
                 f"Path traversal attempt detected for field '{field_name}': "
                 f"{original_path} -> {resolved_path}"
@@ -237,7 +236,7 @@ class StaticDataLoader:
                     'static_data_dir': str(self.static_data_dir),
                     'error_type': 'path_traversal_attempt'
                 }
-            )
+            ) from exc
 
     def _load_file(self, file_path: Path, field_name: str) -> Any:
         """
@@ -284,7 +283,7 @@ class StaticDataLoader:
 
         if suffix == '.json':
             return self._load_json(file_path, field_name)
-        elif suffix in {'.yml', '.yaml'}:
+        if suffix in {'.yml', '.yaml'}:
             return self._load_yaml(file_path, field_name)
         elif suffix in {'.md', '.txt'}:
             return self._load_text(file_path, field_name)
@@ -332,7 +331,7 @@ class StaticDataLoader:
                     'error_type': 'json_parse_error'
                 },
                 cause=e
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Error reading JSON file for field '{field_name}': {e}")
             raise StaticDataLoadError(
@@ -344,7 +343,7 @@ class StaticDataLoader:
                     'error_type': 'json_read_error'
                 },
                 cause=e
-            )
+            ) from e
 
     def _load_yaml(self, file_path: Path, field_name: str) -> Any:
         """
@@ -374,7 +373,7 @@ class StaticDataLoader:
                     'error_type': 'yaml_parse_error'
                 },
                 cause=e
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Error reading YAML file for field '{field_name}': {e}")
             raise StaticDataLoadError(
@@ -386,7 +385,7 @@ class StaticDataLoader:
                     'error_type': 'yaml_read_error'
                 },
                 cause=e
-            )
+            ) from e
 
     def _load_text(self, file_path: Path, field_name: str) -> str:
         """
@@ -416,7 +415,7 @@ class StaticDataLoader:
                     'error_type': 'text_read_error'
                 },
                 cause=e
-            )
+            ) from e
 
     def _load_csv(self, file_path: Path, field_name: str) -> list:
         """
@@ -447,7 +446,7 @@ class StaticDataLoader:
                     'error_type': 'csv_parse_error'
                 },
                 cause=e
-            )
+            ) from e
         except Exception as e:
             logger.error(f"Error reading CSV file for field '{field_name}': {e}")
             raise StaticDataLoadError(
@@ -459,7 +458,7 @@ class StaticDataLoader:
                     'error_type': 'csv_read_error'
                 },
                 cause=e
-            )
+            ) from e
 
     def clear_cache(self) -> None:
         """Clear the file cache (typically called between workflow runs)."""

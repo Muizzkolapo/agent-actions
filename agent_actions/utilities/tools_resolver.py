@@ -53,11 +53,11 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
     if tool_path:
         # If it's a list, return the first path
         if isinstance(tool_path, list) and len(tool_path) > 0:
-            logger.debug(f"Resolved tools_path from tool_path list: {tool_path[0]}")
+            logger.debug("Resolved tools_path from tool_path list: %s", tool_path[0])
             return tool_path[0]
         # If it's a string, return it directly
-        elif isinstance(tool_path, str):
-            logger.debug(f"Resolved tools_path from tool_path string: {tool_path}")
+        if isinstance(tool_path, str):
+            logger.debug("Resolved tools_path from tool_path string: %s", tool_path)
             return tool_path
 
     # Check for tools configuration
@@ -66,7 +66,7 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
     # Check for simple format (consistent with realtime mode)
     if isinstance(tools, dict) and 'path' in tools:
         path = tools.get('path')
-        logger.debug(f"Resolved tools_path from tools.path: {path}")
+        logger.debug("Resolved tools_path from tools.path: %s", path)
         return path
 
     # Check for OpenAI tool calling format
@@ -82,7 +82,7 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
                             tool_config = yaml.safe_load(f)
                             if tool_config and 'module_path' in tool_config:
                                 module_path = tool_config['module_path']
-                                logger.debug(f"Resolved tools_path from OpenAI tool config: {module_path}")
+                                logger.debug("Resolved tools_path from OpenAI tool config: %s", module_path)
                                 return module_path
                     except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
                         logger.warning("Failed to load tool config from %s: %s", tool_file_path, e)

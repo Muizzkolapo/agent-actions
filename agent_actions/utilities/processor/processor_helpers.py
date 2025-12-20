@@ -125,8 +125,7 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
                 passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
                 return not passthrough_on_error
             return not filter_result.matched
-        else:
-            return not filter_result
+        return not filter_result
     except Exception as e:
         logger.debug(
             "Where clause filter check failed, using passthrough_on_error setting: %s",

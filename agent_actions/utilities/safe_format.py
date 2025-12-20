@@ -87,7 +87,7 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
         # Prevent infinite loops from circular references
         exc_id = id(current)
         if exc_id in visited:
-            logger.debug(f"Circular reference detected in exception chain at depth {depth}")
+            logger.debug("Circular reference detected in exception chain at depth %s", depth)
             break
         visited.add(exc_id)
 
@@ -100,7 +100,6 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
                 next_exc = current.__cause__
         except Exception:
             logger.debug("Error accessing __cause__")
-            pass
 
         # Try __context__ if no __cause__ (implicit chaining)
         if next_exc is None:
@@ -109,7 +108,6 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
                     next_exc = current.__context__
             except Exception:
                 logger.debug("Error accessing __context__")
-                pass
 
         # If no next exception, we've reached the end
         if next_exc is None:
@@ -281,5 +279,5 @@ def format_exception_chain_for_debug(exc: Exception, max_depth: int = 10) -> str
         return "\n".join(lines)
 
     except Exception as format_error:
-        logger.error(f"Failed to format exception chain: {format_error}")
+        logger.error("Failed to format exception chain: %s", format_error)
         return f"Exception chain formatting failed. Original error: {safe_format_error(exc)}"

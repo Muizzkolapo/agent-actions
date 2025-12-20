@@ -243,7 +243,7 @@ def create_agent_directory_structure(agent_name: str, base_path: Optional[Path]=
     created_paths = {}
     for name, path in agent_paths.items():
         created_paths[name] = ensure_directory_exists(path)
-    logger.info(f'Created agent directory structure for {agent_name}')
+    logger.info('Created agent directory structure for %s', agent_name)
     return created_paths
 DEFAULT_MARKER_FILE = 'agent_actions.yml'
 COMMON_EXTENSIONS = ['.json', '.yml', '.yaml', '.txt', '.py']
@@ -275,8 +275,12 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
         ValueError: If the dependencies input is invalid or a cyclic dependency is detected.
     """
     if not isinstance(dependencies, dict):
-        from agent_actions.errors import DataValidationError
-        raise DataValidationError('dependencies', 'dictionary', str(type(dependencies).__name__), context={'operation': 'topological_sort'})
+        from agent_actions.errors import DataValidationError  # pylint: disable=import-outside-toplevel
+        message = (
+            f"Invalid type for dependencies: expected dictionary, "
+            f"got {type(dependencies).__name__}"
+        )
+        raise DataValidationError(message, context={'operation': 'topological_sort'})
     all_nodes = set(dependencies.keys())
     for dependent_nodes in dependencies.values():
         all_nodes.update(dependent_nodes)
@@ -295,7 +299,16 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
     if len(sorted_nodes) != len(all_nodes):
-        from agent_actions.errors import WorkflowError
+        from agent_actions.errors import WorkflowError  # pylint: disable=import-outside-toplevel
         cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
-        raise WorkflowError('dependency_resolution', f'Cyclic dependency detected in the workflow', context={'cycle_nodes': list(cycle_nodes), 'sorted_nodes': sorted_nodes, 'all_nodes': list(all_nodes), 'operation': 'topological_sort'})
+        message = "Cyclic dependency detected in the workflow"
+        raise WorkflowError(
+            message,
+            context={
+                'cycle_nodes': list(cycle_nodes),
+                'sorted_nodes': sorted_nodes,
+                'all_nodes': list(all_nodes),
+                'operation': 'dependency_resolution'
+            }
+        )
     return sorted_nodes[::-1]

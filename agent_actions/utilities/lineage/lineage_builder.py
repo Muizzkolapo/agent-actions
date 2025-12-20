@@ -47,8 +47,7 @@ class LineageBuilder:
                 item['lineage']
             )
             return filtered_lineage + [node_id]
-        else:
-            return [node_id]
+        return [node_id]
 
     @staticmethod
     def add_lineage_tracking(
