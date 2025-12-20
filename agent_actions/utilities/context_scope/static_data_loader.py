@@ -84,7 +84,7 @@ class StaticDataLoader:
         self.static_data_dir = static_data_dir.resolve()
         self._cache: Dict[str, Any] = {}
 
-        logger.debug(f"StaticDataLoader initialized with directory: {self.static_data_dir}")
+        logger.debug("StaticDataLoader initialized with directory: %s", self.static_data_dir)
 
     def load_static_data(
         self,
@@ -120,22 +120,22 @@ class StaticDataLoader:
                 # Check cache
                 cache_key = str(resolved_path)
                 if cache_key in self._cache:
-                    logger.debug(f"Cache hit for field '{field_name}': {cache_key}")
+                    logger.debug("Cache hit for field '%s': %s", field_name, cache_key)
                     loaded_data[field_name] = self._cache[cache_key]
                 else:
                     # Load and cache
-                    logger.debug(f"Loading file for field '{field_name}': {resolved_path}")
+                    logger.debug("Loading file for field '%s': %s", field_name, resolved_path)
                     data = self._load_file(resolved_path, field_name)
                     self._cache[cache_key] = data
                     loaded_data[field_name] = data
-                    logger.debug(f"Loaded static data field '{field_name}' from {resolved_path.name}")
+                    logger.debug("Loaded static data field '%s' from %s", field_name, resolved_path.name)
 
             except StaticDataLoadError:
                 # Re-raise StaticDataLoadError as-is
                 raise
             except Exception as e:
                 # Wrap unexpected errors
-                logger.error(f"Unexpected error loading field '{field_name}': {e}")
+                logger.error("Unexpected error loading field '%s': %s", field_name, e)
                 raise StaticDataLoadError(
                     f"Failed to load static data field '{field_name}': {str(e)}",
                     context={
@@ -146,7 +146,7 @@ class StaticDataLoader:
                     cause=e
                 ) from e
 
-        logger.debug(f"Loaded {len(loaded_data)} static data fields: {list(loaded_data.keys())}")
+        logger.debug("Loaded %s static data fields: %s", len(loaded_data), list(loaded_data.keys()))
         return loaded_data
 
     def _parse_file_path(self, file_spec: str, field_name: str) -> str:
@@ -182,7 +182,7 @@ class StaticDataLoader:
 
         # Reject absolute paths immediately
         if path.is_absolute():
-            logger.error(f"Absolute path rejected for field '{field_name}': {file_path}")
+            logger.error("Absolute path rejected for field '%s': %s", field_name, file_path)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Absolute paths not allowed",
                 context={
@@ -199,7 +199,7 @@ class StaticDataLoader:
         # Validate security
         self._validate_path_security(resolved, field_name, file_path)
 
-        logger.debug(f"Resolved path for field '{field_name}': {resolved}")
+        logger.debug("Resolved path for field '%s': %s", field_name, resolved)
         return resolved
 
     def _validate_path_security(
@@ -224,8 +224,8 @@ class StaticDataLoader:
             resolved_path.relative_to(self.static_data_dir)
         except ValueError as exc:
             logger.error(
-                f"Path traversal attempt detected for field '{field_name}': "
-                f"{original_path} -> {resolved_path}"
+                "Path traversal attempt detected for field '%s': %s -> %s",
+                field_name, original_path, resolved_path
             )
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': File path escapes static data directory",
@@ -319,7 +319,7 @@ class StaticDataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error in field '{field_name}': {e}")
+            logger.error("JSON parse error in field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Invalid JSON format",
                 context={
@@ -333,7 +333,7 @@ class StaticDataLoader:
                 cause=e
             ) from e
         except Exception as e:
-            logger.error(f"Error reading JSON file for field '{field_name}': {e}")
+            logger.error("Error reading JSON file for field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Failed to read JSON file",
                 context={
@@ -363,7 +363,7 @@ class StaticDataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
         except yaml.YAMLError as e:
-            logger.error(f"YAML parse error in field '{field_name}': {e}")
+            logger.error("YAML parse error in field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Invalid YAML format",
                 context={
@@ -375,7 +375,7 @@ class StaticDataLoader:
                 cause=e
             ) from e
         except Exception as e:
-            logger.error(f"Error reading YAML file for field '{field_name}': {e}")
+            logger.error("Error reading YAML file for field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Failed to read YAML file",
                 context={
@@ -405,7 +405,7 @@ class StaticDataLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
-            logger.error(f"Error reading text file for field '{field_name}': {e}")
+            logger.error("Error reading text file for field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Failed to read text file",
                 context={
@@ -436,7 +436,7 @@ class StaticDataLoader:
                 reader = csv.DictReader(f)
                 return list(reader)
         except csv.Error as e:
-            logger.error(f"CSV parse error in field '{field_name}': {e}")
+            logger.error("CSV parse error in field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Invalid CSV format",
                 context={
@@ -448,7 +448,7 @@ class StaticDataLoader:
                 cause=e
             ) from e
         except Exception as e:
-            logger.error(f"Error reading CSV file for field '{field_name}': {e}")
+            logger.error("Error reading CSV file for field '%s': %s", field_name, e)
             raise StaticDataLoadError(
                 f"Static data field '{field_name}': Failed to read CSV file",
                 context={
@@ -464,7 +464,7 @@ class StaticDataLoader:
         """Clear the file cache (typically called between workflow runs)."""
         num_files = len(self._cache)
         self._cache.clear()
-        logger.debug(f"Cache cleared ({num_files} files removed)")
+        logger.debug("Cache cleared (%s files removed)", num_files)
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """
