@@ -1,15 +1,26 @@
-import json
+"""
+DeepSeek handler for agent-actions LLM invocation.
+
+Provides implementation of call_json() and call_non_json() methods
+for DeepSeek API integration using OpenAI-compatible SDK.
+"""
+
 import logging
-from openai import OpenAI
+from openai import OpenAI  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.mixins import (
+    JSONResponseMixin,
+    GenericErrorHandlerMixin
+)
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
 
-class DeepSeekHandler(BaseVendorHandler):
+class DeepSeekHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
+    """DeepSeek API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -28,60 +39,16 @@ class DeepSeekHandler(BaseVendorHandler):
             response_message = response.choices[0].message
             response_content = response_message.content
 
-            if not response_content:
-                logger.error(
-                    "DeepSeek returned empty response",
-                    extra={"operation": "deepseek_call_json", "model": model_name},
-                )
-                raise VendorAPIError(
-                    "DeepSeek returned empty response", vendor="deepseek", operation="call_json"
-                )
-
-            try:
-                response_data = json.loads(response_content)
-                logger.debug(
-                    "DeepSeek JSON response parsed successfully",
-                    extra={
-                        "operation": "deepseek_call_json",
-                        "model": model_name,
-                        "response_length": len(response_content),
-                    },
-                )
-                return response_data
-            except json.JSONDecodeError as e:
-                logger.error(
-                    "DeepSeek returned invalid JSON",
-                    extra={
-                        "operation": "deepseek_call_json",
-                        "model": model_name,
-                        "response_text": response_content[:200],
-                        "error": str(e),
-                        "line": e.lineno if hasattr(e, "lineno") else None,
-                    },
-                    exc_info=True,
-                )
-                raise VendorAPIError(
-                    f"DeepSeek returned invalid JSON: {e}",
-                    vendor="deepseek",
-                    operation="call_json",
-                    cause=e,
-                ) from e
+            return DeepSeekHandler.parse_json_response(
+                response_content=response_content,
+                vendor_name="DeepSeek",
+                operation="call_json",
+                model_name=model_name,
+            )
         except VendorAPIError:
             raise
         except Exception as e:
-            logger.error(
-                "DeepSeek API call failed",
-                extra={
-                    "operation": "deepseek_call_json",
-                    "model": model_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            raise VendorAPIError(
-                f"DeepSeek API call failed: {e}", vendor="deepseek", operation="call_json", cause=e
-            ) from e
+            DeepSeekHandler.handle_generic_error(e, "DeepSeek", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):

@@ -28,7 +28,13 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
         """Return AUTO processing mode to let system choose."""
         return ProcessingMode.AUTO
 
-    def process_item(self, contents: Dict, generated_data: List[Dict], source_guid: str, idx: int=0) -> List[Dict]:
+    def process_item(
+        self,
+        contents: Dict,
+        generated_data: List[Dict],
+        source_guid: str,
+        idx: int = 0
+    ) -> List[Dict]:
         """
         Process a generated data item with transformations.
         
@@ -45,11 +51,29 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
             ValueError: If data processing fails
         """
         try:
-            return transform_with_passthrough(generated_data, contents, source_guid, self.agent_config, idx)
-        except Exception as e:
-            self.handle_processing_error(e, 'Processing generated data item', TransformationError, source_guid=source_guid, item_index=idx, item_count=len(generated_data) if isinstance(generated_data, list) else 1)
+            return transform_with_passthrough(
+                generated_data,
+                contents,
+                source_guid,
+                self.agent_config,
+                idx
+            )
+        except TransformationError as error:
+            item_count = (
+                len(generated_data) if isinstance(generated_data, list) else 1
+            )
+            return self.handle_processing_error(
+                error,
+                'Processing generated data item',
+                TransformationError,
+                source_guid=source_guid,
+                item_index=idx,
+                item_count=item_count
+            )
 
-    def separate_side_output(self, processed_items: List[Dict]) -> tuple[List[Dict], List[Dict]]:
+    def separate_side_output(
+        self, processed_items: List[Dict]
+    ) -> tuple[List[Dict], List[Dict]]:
         """
         Separate main output from side output.
         

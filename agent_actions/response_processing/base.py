@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 """Base classes and utilities for response interceptors."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -29,6 +28,7 @@ class ResponseInterceptor(ABC):
         """Configure the interceptor from agent config."""
 
 
+# pylint: disable=too-few-public-methods
 class InterceptorChain:
     """Manages the chain of interceptors."""
 

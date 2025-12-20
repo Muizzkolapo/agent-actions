@@ -10,9 +10,10 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
 from ..base import BatchProvider, BatchTask
+from ..mixins import OpenAICompatibleResponseMixin
 
 
-class OpenAIBatchProvider(BatchProvider):
+class OpenAIBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
     """
     OpenAI Batch API implementation of the BatchProvider interface.
 
@@ -71,45 +72,17 @@ class OpenAIBatchProvider(BatchProvider):
             "body": body,
         }
 
-    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
-        """Extract error from OpenAI response."""
-        if raw_response.get("error"):
-            return str(raw_response["error"])
-        response_data = raw_response.get("response", {})
-        status_code = response_data.get("status_code")
-        if status_code and status_code != 200:
-            return f"HTTP {status_code}"
-        return None
-
-    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
-        """Extract content from OpenAI response."""
-        response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        if "choices" in response_body and response_body["choices"]:
-            choice = response_body["choices"][0]
-            if "message" in choice and "content" in choice["message"]:
-                return choice["message"]["content"]
-        return None
-
     def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract metadata from OpenAI response."""
+        """Extract metadata from OpenAI response with OpenAI-specific fields."""
+        # Get base metadata from mixin
+        metadata = super()._extract_metadata_from_response(raw_response)
+        # Add OpenAI-specific fields if response body exists
         response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        return {
-            "model": response_body.get("model"),
-            "finish_reason": response_body.get("choices", [{}])[0].get("finish_reason"),
-            "created": response_body.get("created"),
-            "system_fingerprint": response_body.get("system_fingerprint"),
-            "status_code": response_data.get("status_code"),
-        }
-
-    def _extract_usage_from_response(
-        self, raw_response: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        """Extract usage from OpenAI response."""
-        response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        return response_body.get("usage")
+        response_body = response_data.get("body")
+        if response_body:
+            metadata["created"] = response_body.get("created")
+            metadata["system_fingerprint"] = response_body.get("system_fingerprint")
+        return metadata
 
     def _get_default_model(self) -> str:
         """Return OpenAI's default model."""

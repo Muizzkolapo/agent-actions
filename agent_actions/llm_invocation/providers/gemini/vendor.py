@@ -1,16 +1,27 @@
-import json
+"""
+Gemini handler for agent-actions LLM invocation.
+
+Provides implementation of call_json() and call_non_json() methods
+for Google Gemini API integration.
+"""
+
 import logging
 from textwrap import dedent
-import google.generativeai as genai
+import google.generativeai as genai  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.mixins import (
+    JSONResponseMixin,
+    GenericErrorHandlerMixin
+)
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
 
-class GeminiHandler(BaseVendorHandler):
+class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Google Gemini API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -27,51 +38,16 @@ class GeminiHandler(BaseVendorHandler):
             prompt_dedent = dedent(prompt)
             response_temp = llm.generate_content(prompt_dedent)
 
-            try:
-                response = json.loads(response_temp.text)
-                logger.debug(
-                    "Gemini JSON response parsed successfully",
-                    extra={
-                        "operation": "gemini_call_json",
-                        "model": model_name,
-                        "response_length": len(response_temp.text),
-                    },
-                )
-                return response
-            except json.JSONDecodeError as e:
-                logger.error(
-                    "Gemini returned invalid JSON",
-                    extra={
-                        "operation": "gemini_call_json",
-                        "model": model_name,
-                        "response_text": response_temp.text[:200] if response_temp.text else "None",
-                        "error": str(e),
-                        "line": e.lineno if hasattr(e, "lineno") else None,
-                    },
-                    exc_info=True,
-                )
-                raise VendorAPIError(
-                    f"Gemini returned invalid JSON: {e}",
-                    vendor="gemini",
-                    operation="call_json",
-                    cause=e,
-                ) from e
+            return GeminiHandler.parse_json_response(
+                response_content=response_temp.text,
+                vendor_name="Gemini",
+                operation="call_json",
+                model_name=model_name,
+            )
         except VendorAPIError:
             raise
         except Exception as e:
-            logger.error(
-                "Gemini API call failed",
-                extra={
-                    "operation": "gemini_call_json",
-                    "model": model_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            raise VendorAPIError(
-                f"Gemini API call failed: {e}", vendor="gemini", operation="call_json", cause=e
-            ) from e
+            GeminiHandler.handle_generic_error(e, "Gemini", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):

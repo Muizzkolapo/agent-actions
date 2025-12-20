@@ -6,11 +6,21 @@ from agent_actions.errors import AgentActionsException, ConfigurationError  # Ne
 
 class PromptUtils:
     """
-    A class for processing strings, including field reference replacement and function call processing.
+    A class for processing strings, including field reference replacement
+    and function call processing.
     """
 
     @staticmethod
-    def process_dispatch_in_text(text: str, tools_path: str, context_data_str: str, agent_config: dict = None, captured_results: dict = None, preserve_type_on_exact_match: bool = False):
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    # pylint: disable=too-many-locals,too-many-branches
+    def process_dispatch_in_text(
+        text: str,
+        tools_path: str,
+        context_data_str: str,
+        agent_config: dict = None,
+        captured_results: dict = None,
+        preserve_type_on_exact_match: bool = False
+    ):
         """
         Process dispatch_task() calls in a single string.
 
@@ -20,16 +30,17 @@ class PromptUtils:
             context_data_str: Context data string to pass to functions
             agent_config: Agent configuration
             captured_results: Dictionary to aggregate results into (modified in-place)
-            preserve_type_on_exact_match: If True and the text is exactly one dispatch call, return the raw result.
+            preserve_type_on_exact_match: If True and the text is exactly one
+                dispatch call, return the raw result.
 
         Returns:
             Processed text (str) or raw result (Any) if preserve_type_on_exact_match is True
         """
         if captured_results is None:
             captured_results = {}
-            
+
         pattern = r"dispatch_task\s*\(\s*['\"]([^'\"]+)['\"]\s*\)"
-        
+
         # Optimization: Check for exact match first if type preservation is requested
         if preserve_type_on_exact_match:
             # We strip whitespace to be lenient, but strictly it should match the pattern
@@ -38,20 +49,28 @@ class PromptUtils:
             if match:
                 function_name = match.group(1)
                 try:
-                    transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                    transformed_text = StringProcessor.call_user_function(
+                        function_name, tools_path, context_data_str
+                    )
                     if agent_config and agent_config.get('add_dispatch'):
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
-                         # Decide behavior for None. If preserving type, return None or Error string?
-                         # Usually schema field might be optional, so proper None might be better than string error.
-                         # But consistency with string replacement suggests error string OR None.
-                         # Let's return None if None, user handles it.
-                         return None 
+                        # Decide behavior for None.
+                        # If preserving type, return None or Error string?
+                        # Usually schema field might be optional,
+                        # so proper None might be better than string error.
+                        # But consistency with string replacement suggests
+                        # error string OR None.
+                        # Let's return None if None, user handles it.
+                        return None
                     return transformed_text
                 except (AgentActionsException, ConfigurationError) as e:
                     raise e
                 except Exception as e:
-                    raise AgentActionsException(f"An unexpected error occurred in function '{function_name}': {str(e)}") from e
+                    raise AgentActionsException(
+                        f"An unexpected error occurred in function "
+                        f"'{function_name}': {str(e)}"
+                    ) from e
 
         matches = re.finditer(pattern, text)
         replacements = []
@@ -59,10 +78,12 @@ class PromptUtils:
             full_match = match.group(0)
             function_name = match.group(1)
             replacements.append((match.start(), match.end(), function_name, full_match))
-            
+
         for start, end, function_name, full_match in reversed(replacements):
             try:
-                transformed_text = StringProcessor.call_user_function(function_name, tools_path, context_data_str)
+                transformed_text = StringProcessor.call_user_function(
+                    function_name, tools_path, context_data_str
+                )
                 if agent_config and agent_config.get('add_dispatch'):
                     captured_results[function_name] = transformed_text
                 if transformed_text is None:
@@ -71,11 +92,16 @@ class PromptUtils:
             except (AgentActionsException, ConfigurationError) as e:
                 raise e
             except Exception as e:
-                raise AgentActionsException(f"An unexpected error occurred in function '{function_name}': {str(e)}") from e
+                raise AgentActionsException(
+                    f"An unexpected error occurred in function "
+                    f"'{function_name}': {str(e)}"
+                ) from e
         return text
 
     @staticmethod
-    def inject_function_outputs_into_prompt(prompt_config, tools_path=None, context_data_str=None, agent_config=None):
+    def inject_function_outputs_into_prompt(
+        prompt_config, tools_path=None, context_data_str=None, agent_config=None
+    ):
         """
         Replace multiple dispatch_task() calls in prompt_config with the result of their
         corresponding function.
@@ -95,11 +121,17 @@ class PromptUtils:
 
         if isinstance(prompt_config, list):
             processed_prompt = [
-                PromptUtils.process_dispatch_in_text(str(item), tools_path, context_data_str, agent_config, captured_results)
+                PromptUtils.process_dispatch_in_text(
+                    str(item), tools_path, context_data_str,
+                    agent_config, captured_results
+                )
                 for item in prompt_config
             ]
         elif isinstance(prompt_config, str):
-            processed_prompt = PromptUtils.process_dispatch_in_text(prompt_config, tools_path, context_data_str, agent_config, captured_results)
+            processed_prompt = PromptUtils.process_dispatch_in_text(
+                prompt_config, tools_path, context_data_str,
+                agent_config, captured_results
+            )
         else:
             processed_prompt = prompt_config
         return (processed_prompt, captured_results)
@@ -126,7 +158,11 @@ class PromptUtils:
         for match in re.finditer(pattern, prompt):
             full_ref = match.group(1)
             parts = full_ref.split('.')
-            references.append({'reference': parts[0], 'field_path': parts[1:], 'full_match': match.group(0)})
+            references.append({
+                'reference': parts[0],
+                'field_path': parts[1:],
+                'full_match': match.group(0)
+            })
         return references
 
     @staticmethod
@@ -157,7 +193,9 @@ class PromptUtils:
                 if 0 <= idx < len(data):
                     data = data[idx]
                 else:
-                    raise ValueError(f"Index {idx} out of range for array in '{reference}'")
+                    raise ValueError(
+                        f"Index {idx} out of range for array in '{reference}'"
+                    )
             else:
                 field_str = '.'.join(field_path)
                 raise ValueError(f"Field '{field_str}' not found in '{reference}'")
@@ -181,12 +219,16 @@ class PromptUtils:
         references = PromptUtils.parse_field_references(prompt)
         for ref in references:
             try:
-                value = PromptUtils.resolve_field_reference(ref['reference'], ref['field_path'], context)
+                value = PromptUtils.resolve_field_reference(
+                    ref['reference'], ref['field_path'], context
+                )
                 if isinstance(value, (dict, list)):
                     value_str = json.dumps(value, indent=2)
                 else:
                     value_str = str(value)
                 prompt = prompt.replace(ref['full_match'], value_str)
             except ValueError as e:
-                raise ValueError(f"Error resolving {ref['full_match']}: {str(e)}")
+                raise ValueError(
+                    f"Error resolving {ref['full_match']}: {str(e)}"
+                ) from e
         return prompt

@@ -1,3 +1,9 @@
+"""
+OpenAI vendor handler for agent-actions.
+
+Provides implementation of call_json() and call_non_json() methods
+for OpenAI API integration, supporting GPT models.
+"""
 import json
 import logging
 from datetime import datetime
@@ -14,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIHandler(BaseVendorHandler):
+    """OpenAI API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(

@@ -1,13 +1,20 @@
+# pylint: disable=cyclic-import
 """
 Schema loading utilities.
 
 This module provides schema loading functionality used by both batch and realtime modes.
 Moved from llm_invocation/realtime/ to response_processing/ to reflect its shared usage.
 """
+import ast
+import json
 from pathlib import Path
-from agent_actions.io.file_handler import FileHandler
+
 import yaml
-from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
+
+from agent_actions.io.file_handler import FileHandler
+from agent_actions.prompt_generation.render_workflow import (
+    render_pipeline_with_templates
+)
 
 class SchemaLoader:
     """
@@ -16,17 +23,37 @@ class SchemaLoader:
 
     @staticmethod
     def return_schema(agent_name: str) -> set:
+        """
+        Return the set of schema names used by an agent.
+
+        Args:
+            agent_name (str): The name of the agent
+
+        Returns:
+            set: Set of schema names, or empty set if an error occurs
+        """
         try:
             agent_config_dir, _, _ = FileHandler.get_agent_paths(agent_name)
-            agent_config_file = FileHandler.find_config_file(agent_config_dir, f'{agent_name}.yml')
+            agent_config_file = FileHandler.find_config_file(
+                agent_config_dir, f'{agent_name}.yml'
+            )
             current_dir = Path.cwd()
             template_dir = current_dir / 'templates'
-            rendered_templates = render_pipeline_with_templates(agent_config_file, str(template_dir))
+            rendered_templates = render_pipeline_with_templates(
+                agent_config_file, str(template_dir)
+            )
             data = yaml.safe_load(rendered_templates)
-            dynamic_schema_names = {step['schema_name'] for key, steps in data.items() if isinstance(steps, list) for step in steps if 'schema_name' in step}
+            dynamic_schema_names = {
+                step['schema_name']
+                for key, steps in data.items()
+                if isinstance(steps, list)
+                for step in steps
+                if 'schema_name' in step
+            }
             return dynamic_schema_names
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"Error rendering schema for agent '{agent_name}': {str(e)}")
+            return set()  # Return empty set on error
 
     @staticmethod
     def load_schema(schema_name: str) -> dict:
@@ -49,7 +76,9 @@ class SchemaLoader:
             schema_path = None
             for extension in ['yml', 'yaml']:
                 target_filename = f'{schema_name}.{extension}'
-                schema_path_str = FileHandler.find_file_in_directory(str(current_dir), target_filename)
+                schema_path_str = FileHandler.find_file_in_directory(
+                    str(current_dir), target_filename
+                )
                 if schema_path_str:
                     schema_path = Path(schema_path_str)
                     break
@@ -69,13 +98,16 @@ class SchemaLoader:
             raise
 
     @staticmethod
-    def validate_schemas_exist(agent_name: str, directory: str) -> None:
+    def validate_schemas_exist(
+        agent_name: str,
+        directory: str = None  # pylint: disable=unused-argument
+    ) -> None:
         """
         Validates that each schema file exists anywhere in the project.
 
         Args:
             agent_name (str): The name of the agent.
-            directory (str): The base directory to start searching from.
+            directory (str): Deprecated parameter, kept for backward compatibility.
 
         Raises:
             SingleSchemaMissingError: If one schema file is missing.
@@ -116,14 +148,35 @@ class SchemaLoader:
                 item_type = field_type[6:-1]
                 if item_type.startswith('object:'):
                     properties_str = item_type[7:]
-                    items_def = SchemaLoader._parse_object_properties(properties_str)
-                    field_def = {'id': field_name, 'type': 'array', 'items': items_def, 'required': is_required}
+                    items_def = SchemaLoader._parse_object_properties(
+                        properties_str
+                    )
+                    field_def = {
+                        'id': field_name,
+                        'type': 'array',
+                        'items': items_def,
+                        'required': is_required
+                    }
                 else:
-                    field_def = {'id': field_name, 'type': 'array', 'items': {'type': item_type}, 'required': is_required}
+                    field_def = {
+                        'id': field_name,
+                        'type': 'array',
+                        'items': {'type': item_type},
+                        'required': is_required
+                    }
             elif field_type == 'array':
-                field_def = {'id': field_name, 'type': 'array', 'items': {'type': 'string'}, 'required': is_required}
+                field_def = {
+                    'id': field_name,
+                    'type': 'array',
+                    'items': {'type': 'string'},
+                    'required': is_required
+                }
             else:
-                field_def = {'id': field_name, 'type': field_type, 'required': is_required}
+                field_def = {
+                    'id': field_name,
+                    'type': field_type,
+                    'required': is_required
+                }
             fields.append(field_def)
         unified_schema = {'name': 'InlineSchema', 'fields': fields}
         return unified_schema
@@ -139,8 +192,6 @@ class SchemaLoader:
         Returns:
             dict: Object schema with type and properties
         """
-        import ast
-        import json
         try:
             properties_str = properties_str.strip()
             try:

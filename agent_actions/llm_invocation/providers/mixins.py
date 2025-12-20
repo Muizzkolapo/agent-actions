@@ -1,0 +1,173 @@
+"""
+Reusable mixins for vendor handlers to reduce code duplication.
+
+This module provides common functionality that multiple vendor handlers share,
+eliminating duplicate code across different provider implementations.
+"""
+
+import json
+import logging
+from typing import Any, Union, Dict, List, Optional
+from agent_actions.errors import VendorAPIError  # New modular pattern!
+
+logger = logging.getLogger(__name__)
+
+
+class JSONResponseMixin:
+    """Mixin providing standardized JSON response parsing with error handling."""
+
+    @staticmethod
+    def parse_json_response(
+        response_content: str,
+        vendor_name: str,
+        operation: str,
+        model_name: str,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Parse JSON response with standardized error handling and logging.
+
+        Args:
+            response_content: Raw JSON string from API
+            vendor_name: Name of vendor (for error messages)
+            operation: Operation name (e.g., "call_json", "call_non_json")
+            model_name: Model name (for logging)
+
+        Returns:
+            Parsed JSON data (dict or list)
+
+        Raises:
+            VendorAPIError: If JSON parsing fails or response is empty
+        """
+        if not response_content:
+            logger.error(
+                "%s returned empty response",
+                vendor_name,
+                extra={"operation": f"{vendor_name}_{operation}", "model": model_name},
+            )
+            raise VendorAPIError(
+                f"{vendor_name} returned empty response",
+                vendor=vendor_name,
+                operation=operation,
+            )
+
+        try:
+            response_data = json.loads(response_content)
+            logger.debug(
+                "%s JSON response parsed successfully",
+                vendor_name,
+                extra={
+                    "operation": f"{vendor_name}_{operation}",
+                    "model": model_name,
+                    "response_length": len(response_content),
+                },
+            )
+            return response_data
+        except json.JSONDecodeError as e:
+            logger.error(
+                "%s returned invalid JSON",
+                vendor_name,
+                extra={
+                    "operation": f"{vendor_name}_{operation}",
+                    "model": model_name,
+                    "response_text": response_content[:200],
+                    "error": str(e),
+                    "line": e.lineno if hasattr(e, "lineno") else None,
+                },
+                exc_info=True,
+            )
+            raise VendorAPIError(
+                f"{vendor_name} returned invalid JSON: {e}",
+                vendor=vendor_name,
+                operation=operation,
+                cause=e,
+            ) from e
+
+
+class GenericErrorHandlerMixin:
+    """Mixin providing standardized generic error handling for vendor API calls."""
+
+    @staticmethod
+    def handle_generic_error(
+        error: Exception,
+        vendor_name: str,
+        operation: str,
+        model_name: str,
+    ) -> None:
+        """
+        Handle generic exceptions with standardized logging and re-raising.
+
+        Args:
+            error: The caught exception
+            vendor_name: Name of vendor
+            operation: Operation name
+            model_name: Model name
+
+        Raises:
+            VendorAPIError: Always raises with proper context
+        """
+        logger.error(
+            "%s API call failed",
+            vendor_name,
+            extra={
+                "operation": f"{vendor_name}_{operation}",
+                "model": model_name,
+                "error": str(error),
+                "error_type": type(error).__name__,
+            },
+            exc_info=True,
+        )
+        raise VendorAPIError(
+            f"{vendor_name} API call failed: {error}",
+            vendor=vendor_name,
+            operation=operation,
+            cause=error,
+        ) from error
+
+
+class OpenAICompatibleResponseMixin:
+    """
+    Mixin for providers that use OpenAI-compatible response format.
+
+    Provides standard extraction methods for error, content, metadata, and usage
+    from OpenAI-style batch responses.
+    """
+
+    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
+        """Extract error from OpenAI-compatible response."""
+        if raw_response.get("error"):
+            return str(raw_response["error"])
+        response_data = raw_response.get("response", {})
+        status_code = response_data.get("status_code")
+        if status_code and status_code != 200:
+            return f"HTTP {status_code}"
+        return None
+
+    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
+        """Extract content from OpenAI-compatible response."""
+        response_data = raw_response.get("response", {})
+        response_body = response_data.get("body", {})
+        if "choices" in response_body and response_body["choices"]:
+            choice = response_body["choices"][0]
+            if "message" in choice and "content" in choice["message"]:
+                return choice["message"]["content"]
+        return None
+
+    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from OpenAI-compatible response."""
+        response_data = raw_response.get("response", {})
+        response_body = response_data.get("body", {})
+        return {
+            "model": response_body.get("model"),
+            "finish_reason": (
+                response_body.get("choices", [{}])[0].get("finish_reason")
+            ),
+            "status_code": response_data.get("status_code"),
+        }
+
+    def _extract_usage_from_response(
+        self, raw_response: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Extract usage from OpenAI-compatible response."""
+        response_data = raw_response.get("response", {})
+        response_body = response_data.get("body", {})
+        return response_body.get("usage")

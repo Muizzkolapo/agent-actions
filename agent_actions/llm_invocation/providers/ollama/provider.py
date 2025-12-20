@@ -18,9 +18,10 @@ from typing import List, Dict, Any, Optional, Tuple
 
 from ollama import Client
 from ..base import BatchProvider, BatchTask, BatchResult
+from ..mixins import OpenAICompatibleResponseMixin
 
 
-class OllamaLocalBatchProvider(BatchProvider):
+class OllamaLocalBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
     """
     Ollama local batch provider with in-process simulation.
 
@@ -74,44 +75,6 @@ class OllamaLocalBatchProvider(BatchProvider):
             "url": "/v1/chat/completions",
             "body": body,
         }
-
-    def _extract_error_from_response(self, raw_response: Dict[str, Any]) -> Optional[str]:
-        """Extract error from Ollama response."""
-        if raw_response.get("error"):
-            return str(raw_response["error"])
-        response_data = raw_response.get("response", {})
-        status_code = response_data.get("status_code")
-        if status_code and status_code != 200:
-            return f"HTTP {status_code}"
-        return None
-
-    def _extract_content_from_response(self, raw_response: Dict[str, Any]) -> Any:
-        """Extract content from Ollama response."""
-        response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        if "choices" in response_body and response_body["choices"]:
-            choice = response_body["choices"][0]
-            if "message" in choice and "content" in choice["message"]:
-                return choice["message"]["content"]
-        return None
-
-    def _extract_metadata_from_response(self, raw_response: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract metadata from Ollama response."""
-        response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        return {
-            "model": response_body.get("model"),
-            "finish_reason": response_body.get("choices", [{}])[0].get("finish_reason"),
-            "status_code": response_data.get("status_code"),
-        }
-
-    def _extract_usage_from_response(
-        self, raw_response: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        """Extract usage from Ollama response."""
-        response_data = raw_response.get("response", {})
-        response_body = response_data.get("body", {})
-        return response_body.get("usage")
 
     def _get_default_model(self) -> str:
         """Return Ollama's default model."""

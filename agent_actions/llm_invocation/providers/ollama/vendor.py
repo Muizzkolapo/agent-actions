@@ -12,12 +12,13 @@ A mirror of OpenAIHandler that supports:
 
 import json
 import os
-from ollama import Client
+from ollama import Client  # pylint: disable=import-error
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 
 class OllamaHandler(BaseVendorHandler):
+    """Ollama local LLM handler for JSON and non-JSON invocations."""
 
     @staticmethod
     def _prep_messages(prompt_config: str, context_data: str):

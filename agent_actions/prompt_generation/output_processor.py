@@ -48,5 +48,9 @@ class OutputProcessor:
         JsonFileHandler.ensure_directory(str(final_workflow_output))
         side_output_dir = Path(final_agent_output_folder).parent / 'side_output'
         if side_output_dir.exists():
-            self.combine_json_arrays(final_agent_output_folder, str(side_output_dir), str(final_workflow_output))
+            self.combine_json_arrays(
+                final_agent_output_folder,
+                str(side_output_dir),
+                str(final_workflow_output)
+            )
         return str(final_workflow_output)

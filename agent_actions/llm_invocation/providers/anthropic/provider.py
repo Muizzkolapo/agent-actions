@@ -48,7 +48,7 @@ class AnthropicBatchProvider(BatchProvider):
         self.version = version or "2023-06-01"
         self.enable_prompt_caching = enable_prompt_caching
         try:
-            import anthropic
+            import anthropic  # pylint: disable=import-outside-toplevel
 
             self.anthropic = anthropic
             if api_key:
@@ -56,7 +56,7 @@ class AnthropicBatchProvider(BatchProvider):
             else:
                 self.client = anthropic.Anthropic()
         except ImportError as e:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
+            from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ConfigurationError(
                 "Required package not installed",
@@ -64,7 +64,7 @@ class AnthropicBatchProvider(BatchProvider):
                 cause=e,
             ) from e
         except Exception as e:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
+            from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ConfigurationError(
                 "Failed to initialize Anthropic client",
@@ -129,7 +129,7 @@ class AnthropicBatchProvider(BatchProvider):
         if result_type == "failed":
             error_info = self._get_attribute_or_key(result, "error", {})
             return str(error_info) if error_info else "Batch processing failed"
-        elif result_type == "succeeded":
+        if result_type == "succeeded":
             return None
         else:
             return f"Unknown result type: {result_type}"
@@ -208,7 +208,7 @@ class AnthropicBatchProvider(BatchProvider):
                 return self._get_attribute_or_key(content_block, "text")
 
             # Check dict with type='text'
-            elif isinstance(content_block, dict) and content_block.get("type") == "text":
+            if isinstance(content_block, dict) and content_block.get("type") == "text":
                 return content_block.get("text", "")
 
             # Check for text attribute/key directly

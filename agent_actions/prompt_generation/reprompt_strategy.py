@@ -16,15 +16,16 @@ class RepromptContext:
     agent_config: Dict[str, Any]
 
 
+# pylint: disable=too-few-public-methods
 class RepromptStrategy(ABC):
     """Base class for reprompt generation strategies."""
 
     @abstractmethod
     def generate_improved_prompt(self, context: RepromptContext) -> str:
         """Generate an improved prompt based on the failure context."""
-        pass
 
 
+# pylint: disable=too-few-public-methods
 class LLMRepromptStrategy(RepromptStrategy):
     """Strategy that uses templates to construct improved prompts."""
 
@@ -34,13 +35,14 @@ class LLMRepromptStrategy(RepromptStrategy):
         self.include_previous = config.get("include_previous_response", True)
         self.feedback_template = config.get(
             "feedback_template",
-            "The previous response did not meet the requirements: {error}\nPlease try again with the following criteria: {criteria}"
+            "The previous response did not meet the requirements: {error}\n"
+            "Please try again with the following criteria: {criteria}"
         )
 
     def generate_improved_prompt(self, context: RepromptContext) -> str:
         """Generate improved prompt using template construction."""
         if self.prompt_debug:
-            print(f"🤖 LLM REPROMPT STRATEGY:")
+            print("🤖 LLM REPROMPT STRATEGY:")
             print(f"   Attempt #{context.attempt_number}")
             print(f"   Error: {context.validation_error}")
             print(f"   Criteria: {context.validation_criteria}")
@@ -63,7 +65,8 @@ class LLMRepromptStrategy(RepromptStrategy):
             parts.append(f"\n\nYour previous response was: {context.failed_response}")
 
         # Add attempt number for context
-        parts.append(f"\n\n(Attempt {context.attempt_number} of {context.validation_criteria.get('max_attempts', 3)})")
+        max_attempts = context.validation_criteria.get('max_attempts', 3)
+        parts.append(f"\n\n(Attempt {context.attempt_number} of {max_attempts})")
 
         improved_prompt = "\n".join(parts)
 
@@ -73,6 +76,7 @@ class LLMRepromptStrategy(RepromptStrategy):
         return improved_prompt
 
 
+# pylint: disable=too-few-public-methods
 class TemplateRepromptStrategy(RepromptStrategy):
     """Strategy that uses predefined templates for different error types."""
 
@@ -81,13 +85,14 @@ class TemplateRepromptStrategy(RepromptStrategy):
         self.prompt_debug = prompt_debug
         self.default_template = templates.get(
             "default",
-            "{original_prompt}\n\nThe response did not meet requirements: {error}\nPlease try again."
+            "{original_prompt}\n\nThe response did not meet requirements: "
+            "{error}\nPlease try again."
         )
 
     def generate_improved_prompt(self, context: RepromptContext) -> str:
         """Generate improved prompt using specific templates."""
         if self.prompt_debug:
-            print(f"📝 TEMPLATE REPROMPT STRATEGY:")
+            print("📝 TEMPLATE REPROMPT STRATEGY:")
             print(f"   Looking for template for error: {context.validation_error}")
 
         # Find matching template based on error message

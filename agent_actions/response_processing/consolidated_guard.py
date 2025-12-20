@@ -1,6 +1,7 @@
 """Consolidated guard configuration with explicit behavior control."""
 from enum import Enum
 from typing import Union, Dict, Any
+from agent_actions.errors import ConfigValidationError
 from .guard_parser import GuardParser, GuardType
 
 class GuardBehavior(str, Enum):
@@ -52,11 +53,23 @@ class GuardConfig:
             ValueError: If required keys are missing
         """
         if not isinstance(config_dict, dict):
-            from agent_actions.errors import ConfigValidationError  # New modular pattern!
-            raise ConfigValidationError('guard_config_type', 'Guard config must be a dictionary', context={'config_type': str(type(config_dict)), 'operation': 'parse_guard_config'})
+            raise ConfigValidationError(
+                'guard_config_type',
+                'Guard config must be a dictionary',
+                context={
+                    'config_type': str(type(config_dict)),
+                    'operation': 'parse_guard_config'
+                }
+            )
         if 'condition' not in config_dict:
-            from agent_actions.errors import ConfigValidationError  # New modular pattern!
-            raise ConfigValidationError('guard_config_condition', "Guard dict must have 'condition' key", context={'config_keys': list(config_dict.keys()), 'operation': 'parse_guard_config'})
+            raise ConfigValidationError(
+                'guard_config_condition',
+                "Guard dict must have 'condition' key",
+                context={
+                    'config_keys': list(config_dict.keys()),
+                    'operation': 'parse_guard_config'
+                }
+            )
         condition = config_dict['condition']
         on_false = config_dict.get('on_false', 'filter')
         return cls(condition=condition, on_false=on_false)
@@ -97,9 +110,16 @@ def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
     """
     if isinstance(guard_data, str):
         return GuardConfig.from_string(guard_data)
-    elif isinstance(guard_data, dict):
+    if isinstance(guard_data, dict):
         return GuardConfig.from_dict(guard_data)
-    else:
-        from agent_actions.errors import ConfigValidationError  # New modular pattern!
-        raise ConfigValidationError('guard_data_type', f'Guard must be string or dict, got {type(guard_data)}', context={'guard_type': str(type(guard_data)), 'operation': 'parse_guard_config'})
+
+    raise ConfigValidationError(
+        'guard_data_type',
+        f'Guard must be string or dict, got {type(guard_data)}',
+        context={
+            'guard_type': str(type(guard_data)),
+            'operation': 'parse_guard_config'
+        }
+    )
+
 __all__ = ['GuardBehavior', 'GuardConfig', 'parse_guard_config']

@@ -1,10 +1,18 @@
+"""
+Base vendor handler for agent-actions LLM invocation.
+
+Provides common functionality for all vendor handlers including API key management,
+data redaction, and invocation dispatch to JSON or non-JSON modes.
+"""
+
 import os
 import re
-from typing import Any, Dict, Optional, Union
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional, Union
 from agent_actions.utilities.constants import API_KEY_KEY, JSON_MODE_KEY
 
 
-class BaseVendorHandler:
+class BaseVendorHandler(ABC):
     """Common functionality shared by vendor handlers."""
 
     @staticmethod
@@ -31,9 +39,9 @@ class BaseVendorHandler:
                 )
                 for k, v in data.items()
             }
-        elif isinstance(data, list):
+        if isinstance(data, list):
             return [BaseVendorHandler.redact_sensitive_data(item, redact_keys) for item in data]
-        elif isinstance(data, str):
+        if isinstance(data, str):
             # Redact API key patterns (sk-*, anthropic-*, etc.)
             patterns = [
                 (r"sk-[a-zA-Z0-9]{20,}", "sk-[REDACTED]"),
@@ -64,7 +72,7 @@ class BaseVendorHandler:
         Raises:
             ConfigurationError: If api_key is not configured or environment variable doesn't exist
         """
-        from agent_actions.errors import ConfigurationError  # New modular pattern!
+        from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
         key_name: Optional[str] = agent_config.get(API_KEY_KEY)
         if not key_name:
@@ -105,6 +113,50 @@ class BaseVendorHandler:
                 },
             )
         return api_key
+
+    @staticmethod
+    @abstractmethod
+    def call_json(
+        api_key: Optional[str],
+        agent_config: Dict[str, Any],
+        prompt_config: Dict[str, Any],
+        context_data: Dict[str, Any],
+        schema: Optional[Dict[str, Any]],
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """
+        Call vendor API in JSON mode with schema.
+
+        Args:
+            api_key: API key for vendor authentication
+            agent_config: Agent configuration dict
+            prompt_config: Prompt configuration dict
+            context_data: Context data for the prompt
+            schema: Optional JSON schema for structured output
+
+        Returns:
+            JSON response as dict or list of dicts
+        """
+
+    @staticmethod
+    @abstractmethod
+    def call_non_json(
+        api_key: Optional[str],
+        agent_config: Dict[str, Any],
+        prompt_config: Dict[str, Any],
+        context_data: Dict[str, Any],
+    ) -> List[Dict[str, str]]:
+        """
+        Call vendor API in non-JSON mode.
+
+        Args:
+            api_key: API key for vendor authentication
+            agent_config: Agent configuration dict
+            prompt_config: Prompt configuration dict
+            context_data: Context data for the prompt
+
+        Returns:
+            List of response dicts
+        """
 
     @classmethod
     def invoke(

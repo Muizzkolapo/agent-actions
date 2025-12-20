@@ -9,7 +9,13 @@ from agent_actions.orchestration.dependency_injection import registry
 class DataGenerator(IGenerator):
     """Handles agent creation and data generation (Single Responsibility)."""
 
-    def __init__(self, agent_config: AgentEntryDict, agent_name: str, dependency_configs: Optional[Dict[str, AgentEntryDict]]=None, agent_indices: Optional[Dict[str, int]]=None):
+    def __init__(
+        self,
+        agent_config: AgentEntryDict,
+        agent_name: str,
+        dependency_configs: Optional[Dict[str, AgentEntryDict]]=None,
+        agent_indices: Optional[Dict[str, int]]=None
+    ):
         """
         Initialize the data generator.
 
@@ -34,7 +40,16 @@ class DataGenerator(IGenerator):
         """Return AUTO processing mode to let system choose."""
         return ProcessingMode.AUTO
 
-    def create_agent_with_data(self, contents: Any, source_content: Optional[Any]=None, loop_context: Optional[Dict]=None, workflow_metadata: Optional[Dict]=None, current_item: Optional[Dict]=None, file_path: Optional[str]=None) -> Tuple[List[Dict], bool, Dict]:
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    def create_agent_with_data(
+        self,
+        contents: Any,
+        source_content: Optional[Any]=None,
+        loop_context: Optional[Dict]=None,
+        workflow_metadata: Optional[Dict]=None,
+        current_item: Optional[Dict]=None,
+        file_path: Optional[str]=None
+    ) -> Tuple[List[Dict], bool, Dict]:
         """
         Create an agent with the provided data and generate results.
 
@@ -43,7 +58,8 @@ class DataGenerator(IGenerator):
             source_content: Optional source content for prompt formatting
             loop_context: Optional loop context for {loop.*} references
             workflow_metadata: Optional workflow metadata for {workflow.*} references
-            current_item: Optional current item dict containing lineage and source_guid for historical node loading
+            current_item: Optional current item dict containing lineage and
+                source_guid for historical node loading
             file_path: Optional file path for constructing historical node paths
 
         Returns:
@@ -57,25 +73,32 @@ class DataGenerator(IGenerator):
         """
         try:
             # Prepare prompt using unified PromptPreparationService (Phase 2: Issue #487)
-            from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.prompt_generation.prompt_preparation_service import (
+                PromptPreparationService
+            )
             from agent_actions.utilities.tools_resolver import resolve_tools_path
 
             # Resolve tools_path for dispatch_task() injection
             tools_path = resolve_tools_path(self.agent_config)
 
+            # Prepare parameters for prompt preparation
+            prep_params = {
+                'agent_config': self.agent_config,
+                'agent_name': self.agent_name,
+                'contents': contents,
+                'mode': 'realtime',
+                'agent_indices': self.agent_indices,
+                'dependency_configs': self.dependency_configs,
+                'source_content': source_content,
+                'loop_context': loop_context,
+                'workflow_metadata': workflow_metadata,
+                'current_item': current_item,
+                'file_path': file_path,
+                'tools_path': tools_path
+            }
             prep_result = PromptPreparationService.prepare_prompt_with_context(
-                agent_config=self.agent_config,
-                agent_name=self.agent_name,
-                contents=contents,
-                mode='realtime',
-                agent_indices=self.agent_indices,
-                dependency_configs=self.dependency_configs,
-                source_content=source_content,
-                loop_context=loop_context,
-                workflow_metadata=workflow_metadata,
-                current_item=current_item,
-                file_path=file_path,
-                tools_path=tools_path
+                **prep_params
             )
 
             # Execute agent with prepared prompt and context
@@ -97,5 +120,8 @@ class DataGenerator(IGenerator):
 
             return (response, executed, prep_result.passthrough_fields)
         except Exception as e:
+            # pylint: disable=import-outside-toplevel
             from agent_actions.errors import GenerationError  # New modular pattern!
-            raise GenerationError(f'Failed to create agent with data: {str(e)}', cause=e)
+            raise GenerationError(
+                f'Failed to create agent with data: {str(e)}', cause=e
+            ) from e

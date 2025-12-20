@@ -1,16 +1,27 @@
-import cohere
-import json
+"""
+Cohere handler for agent-actions LLM invocation.
+
+Provides implementation of call_json() and call_non_json() methods
+for Cohere API integration.
+"""
+
 import logging
 from textwrap import dedent
+import cohere  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.mixins import (
+    JSONResponseMixin,
+    GenericErrorHandlerMixin
+)
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 
 logger = logging.getLogger(__name__)
 
 
-class CohereHandler(BaseVendorHandler):
+class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Cohere API handler for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -25,60 +36,16 @@ class CohereHandler(BaseVendorHandler):
             )
             intermediate_json = response.text
 
-            if not intermediate_json:
-                logger.error(
-                    "Cohere returned empty response",
-                    extra={"operation": "cohere_call_json", "model": model_name},
-                )
-                raise VendorAPIError(
-                    "Cohere returned empty response", vendor="cohere", operation="call_json"
-                )
-
-            try:
-                final_data = json.loads(intermediate_json)
-                logger.debug(
-                    "Cohere JSON response parsed successfully",
-                    extra={
-                        "operation": "cohere_call_json",
-                        "model": model_name,
-                        "response_length": len(intermediate_json),
-                    },
-                )
-                return final_data
-            except json.JSONDecodeError as e:
-                logger.error(
-                    "Cohere returned invalid JSON",
-                    extra={
-                        "operation": "cohere_call_json",
-                        "model": model_name,
-                        "response_text": intermediate_json[:200],
-                        "error": str(e),
-                        "line": e.lineno if hasattr(e, "lineno") else None,
-                    },
-                    exc_info=True,
-                )
-                raise VendorAPIError(
-                    f"Cohere returned invalid JSON: {e}",
-                    vendor="cohere",
-                    operation="call_json",
-                    cause=e,
-                ) from e
+            return CohereHandler.parse_json_response(
+                response_content=intermediate_json,
+                vendor_name="Cohere",
+                operation="call_json",
+                model_name=model_name,
+            )
         except VendorAPIError:
             raise
         except Exception as e:
-            logger.error(
-                "Cohere API call failed",
-                extra={
-                    "operation": "cohere_call_json",
-                    "model": model_name,
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                },
-                exc_info=True,
-            )
-            raise VendorAPIError(
-                f"Cohere API call failed: {e}", vendor="cohere", operation="call_json", cause=e
-            ) from e
+            CohereHandler.handle_generic_error(e, "Cohere", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
