@@ -3,8 +3,12 @@
 from typing import Dict, Any, Optional
 
 
-class ErrorContextService:
-    """Handles error context extraction and merging from exceptions."""
+class ErrorContextService:  # pylint: disable=too-few-public-methods
+    """
+    Handles error context extraction and merging from exceptions.
+
+    Utility class - single public method by design (merge_exception_context).
+    """
 
     @staticmethod
     def merge_exception_context(
@@ -48,8 +52,9 @@ class ErrorContextService:
 
         # Extract other useful exception attributes from outermost exception only
         # (to avoid attribute conflicts from different exception types in chain)
+        excluded_attrs = ['args', 'with_traceback', 'context']
         for attr_name in dir(exc):
-            if not attr_name.startswith('_') and attr_name not in ['args', 'with_traceback', 'context']:
+            if not attr_name.startswith('_') and attr_name not in excluded_attrs:
                 try:
                     attr_value = getattr(exc, attr_name)
                     # Only include simple types (not methods/callables)
@@ -58,8 +63,9 @@ class ErrorContextService:
                         (str, int, float, bool, type(None))
                     ):
                         merged_context[attr_name] = attr_value
-                except Exception:
-                    pass  # Skip attributes that can't be accessed
+                except Exception:  # pylint: disable=broad-exception-caught
+                    # Silently skip attributes that can't be accessed - defensive programming
+                    pass
 
         # Additional context takes final precedence
         if additional_context:

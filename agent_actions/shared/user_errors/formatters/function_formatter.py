@@ -34,7 +34,10 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         title = f"Function '{function_name}' not found"
 
         # Build details
-        details = f"The function '{function_name}' is not registered as a UDF (User Defined Function)."
+        details = (
+            f"The function '{function_name}' is not registered as a "
+            "UDF (User Defined Function)."
+        )
 
         # Find similar function names
         similar = self._find_similar_functions(function_name, available_functions)
@@ -42,7 +45,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         # Build fix message
         fix_parts = []
         if similar:
-            fix_parts.append(f"Did you mean one of these?")
+            fix_parts.append("Did you mean one of these?")
             for func in similar[:3]:  # Show top 3 matches
                 fix_parts.append(f"  - {func}")
         else:
@@ -60,7 +63,10 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             title=title,
             details=details,
             fix="\n".join(fix_parts),
-            context={'function_name': function_name, 'similar_functions': similar[:3] if similar else None},
+            context={
+                'function_name': function_name,
+                'similar_functions': similar[:3] if similar else None
+            },
             docs_url="https://docs.agent-actions.com/user-defined-functions"
         )
 

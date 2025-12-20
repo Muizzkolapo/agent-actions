@@ -26,7 +26,6 @@ class ErrorFormatter(ABC):
         Returns:
             True if this formatter should handle the error
         """
-        pass
 
     @abstractmethod
     def format(
@@ -48,4 +47,30 @@ class ErrorFormatter(ABC):
         Returns:
             UserError with user-friendly message
         """
-        pass
+
+    def _extract_provider_name(self, message: str, context: Dict[str, Any]) -> str:
+        """
+        Extract provider name from error message or context.
+
+        Checks message for common provider names (anthropic, openai, gemini, cohere)
+        and falls back to context['provider'] or 'API'.
+
+        Args:
+            message: Error message to search
+            context: Context dict that may contain 'provider' key
+
+        Returns:
+            Provider name (lowercase) or 'API' as fallback
+        """
+        message_lower = message.lower()
+
+        if 'anthropic' in message_lower:
+            return 'anthropic'
+        if 'openai' in message_lower:
+            return 'openai'
+        if 'gemini' in message_lower:
+            return 'gemini'
+        if 'cohere' in message_lower:
+            return 'cohere'
+
+        return context.get('provider', 'API')

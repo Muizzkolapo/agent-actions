@@ -24,12 +24,14 @@ from .services import ErrorContextService
 logger = logging.getLogger(__name__)
 
 
-class ErrorTranslator:
+class ErrorTranslator:  # pylint: disable=too-few-public-methods
     """
     Translates Python exceptions to user-friendly errors.
 
     Uses Strategy Pattern with formatter chain. Each formatter
     handles a specific error category (Config, Model, Auth, etc.).
+
+    Facade pattern - single public method by design (translate).
     """
 
     def __init__(self):
@@ -64,14 +66,16 @@ class ErrorTranslator:
         root_message = safe_get_exception_message(root_cause)
 
         logger.debug(
-            f"Translating error: {type(exc).__name__} -> "
-            f"{type(root_cause).__name__}: {root_message}"
+            "Translating error: %s -> %s: %s",
+            type(exc).__name__,
+            type(root_cause).__name__,
+            root_message
         )
 
         # Find first formatter that can handle this error
         for formatter in self.formatters:
             if formatter.can_handle(exc, root_cause, root_message):
-                logger.debug(f"Using formatter: {type(formatter).__name__}")
+                logger.debug("Using formatter: %s", type(formatter).__name__)
                 return formatter.format(exc, root_cause, root_message, merged_context)
 
         # Should never reach here since GenericErrorFormatter always matches

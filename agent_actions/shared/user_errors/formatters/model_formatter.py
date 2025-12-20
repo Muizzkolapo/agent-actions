@@ -36,7 +36,7 @@ class ModelErrorFormatter(ErrorFormatter):
         # Get suggested models for the provider
         suggestions = self._get_model_suggestions(provider)
 
-        fix_msg = f"Update the 'model' field in your agent config"
+        fix_msg = "Update the 'model' field in your agent config"
         if suggestions:
             fix_msg += f" to one of: {', '.join(suggestions)}"
 
@@ -62,12 +62,11 @@ class ModelErrorFormatter(ErrorFormatter):
         """Guess provider from model name."""
         if 'claude' in model.lower():
             return 'anthropic'
-        elif 'gpt' in model.lower():
+        if 'gpt' in model.lower():
             return 'openai'
-        elif 'gemini' in model.lower():
+        if 'gemini' in model.lower():
             return 'gemini'
-        else:
-            return 'unknown'
+        return 'unknown'
 
     def _get_model_suggestions(self, provider: str) -> list:
         """Get model suggestions for a provider."""

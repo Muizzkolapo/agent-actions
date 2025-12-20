@@ -66,18 +66,3 @@ class APIErrorFormatter(ErrorFormatter):
             fix="Check your API key and network connection",
             context=context
         )
-
-    def _extract_provider_name(self, message: str, context: Dict) -> str:
-        """Extract provider name from error message or context."""
-        message_lower = message.lower()
-
-        if 'anthropic' in message_lower:
-            return 'anthropic'
-        elif 'openai' in message_lower:
-            return 'openai'
-        elif 'gemini' in message_lower:
-            return 'gemini'
-        elif 'cohere' in message_lower:
-            return 'cohere'
-
-        return context.get('provider', 'API')

@@ -13,7 +13,8 @@ class FileErrorFormatter(ErrorFormatter):
         exc_names = [type(exc).__name__, type(root).__name__]
 
         # Check exception types
-        if any(name in ['FileNotFoundError', 'PermissionError', 'FileLoadError'] for name in exc_names):
+        file_error_types = ['FileNotFoundError', 'PermissionError', 'FileLoadError']
+        if any(name in file_error_types for name in exc_names):
             return True
 
         message_lower = message.lower()
@@ -44,7 +45,11 @@ class FileErrorFormatter(ErrorFormatter):
                     category="File Error",
                     title="Agent configuration not found",
                     details=f"Could not find configuration for agent '{agent}'",
-                    fix=f"1. Create agents/{agent}.yaml\n     2. Or use an existing agent: agent-actions run --agent <existing-agent>",
+                    fix=(
+                        f"1. Create agents/{agent}.yaml\n"
+                        "     2. Or use an existing agent: "
+                        "agent-actions run --agent <existing-agent>"
+                    ),
                     context=context,
                     docs_url="https://docs.agent-actions.com/agents/create"
                 )
