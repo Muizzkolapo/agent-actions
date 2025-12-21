@@ -133,7 +133,8 @@ class LineageTrackingMixin:
 
         if source_item is not None:
             lineage = LineageBuilder.build_lineage(source_item, node_id)
-        elif context_data is not None and isinstance(context_data, dict) and "lineage" in context_data:
+        elif (context_data is not None and isinstance(context_data, dict)
+              and "lineage" in context_data):
             lineage = context_data["lineage"] + [node_id]
         else:
             lineage = [node_id]
