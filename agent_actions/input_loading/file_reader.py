@@ -1,16 +1,20 @@
 """Module for reading data loading and processing."""
-import json
 import csv
+import json
 import xml.etree.ElementTree as ET
-import PyPDF2
-from docx import Document
-import pandas as pd
-from bs4 import BeautifulSoup
 from pathlib import Path
-from agent_actions.errors import AgentActionsException  # New modular pattern!
+
+import pandas as pd
+import PyPDF2
+from bs4 import BeautifulSoup
+from docx import Document
+
+from agent_actions.errors import AgentActionsException
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 
+
 class FileReader(ProcessorErrorHandlerMixin):
+    """File reader for various file formats."""
 
     def __init__(self, file_path):
         super().__init__()
@@ -18,24 +22,63 @@ class FileReader(ProcessorErrorHandlerMixin):
         self.file_type = Path(file_path).suffix.lower()
 
     def read(self):
-        file_type_handlers = {'.json': self._read_json, '.txt': self._read_text, '.md': self._read_text, '.csv': self._read_csv, '.pdf': self._read_pdf, '.xml': self._read_xml, '.docx': self._read_docx, '.xlsx': self._read_xlsx, '.html': self._read_html}
+        """Read file based on file type."""
+        file_type_handlers = {
+            '.json': self._read_json,
+            '.txt': self._read_text,
+            '.md': self._read_text,
+            '.csv': self._read_csv,
+            '.pdf': self._read_pdf,
+            '.xml': self._read_xml,
+            '.docx': self._read_docx,
+            '.xlsx': self._read_xlsx,
+            '.html': self._read_html
+        }
         if self.file_type in file_type_handlers:
             try:
                 return file_type_handlers[self.file_type]()
             except FileNotFoundError as e:
                 self.handle_file_error(e, 'read', self.file_path, file_type=self.file_type)
+                raise
             except IOError as e:
                 self.handle_file_error(e, 'read', self.file_path, file_type=self.file_type)
+                raise
             except Exception as e:
-                self.handle_processing_error(e, f'Read file {self.file_path} (type: {self.file_type})', file_path=self.file_path, file_type=self.file_type)
+                operation = f'Read file {self.file_path} (type: {self.file_type})'
+                self.handle_processing_error(
+                    e, operation, file_path=self.file_path, file_type=self.file_type
+                )
+                raise
         else:
-            raise AgentActionsException(f'Unsupported file type: {self.file_type}', context={'file_path': self.file_path, 'file_type': self.file_type, 'operation': 'read'})
+            error_context = {
+                'file_path': self.file_path,
+                'file_type': self.file_type,
+                'operation': 'read'
+            }
+            raise AgentActionsException(
+                f'Unsupported file type: {self.file_type}', context=error_context
+            )
 
     def _read_json(self):
         with open(self.file_path, 'r', encoding='utf-8') as file:
             data = json.load(file)
-            if isinstance(data, dict) and 'batch_job_id' in data and (data.get('status') == 'submitted'):
-                raise AgentActionsException(f"Cannot process batch placeholder file. Batch job {data['batch_job_id']} is still pending.", context={'file_path': self.file_path, 'batch_job_id': data['batch_job_id'], 'status': data.get('status'), 'operation': 'read_json'})
+            is_batch_placeholder = (
+                isinstance(data, dict)
+                and 'batch_job_id' in data
+                and data.get('status') == 'submitted'
+            )
+            if is_batch_placeholder:
+                error_msg = (
+                    f"Cannot process batch placeholder file. "
+                    f"Batch job {data['batch_job_id']} is still pending."
+                )
+                error_context = {
+                    'file_path': self.file_path,
+                    'batch_job_id': data['batch_job_id'],
+                    'status': data.get('status'),
+                    'operation': 'read_json'
+                }
+                raise AgentActionsException(error_msg, context=error_context)
             return data
 
     def _read_text(self):

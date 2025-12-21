@@ -1,24 +1,19 @@
 """Text content loader implementation."""
+# pylint: disable=duplicate-code
+# Similar loader pattern is intentional across different file type loaders
 import logging
 from typing import Any, Optional
-from agent_actions.response_processing.config_types import AgentEntryDict
+
+from agent_actions.errors import FileLoadError
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.errors import FileLoadError  # New modular pattern!
+
 logger = logging.getLogger(__name__)
+
 
 class TextLoader(BaseLoader[str]):
     """Loader for text-based content like TXT, MD, PDF, DOCX, and HTML."""
 
-    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
-        """Initialize with agent configuration and name.
-        
-        Args:
-            agent_config: Agent configuration
-            agent_name: Name of the agent
-        """
-        super().__init__(agent_config, agent_name)
-
-    def process(self, content: Any, file_path: Optional[str]=None) -> str:
+    def process(self, content: Any, file_path: Optional[str] = None) -> str:
         """Load and return text content from a file or in-memory content.
 
         Args:
@@ -31,14 +26,21 @@ class TextLoader(BaseLoader[str]):
         try:
             if file_path:
                 return self.load_file(file_path)
-            elif content:
+            if content:
                 return str(content)
-            else:
-                self.handle_validation_error(ValueError('Either file_path or content must be provided'), 'text input', file_path=file_path)
+
+            error = ValueError('Either file_path or content must be provided')
+            self.handle_validation_error(
+                error, 'text input', file_path=file_path
+            )
+            raise error
         except FileLoadError:
             raise
         except Exception as e:
-            self.handle_processing_error(e, 'Processing text content', file_path=file_path)
+            self.handle_processing_error(
+                e, 'Processing text content', file_path=file_path
+            )
+            raise
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

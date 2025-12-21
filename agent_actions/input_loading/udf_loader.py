@@ -12,9 +12,13 @@ Key Features:
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Dict, Any, List
-from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY, get_udf
-from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!
+from typing import Any, Dict, List
+
+from agent_actions.errors import DuplicateFunctionError, UDFLoadError
+from agent_actions.utilities.udf_management.udf_registry import (
+    UDF_REGISTRY,
+    get_udf
+)
 
 def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
     """
@@ -39,14 +43,35 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
     """
     user_code_path = Path(user_code_path)
     if not user_code_path.exists():
-        raise UDFLoadError(module='<discovery>', file=str(user_code_path), error='User code directory not found', context={'user_code_path': str(user_code_path), 'operation': 'discover_udfs'})
+        error_context = {
+            'user_code_path': str(user_code_path),
+            'operation': 'discover_udfs'
+        }
+        raise UDFLoadError(
+            module='<discovery>',
+            file=str(user_code_path),
+            error='User code directory not found',
+            context=error_context
+        )
     if not user_code_path.is_dir():
-        raise UDFLoadError(module='<discovery>', file=str(user_code_path), error='User code path is not a directory', context={'user_code_path': str(user_code_path), 'operation': 'discover_udfs'})
+        error_context = {
+            'user_code_path': str(user_code_path),
+            'operation': 'discover_udfs'
+        }
+        raise UDFLoadError(
+            module='<discovery>',
+            file=str(user_code_path),
+            error='User code path is not a directory',
+            context=error_context
+        )
     user_code_str = str(user_code_path.absolute())
     if user_code_str not in sys.path:
         sys.path.insert(0, user_code_str)
     python_files = list(user_code_path.rglob('*.py'))
-    python_files = [f for f in python_files if not f.name.startswith('_') and (not f.name.startswith('test_'))]
+    python_files = [
+        f for f in python_files
+        if not f.name.startswith('_') and not f.name.startswith('test_')
+    ]
     for py_file in python_files:
         try:
             relative_path = py_file.relative_to(user_code_path)
@@ -61,8 +86,14 @@ def discover_udfs(user_code_path: Path) -> Dict[str, Dict[str, Any]]:
         except DuplicateFunctionError:
             raise
         except Exception as e:
-            from agent_actions.errors import UDFLoadError  # Avoid circular import
-            raise UDFLoadError(module=module_name, file=str(py_file), error=str(e), context={'error_type': type(e).__name__}, cause=e)
+            error_context = {'error_type': type(e).__name__}
+            raise UDFLoadError(
+                module=module_name,
+                file=str(py_file),
+                error=str(e),
+                context=error_context,
+                cause=e
+            ) from e
     return UDF_REGISTRY
 
 def validate_udf_references(config: Dict[str, Any]) -> None:
@@ -99,7 +130,4 @@ def validate_udf_references(config: Dict[str, Any]) -> None:
                 extract_impl_refs(item, current_path)
     extract_impl_refs(config)
     for impl_ref in impl_references:
-        try:
-            get_udf(impl_ref)
-        except FunctionNotFoundError:
-            raise
+        get_udf(impl_ref)
