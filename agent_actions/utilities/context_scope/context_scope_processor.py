@@ -1,14 +1,12 @@
-"""Context Scope Processor - Field flow control for LLM context and output.
-
-This module provides utilities for processing context_scope configuration directives
-that control how upstream action fields flow through the current action.
-
-Supports four directives:
-- static_data: Load external reference files, available in both prompt and LLM context
-- observe: Fields added to LLM context, available in prompt templates (not in output unless in schema)
-- drop: Fields blocked from LLM entirely (security/privacy)
-- passthrough: Fields guaranteed in output (also available in templates)
 """
+Context Scope Processor - Field flow control for LLM context and output.
+
+Processes context_scope directives: static_data, observe, drop, passthrough.
+"""
+# pylint: disable=line-too-long,import-outside-toplevel,broad-exception-caught
+# Line-too-long: Complex data transformations require descriptive variable names
+# Import-outside-toplevel: Avoid circular imports
+# Broad-exception-caught: Intentional fallback behavior for data processing
 
 import json
 import logging
@@ -19,52 +17,11 @@ logger = logging.getLogger(__name__)
 
 
 class ContextScopeProcessor:
-    """
-    Handles context_scope processing for granular field flow control.
-
-    This class provides static methods to:
-    1. Parse field references in 'action.field' format
-    2. Extract field values from nested field_context
-    3. Apply context_scope rules to split field_context into 3 streams
-    4. Format LLM context for message injection
-    5. Merge passthrough fields into LLM output
-
-    Example usage:
-        context_scope = {
-            'observe': ['action.reference_data'],
-            'drop': ['source.api_key'],
-            'passthrough': ['action.document_id']
-        }
-
-        prompt_ctx, llm_ctx, passthrough = ContextScopeProcessor.apply_context_scope(
-            field_context, context_scope
-        )
-    """
+    """Processes context_scope configuration for field flow control."""
 
     @staticmethod
     def parse_field_reference(field_ref: str) -> Tuple[str, str]:
-        """
-        Parse field reference in 'action.field' format.
-
-        Args:
-            field_ref: Field reference string (e.g., 'fact_extractor.document_id')
-
-        Returns:
-            Tuple of (action_name, field_name)
-
-        Raises:
-            ValueError: If field_ref is not in 'action.field' format
-
-        Examples:
-            >>> parse_field_reference('fact_extractor.document_id')
-            ('fact_extractor', 'document_id')
-
-            >>> parse_field_reference('source.page_content')
-            ('source', 'page_content')
-
-            >>> parse_field_reference('invalid')
-            ValueError: Invalid field reference: 'invalid'. Expected format: 'action.field'
-        """
+        """Parse field reference in 'action.field' format, returning (action_name, field_name)."""
         if not field_ref or not isinstance(field_ref, str):
             raise ValueError(
                 f"Invalid field reference: {field_ref!r}. "
@@ -94,31 +51,7 @@ class ContextScopeProcessor:
         action_name: str,
         field_name: str
     ) -> Any:
-        """
-        Extract field value from nested field_context structure.
-
-        Args:
-            field_context: Nested dict with structure {action: {field: value}}
-            action_name: Name of the action (e.g., 'fact_extractor')
-            field_name: Name of the field (e.g., 'document_id')
-
-        Returns:
-            Field value if found, None otherwise
-
-        Examples:
-            >>> field_context = {
-            ...     'source': {'page_content': 'text'},
-            ...     'fact_extractor': {'document_id': '123', 'facts': [...]}
-            ... }
-            >>> extract_field_value(field_context, 'fact_extractor', 'document_id')
-            '123'
-
-            >>> extract_field_value(field_context, 'missing_action', 'field')
-            None
-
-            >>> extract_field_value(field_context, 'fact_extractor', 'missing_field')
-            None
-        """
+        """Extract field value from nested field_context structure, returning None if not found."""
         if not isinstance(field_context, dict):
             return None
 
@@ -138,53 +71,7 @@ class ContextScopeProcessor:
         context_scope: Dict,
         static_data: Optional[Dict] = None
     ) -> Tuple[Dict, Dict, Dict]:
-        """
-        Apply context_scope rules to split field_context into 3 streams.
-
-        This is the core method that implements the context_scope feature by:
-        0. Processing static_data: Merge into prompt_context and llm_context
-        1. Processing drop: Removes fields from prompt_context
-        2. Processing observe: Adds to llm_context, KEEPS in prompt_context for template rendering
-        3. Processing passthrough: Extracts to passthrough_fields, keeps in prompt_context for template access
-
-        Args:
-            field_context: Complete field context with all upstream action data
-                          Structure: {action_name: {field: value, ...}, ...}
-            context_scope: Context scope configuration with directives
-                          Structure: {
-                              'static_data': {'field_name': '$file:path', ...},
-                              'observe': ['action.field', ...],
-                              'drop': ['action.field', ...],
-                              'passthrough': ['action.field', ...]
-                          }
-            static_data: Optional pre-loaded static data from files
-                        Structure: {field_name: loaded_value, ...}
-
-        Returns:
-            Tuple of (prompt_context, llm_context, passthrough_fields):
-            - prompt_context: Field context for {{ reference.field }} rendering (includes passthrough and static data)
-            - llm_context: Fields for LLM additional context (includes static data)
-            - passthrough_fields: Fields guaranteed in output, also available in prompt_context (flat dict)
-
-        Examples:
-            >>> field_context = {
-            ...     'source': {'text': 'data', 'api_key': 'secret'},
-            ...     'extractor': {'facts': [...], 'id': '123', 'meta': {...}}
-            ... }
-            >>> context_scope = {
-            ...     'static_data': {'syllabus': '$file:syllabus.json'},
-            ...     'observe': ['extractor.meta'],
-            ...     'drop': ['source.api_key'],
-            ...     'passthrough': ['extractor.id']
-            ... }
-            >>> static_data = {'syllabus': {'content': '...'}}
-            >>> prompt_ctx, llm_ctx, passthrough = apply_context_scope(
-            ...     field_context, context_scope, static_data
-            ... )
-            >>> # prompt_ctx: {source: {text: 'data'}, extractor: {facts: [...], meta: {...}, id: '123'}, seed: {syllabus: {...}}}
-            >>> # llm_ctx: {syllabus: {...}, meta: {...}}
-            >>> # passthrough: {id: '123'}
-        """
+        """Apply context_scope rules, returning (prompt_context, llm_context, passthrough_fields)."""
         # Deep copy to avoid mutating original field_context
         prompt_context = deepcopy(field_context)
         llm_context = {}
@@ -263,38 +150,7 @@ class ContextScopeProcessor:
 
     @staticmethod
     def format_llm_context(llm_context: Dict) -> str:
-        """
-        Format llm_context dict as readable text for LLM message injection.
-
-        Converts a dictionary of context fields into a formatted string suitable
-        for appending to LLM messages or system context.
-
-        Args:
-            llm_context: Dictionary of fields to send to LLM
-                        Structure: {field_name: value, ...}
-
-        Returns:
-            Formatted string with each field on a new line, or empty string if no context
-
-        Examples:
-            >>> llm_context = {
-            ...     'entities': ['entity1', 'entity2'],
-            ...     'metadata': {'source': 'research', 'date': '2024-01-01'}
-            ... }
-            >>> print(format_llm_context(llm_context))
-            Additional context:
-            entities: [
-              "entity1",
-              "entity2"
-            ]
-            metadata: {
-              "source": "research",
-              "date": "2024-01-01"
-            }
-
-            >>> format_llm_context({})
-            ''
-        """
+        """Format llm_context dict as readable text for LLM message injection."""
         if not llm_context:
             return ""
 
@@ -312,40 +168,7 @@ class ContextScopeProcessor:
         llm_response: List[Dict],
         passthrough_fields: Dict
     ) -> List[Dict]:
-        """
-        Merge passthrough fields into LLM response (similar to observe logic).
-
-        This method implements the passthrough directive by merging fields into
-        the LLM's output structure. Works with both structured and flat responses.
-
-        Args:
-            llm_response: LLM response, can be:
-                         - List of dicts with 'content' key (structured)
-                         - List of flat dicts
-                         - Single dict
-            passthrough_fields: Fields to merge into output
-                               Structure: {field_name: value, ...}
-
-        Returns:
-            LLM response with passthrough fields merged
-
-        Note:
-            Similar to ProcessorUtils.transform_with_observe() but for context_scope
-
-        Examples:
-            >>> llm_response = [
-            ...     {'source_guid': 'guid1', 'content': {'classification': 'positive'}}
-            ... ]
-            >>> passthrough_fields = {'document_id': '123', 'filename': 'doc.pdf'}
-            >>> result = merge_passthrough_fields(llm_response, passthrough_fields)
-            >>> result[0]['content']
-            {'classification': 'positive', 'document_id': '123', 'filename': 'doc.pdf'}
-
-            >>> llm_response = {'classification': 'positive'}
-            >>> passthrough_fields = {'document_id': '123'}
-            >>> merge_passthrough_fields(llm_response, passthrough_fields)
-            {'classification': 'positive', 'document_id': '123'}
-        """
+        """Merge passthrough fields into LLM response."""
         if not passthrough_fields:
             # No passthrough fields to merge
             return llm_response
@@ -378,6 +201,9 @@ class ContextScopeProcessor:
         return llm_response
 
     @staticmethod
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    # pylint: disable=too-many-branches,too-many-statements
+    # Complex field context building with historical data requires all these parameters
     def build_field_context_with_history(
         contents: Dict,
         agent_name: str,
@@ -390,44 +216,7 @@ class ContextScopeProcessor:
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None
     ) -> Dict:
-        """
-        Build field context with agent namespaces from flat contents.
-
-        Automatically loads ALL previous actions from lineage, making them available
-        for field references. No manual dependencies declaration needed.
-
-        Used by BOTH online and batch modes for consistent field context building.
-
-        Args:
-            contents: Flat dict containing all fields from dependencies
-            agent_name: Name of the current agent
-            agent_config: Configuration for the current agent
-            agent_indices: Dict mapping agent names to their node indices
-            dependency_configs: Dict mapping dependency names to their configs
-            source_content: Optional source content for {source.field} references
-            loop_context: Optional loop context for {loop.*} references
-            workflow_metadata: Optional workflow metadata for {workflow.*} references
-            current_item: Optional current item dict containing lineage and source_guid
-            file_path: Optional file path for constructing historical node paths
-
-        Returns:
-            Namespaced field_context dict for replace_field_references()
-
-        Example:
-            Input contents (flat):
-                {'bloom_details': '...', 'cluster_id': '...', 'page_content': '...'}
-
-            Output field_context (namespaced):
-                {
-                    'source': {...},
-                    'fact_extractor': {...},        # Auto-loaded from lineage
-                    'flatten_facts': {...},         # Auto-loaded from lineage
-                    'cluster_list': {...},          # Auto-loaded from lineage
-                    'combine_by_cluster': {...},    # Auto-loaded from lineage
-                    'loop': {...},
-                    'workflow': {...}
-                }
-        """
+        """Build field context with agent namespaces, auto-loading previous actions from lineage."""
         from agent_actions.utilities.context_scope.llm_context_utils import LLMContextUtils
         from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
 
@@ -462,8 +251,6 @@ class ContextScopeProcessor:
                     if source_content:
                         field_context['source'] = source_content
                     # Log the error but don't fail - some workflows may not have source folder
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.debug("Could not load source from folder: %s", e)
 
         # Fallback: Use passed source_content if not loaded above

@@ -1,16 +1,9 @@
-"""
-Static Data Loader for Context Scope Static Data Loading.
-
-This module provides functionality to load external reference files (JSON, YAML,
-Markdown, CSV) in workflow configurations through context_scope.static_data.
-
-Features:
-- Parses $file: prefix syntax
-- Loads files from static_data/ or seed/ folder only
-- Supports JSON, YAML, Markdown, CSV, and plain text
-- Caches loaded data per workflow run
-- Prevents path traversal outside static data folder
-"""
+"""Static Data Loader for external reference files in context_scope configuration."""
+# pylint: disable=line-too-long,unused-argument,no-else-return,import-outside-toplevel
+# Line-too-long: Descriptive error messages and contexts require long lines
+# Unused-argument: Interface consistency for _parse_file_path method
+# No-else-return: Code clarity - explicit return paths for different file types
+# Import-outside-toplevel: Import sys only when needed in get_cache_stats
 
 import csv
 import json
@@ -35,29 +28,14 @@ class StaticDataLoadError(FileSystemError):
         *,
         cause: Optional[Exception] = None
     ):
-        """Initialize StaticDataLoadError.
-
-        Args:
-            message: The error message
-            context: Additional context dict with error details
-            cause: The underlying exception that caused this error
-        """
+        """Initialize StaticDataLoadError with message, context, and optional cause."""
         ctx = context or {}
         ctx['operation'] = 'load_static_data'
         super().__init__(message, context=ctx, cause=cause)
 
 
 class StaticDataLoader:
-    """
-    Loads static/seed data files from designated static_data/ or seed/ folder.
-
-    Features:
-    - Parses $file: prefix syntax
-    - Loads files from static_data/ or seed/ folder only
-    - Supports JSON, YAML, Markdown, CSV, and plain text
-    - Caches loaded data per workflow run
-    - Prevents path traversal outside static data folder
-    """
+    """Loads static/seed data files with caching and path validation."""
 
     # File size limit: 10MB to prevent memory issues
     MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
@@ -66,16 +44,7 @@ class StaticDataLoader:
     SUPPORTED_EXTENSIONS = {'.json', '.yml', '.yaml', '.md', '.txt', '.csv'}
 
     def __init__(self, static_data_dir: Path):
-        """
-        Initialize StaticDataLoader.
-
-        Args:
-            static_data_dir: Path to the static_data/ or seed/ folder
-                            containing static data files
-
-        Raises:
-            ValueError: If static_data_dir doesn't exist or is not a directory
-        """
+        """Initialize StaticDataLoader with path to static_data/ or seed/ folder."""
         if not static_data_dir.exists():
             raise ValueError(f"Static data directory does not exist: {static_data_dir}")
         if not static_data_dir.is_dir():
@@ -90,19 +59,7 @@ class StaticDataLoader:
         self,
         static_data_config: Dict[str, str]
     ) -> Dict[str, Any]:
-        """
-        Load all static data files specified in context_scope.static_data.
-
-        Args:
-            static_data_config: Dictionary mapping field names to file paths
-                               (e.g., {'exam_syllabus': '$file:syllabus.json'})
-
-        Returns:
-            Dictionary mapping field names to loaded data
-
-        Raises:
-            StaticDataLoadError: If file not found, invalid format, or security violation
-        """
+        """Load all static data files specified in context_scope.static_data."""
         if not static_data_config:
             logger.debug("No static data config provided, skipping load")
             return {}
@@ -150,34 +107,13 @@ class StaticDataLoader:
         return loaded_data
 
     def _parse_file_path(self, file_spec: str, field_name: str) -> str:
-        """
-        Parse file path from $file: prefix syntax.
-
-        Args:
-            file_spec: File specification (e.g., '$file:path.json' or 'path.json')
-            field_name: Field name for error messages
-
-        Returns:
-            Parsed file path without prefix
-        """
+        """Parse file path from $file: prefix syntax."""
         if file_spec.startswith('$file:'):
             return file_spec[6:]  # Remove '$file:' prefix
         return file_spec  # Use as-is
 
     def _resolve_path(self, file_path: str, field_name: str) -> Path:
-        """
-        Resolve file path relative to static_data_dir.
-
-        Args:
-            file_path: Relative file path
-            field_name: Field name for error messages
-
-        Returns:
-            Resolved absolute path
-
-        Raises:
-            StaticDataLoadError: If path is absolute or escapes static_data_dir
-        """
+        """Resolve file path relative to static_data_dir with security validation."""
         path = Path(file_path)
 
         # Reject absolute paths immediately
@@ -208,17 +144,7 @@ class StaticDataLoader:
         field_name: str,
         original_path: str
     ) -> None:
-        """
-        Validate that resolved path doesn't escape static_data_dir.
-
-        Args:
-            resolved_path: Resolved absolute path
-            field_name: Field name for error messages
-            original_path: Original path specification for error messages
-
-        Raises:
-            StaticDataLoadError: If path escapes static_data_dir
-        """
+        """Validate that resolved path doesn't escape static_data_dir."""
         try:
             # This will raise ValueError if path is outside static_data_dir
             resolved_path.relative_to(self.static_data_dir)
@@ -239,19 +165,7 @@ class StaticDataLoader:
             ) from exc
 
     def _load_file(self, file_path: Path, field_name: str) -> Any:
-        """
-        Load file content based on file extension.
-
-        Args:
-            file_path: Absolute resolved file path
-            field_name: Field name for error messages
-
-        Returns:
-            Loaded and parsed file content
-
-        Raises:
-            StaticDataLoadError: If file doesn't exist, is too large, or has unsupported format
-        """
+        """Load file content based on file extension."""
         # Check if file exists
         if not file_path.exists():
             raise StaticDataLoadError(
@@ -302,19 +216,7 @@ class StaticDataLoader:
             )
 
     def _load_json(self, file_path: Path, field_name: str) -> Any:
-        """
-        Load JSON file.
-
-        Args:
-            file_path: Path to JSON file
-            field_name: Field name for error messages
-
-        Returns:
-            Parsed JSON object (dict, list, etc.)
-
-        Raises:
-            StaticDataLoadError: If JSON parsing fails
-        """
+        """Load and parse JSON file."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
@@ -346,19 +248,7 @@ class StaticDataLoader:
             ) from e
 
     def _load_yaml(self, file_path: Path, field_name: str) -> Any:
-        """
-        Load YAML file.
-
-        Args:
-            file_path: Path to YAML file
-            field_name: Field name for error messages
-
-        Returns:
-            Parsed YAML object (dict, list, etc.)
-
-        Raises:
-            StaticDataLoadError: If YAML parsing fails
-        """
+        """Load and parse YAML file."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return yaml.safe_load(f)
@@ -388,19 +278,7 @@ class StaticDataLoader:
             ) from e
 
     def _load_text(self, file_path: Path, field_name: str) -> str:
-        """
-        Load plain text or Markdown file.
-
-        Args:
-            file_path: Path to text/Markdown file
-            field_name: Field name for error messages
-
-        Returns:
-            File content as string
-
-        Raises:
-            StaticDataLoadError: If file reading fails
-        """
+        """Load plain text or Markdown file."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 return f.read()
@@ -418,19 +296,7 @@ class StaticDataLoader:
             ) from e
 
     def _load_csv(self, file_path: Path, field_name: str) -> list:
-        """
-        Load CSV file as list of dictionaries.
-
-        Args:
-            file_path: Path to CSV file
-            field_name: Field name for error messages
-
-        Returns:
-            List of dictionaries (with headers as keys)
-
-        Raises:
-            StaticDataLoadError: If CSV parsing fails
-        """
+        """Load CSV file as list of dictionaries with headers as keys."""
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
@@ -461,22 +327,13 @@ class StaticDataLoader:
             ) from e
 
     def clear_cache(self) -> None:
-        """Clear the file cache (typically called between workflow runs)."""
+        """Clear the file cache."""
         num_files = len(self._cache)
         self._cache.clear()
         logger.debug("Cache cleared (%s files removed)", num_files)
 
     def get_cache_stats(self) -> Dict[str, Any]:
-        """
-        Get cache statistics for debugging.
-
-        Returns:
-            Dictionary with cache statistics including:
-            - cached_files: Number of files in cache
-            - cached_file_paths: List of cached file paths
-            - total_size_bytes: Estimated total cache size in bytes
-            - total_size_mb: Estimated total cache size in MB
-        """
+        """Get cache statistics for debugging."""
         import sys
 
         # Estimate cache size

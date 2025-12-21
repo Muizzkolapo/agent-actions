@@ -21,6 +21,9 @@ Usage:
     # In config:
     # impl: my_function  # Simple name, no module path needed
 """
+# pylint: disable=line-too-long
+# Line-too-long: Descriptive error messages and metadata storage require long lines
+
 import inspect
 from typing import Any, Callable, Dict, List
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
