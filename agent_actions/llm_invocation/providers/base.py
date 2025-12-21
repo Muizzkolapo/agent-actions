@@ -212,7 +212,7 @@ class BatchProvider(ABC):
             raw_status = self._fetch_status(batch_id)
             return self._normalize_status(raw_status)
         except Exception as e:
-            logger.error("Error checking batch {batch_id}: %s", e)
+            logger.error(f"Error checking batch {batch_id}: {e}")
             raise
 
     @abstractmethod
@@ -295,7 +295,7 @@ class BatchProvider(ABC):
                     batch_result = self.parse_provider_response(raw_result)
                     batch_results.append(batch_result)
                 except json.JSONDecodeError as e:
-                    logger.error("JSON parsing error on line {line_num}: %s", e)
+                    logger.error(f"JSON parsing error on line {line_num}: {e}")
                     batch_results.append(
                             BatchResult(
                                 custom_id=f"error_line_{line_num}",
