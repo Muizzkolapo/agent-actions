@@ -50,7 +50,7 @@ class FieldManager:
             obj['node_id'] = self.id_generator.generate_node_id(idx)
         return obj
 
-    def create_processed_item(
+    def create_processed_item(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         source_guid: str,
         content: Any,

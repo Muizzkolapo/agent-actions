@@ -50,22 +50,33 @@ def split_record_temp_dir(split_records_data):
 
     Structure:
         tmp_dir/
-        └── target/
-            └── node_5_split_operation/
-                └── test_file.json (contains 3 split records)
+        └── agent_io/
+            ├── source/
+            │   └── test_file.json (source data)
+            └── target/
+                └── node_5_split_operation/
+                    └── test_file.json (contains 3 split records)
 
     This mimics the real workflow directory structure where historical
     node data is stored.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
-        target_dir = tmp_path / "target"
+        agent_io_dir = tmp_path / "agent_io"
 
-        # Create node_5 directory with split records
+        # Create source directory with source data
+        source_dir = agent_io_dir / "source"
+        source_dir.mkdir(parents=True)
+        source_file = source_dir / "test_file.json"
+        with open(source_file, 'w') as f:
+            json.dump(split_records_data, f, indent=2)
+
+        # Create target directory with split records
+        target_dir = agent_io_dir / "target"
         node_5_dir = target_dir / "node_5_split_operation"
         node_5_dir.mkdir(parents=True)
 
-        # Write split records to file
+        # Write split records to target file
         split_file = node_5_dir / "test_file.json"
         with open(split_file, 'w') as f:
             json.dump(split_records_data, f, indent=2)
@@ -131,7 +142,7 @@ class TestContextScopeWithSplitRecords:
 
         # Construct file path to current processing location
         # NOTE: Points to downstream node, not historical node
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -180,7 +191,7 @@ class TestContextScopeWithSplitRecords:
         }
 
         # Construct file path to current processing location
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -230,7 +241,7 @@ class TestContextScopeWithSplitRecords:
         }
 
         # Construct file path to current processing location
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -271,7 +282,7 @@ class TestContextScopeWithSplitRecords:
             "dependencies": ["split_operation"]
         }
 
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         loaded_statuses = []
         loaded_tags = []
@@ -337,7 +348,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             "dependencies": ["split_operation"]
         }
 
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         # Should not crash
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -372,7 +383,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             "dependencies": ["split_operation"]
         }
 
-        file_path = str(split_record_temp_dir / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
 
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents={},

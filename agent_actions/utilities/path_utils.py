@@ -17,11 +17,11 @@ _global_path_manager: Optional[PathManager] = None
 def get_path_manager() -> PathManager:
     """
     Get the global PathManager instance.
-    
+
     Returns:
         Global PathManager instance
     """
-    global _global_path_manager
+    global _global_path_manager  # pylint: disable=global-statement # Singleton pattern
     if _global_path_manager is None:
         _global_path_manager = PathManager()
     return _global_path_manager
@@ -89,19 +89,18 @@ def check_path_exists(path: Union[str, Path]) -> bool:
     """
     return Path(path).exists()
 
-def find_project_root(start_path: Optional[Path]=None, marker_file: str='agent_actions.yml') -> Path:
+def find_project_root(start_path: Optional[Path]=None) -> Path:
     """
     Find project root by looking for marker file.
-    
+
     This consolidates the project root discovery logic.
-    
+
     Args:
         start_path: Starting point for search
-        marker_file: Name of marker file to look for
-        
+
     Returns:
         Path to project root
-        
+
     Raises:
         ProjectRootNotFoundError: If project root cannot be found
     """
@@ -122,17 +121,19 @@ def create_mirror_source_path(target_path: Union[str, Path]) -> Path:
     """
     return get_path_manager().create_mirror_path(Path(target_path), 'target', 'source')
 
-def validate_path_permissions(path: Union[str, Path], readable: bool=False, writable: bool=False) -> bool:
+def validate_path_permissions(
+    path: Union[str, Path], readable: bool=False, writable: bool=False
+) -> bool:
     """
     Validate path permissions.
-    
+
     This consolidates the permission checking logic found in validators.
-    
+
     Args:
         path: Path to validate
         readable: Check if path is readable
         writable: Check if path is writable
-        
+
     Returns:
         True if path meets all permission requirements
     """
@@ -143,7 +144,7 @@ def validate_path_permissions(path: Union[str, Path], readable: bool=False, writ
         requirements['must_be_writable'] = True
     try:
         return get_path_manager().validate_path(Path(path), requirements)
-    except Exception as e:
+    except (PermissionError, OSError, ValueError) as e:
         logger.debug(
             "Path validation failed, returning False: %s",
             e,
@@ -217,13 +218,23 @@ def safe_path_join(*parts: Union[str, Path]) -> Path:
     for part in parts:
         joined_path = joined_path / Path(part)
     resolved_path = resolve_absolute_path(joined_path)
-    from agent_actions.errors import FileSystemError  # New modular pattern!
+    # pylint: disable=import-outside-toplevel # Avoid circular import
+    from agent_actions.errors import FileSystemError
     pm = get_path_manager()
     if not pm.is_within_project(resolved_path):
-        raise FileSystemError(f'Path {resolved_path} is outside project bounds', context={'resolved_path': str(resolved_path), 'project_root': str(pm.get_project_root()), 'operation': 'safe_join_paths'})
+        raise FileSystemError(
+            f'Path {resolved_path} is outside project bounds',
+            context={
+                'resolved_path': str(resolved_path),
+                'project_root': str(pm.get_project_root()),
+                'operation': 'safe_join_paths'
+            }
+        )
     return resolved_path
 
-def create_agent_directory_structure(agent_name: str, base_path: Optional[Path]=None) -> dict[str, Path]:
+def create_agent_directory_structure(
+    agent_name: str, base_path: Optional[Path]=None
+) -> dict[str, Path]:
     """
     Create standard agent directory structure.
     

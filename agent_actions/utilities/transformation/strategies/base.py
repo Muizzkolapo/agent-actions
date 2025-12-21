@@ -33,7 +33,7 @@ class IPassthroughTransformStrategy(ABC):
         """
 
     @abstractmethod
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,
@@ -53,4 +53,6 @@ class IPassthroughTransformStrategy(ABC):
 
         Returns:
             Transformed data list
+
+        Note: All parameters required by interface contract.
         """

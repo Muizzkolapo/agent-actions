@@ -9,7 +9,17 @@ from agent_actions.utilities.transformation import PassthroughTransformer
 
 logger = logging.getLogger(__name__)
 
-def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatted_prompt: str, *, tools_path: Optional[str]=None, tool_args: Optional[Dict[str, Any]]=None, source_content: Optional[Any]=None, llm_context: Optional[Any]=None) -> tuple[Any, bool]:
+def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    agent_config: Dict,
+    agent_name: str,
+    context: Any,
+    formatted_prompt: str,
+    *,
+    tools_path: Optional[str]=None,
+    tool_args: Optional[Dict[str, Any]]=None,
+    source_content: Optional[Any]=None,
+    llm_context: Optional[Any]=None
+) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
@@ -79,8 +89,9 @@ def run_dynamic_agent(agent_config: Dict, agent_name: str, context: Any, formatt
         original_context=processed_context  # CRITICAL: Pass original context for tools
     )
 
-    # Note: passthrough fields are NOT merged here - they're merged later in transform_with_observe()
-    # using the same pathway as observe directive (via DataTransformer.update_schema_objects)
+    # Note: passthrough fields are NOT merged here - they're merged later in
+    # transform_with_observe() using the same pathway as observe directive
+    # (via DataTransformer.update_schema_objects)
 
     return (response, True)
 
@@ -100,7 +111,7 @@ def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
         filter_service = get_global_filter()
         filter_matched = filter_service.filter_item(context, where_clause_config['clause'])
         return not filter_matched
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Where clause skip check failed, using passthrough_on_error setting: %s",
             e,
@@ -126,7 +137,7 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
                 return not passthrough_on_error
             return not filter_result.matched
         return not filter_result
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Where clause filter check failed, using passthrough_on_error setting: %s",
             e,
@@ -138,7 +149,17 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
         passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
         return not passthrough_on_error
 
-def transform_with_passthrough(data: list, context_data: dict, source_guid: str, agent_config: Dict, idx: int=0, passthrough_fields: Optional[Dict]=None) -> list:
+def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    data: list,
+    context_data: dict,
+    source_guid: str,
+    agent_config: Dict,
+    idx: int=0,
+    passthrough_fields: Optional[Dict]=None
+) -> list:
     """Apply ``context_scope.passthrough`` logic to generated data consistently."""
     transformer = PassthroughTransformer()
-    return transformer.transform_with_passthrough(data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields)
+    return transformer.transform_with_passthrough(
+        data, context_data, source_guid, agent_config, idx,
+        passthrough_fields=passthrough_fields
+    )

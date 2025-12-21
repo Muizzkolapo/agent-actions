@@ -38,7 +38,7 @@ def load_project_config(project_root: Path) -> Dict[str, Any]:
     for config_file in config_files:
         if config_file.exists():
             try:
-                with open(config_file, 'r') as f:
+                with open(config_file, 'r', encoding='utf-8') as f:
                     return yaml.safe_load(f) or {}
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
@@ -49,6 +49,6 @@ def load_project_config(project_root: Path) -> Dict[str, Any]:
                         'operation': 'load_config'
                     },
                     cause=e
-                )
+                ) from e
 
     return {}
