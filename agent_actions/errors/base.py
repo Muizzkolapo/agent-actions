@@ -3,6 +3,9 @@
 This module provides the root exception class for all agent-actions errors.
 Following the dbt-mcp pattern, we keep the hierarchy simple and clean.
 """
+# pylint: disable=import-outside-toplevel,broad-exception-caught
+# Import-outside-toplevel: Avoid circular imports with utilities module
+# Broad-exception-caught: Safety fallback for exception formatting
 
 from typing import Any, Dict, Optional
 

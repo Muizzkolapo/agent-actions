@@ -1,4 +1,7 @@
 """External service and vendor API errors."""
+# pylint: disable=too-many-arguments,too-many-positional-arguments,unnecessary-pass
+# Too-many-arguments: Legacy compatibility for VendorAPIError requires all parameters
+# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from typing import Optional, Dict, Any
 from agent_actions.errors.base import AgentActionsError
@@ -13,7 +16,15 @@ class ExternalServiceError(AgentActionsError):
 class VendorAPIError(ExternalServiceError):
     """Raised when an error occurs during a call to a vendor's API."""
 
-    def __init__(self, message_or_vendor: Optional[str] = None, endpoint: Optional[str] = None, context: Optional[Dict[str, Any]] = None, *, cause: Optional[Exception] = None, **kwargs):
+    def __init__(
+        self,
+        message_or_vendor: Optional[str] = None,
+        endpoint: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+        *,
+        cause: Optional[Exception] = None,
+        **kwargs
+    ):
         """
         Initialize VendorAPIError.
 
@@ -29,7 +40,7 @@ class VendorAPIError(ExternalServiceError):
             **kwargs: Support for 'vendor' keyword argument
         """
         vendor = kwargs.pop('vendor', None)
-        
+
         if vendor:
             # Case: vendor passed as kwarg
             message = f"Error calling {vendor} API endpoint {endpoint}"

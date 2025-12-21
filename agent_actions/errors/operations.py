@@ -1,4 +1,6 @@
 """Operational errors for agent execution and template rendering."""
+# pylint: disable=unnecessary-pass
+# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError
 
