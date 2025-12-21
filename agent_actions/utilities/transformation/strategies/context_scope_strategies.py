@@ -88,6 +88,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
 
         if context_scope and context_scope.get('passthrough'):
             passthrough_refs = context_scope.get('passthrough', [])
+            # pylint: disable=no-member
             return ContextScopeProcessor.extract_field_names_from_references(
                 passthrough_refs, return_type='list'
             )

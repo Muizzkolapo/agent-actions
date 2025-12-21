@@ -106,34 +106,34 @@ def retry(
 
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs) -> T:
-                last_exception = None
-                current_delay = strategy.delay
-                # Extract exception tuple for proper except clause
-                exception_types = strategy.exceptions
+            last_exception = None
+            current_delay = strategy.delay
+            # Extract exception tuple for proper except clause
+            exception_types = strategy.exceptions
 
-                for attempt in range(1, strategy.max_attempts + 1):
-                    try:
-                        return func(*args, **kwargs)
-                    except exception_types as e:  # pylint: disable=catching-non-exception
-                        last_exception = e
-                        if attempt == strategy.max_attempts:
-                            logger.warning(
-                                "Retry failed after %s attempts for %s: %s",
-                                attempt, func.__name__, str(e)
-                            )
-                            raise
-
-                        logger.debug(
-                            "Retry attempt %s/%s for %s after error: %s. Waiting %.2fs",
-                            attempt, strategy.max_attempts, func.__name__, str(e), current_delay
+            for attempt in range(1, strategy.max_attempts + 1):
+                try:
+                    return func(*args, **kwargs)
+                except exception_types as e:  # pylint: disable=catching-non-exception
+                    last_exception = e
+                    if attempt == strategy.max_attempts:
+                        logger.warning(
+                            "Retry failed after %s attempts for %s: %s",
+                            attempt, func.__name__, str(e)
                         )
+                        raise
 
-                        time.sleep(current_delay)
-                        current_delay = min(current_delay * strategy.backoff, strategy.max_delay)
+                    logger.debug(
+                        "Retry attempt %s/%s for %s after error: %s. Waiting %.2fs",
+                        attempt, strategy.max_attempts, func.__name__, str(e), current_delay
+                    )
 
-                if last_exception:
-                    raise last_exception
-                return None  # type: ignore
+                    time.sleep(current_delay)
+                    current_delay = min(current_delay * strategy.backoff, strategy.max_delay)
+
+            if last_exception:
+                raise last_exception
+            return None  # type: ignore
         return sync_wrapper
 
     return decorator

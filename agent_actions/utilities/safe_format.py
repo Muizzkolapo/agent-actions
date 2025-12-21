@@ -5,6 +5,7 @@ This module provides bulletproof error formatting functions that handle
 all edge cases including broken __str__ methods, circular references,
 and malformed exception chains.
 """
+# pylint: disable=broad-exception-caught  # Intentional - safety formatting must catch everything
 
 import logging
 from typing import Any, Set
@@ -13,24 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def safe_format_error(exc: Any) -> str:
-    """
-    Safely format any exception without risk of cascading failures.
-
-    This function tries multiple approaches to get a string representation
-    of an exception, falling back gracefully if any approach fails.
-
-    Args:
-        exc: The exception or any object to format safely
-
-    Returns:
-        A string representation that is guaranteed to work
-
-    Priority order:
-        1. Try str(exc)
-        2. Fallback to repr(exc)
-        3. Fallback to exception class name
-        4. Ultimate fallback to generic message
-    """
+    """Safely format any exception without risk of cascading failures."""
     if exc is None:
         return "None"
 
@@ -62,20 +46,7 @@ def safe_format_error(exc: Any) -> str:
 
 
 def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
-    """
-    Walk exception chain to find root cause safely.
-
-    This function traverses the exception chain (__cause__ and __context__)
-    to find the original exception that started the chain. It handles
-    circular references and broken chains gracefully.
-
-    Args:
-        exc: The exception to start traversal from
-        max_depth: Maximum depth to traverse (prevents infinite loops)
-
-    Returns:
-        The root cause exception
-    """
+    """Walk exception chain to find root cause, handling circular references safely."""
     if not isinstance(exc, Exception):
         return exc
 
@@ -120,16 +91,7 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
 
 
 def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
-    """
-    Get the full exception chain as a list.
-
-    Args:
-        exc: The exception to start from
-        max_depth: Maximum depth to traverse
-
-    Returns:
-        List of exceptions in the chain, from outermost to root cause
-    """
+    """Get the full exception chain as a list, from outermost to root cause."""
     if not isinstance(exc, Exception):
         return [exc]
 
@@ -164,18 +126,7 @@ def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
 
 
 def safe_get_exception_message(exc: Exception) -> str:
-    """
-    Safely extract just the message portion of an exception.
-
-    This is different from safe_format_error as it tries to get
-    just the core message without class name or context.
-
-    Args:
-        exc: The exception to extract message from
-
-    Returns:
-        The exception message or a safe fallback
-    """
+    """Safely extract just the message portion of an exception."""
     if not isinstance(exc, Exception):
         return safe_format_error(exc)
 
@@ -193,15 +144,7 @@ def safe_get_exception_message(exc: Exception) -> str:
 
 
 def format_exception_context(context: Any) -> str:
-    """
-    Safely format exception context (usually a dict).
-
-    Args:
-        context: The context to format (could be dict, string, or anything)
-
-    Returns:
-        Formatted context string
-    """
+    """Safely format exception context (usually a dict)."""
     if context is None:
         return ""
 
@@ -223,32 +166,7 @@ def format_exception_context(context: Any) -> str:
 
 
 def format_exception_chain_for_debug(exc: Exception, max_depth: int = 10) -> str:
-    """
-    Format the complete exception chain for debugging purposes.
-
-    This function creates a detailed, structured representation of the entire
-    exception chain, including all context at each level. This is intended
-    for logging and debugging, NOT for user-facing messages.
-
-    Args:
-        exc: The exception to format
-        max_depth: Maximum depth to traverse
-
-    Returns:
-        Formatted string with full exception chain details
-
-    Example output:
-        Exception Chain (3 levels):
-
-        [1] ConfigurationError: Invalid agent configuration
-            Context: agent=my-agent, file=config.yml
-
-        [2] ValidationError: Missing required field 'model'
-            Context: field=model, section=agents
-
-        [3] ValueError: Model name cannot be empty
-            (Root Cause)
-    """
+    """Format the complete exception chain for debugging purposes."""
     try:
         chain = get_error_chain(exc, max_depth)
 

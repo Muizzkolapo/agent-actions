@@ -4,6 +4,13 @@ Standardized error handling mixin for processors.
 This module provides a mixin class that implements consistent error handling
 patterns across all processor modules.
 """
+# pylint: disable=line-too-long,import-outside-toplevel,no-else-raise
+# pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
+# Line-too-long: Error messages need to be descriptive
+# Import-outside-toplevel: Avoid circular imports with error module
+# No-else-raise: Code clarity - explicit error handling paths
+# Too-many-arguments: Error context requires all these parameters
+# Unused-argument: Interface consistency
 import json
 import logging
 import time
