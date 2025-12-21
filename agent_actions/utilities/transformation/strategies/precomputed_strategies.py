@@ -5,8 +5,9 @@ These strategies handle transformation when passthrough_fields
 are pre-computed and provided directly (new behavior).
 """
 from typing import Dict, List, Optional
-from .base import IPassthroughTransformStrategy
+
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
+from .base import IPassthroughTransformStrategy
 
 
 class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
@@ -32,7 +33,7 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
             and already_structured
         )
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,
@@ -74,7 +75,7 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
             and not already_structured
         )
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,

@@ -16,7 +16,7 @@ from .strategies import (
 )
 
 
-class PassthroughTransformer:
+class PassthroughTransformer:  # pylint: disable=too-few-public-methods
     """
     Orchestrates passthrough transformations using Strategy Pattern.
 
@@ -25,6 +25,8 @@ class PassthroughTransformer:
     - Precomputed fields (from field_context)
     - Context scope extraction (from context_scope.passthrough config)
     - Structured vs unstructured data
+
+    Note: Single public method is appropriate for transformer orchestrator pattern.
     """
 
     def __init__(self, field_manager: Optional[FieldManager] = None):
@@ -48,7 +50,7 @@ class PassthroughTransformer:
             DefaultStructureStrategy()  # Catch-all
         ]
 
-    def transform_with_passthrough(
+    def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,

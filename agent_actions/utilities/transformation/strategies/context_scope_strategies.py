@@ -5,8 +5,10 @@ These strategies handle transformation by extracting fields from
 context_scope.passthrough configuration at runtime.
 """
 from typing import Dict, List, Optional
-from .base import IPassthroughTransformStrategy
+
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from .base import IPassthroughTransformStrategy
 
 
 class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
@@ -25,14 +27,14 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
         already_structured: bool
     ) -> bool:
         """Check if we have no precomputed fields, structured data."""
-        has_passthrough_config = self._has_passthrough_config(agent_config)
+        has_passthrough_config = self.has_passthrough_config(agent_config)
         return (
             (passthrough_fields is None or len(passthrough_fields) == 0)
             and already_structured
             and has_passthrough_config
         )
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,
@@ -41,7 +43,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
         passthrough_fields: Optional[Dict] = None
     ) -> List:
         """Extract and merge context_scope passthrough fields."""
-        fields_to_merge = self._extract_context_scope_fields(agent_config)
+        fields_to_merge = self.extract_context_scope_fields(agent_config)
 
         context_for_passthrough = context_data
         if (
@@ -74,29 +76,23 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
         return DataTransformer.transform_structure([{source_guid: updated}])
 
     @staticmethod
-    def _has_passthrough_config(agent_config: Dict) -> bool:
+    def has_passthrough_config(agent_config: Dict) -> bool:
         """Check if agent_config has passthrough configuration."""
         context_scope = agent_config.get('context_scope', {})
         return bool(context_scope and context_scope.get('passthrough'))
 
     @staticmethod
-    def _extract_context_scope_fields(agent_config: Dict) -> List[str]:
+    def extract_context_scope_fields(agent_config: Dict) -> List[str]:
         """Extract field names from context_scope.passthrough."""
         context_scope = agent_config.get('context_scope', {})
-        fields_to_merge = []
 
         if context_scope and context_scope.get('passthrough'):
             passthrough_refs = context_scope.get('passthrough', [])
-            for field_ref in passthrough_refs:
-                # Parse 'action.field' -> 'field'
-                if isinstance(field_ref, str) and '.' in field_ref:
-                    parts = field_ref.split('.', 1)
-                    if len(parts) == 2:
-                        field_name = parts[1]
-                        if field_name not in fields_to_merge:
-                            fields_to_merge.append(field_name)
+            return ContextScopeProcessor.extract_field_names_from_references(
+                passthrough_refs, return_type='list'
+            )
 
-        return fields_to_merge
+        return []
 
 
 class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
@@ -116,7 +112,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
     ) -> bool:
         """Check if we have no precomputed fields, unstructured data."""
         has_passthrough_config = (
-            ContextScopeStructuredStrategy._has_passthrough_config(agent_config)
+            ContextScopeStructuredStrategy.has_passthrough_config(agent_config)
         )
         return (
             (passthrough_fields is None or len(passthrough_fields) == 0)
@@ -124,7 +120,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
             and has_passthrough_config
         )
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,
@@ -134,7 +130,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
     ) -> List:
         """Extract and merge context_scope passthrough fields."""
         fields_to_merge = (
-            ContextScopeStructuredStrategy._extract_context_scope_fields(agent_config)
+            ContextScopeStructuredStrategy.extract_context_scope_fields(agent_config)
         )
 
         context_for_passthrough = context_data
@@ -183,7 +179,7 @@ class NoOpStrategy(IPassthroughTransformStrategy):
     ) -> bool:
         """Check if structured data with no passthrough."""
         has_passthrough_config = (
-            ContextScopeStructuredStrategy._has_passthrough_config(agent_config)
+            ContextScopeStructuredStrategy.has_passthrough_config(agent_config)
         )
         return (
             already_structured
@@ -191,7 +187,7 @@ class NoOpStrategy(IPassthroughTransformStrategy):
             and (passthrough_fields is None or len(passthrough_fields) == 0)
         )
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,
@@ -224,7 +220,7 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         """
         return True  # Catch-all
 
-    def transform(
+    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         data: List,
         context_data: Dict,

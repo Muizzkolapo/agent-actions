@@ -9,6 +9,8 @@ behavior.
 import logging
 from typing import Dict, Any, Optional
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 
@@ -75,17 +77,22 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
             if isinstance(tool, dict) and tool.get('type') == 'function':
                 function_def = tool.get('function', {})
                 if 'file' in function_def:
-                    import yaml
                     try:
                         tool_file_path = function_def['file']
                         with open(tool_file_path, 'r', encoding='utf-8') as f:
                             tool_config = yaml.safe_load(f)
                             if tool_config and 'module_path' in tool_config:
                                 module_path = tool_config['module_path']
-                                logger.debug("Resolved tools_path from OpenAI tool config: %s", module_path)
+                                logger.debug(
+                                    "Resolved tools_path from OpenAI tool config: %s",
+                                    module_path
+                                )
                                 return module_path
                     except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
-                        logger.warning("Failed to load tool config from %s: %s", tool_file_path, e)
+                        logger.warning(
+                            "Failed to load tool config from %s: %s",
+                            tool_file_path, e
+                        )
 
     logger.debug("No tools_path found in agent_config")
     return None

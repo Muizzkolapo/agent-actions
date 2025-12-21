@@ -69,16 +69,18 @@ from agent_actions.utilities.lineage.lineage_builder import LineageBuilder
 from agent_actions.utilities.id_generation.id_generator import IDGenerator
 
 
-class PassthroughItemBuilder:
+class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
     """
     Unified builder for passthrough items across batch and online modes.
 
     This builder handles all passthrough item construction with consistent structure
     while supporting mode-specific metadata formats for backward compatibility.
+
+    Note: Single static method is appropriate for builder utility pattern.
     """
 
     @staticmethod
-    def build_item(
+    def build_item(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         row: Dict[str, Any],
         reason: str,
         idx: int,
@@ -93,10 +95,13 @@ class PassthroughItemBuilder:
         target_id, source_guid, node_id, lineage, content, and metadata.
 
         Args:
-            row: Original data item (must have 'content' key or entire dict is used as content)
-            reason: Passthrough reason (e.g., 'where_clause_not_matched', 'conditional_clause_failed')
+            row: Original data item (must have 'content' key or entire dict
+                is used as content)
+            reason: Passthrough reason (e.g., 'where_clause_not_matched',
+                'conditional_clause_failed')
             idx: Node index for ID generation (used to create node_id)
-            source_guid: Optional source GUID (if not provided, uses row['source_guid'] or target_id)
+            source_guid: Optional source GUID (if not provided, uses
+                row['source_guid'] or target_id)
             custom_id: Optional custom ID for target_id (batch mode fallback)
             mode: Processing mode - 'batch' or 'online' (affects metadata format)
 
