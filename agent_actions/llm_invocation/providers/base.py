@@ -188,7 +188,7 @@ class BatchProvider(ABC):
 
         batch_dir = self._get_batch_directory(output_directory)
         input_file = self._prepare_batch_input_file(tasks, batch_dir, batch_name)
-        logger.info("Submitting batch with {len(tasks)} tasks to %s...", self.__class__.__name__)
+        logger.info(f"Submitting batch with {len(tasks)} tasks to {self.__class__.__name__}...")
         return self._submit_to_provider_api(input_file, batch_name)
 
     def check_status(self, batch_id: str) -> str:
