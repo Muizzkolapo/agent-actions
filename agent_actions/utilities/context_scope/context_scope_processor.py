@@ -46,6 +46,36 @@ class ContextScopeProcessor:
         return (action_name, field_name)
 
     @staticmethod
+    def extract_field_names_from_references(
+        field_refs: List[str],
+        return_type: str = 'list'
+    ) -> List[str]:
+        """
+        Extract field names from list of field references.
+
+        Args:
+            field_refs: List of references in 'action.field' format
+            return_type: Return type ('list' or other - currently only 'list' supported)
+
+        Returns:
+            List of field names extracted from references
+
+        Example:
+            ['generate_summary.key_concepts', 'extract.facts'] -> ['key_concepts', 'facts']
+        """
+        field_names = []
+
+        for field_ref in field_refs:
+            try:
+                _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                field_names.append(field_name)
+            except ValueError:
+                # Skip invalid references
+                continue
+
+        return field_names
+
+    @staticmethod
     def extract_field_value(
         field_context: Dict,
         action_name: str,
