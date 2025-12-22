@@ -513,5 +513,96 @@ class ActionExpander:
 
         return {workflow_name: agents}
 
+    @staticmethod
+    def validate_guard_references(
+        agents: AgentConfigList,
+        strict: bool = True
+    ) -> list[str]:
+        """
+        Validate that guard conditions only reference valid upstream actions.
+
+        This should be called after expand_actions_to_agents() to ensure all
+        guard field references (e.g., "extract_facts.count > 5") reference
+        actions that exist and are upstream in the dependency graph.
+
+        Args:
+            agents: List of agent configurations from expand_actions_to_agents()
+            strict: If True, raise exception on validation errors. If False,
+                   return list of error messages.
+
+        Returns:
+            List of error messages (empty if all valid)
+
+        Raises:
+            ConfigValidationError: If strict=True and validation fails
+
+        Example:
+            config = {'name': 'my_workflow', 'actions': [...]}
+            result = ActionExpander.expand_actions_to_agents(config)
+            agents = result['my_workflow']
+
+            # Validate guard references
+            errors = ActionExpander.validate_guard_references(agents, strict=False)
+            if errors:
+                for error in errors:
+                    logger.warning(error)
+        """
+        # Import here to avoid circular dependency
+        from agent_actions.utilities.field_resolution import ReferenceValidator
+
+        errors = []
+        validator = ReferenceValidator(strict_dependencies=True)
+
+        # Build agent_indices from the list
+        agent_indices = {}
+        for idx, agent in enumerate(agents):
+            agent_name = agent.get('agent_type') or agent.get('name', f'unknown_{idx}')
+            agent_indices[agent_name] = idx
+
+        # Validate each agent's guard references
+        for agent in agents:
+            agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
+
+            # Check WHERE clause guards
+            where_clause = agent.get('where_clause')
+            if where_clause and isinstance(where_clause, dict):
+                clause = where_clause.get('clause', '')
+                if clause:
+                    guard_errors = validator.extract_and_validate(
+                        guard_condition=clause,
+                        agent_config=agent,
+                        agent_indices=agent_indices,
+                        current_agent_name=agent_name
+                    )
+                    errors.extend(guard_errors)
+
+            # Check conditional_clause (UDF guards)
+            conditional_clause = agent.get('conditional_clause')
+            if conditional_clause and isinstance(conditional_clause, str):
+                # UDF guards may also contain field references
+                guard_errors = validator.extract_and_validate(
+                    guard_condition=conditional_clause,
+                    agent_config=agent,
+                    agent_indices=agent_indices,
+                    current_agent_name=agent_name
+                )
+                errors.extend(guard_errors)
+
+        # Handle strict mode
+        if strict and errors:
+            raise ConfigValidationError(
+                config_key='guard',
+                reason='Guard references invalid actions',
+                context={
+                    'errors': errors,
+                    'hint': (
+                        'Ensure guard conditions only reference actions that are '
+                        'declared in the dependencies list and exist in the workflow.'
+                    )
+                }
+            )
+
+        return errors
+
 
 __all__ = ['ActionExpander']
