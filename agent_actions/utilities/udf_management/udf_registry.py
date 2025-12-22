@@ -5,61 +5,297 @@ This module provides a decorator-based registration system for user-defined func
 similar to dbt macros. Functions are auto-discovered and referenced by name only.
 
 Key Features:
-- @udf_tool decorator for automatic registration
+- @udf_tool decorator with REQUIRED schemas
 - Case-insensitive exact name matching
 - Duplicate detection at registration time
-- Function metadata storage (module, file, docstring, signature)
+- Function metadata storage (module, file, docstring, signature, schema)
+- Thread-safe registry operations
+- Security validations (path traversal, file size, symlinks)
+- Schema compilation caching for performance
 
 Usage:
     from agent_actions import udf_tool
+    from agent_actions.configuration.new_format_schema import Granularity
 
-    @udf_tool
+    @udf_tool(schema={'text': 'string'})
     def my_function(data):
         '''Process data.'''
         return processed_data
 
-    # In config:
-    # impl: my_function  # Simple name, no module path needed
+    # With file-based schema
+    @udf_tool(schema_file='schemas/my_function.yml', granularity=Granularity.FILE)
+    def batch_function(data):
+        return [process(item) for item in data]
 """
 # pylint: disable=line-too-long
 # Line-too-long: Descriptive error messages and metadata storage require long lines
 
 import inspect
-from typing import Any, Callable, Dict, List
-from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError  # New modular pattern!
+import threading
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
+
+import yaml
+
+from agent_actions.configuration.new_format_schema import Granularity
+from agent_actions.errors import ConfigurationError, DuplicateFunctionError, FunctionNotFoundError
+
+# Thread safety
+_registry_lock = threading.RLock()
+
+# Registry with cached compiled schemas
 UDF_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
-def udf_tool(func: Callable) -> Callable:
+# Security constants
+MAX_SCHEMA_FILE_SIZE = 1 * 1024 * 1024  # 1MB
+
+# Thread-local storage for circular reference detection
+_schema_loading_stack = threading.local()
+
+
+def _get_loading_stack() -> List[str]:
+    """Get thread-local loading stack for circular reference detection."""
+    if not hasattr(_schema_loading_stack, 'stack'):
+        _schema_loading_stack.stack = []
+    return _schema_loading_stack.stack
+
+
+def udf_tool(
+    func: Optional[Callable] = None,
+    *,
+    schema: Optional[Union[Dict[str, Any], str]] = None,
+    schema_file: Optional[str] = None,
+    granularity: Granularity = Granularity.RECORD
+) -> Callable:
     """
-    Decorator to register a user-defined function in the global registry.
-
-    Functions are registered by name (case-insensitive) and can be referenced
-    in config files without module paths.
-
+    Decorator to register a UDF with REQUIRED schema.
+    
     Args:
         func: The function to register
-
-    Returns:
-        The original function (transparent decorator)
-
+        schema: Inline schema definition (dict) - uses unified format
+        schema_file: Path to schema YAML file (relative to tool directory)
+        granularity: RECORD (default) or FILE processing (uses existing Granularity enum)
+        
     Raises:
-        DuplicateFunctionError: If a function with the same name (case-insensitive)
-            is already registered
-
-    Example:
-        @udf_tool
-        def apply_edited_distractors(data):
-            return modified_data
+        ConfigurationError: If neither schema nor schema_file is provided
+        
+    Examples:
+        # Inline schema - RECORD granularity
+        @udf_tool(schema={
+            'fields': [
+                {'id': 'user_id', 'type': 'string', 'required': True}
+            ]
+        })
+        def process_user(data, **kwargs):
+            return {'status': 'processed'}
+            
+        # File-level schema - FILE granularity (batch processing)
+        @udf_tool(
+            schema_file='process_users.yml',
+            granularity=Granularity.FILE
+        )
+        def process_users_batch(data, **kwargs):
+            return [process(user) for user in data]
     """
-    func_name = func.__name__
-    func_name_lower = func_name.lower()
-    if func_name_lower in UDF_REGISTRY:
-        existing = UDF_REGISTRY[func_name_lower]
-        existing_location = f"{existing['module']}.{existing['name']}"
-        new_location = f'{func.__module__}.{func_name}'
-        raise DuplicateFunctionError(function_name=func_name, existing_location=existing_location, existing_file=existing['file'], new_location=new_location, new_file=inspect.getfile(func))
-    UDF_REGISTRY[func_name_lower] = {'function': func, 'module': func.__module__, 'name': func_name, 'file': inspect.getfile(func), 'docstring': func.__doc__, 'signature': inspect.signature(func)}
-    return func
+    
+    def decorator(f: Callable) -> Callable:
+        # Validate that schema is provided
+        if schema is None and schema_file is None:
+            raise ConfigurationError(
+                f"UDF tool '{f.__name__}' must have a schema. "
+                f"Provide either 'schema' (inline) or 'schema_file' parameter.",
+                context={
+                    'function_name': f.__name__,
+                    'module': f.__module__,
+                    'file': inspect.getfile(f),
+                    'operation': 'udf_tool_registration'
+                }
+            )
+        
+        # Load schema from file or use inline
+        if schema_file:
+            resolved_schema = _load_schema_from_file_secure(schema_file, f)
+        else:
+            resolved_schema = _validate_inline_schema(schema, f)
+        
+        # Thread-safe registration
+        with _registry_lock:
+            func_name_lower = f.__name__.lower()
+            
+            # Check for duplicates (atomic check-and-register)
+            if func_name_lower in UDF_REGISTRY:
+                existing = UDF_REGISTRY[func_name_lower]
+                raise DuplicateFunctionError(
+                    function_name=f.__name__,
+                    existing_location=f"{existing['module']}.{existing['name']}",
+                    existing_file=existing['file'],
+                    new_location=f'{f.__module__}.{f.__name__}',
+                    new_file=inspect.getfile(f)
+                )
+            
+            # Pre-compile schema for performance (cache it)
+            from agent_actions.response_processing.schema_change import compile_unified_schema
+            compiled_schema_cache = {
+                'openai': compile_unified_schema(resolved_schema, 'openai'),
+                'anthropic': compile_unified_schema(resolved_schema, 'anthropic'),
+                'gemini': compile_unified_schema(resolved_schema, 'gemini'),
+            }
+            
+            # Store with schema and granularity
+            UDF_REGISTRY[func_name_lower] = {
+                'function': f,
+                'module': f.__module__,
+                'name': f.__name__,
+                'file': inspect.getfile(f),
+                'docstring': f.__doc__,
+                'signature': inspect.signature(f),
+                'schema': resolved_schema,  # Unified schema format
+                'schema_source': 'file' if schema_file else 'inline',
+                'schema_file': schema_file,
+                'granularity': granularity,  # Use Granularity enum
+                'compiled_schemas': compiled_schema_cache  # CACHED!
+            }
+        
+        return f
+    
+    # Support both @udf_tool and @udf_tool(schema=...)
+    if func is not None:
+        return decorator(func)
+    return decorator
+
+
+def _load_schema_from_file_secure(schema_file: str, func: Callable) -> Dict[str, Any]:
+    """
+    Load schema from YAML file with security validations.
+    
+    Security checks:
+    1. Path traversal protection
+    2. Symlink rejection
+    3. File size limits
+    4. Circular reference detection
+    """
+    # Resolve schema file path relative to the function's module
+    func_file = Path(inspect.getfile(func))
+    schema_path = (func_file.parent / schema_file).resolve()
+    
+    # Security check 1: Path traversal protection
+    project_root = Path.cwd()
+    try:
+        schema_path.relative_to(project_root)
+    except ValueError as e:
+        raise ConfigurationError(
+            f"Schema file '{schema_file}' is outside project bounds",
+            context={
+                'function_name': func.__name__,
+                'schema_file': schema_file,
+                'resolved_path': str(schema_path),
+                'project_root': str(project_root),
+                'security_violation': 'path_traversal'
+            },
+            cause=e
+        ) from e
+    
+    # Security check 2: Symlink rejection
+    if schema_path.is_symlink():
+        raise ConfigurationError(
+            f"Schema file '{schema_file}' is a symlink (not allowed)",
+            context={
+                'function_name': func.__name__,
+                'schema_file': schema_file,
+                'security_violation': 'symlink'
+            }
+        )
+    
+    # Security check 3: File existence
+    if not schema_path.exists():
+        raise ConfigurationError(
+            f"Schema file '{schema_file}' not found for UDF '{func.__name__}'",
+            context={
+                'function_name': func.__name__,
+                'schema_file': schema_file,
+                'resolved_path': str(schema_path),
+                'function_file': str(func_file)
+            }
+        )
+    
+    # Security check 4: File size limit (prevent YAML bombs)
+    file_size = schema_path.stat().st_size
+    if file_size > MAX_SCHEMA_FILE_SIZE:
+        raise ConfigurationError(
+            f"Schema file '{schema_file}' exceeds size limit ({file_size} > {MAX_SCHEMA_FILE_SIZE} bytes)",
+            context={
+                'function_name': func.__name__,
+                'schema_file': schema_file,
+                'file_size': file_size,
+                'max_size': MAX_SCHEMA_FILE_SIZE,
+                'security_violation': 'file_size_limit'
+            }
+        )
+    
+    # Security check 5: Circular reference detection (thread-safe)
+    loading_stack = _get_loading_stack()  # Thread-local!
+    schema_path_str = str(schema_path)
+    
+    if schema_path_str in loading_stack:
+        raise ConfigurationError(
+            f"Circular schema reference detected: {schema_file}",
+            context={
+                'function_name': func.__name__,
+                'schema_file': schema_file,
+                'loading_stack': loading_stack.copy(),
+                'security_violation': 'circular_reference'
+            }
+        )
+    
+    # Load schema directly (FIX: don't use SchemaLoader.load_schema())
+    loading_stack.append(schema_path_str)
+    try:
+        with schema_path.open('r', encoding='utf-8') as file:
+            schema = yaml.safe_load(file)
+        
+        if not isinstance(schema, dict):
+            raise ConfigurationError(
+                f"Schema file '{schema_file}' must contain a dictionary",
+                context={
+                    'function_name': func.__name__,
+                    'schema_file': schema_file,
+                    'schema_type': type(schema).__name__
+                }
+            )
+        
+        return schema
+    finally:
+        loading_stack.pop()
+
+
+def _validate_inline_schema(schema: Union[Dict[str, Any], str], func: Callable) -> Dict[str, Any]:
+    """
+    Validate inline schema format.
+    
+    Accepts two formats:
+    1. Unified format: {'name': '...', 'fields': [...]}
+    2. Simple dict: {'field_name': 'type'} - converted to unified
+    """
+    from agent_actions.response_processing.schema_loader import SchemaLoader
+    
+    if not isinstance(schema, dict):
+        raise ConfigurationError(
+            f"Schema for UDF '{func.__name__}' must be a dictionary",
+            context={'function_name': func.__name__, 'schema_type': type(schema).__name__}
+        )
+    
+    # Check if already in unified format
+    if 'fields' in schema:
+        # Validate unified format
+        if 'name' not in schema:
+            schema['name'] = func.__name__
+        return schema
+    
+    # Convert simple dict to unified format
+    unified = SchemaLoader.construct_schema_from_dict(schema)
+    unified['name'] = func.__name__
+    return unified
+
 
 def get_udf(func_name: str) -> Callable:
     """
@@ -78,14 +314,41 @@ def get_udf(func_name: str) -> Callable:
         func = get_udf('apply_edited_distractors')
         result = func(data)
     """
-    func_name_lower = func_name.lower()
-    if func_name_lower not in UDF_REGISTRY:
-        available = sorted([meta['name'] for meta in UDF_REGISTRY.values()])
-        raise FunctionNotFoundError(
-            f"Function '{func_name}' not found",
-            context={'function_name': func_name, 'available_functions': available}
-        )
-    return UDF_REGISTRY[func_name_lower]['function']
+    with _registry_lock:
+        func_name_lower = func_name.lower()
+        if func_name_lower not in UDF_REGISTRY:
+            available = sorted([meta['name'] for meta in UDF_REGISTRY.values()])
+            raise FunctionNotFoundError(
+                f"Function '{func_name}' not found",
+                context={'function_name': func_name, 'available_functions': available}
+            )
+        return UDF_REGISTRY[func_name_lower]['function']
+
+
+def get_udf_metadata(func_name: str) -> Dict[str, Any]:
+    """
+    Get complete UDF metadata including schema and granularity.
+    Thread-safe.
+    
+    Args:
+        func_name: Name of the function
+        
+    Returns:
+        Dictionary containing all metadata
+        
+    Raises:
+        FunctionNotFoundError: If function not found
+    """
+    with _registry_lock:
+        func_name_lower = func_name.lower()
+        if func_name_lower not in UDF_REGISTRY:
+            available = sorted([meta['name'] for meta in UDF_REGISTRY.values()])
+            raise FunctionNotFoundError(
+                f"Function '{func_name}' not found",
+                context={'function_name': func_name, 'available_functions': available}
+            )
+        return UDF_REGISTRY[func_name_lower].copy()  # Return copy for thread safety
+
 
 def list_udfs() -> List[Dict[str, Any]]:
     """
@@ -104,18 +367,33 @@ def list_udfs() -> List[Dict[str, Any]]:
         for udf in udfs:
             print(f"{udf['name']} - {udf['file']}")
     """
-    return [{'name': meta['name'], 'module': meta['module'], 'file': meta['file'], 'docstring': meta['docstring'], 'signature': str(meta['signature'])} for meta in sorted(UDF_REGISTRY.values(), key=lambda x: x['name'].lower())]
+    with _registry_lock:
+        return [
+            {
+                'name': meta['name'],
+                'module': meta['module'],
+                'file': meta['file'],
+                'docstring': meta['docstring'],
+                'signature': str(meta['signature'])
+            }
+            for meta in sorted(UDF_REGISTRY.values(), key=lambda x: x['name'].lower())
+        ]
+
 
 def clear_registry() -> None:
     """
-    Clear the UDF registry.
+    Clear the UDF registry. Thread-safe.
 
-    This is primarily used for test isolation to ensure tests don't
-    interfere with each other.
+    Note: Only clears the registry, not thread-local loading stacks.
+    Each thread manages its own loading stack.
+
+    This function should only be called in test cleanup.
 
     Example:
         @pytest.fixture(autouse=True)
         def cleanup():
             clear_registry()
     """
-    UDF_REGISTRY.clear()
+    with _registry_lock:
+        UDF_REGISTRY.clear()
+        # Don't clear thread-local stacks - each thread owns its own
