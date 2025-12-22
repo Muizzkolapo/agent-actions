@@ -277,6 +277,88 @@ class WhereClauseHandler:
 
         return filter_result.should_include, filter_result.status
 
+    def filter_single_item_with_context(
+        self,
+        item: Dict,
+        where_config: Optional[Dict],
+        field_context: Optional[Dict] = None,
+        conditional_clause: Optional[str] = None
+    ) -> Tuple[bool, str]:
+        """
+        Filter single item WITH full upstream context access.
+
+        This enhanced method allows WHERE clauses to reference upstream action
+        fields directly (e.g., "extract_facts.count > 5") without requiring
+        those fields to be declared in context_scope.
+
+        Args:
+            item: Data item to filter (expects 'content' key or uses full dict)
+            where_config: WHERE clause configuration dict
+            field_context: Upstream action data {action_name: {field: value}}
+            conditional_clause: Optional conditional clause (legacy UDF support)
+
+        Returns:
+            Tuple of (should_include: bool, status: str)
+
+        Example:
+            # Build field_context with upstream data
+            field_context = {
+                'extract_facts': {'count': 10, 'facts': [...]},
+                'source': {'type': 'pdf', 'title': 'My Document'}
+            }
+
+            # Now guards can access upstream fields!
+            should_include, status = handler.filter_single_item_with_context(
+                item={'content': {'status': 'active'}},
+                where_config={'clause': 'extract_facts.count > 5', 'scope': 'item'},
+                field_context=field_context
+            )
+            # WHERE clause "extract_facts.count > 5" evaluates to True
+        """
+        config = self.validate_config(where_config)
+
+        # No filtering configured
+        if not self.should_evaluate_at_item_level(config) and not conditional_clause:
+            return True, 'included'
+
+        # Extract current item content
+        item_content = item.get('content', item)
+
+        # Build evaluation data with upstream context access
+        if field_context:
+            # Create evaluation dict that merges:
+            # 1. Current item content (top-level for backward compat)
+            # 2. Upstream action data (namespaced by action name)
+            eval_data = {}
+
+            # Add current item content at top level
+            if isinstance(item_content, dict):
+                eval_data.update(item_content)
+
+            # Add upstream action data under action names
+            # This enables "action_name.field" access in WHERE clauses
+            for action_name, action_data in field_context.items():
+                if action_name not in eval_data:  # Don't overwrite current content
+                    eval_data[action_name] = action_data
+
+            logger.debug(
+                "Evaluating WHERE clause with upstream context. "
+                "Actions available: %s",
+                list(field_context.keys())
+            )
+        else:
+            # No field context - use item content only (original behavior)
+            eval_data = item_content
+
+        # Delegate to FilterService
+        filter_result = self.filter_service.filter_single_item(
+            eval_data,
+            config.to_dict() if config else None,
+            conditional_clause
+        )
+
+        return filter_result.should_include, filter_result.status
+
     def filter_items_batch_mode(
         self,
         items: List[Dict],
