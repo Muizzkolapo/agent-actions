@@ -65,7 +65,7 @@ from agent_actions.errors.filesystem import (
 # Resource errors
 from agent_actions.errors.resources import (
     ResourceError,
-    MemoryError,
+    ResourceMemoryError,
     DependencyError,
 )
 
@@ -124,7 +124,7 @@ __all__ = [
     "DirectoryError",
     # Resources
     "ResourceError",
-    "MemoryError",
+    "ResourceMemoryError",
     "DependencyError",
     # Operations
     "OperationalError",

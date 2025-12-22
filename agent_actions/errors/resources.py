@@ -1,4 +1,6 @@
 """Resource-related errors (memory, dependencies, etc)."""
+# pylint: disable=unnecessary-pass
+# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError
 
@@ -8,11 +10,11 @@ class ResourceError(AgentActionsError):
     pass
 
 
-class MemoryError(ResourceError):
+class ResourceMemoryError(ResourceError):
     """Raised when memory-related issues occur.
 
-    Note: This shadows Python's built-in MemoryError, but is scoped
-    to agent-actions for application-level memory management issues.
+    Note: Renamed from MemoryError to avoid shadowing Python's built-in.
+    For application-level memory management issues in agent-actions.
     """
     pass
 

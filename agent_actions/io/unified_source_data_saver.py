@@ -96,12 +96,14 @@ class SourceSaveMode(Enum):
     ONLINE = "online"  # Optional locking/dedup for future parallel processing
 
 
-class UnifiedSourceDataSaver:
+class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
     """
     Unified source data saver with configurable deduplication and locking.
 
     This saver provides a consistent interface for saving source data across
     batch and online modes while allowing mode-specific optimizations.
+
+    Note: Single public method by design - focused utility class.
     """
 
     def __init__(
@@ -179,8 +181,8 @@ class UnifiedSourceDataSaver:
         source_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(
-            f"Saving {len(items)} source items to {source_file} "
-            f"(dedup={self.enable_deduplication}, lock={self.enable_locking})"
+            "Saving %d source items to %s (dedup=%s, lock=%s)",
+            len(items), source_file, self.enable_deduplication, self.enable_locking
         )
 
         # Save with or without locking
@@ -189,7 +191,7 @@ class UnifiedSourceDataSaver:
         else:
             self._save_without_lock(source_file, items)
 
-        logger.info(f"Saved {len(items)} source items to {source_file}")
+        logger.info("Saved %d source items to %s", len(items), source_file)
 
     def _save_with_lock(self, source_file: Path, new_items: List[Dict]) -> None:
         """
@@ -207,7 +209,8 @@ class UnifiedSourceDataSaver:
         """
         if not PORTALOCKER_AVAILABLE:
             logger.warning("Locking requested but portalocker unavailable - using unlocked save")
-            return self._save_without_lock(source_file, new_items)
+            self._save_without_lock(source_file, new_items)
+            return
 
         try:
             with portalocker.Lock(source_file, 'a+', timeout=10) as fh:
@@ -217,7 +220,7 @@ class UnifiedSourceDataSaver:
                 try:
                     existing = json.loads(content) if content else []
                 except json.JSONDecodeError:
-                    logger.warning(f"Invalid JSON in {source_file}, starting fresh")
+                    logger.warning("Invalid JSON in %s, starting fresh", source_file)
                     existing = []
 
                 # Merge with deduplication if enabled
@@ -233,7 +236,7 @@ class UnifiedSourceDataSaver:
                 json.dump(existing, fh, indent=2, ensure_ascii=False)
 
         except portalocker.exceptions.LockException as e:
-            logger.error(f"Failed to acquire lock on {source_file}: {e}")
+            logger.error("Failed to acquire lock on %s: %s", source_file, e)
             raise IOError(f"Failed to acquire file lock: {e}") from e
 
     def _save_without_lock(self, source_file: Path, new_items: List[Dict]) -> None:
@@ -259,7 +262,7 @@ class UnifiedSourceDataSaver:
                     content = f.read()
                     existing = json.loads(content) if content else []
             except json.JSONDecodeError:
-                logger.warning(f"Invalid JSON in {source_file}, starting fresh")
+                logger.warning("Invalid JSON in %s, starting fresh", source_file)
                 existing = []
 
         # Merge with deduplication if enabled
@@ -316,8 +319,8 @@ class UnifiedSourceDataSaver:
         if len(deduplicated) < len(new_items):
             duplicates_count = len(new_items) - len(deduplicated)
             logger.debug(
-                f"Deduplicated {duplicates_count} items with duplicate source_guids "
-                f"({len(deduplicated)} unique items remaining)"
+                "Deduplicated %d items with duplicate source_guids (%d unique items remaining)",
+                duplicates_count, len(deduplicated)
             )
 
         return deduplicated
@@ -351,9 +354,9 @@ def get_source_data_saver(
             enable_deduplication=True,
             enable_locking=True
         )
-    else:  # ONLINE
-        return UnifiedSourceDataSaver(
-            base_directory=base_directory,
-            enable_deduplication=True,
-            enable_locking=False  # Online is single-threaded
-        )
+    # ONLINE mode
+    return UnifiedSourceDataSaver(
+        base_directory=base_directory,
+        enable_deduplication=True,
+        enable_locking=False  # Online is single-threaded
+    )

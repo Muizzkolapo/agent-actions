@@ -1,25 +1,20 @@
 """XML content loader implementation."""
+# pylint: disable=duplicate-code
+# Similar loader pattern is intentional across different file type loaders
 import logging
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, Optional
-from agent_actions.response_processing.config_types import AgentEntryDict
+
+from agent_actions.errors import DataParseError, FileLoadError
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.errors import DataParseError, FileLoadError  # New modular pattern!
+
 logger = logging.getLogger(__name__)
+
 
 class XmlLoader(BaseLoader[ET.Element]):
     """Loader for XML content."""
 
-    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
-        """Initialize with agent configuration and name.
-        
-        Args:
-            agent_config: Agent configuration
-            agent_name: Name of the agent
-        """
-        super().__init__(agent_config, agent_name)
-
-    def process(self, content: Any, file_path: Optional[str]=None) -> ET.Element:
+    def process(self, content: Any, file_path: Optional[str] = None) -> ET.Element:
         """Load and return XML root element from a file or in-memory content.
 
         Args:
@@ -35,7 +30,9 @@ class XmlLoader(BaseLoader[ET.Element]):
             elif content:
                 content_str = content
             else:
-                self.handle_validation_error(ValueError('Either file_path or content must be provided'), 'XML input', file_path=file_path)
+                error = ValueError('Either file_path or content must be provided')
+                self.handle_validation_error(error, 'XML input', file_path=file_path)
+                raise error
             root = ET.fromstring(content_str)
             return root
         except ET.ParseError as e:
@@ -43,28 +40,44 @@ class XmlLoader(BaseLoader[ET.Element]):
             if hasattr(e, 'position'):
                 position_info['line_number'] = e.position[0]
                 position_info['column_number'] = e.position[1]
-            self.handle_processing_error(e, f"Parsing XML from {file_path or 'content string'}", DataParseError, file_path=file_path, **position_info)
+            operation = f"Parsing XML from {file_path or 'content string'}"
+            self.handle_processing_error(
+                e, operation, DataParseError, file_path=file_path, **position_info
+            )
+            raise
         except FileLoadError:
             raise
         except Exception as e:
-            self.handle_processing_error(e, 'Processing XML content', DataParseError, file_path=file_path)
+            self.handle_processing_error(
+                e, 'Processing XML content', DataParseError, file_path=file_path
+            )
+            raise
 
     def process_xml_element(self, element: Any) -> Dict[str, Any]:
         """Process an XML element into a dictionary.
-        
+
         Args:
             element: XML element
-            
+
         Returns:
             Dictionary representation of the XML element
         """
         try:
-            result = {'tag': element.tag, 'attributes': element.attrib, 'text': element.text.strip() if element.text else '', 'children': []}
+            result = {
+                'tag': element.tag,
+                'attributes': element.attrib,
+                'text': element.text.strip() if element.text else '',
+                'children': []
+            }
             for child in element:
                 result['children'].append(self.process_xml_element(child))
             return result
         except Exception as e:
-            self.handle_transformation_error(e, 'XML element', 'dictionary', element_tag=element.tag if hasattr(element, 'tag') else 'unknown')
+            element_tag = element.tag if hasattr(element, 'tag') else 'unknown'
+            self.handle_transformation_error(
+                e, 'XML element', 'dictionary', element_tag=element_tag
+            )
+            raise
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""

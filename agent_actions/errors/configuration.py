@@ -1,4 +1,7 @@
 """Configuration-related errors."""
+# pylint: disable=too-many-arguments,too-many-positional-arguments,unnecessary-pass
+# Too-many-arguments: Legacy compatibility requires preserving all parameters
+# Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError
 
@@ -53,8 +56,19 @@ class ConfigValidationError(ConfigurationError):
 
 class DuplicateFunctionError(ConfigurationError):
     """Raised when duplicate @udf_tool function names are detected."""
-    
-    def __init__(self, message: str = None, *, function_name: str = None, existing_location: str = None, existing_file: str = None, new_location: str = None, new_file: str = None, context: dict = None, cause: Exception = None):
+
+    def __init__(
+        self,
+        message: str = None,
+        *,
+        function_name: str = None,
+        existing_location: str = None,
+        existing_file: str = None,
+        new_location: str = None,
+        new_file: str = None,
+        context: dict = None,
+        cause: Exception = None
+    ):
         if function_name:
             msg = f"Duplicate UDF function name detected: '{function_name}'"
             if existing_location and new_location:
@@ -80,8 +94,17 @@ class FunctionNotFoundError(ConfigurationError):
 
 class UDFLoadError(ConfigurationError):
     """Raised when a UDF module fails to load."""
-    
-    def __init__(self, message: str = None, *, module: str = None, file: str = None, error: str = None, context: dict = None, cause: Exception = None):
+
+    def __init__(
+        self,
+        message: str = None,
+        *,
+        module: str = None,
+        file: str = None,
+        error: str = None,
+        context: dict = None,
+        cause: Exception = None
+    ):
         if module and error:
             msg = f"Failed to load UDF module '{module}': {error}"
             if file:

@@ -1,25 +1,21 @@
 """JSON content loader implementation."""
+# pylint: disable=duplicate-code
+# Similar loader pattern is intentional across different file type loaders
 import json
 import logging
 from typing import Any, Dict, List, Optional, Union
-from agent_actions.response_processing.config_types import AgentEntryDict
+
+from agent_actions.errors import DataParseError, FileLoadError, ValidationError
 from agent_actions.input_loading.base_base_loader import BaseLoader
-from agent_actions.errors import DataParseError, FileLoadError  # New modular pattern!
+
 logger = logging.getLogger(__name__)
 
 class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
     """Loader for JSON content."""
 
-    def __init__(self, agent_config: AgentEntryDict, agent_name: str):
-        """Initialize with agent configuration and name.
-        
-        Args:
-            agent_config: Agent configuration
-            agent_name: Name of the agent
-        """
-        super().__init__(agent_config, agent_name)
-
-    def process(self, content: Any, file_path: Optional[str]=None) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+    def process(
+        self, content: Any, file_path: Optional[str] = None
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Load and return raw JSON content from a file or memory.
 
         Args:
@@ -32,32 +28,42 @@ class JsonLoader(BaseLoader[Union[Dict[str, Any], List[Dict[str, Any]]]]):
         try:
             if file_path:
                 content_str = self.load_file(file_path)
-                parsed_data: Union[Dict[str, Any], List[Dict[str, Any]]] = json.loads(content_str)
-                return parsed_data
-            elif content:
-                parsed_data = json.loads(content)
-                return parsed_data
-            else:
-                from agent_actions.errors import ValidationError  # New modular pattern!
-                error = ValidationError(
-                    'Either file_path or content must be provided',
-                    context={
-                        'agent_name': self.agent_name,
-                        'loader_type': 'json',
-                        'failed_fields': ['file_path', 'content'],
-                        'expected': 'At least one of file_path or content must be provided',
-                        'actual_values': {'file_path': file_path, 'content': content},
-                        'suggestion': 'Provide either the file_path parameter (path to JSON file) or the content parameter (JSON string) for JSON data processing.'
-                    }
+                return json.loads(content_str)
+            if content:
+                return json.loads(content)
+
+            error_context = {
+                'agent_name': self.agent_name,
+                'loader_type': 'json',
+                'failed_fields': ['file_path', 'content'],
+                'expected': 'At least one of file_path or content must be provided',
+                'actual_values': {'file_path': file_path, 'content': content},
+                'suggestion': (
+                    'Provide either the file_path parameter (path to JSON file) '
+                    'or the content parameter (JSON string) for JSON data processing.'
                 )
-                self.handle_validation_error(error, 'JSON input', file_path=file_path)
-                raise error
+            }
+            error = ValidationError(
+                'Either file_path or content must be provided',
+                context=error_context
+            )
+            self.handle_validation_error(error, 'JSON input', file_path=file_path)
+            raise error
         except json.JSONDecodeError as e:
-            self.handle_processing_error(e, f"Parsing JSON from {file_path or 'content string'}", DataParseError, file_path=file_path, line_number=e.lineno if hasattr(e, 'lineno') else None, column_number=e.colno if hasattr(e, 'colno') else None)
+            operation = f"Parsing JSON from {file_path or 'content string'}"
+            self.handle_processing_error(
+                e, operation, DataParseError,
+                file_path=file_path,
+                line_number=e.lineno if hasattr(e, 'lineno') else None,
+                column_number=e.colno if hasattr(e, 'colno') else None
+            )
+            raise
         except FileLoadError:
             raise
         except Exception as e:
-            self.handle_processing_error(e, 'Processing JSON content', DataParseError, file_path=file_path)
+            self.handle_processing_error(
+                e, 'Processing JSON content', DataParseError, file_path=file_path
+            )
             raise
 
     def supports_filetype(self, file_extension: str) -> bool:

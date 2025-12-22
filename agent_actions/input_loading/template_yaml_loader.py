@@ -1,9 +1,13 @@
 """Custom YAML loader for handling template syntax in old workflow files."""
+# pylint: disable=too-few-public-methods,too-many-locals
+# too-few-public-methods: This is a utility class with a single responsibility
+# too-many-locals: Complex template processing requires multiple local variables
+
+import logging
+import re
+from typing import Any, Dict, List
 
 import yaml
-import re
-import logging
-from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -19,14 +23,16 @@ class TemplateYamlLoader:
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-        except FileNotFoundError as e:
-            logger.error(f"Template YAML file not found: {file_path}", exc_info=True)
+        except FileNotFoundError:
+            logger.error("Template YAML file not found: %s", file_path, exc_info=True)
             raise
-        except PermissionError as e:
-            logger.error(f"Permission denied reading template YAML: {file_path}", exc_info=True)
+        except PermissionError:
+            logger.error(
+                "Permission denied reading template YAML: %s", file_path, exc_info=True
+            )
             raise
-        except (UnicodeDecodeError, IOError) as e:
-            logger.error(f"Error reading template YAML: {file_path}", exc_info=True)
+        except (UnicodeDecodeError, IOError):
+            logger.error("Error reading template YAML: %s", file_path, exc_info=True)
             raise
 
         # Preprocess the content to handle templates
@@ -34,7 +40,8 @@ class TemplateYamlLoader:
             processed_content = self._preprocess_templates(content)
         except Exception as e:
             logger.error(
-                f"Error preprocessing template syntax in {file_path}: {e}",
+                "Error preprocessing template syntax in %s: %s",
+                file_path, e,
                 exc_info=True,
                 extra={'file_path': file_path}
             )
@@ -45,7 +52,8 @@ class TemplateYamlLoader:
             return yaml.safe_load(processed_content)
         except yaml.YAMLError as e:
             logger.error(
-                f"YAML parsing error in {file_path} after template preprocessing: {e}",
+                "YAML parsing error in %s after template preprocessing: %s",
+                file_path, e,
                 exc_info=True,
                 extra={'file_path': file_path}
             )
