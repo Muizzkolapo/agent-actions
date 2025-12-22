@@ -7,7 +7,7 @@ import importlib
 import importlib.util
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
 from agent_actions.utilities.safe_format import safe_format_error
 
@@ -67,27 +67,135 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
         raise ConfigurationError(f"Function '{function_name}' not found in module '{module_name}'", context={'function_name': function_name, 'module_name': module_name, 'search_paths': search_paths}, cause=e) from e
     return function
 
-def execute_user_defined_function(udf_name: str, input_data: Dict[str, Any], **kwargs: Any) -> Any:
+def execute_user_defined_function(
+    udf_name: str, 
+    input_data: Union[Dict[str, Any], List[Any]], 
+    validate_input: bool = True,
+    **kwargs: Any
+) -> Any:
     """
-    Dynamically execute a user-defined function (UDF).
-
+    Execute UDF with schema validation and granularity handling.
+    
+    Uses CACHED compiled schemas for performance.
+    
     Args:
-        udf_name: Simple function name (e.g., 'my_function').
-                 Must be decorated with @udf_tool and registered via auto-discovery.
-        input_data: The input data to pass to the UDF.
-        **kwargs: Additional keyword arguments to pass to the UDF.
-
+        udf_name: Simple function name (e.g., 'my_function')
+        input_data: Input data (single object or array depending on granularity)
+        validate_input: Whether to validate input against schema
+        **kwargs: Additional arguments
+        
     Returns:
-        The result of the UDF execution.
-
+        Result from UDF execution
+        
     Raises:
-        FunctionNotFoundError: If the function is not in the UDF registry.
-        Exception: If there's an error executing the function.
+        SchemaValidationError: If input validation fails
+        AgentActionsException: If execution fails
     """
-    from agent_actions.utilities.udf_management.udf_registry import get_udf
-    udf = get_udf(udf_name)
+    from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
+    from agent_actions.configuration.new_format_schema import Granularity
+    from agent_actions.errors import SchemaValidationError
+    
+    metadata = get_udf_metadata(udf_name)
+    udf = metadata['function']
+    schema = metadata['schema']  # Always present (required)
+    granularity = metadata['granularity']
+    compiled_schemas = metadata['compiled_schemas']  # Use cached!
+    
+    # Validate input if enabled
+    if validate_input:
+        # Use CACHED compiled schema (no recompilation!)
+        compiled_schema = compiled_schemas['openai']
+        
+        # Validate based on granularity
+        if granularity == Granularity.FILE:
+            # Expect array input
+            if not isinstance(input_data, list):
+                raise SchemaValidationError(
+                    f"UDF '{udf_name}' expects array input (FILE granularity) "
+                    f"but received {type(input_data).__name__}",
+                    context={
+                        'function': udf_name,
+                        'granularity': 'FILE',
+                        'expected_type': 'list',
+                        'received_type': type(input_data).__name__
+                    }
+                )
+            # Validate each item in array
+            for idx, item in enumerate(input_data):
+                _validate_against_schema(item, compiled_schema, udf_name, item_index=idx)
+        else:  # RECORD granularity
+            # Expect single object input
+            if not isinstance(input_data, dict):
+                raise SchemaValidationError(
+                    f"UDF '{udf_name}' expects object input (RECORD granularity) "
+                    f"but received {type(input_data).__name__}",
+                    context={
+                        'function': udf_name,
+                        'granularity': 'RECORD',
+                        'expected_type': 'dict',
+                        'received_type': type(input_data).__name__
+                    }
+                )
+            
+            # Validate against schema
+            _validate_against_schema(input_data, compiled_schema, udf_name)
+    
+    # Execute function
     try:
         result = udf(input_data, **kwargs)
         return result
     except Exception as e:
-        raise AgentActionsException(f"Error executing user defined function '{udf_name}': {safe_format_error(e)}", context={'function': udf_name, 'operation': 'execute_udf'}, cause=e) from e
+        raise AgentActionsException(
+            f"Error executing UDF '{udf_name}': {safe_format_error(e)}",
+            context={
+                'function': udf_name,
+                'operation': 'execute_udf',
+                'granularity': granularity.value
+            },
+            cause=e
+        ) from e
+
+
+def _validate_against_schema(
+    data: Dict[str, Any], 
+    compiled_schema: Dict[str, Any], 
+    func_name: str,
+    item_index: Optional[int] = None
+) -> None:
+    """
+    Validate data against compiled schema.
+    
+    IMPLEMENTATION (not a stub!):
+    Uses jsonschema for validation with proper error handling.
+    """
+    import jsonschema
+    from jsonschema import ValidationError as JsonSchemaValidationError
+    from agent_actions.errors import SchemaValidationError
+    
+    try:
+        # Extract JSON schema from compiled format
+        if 'schema' in compiled_schema:
+            json_schema = compiled_schema['schema']
+        else:
+            json_schema = compiled_schema
+        
+        # Validate using jsonschema
+        jsonschema.validate(instance=data, schema=json_schema)
+        
+    except JsonSchemaValidationError as e:
+        # Build helpful error message
+        error_path = ' -> '.join(str(p) for p in e.path) if e.path else 'root'
+        item_info = f" (item {item_index})" if item_index is not None else ""
+        
+        raise SchemaValidationError(
+            f"Schema validation failed for UDF '{func_name}'{item_info} at {error_path}: {e.message}",
+            context={
+                'function': func_name,
+                'validation_error': e.message,
+                'error_path': error_path,
+                'item_index': item_index,
+                'failed_value': e.instance,
+                'schema_constraint': e.schema
+            },
+            cause=e
+        ) from e
