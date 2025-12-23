@@ -1,11 +1,14 @@
 """Tests for UDF registry and @udf_tool decorator."""
 import pytest
 from pathlib import Path
+from typing import TypedDict
 from agent_actions.utilities.udf_management.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
-# Default test schema for tests that don't care about schema content
-TEST_SCHEMA = {'text': 'string'}
+
+# Default test type for tests that don't care about schema content
+class SimpleInput(TypedDict):
+    text: str
 
 
 @pytest.fixture(autouse=True)
@@ -22,7 +25,7 @@ class TestUDFRegistration:
     def test_udf_registration(self):
         """Test that @udf_tool decorator registers function in registry."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def test_function():
             """Test docstring."""
             return 'test'
@@ -33,12 +36,12 @@ class TestUDFRegistration:
     def test_duplicate_udf_raises_error(self):
         """Test that duplicate function names raise DuplicateFunctionError."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def duplicate_func():
             pass
         with pytest.raises(DuplicateFunctionError) as exc_info:
 
-            @udf_tool(schema=TEST_SCHEMA)
+            @udf_tool(input_type=SimpleInput)
             def duplicate_func():  # noqa: F811
                 pass
         error = exc_info.value
@@ -51,7 +54,7 @@ class TestUDFRegistration:
     def test_registry_stores_metadata(self):
         """Test that all metadata is captured and stored."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def metadata_func(x, y):
             """Function with metadata."""
             return x + y
@@ -67,7 +70,7 @@ class TestUDFRegistration:
     def test_decorator_preserves_function(self):
         """Test that decorator returns original function unchanged."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def preserved_func(a, b):
             """Original docstring."""
             return a * b
@@ -78,12 +81,12 @@ class TestUDFRegistration:
     def test_case_insensitive_duplicate_detection(self):
         """Test that duplicate detection is case-insensitive."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def My_Function():
             pass
         with pytest.raises(DuplicateFunctionError):
 
-            @udf_tool(schema=TEST_SCHEMA)
+            @udf_tool(input_type=SimpleInput)
             def my_function():  # noqa: F811
                 pass
 
@@ -94,7 +97,7 @@ class TestUDFRetrieval:
     def test_get_udf_retrieves_function(self):
         """Test that get_udf() retrieves registered function."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def retrieve_test():
             return 'retrieved'
         func = get_udf('retrieve_test')
@@ -103,7 +106,7 @@ class TestUDFRetrieval:
     def test_get_udf_case_insensitive(self):
         """Test that get_udf() is case-insensitive."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def CaseSensitive():
             return 'result'
         assert get_udf('CaseSensitive')() == 'result'
@@ -114,7 +117,7 @@ class TestUDFRetrieval:
     def test_get_udf_not_found_raises_error(self):
         """Test that FunctionNotFoundError is raised when function not found."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def existing_func():
             pass
         with pytest.raises(FunctionNotFoundError) as exc_info:
@@ -126,7 +129,7 @@ class TestUDFRetrieval:
     def test_get_udf_returns_callable(self):
         """Test that retrieved function is callable."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def callable_test(x):
             return x * 2
         func = get_udf('callable_test')
@@ -140,15 +143,15 @@ class TestListUDFs:
     def test_list_udfs_returns_all(self):
         """Test that list_udfs() returns all registered functions."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def func1():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def func2():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def func3():
             pass
         udfs = list_udfs()
@@ -161,7 +164,7 @@ class TestListUDFs:
     def test_list_udfs_includes_metadata(self):
         """Test that list_udfs() includes all metadata fields."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def meta_test(a, b):
             """Test function."""
             pass
@@ -177,15 +180,15 @@ class TestListUDFs:
     def test_list_udfs_sorted_alphabetically(self):
         """Test that list_udfs() returns functions sorted alphabetically."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def zebra():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def Alpha():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def middle():
             pass
         udfs = list_udfs()
@@ -199,11 +202,11 @@ class TestClearRegistry:
     def test_clear_registry(self):
         """Test that clear_registry() removes all functions."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def func1():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def func2():
             pass
         assert len(UDF_REGISTRY) == 2
@@ -214,7 +217,7 @@ class TestClearRegistry:
     def test_clear_registry_isolation(self):
         """Test that clear_registry() provides test isolation."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def test_func():
             pass
         clear_registry()
@@ -228,12 +231,12 @@ class TestExceptionContext:
     def test_duplicate_error_context(self):
         """Test that DuplicateFunctionError includes both locations."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def dup_func():
             pass
         try:
 
-            @udf_tool(schema=TEST_SCHEMA)
+            @udf_tool(input_type=SimpleInput)
             def dup_func():  # noqa: F811
                 pass
         except DuplicateFunctionError as e:
@@ -248,11 +251,11 @@ class TestExceptionContext:
     def test_not_found_error_lists_available(self):
         """Test that FunctionNotFoundError lists available functions."""
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def available1():
             pass
 
-        @udf_tool(schema=TEST_SCHEMA)
+        @udf_tool(input_type=SimpleInput)
         def available2():
             pass
         try:

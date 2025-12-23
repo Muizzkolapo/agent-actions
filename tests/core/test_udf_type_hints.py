@@ -43,7 +43,6 @@ class TestTypeHintRegistration:
         metadata = get_udf_metadata('process')
         assert metadata['schema'] is not None
         assert metadata['schema']['name'] == 'Input'
-        assert metadata['schema_source'] == 'type_hint'
         assert metadata['compiled_schemas'] is not None
 
     def test_register_with_output_type(self):
@@ -203,37 +202,6 @@ class TestOutputValidation:
         # Should not raise - no output schema to validate against
         result = execute_user_defined_function('process', {'text': 'hello'})
         assert result == {'anything': 'goes'}
-
-
-# =============================================================================
-# Backward Compatibility Tests
-# =============================================================================
-
-class TestBackwardCompatibility:
-    """Tests for backward compatibility with existing schema syntax."""
-
-    def test_inline_schema_still_works(self):
-        """Old-style inline schema should still work."""
-        @udf_tool(schema={'text': 'string'})
-        def legacy_tool(data):
-            return data
-
-        result = execute_user_defined_function('legacy_tool', {'text': 'hello'})
-        assert result == {'text': 'hello'}
-
-    def test_unified_format_still_works(self):
-        """Old-style unified format should still work."""
-        @udf_tool(schema={
-            'name': 'legacy',
-            'fields': [
-                {'id': 'text', 'type': 'string', 'required': True}
-            ]
-        })
-        def legacy_unified(data):
-            return data
-
-        result = execute_user_defined_function('legacy_unified', {'text': 'hello'})
-        assert result == {'text': 'hello'}
 
 
 # =============================================================================
