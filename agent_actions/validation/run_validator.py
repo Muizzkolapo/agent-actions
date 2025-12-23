@@ -12,6 +12,7 @@ class RunCommandArgs(BaseModel):
     no_parallel: bool = Field(False, description="Force sequential execution (overrides auto-detection)")
     concurrency_limit: int = Field(5, description="Maximum number of agents to run concurrently in parallel execution", ge=1, le=50)
     upstream: bool = Field(False, description="Recursively execute upstream dependent workflows")
+    downstream: bool = Field(False, description="Execute all downstream workflows that depend on this workflow")
 
     @model_validator(mode='after')
     def check_parallel_flags(self):

@@ -53,7 +53,8 @@ class AgentWorkflow:
         parent_output: Optional[str] = None,
         parent_source: Optional[str] = None,
         parent_pipeline: Optional[str] = None,
-        run_upstream: bool = False
+        run_upstream: bool = False,
+        run_downstream: bool = False
     ):
         """Initialize workflow with configuration and dependencies."""
         # Store configuration
@@ -65,6 +66,8 @@ class AgentWorkflow:
         self.parent_source = parent_source
         self.parent_pipeline = parent_pipeline
         self.run_upstream = run_upstream
+        self.run_downstream = run_downstream
+        self._workspace_index = None  # Lazy-initialized for downstream
 
         # Initialize state
         self.previous_agent_type = None
@@ -309,31 +312,32 @@ class AgentWorkflow:
             logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
             raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
 
-    def _link_upstream_artifacts(self, upstream_name: str):
-        """Link upstream final action output to downstream staging."""
-        # Get workflow root
-        current_config_path = Path(self.constructor_path)
-        workflows_root = current_config_path.parents[2]
+    def _link_workflow_artifacts(self, source_workflow: str, target_workflow: str) -> None:
+        """
+        Link source workflow's output to target workflow's staging.
 
-        # Construct paths directly
-        upstream_io = workflows_root / upstream_name / 'agent_io'
-        downstream_io = workflows_root / self.agent_name / 'agent_io'
+        Args:
+            source_workflow: Name of the workflow providing output
+            target_workflow: Name of the workflow receiving input
+        """
+        workflows_root = self._get_workflows_root()
 
-        upstream_target = upstream_io / 'target'
-        downstream_staging = downstream_io / 'staging'
+        source_target = workflows_root / source_workflow / 'agent_io' / 'target'
+        target_staging = workflows_root / target_workflow / 'agent_io' / 'staging'
 
-        # Link upstream final action output (target) to downstream staging
-        # This makes the upstream workflow's output available as input to downstream
-        if upstream_target.exists():
-            # Find the final action's output directory (node_X with highest index/latest time)
-            latest_node = self._find_latest_node_dir(upstream_target)
+        if source_target.exists():
+            latest_node = self._find_latest_node_dir(source_target)
             if latest_node:
-                self._safe_symlink_contents(latest_node, downstream_staging)
-                logger.info(f"Linked {latest_node} -> {downstream_staging}")
+                self._safe_symlink_contents(latest_node, target_staging)
+                logger.info(f"Linked {latest_node} -> {target_staging}")
             else:
-                logger.warning(f"No output nodes found in {upstream_target} for upstream {upstream_name}")
+                logger.warning(f"No output nodes found in {source_target}")
         else:
-            logger.warning(f"Upstream target directory does not exist: {upstream_target}")
+            logger.warning(f"Source target directory does not exist: {source_target}")
+
+    def _link_upstream_artifacts(self, upstream_name: str) -> None:
+        """Link upstream workflow's output to current workflow's staging."""
+        self._link_workflow_artifacts(upstream_name, self.agent_name)
 
     def _find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
         """Find the most recent node directory in target."""
@@ -363,30 +367,163 @@ class AgentWorkflow:
             logger.warning(f"Symlink failed, falling back to copy: {src} -> {dst}")
             shutil.copytree(src, dst)
 
+    def _validate_safe_path(self, path: Path, base_dir: Path) -> bool:
+        """Validate path doesn't escape base directory (path traversal protection)."""
+        try:
+            resolved = path.resolve()
+            base_resolved = base_dir.resolve()
+            return str(resolved).startswith(str(base_resolved))
+        except (OSError, ValueError):
+            return False
+
     def _safe_symlink_contents(self, src_dir: Path, dst_dir: Path):
-        """Symlink all files from src_dir into dst_dir."""
+        """Symlink all files from src_dir into dst_dir with path traversal protection."""
+        workflows_root = self._get_workflows_root()
+
+        # Validate both directories are within workflows root
+        if not self._validate_safe_path(src_dir, workflows_root):
+            logger.warning(f"Rejecting symlink: source {src_dir} outside workspace")
+            return
+        if not self._validate_safe_path(dst_dir, workflows_root):
+            logger.warning(f"Rejecting symlink: destination {dst_dir} outside workspace")
+            return
+
         if not dst_dir.exists():
             dst_dir.mkdir(parents=True)
-            
+
         for item in src_dir.iterdir():
-            if item.name.startswith('.'): continue
-            
-            src_item = item
+            # Skip hidden files and validate name doesn't contain path traversal
+            if item.name.startswith('.') or '..' in item.name:
+                continue
+
             dst_item = dst_dir / item.name
-            
+
             if dst_item.exists():
                 if dst_item.is_symlink() or dst_item.is_file():
                     dst_item.unlink()
                 else:
                     shutil.rmtree(dst_item)
-            
+
             try:
-                os.symlink(src_item, dst_item)
+                os.symlink(item, dst_item)
             except OSError:
-                if src_item.is_dir():
-                    shutil.copytree(src_item, dst_item)
+                if item.is_dir():
+                    shutil.copytree(item, dst_item)
                 else:
-                    shutil.copy2(src_item, dst_item)
+                    shutil.copy2(item, dst_item)
+
+    def _get_workflows_root(self) -> Path:
+        """Get the root directory containing all workflows."""
+        current_config_path = Path(self.constructor_path)
+        # Assumes: .../workflows/CURRENT/agent_config/current.yml
+        return current_config_path.parents[2]
+
+    def _resolve_downstream_workflows(self) -> bool:
+        """
+        Execute all downstream workflows after current workflow completes.
+
+        Returns:
+            True if all downstream workflows completed successfully,
+            False if any downstream has pending batch jobs.
+        """
+        if not self.run_downstream:
+            return True
+
+        logger.info(
+            f"Checking downstream workflows for {self.agent_name}...",
+            extra={'operation': 'resolve_downstream'}
+        )
+
+        # Lazy-initialize workspace index
+        if self._workspace_index is None:
+            from agent_actions.orchestration.workspace_index import WorkspaceIndex
+            self._workspace_index = WorkspaceIndex(self._get_workflows_root())
+            self._workspace_index.scan_workspace()
+
+        # Get sorted downstream workflows
+        try:
+            downstream_order = self._workspace_index.topological_sort_downstream(
+                self.agent_name
+            )
+        except Exception as e:
+            logger.error(f"Failed to compute downstream order: {e}")
+            raise
+
+        if not downstream_order:
+            self.console.print(f"[dim]No downstream workflows found for {self.agent_name}[/dim]")
+            return True
+
+        self.console.print(
+            f"\n[bold cyan]>> Found {len(downstream_order)} downstream workflow(s): "
+            f"{downstream_order}[/bold cyan]"
+        )
+
+        # Execute each downstream workflow in order
+        for downstream_name in downstream_order:
+            result = self._execute_downstream_workflow(downstream_name)
+            if result is None:
+                # Batch pending
+                return False
+
+        return True
+
+    def _execute_downstream_workflow(self, downstream_name: str):
+        """
+        Execute a single downstream workflow.
+
+        Args:
+            downstream_name: Name of the downstream workflow to execute.
+
+        Returns:
+            Result tuple on success, None if batch pending.
+        """
+        self.console.print(
+            f"\n[bold cyan]>> Downstream: Executing workflow '{downstream_name}'...[/bold cyan]"
+        )
+
+        # Locate downstream config
+        downstream_config_path = self._get_workflows_root() / downstream_name / 'agent_config' / f'{downstream_name}.yml'
+
+        if not downstream_config_path.exists():
+            raise FileNotFoundError(
+                f"Downstream workflow config not found at {downstream_config_path}"
+            )
+
+        # Link current workflow's output to downstream's staging
+        self._link_downstream_artifacts(downstream_name)
+
+        # Create new workflow instance (without recursive downstream)
+        downstream_wf = self.__class__(
+            constructor_path=str(downstream_config_path),
+            user_code_path=self.user_code_path,
+            default_path=self.default_path,
+            use_tools=self.use_tools,
+            run_upstream=False,   # Don't re-run upstream
+            run_downstream=False  # Don't recurse downstream
+        )
+
+        result = downstream_wf.run()
+
+        if result is None:
+            self.console.print(
+                f"[blue]⏳ Downstream workflow '{downstream_name}' has pending batch jobs.[/blue]"
+            )
+            self.console.print(
+                f"[blue]Please wait for batch completion and run this command again:[/blue]"
+            )
+            self.console.print(
+                f"[blue]  agac run -a {self.agent_name} --downstream[/blue]"
+            )
+            return None
+
+        self.console.print(
+            f"[bold green]>> Downstream: Workflow '{downstream_name}' completed[/bold green]"
+        )
+        return result
+
+    def _link_downstream_artifacts(self, downstream_name: str) -> None:
+        """Link current workflow's output to downstream workflow's staging."""
+        self._link_workflow_artifacts(self.agent_name, downstream_name)
 
     async def async_run(self, concurrency_limit: int = 5):
         """
@@ -399,7 +536,14 @@ class AgentWorkflow:
         previous_context = CorrelationContext.get_context()
         try:
             CorrelationContext.start_workflow(self.agent_name)
-            self._resolve_upstream_workflows()
+            should_continue = self._resolve_upstream_workflows()
+            if not should_continue:
+                # Upstream has pending batch jobs, exit gracefully
+                if previous_context:
+                    CorrelationContext.set_context(previous_context)
+                else:
+                    CorrelationContext.clear_context()
+                return None
         except Exception as e:
             if previous_context:
                 CorrelationContext.set_context(previous_context)
@@ -462,6 +606,12 @@ class AgentWorkflow:
                     'success': True
                 }
             )
+
+            # Execute downstream workflows if requested
+            downstream_success = self._resolve_downstream_workflows()
+            if not downstream_success:
+                # Downstream has pending batch jobs
+                return None
 
             # Return success tuple to distinguish from batch pending (None)
             return ('success', {})
@@ -555,6 +705,12 @@ class AgentWorkflow:
                         'success': True
                     }
                 )
+
+                # Execute downstream workflows if requested
+                downstream_success = self._resolve_downstream_workflows()
+                if not downstream_success:
+                    # Downstream has pending batch jobs
+                    return None
 
                 # Return success tuple to distinguish from batch pending (None)
                 return ('success', {})
