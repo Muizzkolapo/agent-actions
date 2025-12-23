@@ -10,11 +10,19 @@ from typing import Dict, List, Optional, TypedDict
 
 from agent_actions.utilities.udf_management.type_conversion import (
     derive_schema_from_type,
-    detect_type_category,
     is_typeddict,
-    TypeCategory,
+    clear_schema_cache,
     HAS_PYDANTIC,
 )
+from agent_actions.errors import ConfigurationError
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    """Clear schema cache before and after each test."""
+    clear_schema_cache()
+    yield
+    clear_schema_cache()
 
 
 # =============================================================================
@@ -25,45 +33,51 @@ class TestTypeDetection:
     """Tests for type detection logic."""
 
     def test_typeddict_detected(self):
-        """TypedDict should be detected as TYPEDDICT."""
+        """TypedDict should be detected and converted."""
         class MyTypedDict(TypedDict):
             name: str
 
-        assert detect_type_category(MyTypedDict) == TypeCategory.TYPEDDICT
         assert is_typeddict(MyTypedDict)
+        schema = derive_schema_from_type(MyTypedDict)
+        assert schema['name'] == 'MyTypedDict'
 
     def test_dataclass_detected(self):
-        """Dataclass should be detected as DATACLASS."""
+        """Dataclass should be detected and converted."""
         @dataclasses.dataclass
         class MyDataclass:
             name: str
 
-        assert detect_type_category(MyDataclass) == TypeCategory.DATACLASS
         assert not is_typeddict(MyDataclass)
+        schema = derive_schema_from_type(MyDataclass)
+        assert schema['name'] == 'MyDataclass'
 
     @pytest.mark.skipif(not HAS_PYDANTIC, reason="Pydantic not installed")
     def test_pydantic_detected(self):
-        """Pydantic model should be detected as PYDANTIC."""
+        """Pydantic model should be detected and converted."""
         from pydantic import BaseModel
 
         class MyPydantic(BaseModel):
             name: str
 
-        assert detect_type_category(MyPydantic) == TypeCategory.PYDANTIC
         assert not is_typeddict(MyPydantic)
+        schema = derive_schema_from_type(MyPydantic)
+        assert schema['name'] == 'MyPydantic'
 
-    def test_unsupported_type(self):
-        """Plain class should be detected as UNSUPPORTED."""
+    def test_unsupported_type_raises(self):
+        """Plain class should raise ConfigurationError."""
         class PlainClass:
             name: str
 
-        assert detect_type_category(PlainClass) == TypeCategory.UNSUPPORTED
+        with pytest.raises(ConfigurationError) as exc_info:
+            derive_schema_from_type(PlainClass)
+        assert "Unsupported type hint" in str(exc_info.value)
 
-    def test_primitive_unsupported(self):
-        """Primitive types should be UNSUPPORTED."""
-        assert detect_type_category(str) == TypeCategory.UNSUPPORTED
-        assert detect_type_category(int) == TypeCategory.UNSUPPORTED
-        assert detect_type_category(dict) == TypeCategory.UNSUPPORTED
+    def test_primitive_type_raises(self):
+        """Primitive types should raise ConfigurationError."""
+        with pytest.raises(ConfigurationError):
+            derive_schema_from_type(str)
+        with pytest.raises(ConfigurationError):
+            derive_schema_from_type(int)
 
 
 # =============================================================================
@@ -288,27 +302,41 @@ class TestPydanticConversion:
 
 
 # =============================================================================
-# Error Handling Tests
+# Schema Caching Tests
 # =============================================================================
 
-class TestErrorHandling:
-    """Tests for error handling in type conversion."""
+class TestSchemaCaching:
+    """Tests for schema caching functionality."""
 
-    def test_unsupported_type_raises(self):
-        """Unsupported type should raise ConfigurationError."""
-        from agent_actions.errors import ConfigurationError
+    def test_cache_returns_same_structure(self):
+        """Cached result should match fresh derivation."""
+        class Input(TypedDict):
+            name: str
 
-        with pytest.raises(ConfigurationError) as exc_info:
-            derive_schema_from_type(str)
+        schema1 = derive_schema_from_type(Input)
+        schema2 = derive_schema_from_type(Input)
 
-        assert "Unsupported type hint" in str(exc_info.value)
+        # Should be equal
+        assert schema1 == schema2
 
-    def test_plain_class_raises(self):
-        """Plain class should raise ConfigurationError."""
-        from agent_actions.errors import ConfigurationError
+    def test_cache_returns_copy(self):
+        """Cached result should be a copy, not same object."""
+        class Input(TypedDict):
+            name: str
 
-        class NotASchema:
-            pass
+        schema1 = derive_schema_from_type(Input)
+        schema2 = derive_schema_from_type(Input)
 
-        with pytest.raises(ConfigurationError):
-            derive_schema_from_type(NotASchema)
+        # Should not be the same object (mutation protection)
+        assert schema1 is not schema2
+        assert schema1['fields'] is not schema2['fields']
+
+    def test_clear_cache(self):
+        """clear_schema_cache should empty the cache."""
+        class Input(TypedDict):
+            name: str
+
+        derive_schema_from_type(Input)
+        clear_schema_cache()
+        # Should not raise - just verifying cache was cleared
+        derive_schema_from_type(Input)

@@ -12,15 +12,17 @@ from agent_actions.utilities.udf_management.udf_registry import (
 )
 from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.errors import SchemaValidationError
-from agent_actions.utilities.udf_management.type_conversion import HAS_PYDANTIC
+from agent_actions.utilities.udf_management.type_conversion import HAS_PYDANTIC, clear_schema_cache
 
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():
-    """Clear registry before and after each test."""
+    """Clear registry and schema cache before and after each test."""
     clear_registry()
+    clear_schema_cache()
     yield
     clear_registry()
+    clear_schema_cache()
 
 
 # =============================================================================
