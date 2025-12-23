@@ -1,19 +1,45 @@
 """Tests for UDF discovery and validation."""
 import pytest
+import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from typing import TypedDict
 import tempfile
 import shutil
 from agent_actions.input_loading.udf_loader import discover_udfs, validate_udf_references
 from agent_actions.utilities.udf_management.udf_registry import udf_tool, clear_registry, UDF_REGISTRY
-from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError  # New modular pattern!
+from agent_actions.utilities.udf_management.type_conversion import clear_schema_cache
+from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError, UDFLoadError
+
+
+# Type for tests (prefixed to avoid pytest collection)
+class _TestInput(TypedDict):
+    value: str
+
+
+# Track modules added by tests for cleanup
+_test_modules_to_clean = set()
+
 
 @pytest.fixture(autouse=True)
 def cleanup_registry():
-    """Clear registry before and after each test for isolation."""
+    """Clear registry, schema cache, and test modules before and after each test."""
     clear_registry()
+    clear_schema_cache()
+    # Clean up any modules added by previous tests
+    test_module_names = ['file1', 'file2', 'file3', 'test', 'test_func', 'my_udf',
+                         'top_level', 'nested', 'regular', 'bad', 'no_udfs',
+                         'subdir.nested', 'func1', 'func2', 'func3']
+    for mod_name in test_module_names:
+        if mod_name in sys.modules:
+            del sys.modules[mod_name]
     yield
     clear_registry()
+    clear_schema_cache()
+    # Clean up again after test
+    for mod_name in test_module_names:
+        if mod_name in sys.modules:
+            del sys.modules[mod_name]
+
 
 @pytest.fixture
 def temp_user_code_dir():
@@ -22,24 +48,55 @@ def temp_user_code_dir():
     yield Path(temp_dir)
     shutil.rmtree(temp_dir)
 
+
+# Template for UDF files with required input_type
+UDF_TEMPLATE = '''
+from typing import TypedDict
+from agent_actions import udf_tool
+
+class Input(TypedDict):
+    value: str
+
+@udf_tool(input_type=Input)
+def {func_name}(data):
+    return "{return_value}"
+'''
+
+MULTI_UDF_TEMPLATE = '''
+from typing import TypedDict
+from agent_actions import udf_tool
+
+class Input(TypedDict):
+    value: str
+
+@udf_tool(input_type=Input)
+def func1(data):
+    return "func1"
+
+@udf_tool(input_type=Input)
+def func2(data):
+    return "func2"
+'''
+
+
 class TestDiscoverUDFs:
     """Tests for discover_udfs() function."""
 
     def test_discover_udfs_single_file(self, temp_user_code_dir):
         """Test discovery of a single UDF in a single file."""
         udf_file = temp_user_code_dir / 'my_udf.py'
-        udf_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef test_function():\n    return "test"\n')
+        udf_file.write_text(UDF_TEMPLATE.format(func_name='test_function', return_value='test'))
         registry = discover_udfs(temp_user_code_dir)
         assert len(registry) == 1
         assert 'test_function' in registry
-        assert registry['test_function']['function']() == 'test'
+        assert registry['test_function']['function']({'value': 'x'}) == 'test'
 
     def test_discover_udfs_multiple_files(self, temp_user_code_dir):
         """Test discovery of UDFs across multiple files."""
         file1 = temp_user_code_dir / 'file1.py'
-        file1.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef func1():\n    return "func1"\n\n@udf_tool\ndef func2():\n    return "func2"\n')
+        file1.write_text(MULTI_UDF_TEMPLATE)
         file2 = temp_user_code_dir / 'file2.py'
-        file2.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef func3():\n    return "func3"\n')
+        file2.write_text(UDF_TEMPLATE.format(func_name='func3', return_value='func3'))
         registry = discover_udfs(temp_user_code_dir)
         assert len(registry) == 3
         assert 'func1' in registry
@@ -51,9 +108,9 @@ class TestDiscoverUDFs:
         sub_dir = temp_user_code_dir / 'subdir'
         sub_dir.mkdir()
         file1 = temp_user_code_dir / 'top_level.py'
-        file1.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef top_func():\n    return "top"\n')
+        file1.write_text(UDF_TEMPLATE.format(func_name='top_func', return_value='top'))
         file2 = sub_dir / 'nested.py'
-        file2.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef nested_func():\n    return "nested"\n')
+        file2.write_text(UDF_TEMPLATE.format(func_name='nested_func', return_value='nested'))
         registry = discover_udfs(temp_user_code_dir)
         assert len(registry) == 2
         assert 'top_func' in registry
@@ -62,9 +119,9 @@ class TestDiscoverUDFs:
     def test_discover_udfs_skips_private_files(self, temp_user_code_dir):
         """Test that files starting with _ are skipped."""
         private_file = temp_user_code_dir / '_private.py'
-        private_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef private_func():\n    return "private"\n')
+        private_file.write_text(UDF_TEMPLATE.format(func_name='private_func', return_value='private'))
         regular_file = temp_user_code_dir / 'regular.py'
-        regular_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef regular_func():\n    return "regular"\n')
+        regular_file.write_text(UDF_TEMPLATE.format(func_name='regular_func', return_value='regular'))
         registry = discover_udfs(temp_user_code_dir)
         assert len(registry) == 1
         assert 'regular_func' in registry
@@ -73,7 +130,7 @@ class TestDiscoverUDFs:
     def test_discover_udfs_handles_import_errors(self, temp_user_code_dir):
         """Test that import errors are wrapped in UDFLoadError."""
         bad_file = temp_user_code_dir / 'bad.py'
-        bad_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef bad_func()  # Missing colon - syntax error\n    return "bad"\n')
+        bad_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool(input_type=dict)\ndef bad_func()  # Missing colon - syntax error\n    return "bad"\n')
         with pytest.raises(UDFLoadError) as exc_info:
             discover_udfs(temp_user_code_dir)
         error = exc_info.value
@@ -87,16 +144,16 @@ class TestDiscoverUDFs:
         if user_code_str in sys.path:
             sys.path.remove(user_code_str)
         udf_file = temp_user_code_dir / 'test.py'
-        udf_file.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef test_func():\n    return "test"\n')
+        udf_file.write_text(UDF_TEMPLATE.format(func_name='test_func', return_value='test'))
         discover_udfs(temp_user_code_dir)
         assert user_code_str in sys.path
 
     def test_discover_udfs_duplicate_error(self, temp_user_code_dir):
         """Test that DuplicateFunctionError is propagated."""
         file1 = temp_user_code_dir / 'file1.py'
-        file1.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef duplicate_func():\n    return "file1"\n')
+        file1.write_text(UDF_TEMPLATE.format(func_name='duplicate_func', return_value='file1'))
         file2 = temp_user_code_dir / 'file2.py'
-        file2.write_text('\nfrom agent_actions import udf_tool\n\n@udf_tool\ndef duplicate_func():\n    return "file2"\n')
+        file2.write_text(UDF_TEMPLATE.format(func_name='duplicate_func', return_value='file2'))
         with pytest.raises(DuplicateFunctionError) as exc_info:
             discover_udfs(temp_user_code_dir)
         error = exc_info.value
@@ -132,14 +189,15 @@ class TestDiscoverUDFs:
         registry = discover_udfs(temp_user_code_dir)
         assert len(registry) == 0
 
+
 class TestValidateUDFReferences:
     """Tests for validate_udf_references() function."""
 
     def test_validate_udf_references_success(self):
         """Test that valid references pass validation."""
 
-        @udf_tool
-        def valid_func():
+        @udf_tool(input_type=_TestInput)
+        def valid_func(data):
             pass
         config = {'actions': [{'impl': 'valid_func'}]}
         validate_udf_references(config)
@@ -155,8 +213,8 @@ class TestValidateUDFReferences:
     def test_validate_udf_references_nested_config(self):
         """Test validation works with nested config structures."""
 
-        @udf_tool
-        def nested_func():
+        @udf_tool(input_type=_TestInput)
+        def nested_func(data):
             pass
         config = {'pipelines': {'main': {'actions': [{'impl': 'nested_func'}, {'steps': [{'impl': 'nested_func'}]}]}}}
         validate_udf_references(config)
@@ -164,8 +222,8 @@ class TestValidateUDFReferences:
     def test_validate_udf_references_list_config(self):
         """Test validation works with list-based configs."""
 
-        @udf_tool
-        def list_func():
+        @udf_tool(input_type=_TestInput)
+        def list_func(data):
             pass
         config = [{'impl': 'list_func'}, {'impl': 'list_func'}]
         validate_udf_references(config)

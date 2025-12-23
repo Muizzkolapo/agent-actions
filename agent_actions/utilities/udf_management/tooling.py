@@ -68,27 +68,29 @@ def load_user_defined_function(module_name: str, function_name: str) -> Callable
     return function
 
 def execute_user_defined_function(
-    udf_name: str, 
-    input_data: Union[Dict[str, Any], List[Any]], 
+    udf_name: str,
+    input_data: Union[Dict[str, Any], List[Any]],
     validate_input: bool = True,
+    validate_output: bool = True,
     **kwargs: Any
 ) -> Any:
     """
-    Execute UDF with schema validation and granularity handling.
-    
+    Execute UDF with input and output schema validation.
+
     Uses CACHED compiled schemas for performance.
-    
+
     Args:
         udf_name: Simple function name (e.g., 'my_function')
         input_data: Input data (single object or array depending on granularity)
         validate_input: Whether to validate input against schema
+        validate_output: Whether to validate output against schema (if output_type defined)
         **kwargs: Additional arguments
-        
+
     Returns:
         Result from UDF execution
-        
+
     Raises:
-        SchemaValidationError: If input validation fails
+        SchemaValidationError: If input or output validation fails
         AgentActionsException: If execution fails
     """
     from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
@@ -99,12 +101,13 @@ def execute_user_defined_function(
     udf = metadata['function']
     schema = metadata['schema']  # Always present (required)
     granularity = metadata['granularity']
-    compiled_schemas = metadata['compiled_schemas']  # Use cached!
-    
+    json_schema = metadata['json_schema']  # Direct JSON Schema
+    json_output_schema = metadata.get('json_output_schema')  # May be None
+
     # Validate input if enabled
     if validate_input:
-        # Use CACHED compiled schema (no recompilation!)
-        compiled_schema = compiled_schemas['openai']
+        # Use cached JSON Schema (direct, no wrapper)
+        compiled_schema = json_schema
         
         # Validate based on granularity
         if granularity == Granularity.FILE:
@@ -143,7 +146,6 @@ def execute_user_defined_function(
     # Execute function
     try:
         result = udf(input_data, **kwargs)
-        return result
     except Exception as e:
         raise AgentActionsException(
             f"Error executing UDF '{udf_name}': {safe_format_error(e)}",
@@ -155,42 +157,70 @@ def execute_user_defined_function(
             cause=e
         ) from e
 
+    # Validate output if enabled and output schema is defined
+    if validate_output and json_output_schema is not None:
+        compiled_output = json_output_schema
+
+        if granularity == Granularity.FILE:
+            # For FILE granularity, output should be a list - validate each item
+            if isinstance(result, list):
+                for idx, item in enumerate(result):
+                    _validate_against_schema(
+                        item, compiled_output, udf_name,
+                        item_index=idx, validation_type='output'
+                    )
+            else:
+                # Single result - validate as-is
+                _validate_against_schema(
+                    result, compiled_output, udf_name, validation_type='output'
+                )
+        else:
+            # RECORD granularity - validate single result
+            _validate_against_schema(
+                result, compiled_output, udf_name, validation_type='output'
+            )
+
+    return result
+
 
 def _validate_against_schema(
-    data: Dict[str, Any], 
-    compiled_schema: Dict[str, Any], 
+    data: Dict[str, Any],
+    compiled_schema: Dict[str, Any],
     func_name: str,
-    item_index: Optional[int] = None
+    item_index: Optional[int] = None,
+    validation_type: str = 'input'
 ) -> None:
     """
     Validate data against compiled schema.
-    
-    IMPLEMENTATION (not a stub!):
+
+    Args:
+        data: Data to validate
+        compiled_schema: Compiled JSON schema
+        func_name: UDF function name for error messages
+        item_index: Optional index for array item validation
+        validation_type: 'input' or 'output' for error messages
+
     Uses jsonschema for validation with proper error handling.
     """
     import jsonschema
     from jsonschema import ValidationError as JsonSchemaValidationError
     from agent_actions.errors import SchemaValidationError
-    
+
     try:
-        # Extract JSON schema from compiled format
-        if 'schema' in compiled_schema:
-            json_schema = compiled_schema['schema']
-        else:
-            json_schema = compiled_schema
-        
-        # Validate using jsonschema
-        jsonschema.validate(instance=data, schema=json_schema)
-        
+        # compiled_schema is now direct JSON Schema (no wrapper)
+        jsonschema.validate(instance=data, schema=compiled_schema)
+
     except JsonSchemaValidationError as e:
         # Build helpful error message
         error_path = ' -> '.join(str(p) for p in e.path) if e.path else 'root'
         item_info = f" (item {item_index})" if item_index is not None else ""
-        
+        type_info = f"{validation_type.capitalize()} schema"
+
         raise SchemaValidationError(
-            f"Schema validation failed for UDF '{func_name}'{item_info} at {error_path}: {e.message}",
+            f"{type_info} validation failed for UDF '{func_name}'{item_info} at {error_path}: {e.message}",
             context={
                 'function': func_name,
+                'validation_type': validation_type,
                 'validation_error': e.message,
                 'error_path': error_path,
                 'item_index': item_index,

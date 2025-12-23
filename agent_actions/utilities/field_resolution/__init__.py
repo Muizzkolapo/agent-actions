@@ -87,6 +87,7 @@ from .exceptions import (
     InvalidReferenceError,
     ReferenceNotFoundError,
     DependencyValidationError,
+    SchemaFieldValidationError,
 )
 
 
@@ -113,4 +114,5 @@ __all__ = [
     'InvalidReferenceError',
     'ReferenceNotFoundError',
     'DependencyValidationError',
+    'SchemaFieldValidationError',
 ]

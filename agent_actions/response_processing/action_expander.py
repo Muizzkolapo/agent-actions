@@ -233,6 +233,25 @@ class ActionExpander:
             )
         agent['model_vendor'] = 'tool'
         agent['model_name'] = action.get('impl', action.get('name'))
+
+        # Add UDF output schema to agent config (REQUIRED for schema validation)
+        impl_name = action.get('impl')
+        if impl_name:
+            from agent_actions.utilities.udf_management import get_udf_metadata
+
+            try:
+                udf_metadata = get_udf_metadata(impl_name)
+
+                # BREAKING: output_type is now effectively required for type safety
+                # UDFs without output_type will pass here but fail during field validation
+                if udf_metadata.get('json_output_schema'):
+                    agent['output_schema'] = udf_metadata['output_schema']
+                    agent['json_output_schema'] = udf_metadata['json_output_schema']
+            except Exception:
+                # UDF not found or not yet registered - continue without schema
+                # Schema validation will fail later if fields are referenced
+                pass
+
         if run_mode == 'batch' and action.get('run_mode') == 'batch':
             action_name = action.get('name', 'unknown')
             raise ConfigurationError(
@@ -559,7 +578,17 @@ class ActionExpander:
             agent_name = agent.get('agent_type') or agent.get('name', f'unknown_{idx}')
             agent_indices[agent_name] = idx
 
-        # Validate each agent's guard references
+        # Build schema registry from agent configs
+        # BREAKING: All tool actions must have output schemas
+        action_schemas = {}
+        for agent in agents:
+            agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
+
+            # Add schema if present (LLM actions won't have, UDFs should)
+            if agent.get('json_output_schema'):
+                action_schemas[agent_name] = agent['json_output_schema']
+
+        # Validate each agent's guard references with schemas
         for agent in agents:
             agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
 
@@ -568,10 +597,17 @@ class ActionExpander:
             if where_clause and isinstance(where_clause, dict):
                 clause = where_clause.get('clause', '')
                 if clause:
-                    guard_errors = validator.extract_and_validate(
-                        guard_condition=clause,
+                    # Parse references from guard condition
+                    from agent_actions.utilities.field_resolution import ReferenceParser
+                    parser = ReferenceParser()
+                    references = parser.parse_batch(clause)
+
+                    # Validate with both dependency and schema checks
+                    guard_errors = validator.validate_with_schemas(
+                        references=references,
                         agent_config=agent,
                         agent_indices=agent_indices,
+                        action_schemas=action_schemas,
                         current_agent_name=agent_name
                     )
                     errors.extend(guard_errors)
@@ -579,11 +615,17 @@ class ActionExpander:
             # Check conditional_clause (UDF guards)
             conditional_clause = agent.get('conditional_clause')
             if conditional_clause and isinstance(conditional_clause, str):
+                # Parse references from conditional clause
+                from agent_actions.utilities.field_resolution import ReferenceParser
+                parser = ReferenceParser()
+                references = parser.parse_batch(conditional_clause)
+
                 # UDF guards may also contain field references
-                guard_errors = validator.extract_and_validate(
-                    guard_condition=conditional_clause,
+                guard_errors = validator.validate_with_schemas(
+                    references=references,
                     agent_config=agent,
                     agent_indices=agent_indices,
+                    action_schemas=action_schemas,
                     current_agent_name=agent_name
                 )
                 errors.extend(guard_errors)
