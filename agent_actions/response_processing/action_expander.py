@@ -269,6 +269,60 @@ class ActionExpander:
             agent['run_mode'] = 'online'
 
     @staticmethod
+    def _add_llm_output_schema(
+        agent: AgentEntryDict,
+        action: Dict[str, Any]
+    ) -> None:
+        """Add output schema to agent config for LLM actions with schemas.
+
+        This enables guard field reference validation against LLM output schemas,
+        providing the same compile-time validation that UDFs receive.
+        """
+        # Skip tool actions (handled by _process_tool_action)
+        if action.get('kind') == 'tool' or agent.get('model_vendor') == 'tool':
+            return
+
+        # Skip if already has json_output_schema
+        if agent.get('json_output_schema'):
+            return
+
+        # Get schema from action (already processed by _process_schema_config)
+        schema_fields = agent.get('schema')
+        if not schema_fields:
+            return
+
+        # Build unified schema format
+        agent_name = agent.get('agent_type', 'unknown')
+
+        # Handle list of fields format: [{id: 'field', type: 'string'}, ...]
+        if isinstance(schema_fields, list):
+            unified_schema = {
+                'name': agent_name,
+                'fields': schema_fields
+            }
+        # Handle dict format (already unified or JSON Schema)
+        elif isinstance(schema_fields, dict):
+            if 'fields' in schema_fields:
+                unified_schema = schema_fields
+            else:
+                # Assume it's a JSON Schema format - compile_unified_schema handles this
+                unified_schema = {'name': agent_name, **schema_fields}
+        else:
+            return
+
+        # Compile to JSON Schema for validation
+        from agent_actions.response_processing.schema_change import compile_unified_schema
+
+        try:
+            # Use 'openai' format as canonical JSON Schema
+            compiled = compile_unified_schema(unified_schema, 'openai')
+            agent['output_schema'] = unified_schema
+            agent['json_output_schema'] = compiled.get('schema', compiled)
+        except Exception:
+            # Schema compilation failed - skip validation for this action
+            pass
+
+    @staticmethod
     def _process_chunk_config(
         agent: AgentEntryDict,
         action: Dict[str, Any],
@@ -437,6 +491,9 @@ class ActionExpander:
         run_mode = agent['run_mode']
         ActionExpander._process_tool_action(agent, action, run_mode)
 
+        # Add output schema for LLM actions (enables guard field validation)
+        ActionExpander._add_llm_output_schema(agent, action)
+
         # Process granularity
         granularity = action.get('granularity', defaults.get('granularity', 'record'))
         if granularity:
@@ -584,7 +641,7 @@ class ActionExpander:
         for agent in agents:
             agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
 
-            # Add schema if present (LLM actions won't have, UDFs should)
+            # Add schema if present (both LLM and UDF actions can have schemas)
             if agent.get('json_output_schema'):
                 action_schemas[agent_name] = agent['json_output_schema']
 
