@@ -1,13 +1,100 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
 from agent_actions.response_processing.where_parser import get_global_filter
 from agent_actions.utilities.transformation import PassthroughTransformer
 
 logger = logging.getLogger(__name__)
+
+
+def evaluate_guard_condition(
+    agent_config: Dict,
+    context: Any
+) -> Tuple[bool, Optional[str]]:
+    """
+    Evaluate guard conditions (where_clause, conditional_clause).
+
+    This is a centralized function for guard evaluation that can be called
+    BEFORE prompt rendering to avoid template errors when guards would skip.
+
+    Args:
+        agent_config: Agent configuration with guard conditions
+        context: Context data for guard evaluation (should include upstream action data)
+
+    Returns:
+        Tuple of (should_execute, skip_behavior):
+        - (True, None) = guard passed, proceed with execution
+        - (False, 'skip') = guard failed with skip behavior, use passthrough
+        - (False, 'filter') = guard failed with filter behavior, filter out entirely
+    """
+    # Check legacy conditional clause (UDF-based)
+    conditional_clause = (agent_config.get('conditional_clause') or '').lower()
+    if conditional_clause:
+        try:
+            if not execute_user_defined_function(conditional_clause, context):
+                logger.debug(
+                    "Guard: conditional_clause '%s' evaluated to False, skipping",
+                    conditional_clause
+                )
+                return (False, 'skip')
+        except Exception as e:
+            logger.debug(
+                "Guard: conditional_clause evaluation failed: %s, proceeding",
+                e
+            )
+            # Don't skip on UDF errors - proceed with execution
+
+    # Check WHERE clause
+    where_clause_config = agent_config.get('where_clause')
+    if where_clause_config:
+        behavior = where_clause_config.get('behavior', 'filter')
+        clause = where_clause_config.get('clause')
+        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+
+        if clause:
+            try:
+                filter_service = get_global_filter()
+                filter_result = filter_service.filter_item(context, clause)
+
+                # Handle FilterResult object or boolean
+                if hasattr(filter_result, 'success'):
+                    if not filter_result.success:
+                        # Evaluation failed
+                        if passthrough_on_error:
+                            logger.debug(
+                                "Guard: WHERE clause evaluation failed, proceeding "
+                                "(passthrough_on_error=True)"
+                            )
+                            return (True, None)
+                        logger.debug(
+                            "Guard: WHERE clause evaluation failed, skipping "
+                            "(passthrough_on_error=False)"
+                        )
+                        return (False, behavior)
+                    matched = filter_result.matched
+                else:
+                    matched = bool(filter_result)
+
+                if not matched:
+                    logger.debug(
+                        "Guard: WHERE clause '%s' not matched, behavior='%s'",
+                        clause, behavior
+                    )
+                    return (False, behavior)
+
+            except Exception as e:
+                logger.debug(
+                    "Guard: WHERE clause evaluation exception: %s", e
+                )
+                if passthrough_on_error:
+                    return (True, None)
+                return (False, behavior)
+
+    # All guards passed
+    return (True, None)
 
 def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     agent_config: Dict,
@@ -18,7 +105,8 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
     tools_path: Optional[str]=None,
     tool_args: Optional[Dict[str, Any]]=None,
     source_content: Optional[Any]=None,
-    llm_context: Optional[Any]=None
+    llm_context: Optional[Any]=None,
+    skip_guard_eval: bool=False
 ) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
@@ -52,17 +140,21 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
         source_content: Optional source content
         llm_context: Optional transformed context for LLM (with context_scope applied).
                      If not provided, uses context for both guards and LLM.
+        skip_guard_eval: If True, skip guard evaluation (already done by caller).
+                        Used when guard was evaluated early (before prompt rendering).
 
     Returns:
         Tuple of (response/context, was_executed) where was_executed indicates
         whether the agent actually processed the data or was skipped.
     """
-    if _should_skip_legacy_conditional(agent_config, context):
-        return (context, False)
-    if _should_skip_where_clause(agent_config, context):
-        return (context, False)
-    if _should_filter_where_clause(agent_config, context):
-        return (None, False)
+    # Skip guard evaluation if already done by caller (e.g., DataGenerator)
+    if not skip_guard_eval:
+        if _should_skip_legacy_conditional(agent_config, context):
+            return (context, False)
+        if _should_skip_where_clause(agent_config, context):
+            return (context, False)
+        if _should_filter_where_clause(agent_config, context):
+            return (None, False)
 
     # Extract content from nested structure if needed (for tools/guards)
     if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):

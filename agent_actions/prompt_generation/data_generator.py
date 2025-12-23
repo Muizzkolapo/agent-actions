@@ -1,9 +1,16 @@
 """Module for generating data using agents."""
+import logging
 from typing import Dict, Any, List, Optional, Tuple
 from agent_actions.response_processing.config_types import AgentEntryDict
-from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
+from agent_actions.utilities.processor.processor_helpers import (
+    run_dynamic_agent,
+    evaluate_guard_condition
+)
 from agent_actions.configuration.interfaces import IGenerator, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry
+
+logger = logging.getLogger(__name__)
+
 
 @registry.register_generator('data_generator')
 class DataGenerator(IGenerator):
@@ -31,6 +38,112 @@ class DataGenerator(IGenerator):
         self.agent_name = agent_name
         self.dependency_configs = dependency_configs or {}
         self.agent_indices = agent_indices or {}
+
+    def _has_guard_condition(self) -> bool:
+        """Check if agent has any guard condition configured."""
+        return bool(
+            self.agent_config.get('where_clause') or
+            self.agent_config.get('conditional_clause')
+        )
+
+    def _evaluate_guard_early(
+        self,
+        contents: Any,
+        current_item: Optional[Dict] = None,
+        file_path: Optional[str] = None,
+        source_content: Optional[Any] = None,
+        loop_context: Optional[Dict] = None,
+        workflow_metadata: Optional[Dict] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Evaluate guard conditions BEFORE prompt rendering.
+
+        This is the key fix for issue #595: Guards are evaluated after prompt
+        rendering, causing template errors when referencing skipped actions.
+
+        By evaluating guards FIRST with a rich context that includes upstream
+        action data, we can skip actions early without attempting to render
+        templates that would fail.
+
+        Args:
+            contents: Current content to process
+            current_item: Current item dict with lineage and source_guid
+            file_path: File path for historical node loading
+            source_content: Source content for references
+            loop_context: Loop context for {loop.*} references
+            workflow_metadata: Workflow metadata for {workflow.*} references
+
+        Returns:
+            Tuple of (should_execute, skip_behavior):
+            - (True, None) = guard passed, proceed with execution
+            - (False, 'skip') = guard failed, skip with passthrough
+            - (False, 'filter') = guard failed, filter out entirely
+        """
+        # Import here to avoid circular dependency
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.utilities.field_resolution.evaluation_context_provider import (
+            EvaluationContextProvider
+        )
+
+        # Build rich context for guard evaluation using EvaluationContextProvider
+        # This loads ALL upstream action data via historical node loader
+        provider = EvaluationContextProvider()
+
+        # Construct current_item if not provided
+        if current_item is None:
+            current_item = {
+                'content': contents if isinstance(contents, dict) else {},
+                'source_guid': contents.get('source_guid') if isinstance(contents, dict) else None,
+                'lineage': contents.get('lineage', []) if isinstance(contents, dict) else []
+            }
+
+        try:
+            eval_context = provider.build_context(
+                current_item=current_item,
+                agent_config=self.agent_config,
+                agent_name=self.agent_name,
+                agent_indices=self.agent_indices,
+                dependency_configs=self.dependency_configs,
+                file_path=file_path,
+                source_content=source_content,
+                loop_context=loop_context,
+                workflow_metadata=workflow_metadata
+            )
+
+            # Convert to flat dict for guard evaluation
+            # This includes current content + upstream action data
+            context_for_guard = eval_context.to_flat_dict()
+
+            logger.debug(
+                "Early guard evaluation for '%s' with context keys: %s",
+                self.agent_name,
+                list(context_for_guard.keys())
+            )
+
+            # Evaluate guard with rich context
+            should_execute, behavior = evaluate_guard_condition(
+                self.agent_config,
+                context_for_guard
+            )
+
+            if not should_execute:
+                logger.debug(
+                    "Early guard evaluation: '%s' will be skipped (behavior=%s)",
+                    self.agent_name,
+                    behavior
+                )
+
+            return (should_execute, behavior)
+
+        except Exception as e:
+            # On error, proceed with execution (don't skip)
+            # The guard will be re-evaluated in run_dynamic_agent if needed
+            logger.warning(
+                "Early guard evaluation failed for '%s': %s. Proceeding with execution.",
+                self.agent_name,
+                e
+            )
+            return (True, None)
 
     def supports_async(self) -> bool:
         """Return True as this generator supports async operations."""
@@ -72,7 +185,36 @@ class DataGenerator(IGenerator):
             RuntimeError: If agent creation or data generation fails
         """
         try:
-            # Prepare prompt using unified PromptPreparationService (Phase 2: Issue #487)
+            # CRITICAL FIX (Issue #595): Evaluate guards BEFORE prompt rendering
+            # This prevents template errors when referencing fields from skipped actions.
+            # If guard says skip/filter, return early without attempting prompt rendering.
+            if self._has_guard_condition():
+                should_execute, behavior = self._evaluate_guard_early(
+                    contents=contents,
+                    current_item=current_item,
+                    file_path=file_path,
+                    source_content=source_content,
+                    loop_context=loop_context,
+                    workflow_metadata=workflow_metadata
+                )
+
+                if not should_execute:
+                    # Guard failed - return early without prompt rendering
+                    if behavior == 'filter':
+                        # Filter behavior: return None to exclude item entirely
+                        logger.debug(
+                            "Guard filter: '%s' returning None (filtered out)",
+                            self.agent_name
+                        )
+                        return (None, False, {})
+                    # Skip behavior: return original contents as passthrough
+                    logger.debug(
+                        "Guard skip: '%s' returning contents as passthrough",
+                        self.agent_name
+                    )
+                    return (contents, False, {})
+
+            # Guard passed (or no guard) - proceed with prompt preparation
             # pylint: disable=import-outside-toplevel
             from agent_actions.prompt_generation.prompt_preparation_service import (
                 PromptPreparationService
@@ -106,6 +248,7 @@ class DataGenerator(IGenerator):
             # CRITICAL: Pass BOTH contexts to run_dynamic_agent:
             # - contents: Original data for guard evaluation and tools/UDFs (can access all fields)
             # - llm_context: Transformed data for LLM (has context_scope.drop applied)
+            # Also pass skip_guard_eval=True since we already evaluated guards above
             tool_args = self.agent_config.get('tool_args', {})
             response, executed = run_dynamic_agent(
                 self.agent_config,
@@ -115,7 +258,8 @@ class DataGenerator(IGenerator):
                 tools_path=tools_path,  # Use resolved tools_path
                 tool_args=tool_args,
                 source_content=source_content,
-                llm_context=prep_result.llm_context  # Transformed context for LLM
+                llm_context=prep_result.llm_context,  # Transformed context for LLM
+                skip_guard_eval=self._has_guard_condition()  # Skip if already evaluated
             )
 
             return (response, executed, prep_result.passthrough_fields)
