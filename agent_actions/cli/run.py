@@ -118,7 +118,8 @@ class RunCommand:  # pylint: disable=too-few-public-methods
             user_code_path=str(self.args.user_code) if self.args.user_code else None,
             default_path=str(paths.default_config_path),
             use_tools=self.args.use_tools,
-            run_upstream=self.args.upstream
+            run_upstream=self.args.upstream,
+            run_downstream=self.args.downstream
         )
 
         # Initialize run tracker
@@ -202,6 +203,10 @@ class RunCommand:  # pylint: disable=too-few-public-methods
     '--upstream', is_flag=True,
     help='Recursively execute upstream dependent workflows'
 )
+@click.option(
+    '--downstream', is_flag=True,
+    help='Execute all downstream workflows that depend on this workflow'
+)
 @handles_user_errors('run')
 @requires_project
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -214,7 +219,8 @@ def run(
     parallel: bool=False,
     no_parallel: bool=False,
     concurrency_limit: int=5,
-    upstream: bool=False
+    upstream: bool=False,
+    downstream: bool=False
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -226,6 +232,8 @@ def run(
     Examples:
         agent-actions run -a my_agent
         agent-actions run -a my_agent --upstream
+        agent-actions run -a my_agent --downstream
+        agent-actions run -a my_agent --upstream --downstream
     """
     # Let @handles_user_errors decorator handle all exceptions
     # for consistent error formatting
@@ -237,7 +245,8 @@ def run(
         parallel=parallel,
         no_parallel=no_parallel,
         concurrency_limit=concurrency_limit,
-        upstream=upstream
+        upstream=upstream,
+        downstream=downstream
     )
     command = RunCommand(args)
     command.execute()
