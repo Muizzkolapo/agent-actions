@@ -63,32 +63,55 @@ def _get_loading_stack() -> List[str]:
 def udf_tool(
     func: Optional[Callable] = None,
     *,
+    input_type: Optional[type] = None,
+    output_type: Optional[type] = None,
     schema: Optional[Union[Dict[str, Any], str]] = None,
     schema_file: Optional[str] = None,
     granularity: Granularity = Granularity.RECORD
 ) -> Callable:
     """
     Decorator to register a UDF with REQUIRED schema.
-    
+
+    Schema Resolution Priority:
+        1. input_type (derives schema from Python type hint)
+        2. schema (inline dict)
+        3. schema_file (external YAML)
+
     Args:
         func: The function to register
+        input_type: Python type (TypedDict, Pydantic, dataclass) for input schema
+        output_type: Python type for output validation (optional)
         schema: Inline schema definition (dict) - uses unified format
         schema_file: Path to schema YAML file (relative to tool directory)
         granularity: RECORD (default) or FILE processing (uses existing Granularity enum)
-        
+
     Raises:
-        ConfigurationError: If neither schema nor schema_file is provided
-        
+        ConfigurationError: If no schema source is provided
+
     Examples:
-        # Inline schema - RECORD granularity
+        # Type-based schema (NEW)
+        from typing import TypedDict
+
+        class UserInput(TypedDict):
+            user_id: str
+            email: str
+
+        class UserOutput(TypedDict):
+            status: str
+
+        @udf_tool(input_type=UserInput, output_type=UserOutput)
+        def process_user(data, **kwargs):
+            return {'status': 'processed'}
+
+        # Inline schema - RECORD granularity (legacy, still works)
         @udf_tool(schema={
             'fields': [
                 {'id': 'user_id', 'type': 'string', 'required': True}
             ]
         })
-        def process_user(data, **kwargs):
+        def process_user_legacy(data, **kwargs):
             return {'status': 'processed'}
-            
+
         # File-level schema - FILE granularity (batch processing)
         @udf_tool(
             schema_file='process_users.yml',
@@ -99,11 +122,11 @@ def udf_tool(
     """
     
     def decorator(f: Callable) -> Callable:
-        # Validate that schema is provided
-        if schema is None and schema_file is None:
+        # Validate that at least one schema source is provided
+        if input_type is None and schema is None and schema_file is None:
             raise ConfigurationError(
                 f"UDF tool '{f.__name__}' must have a schema. "
-                f"Provide either 'schema' (inline) or 'schema_file' parameter.",
+                f"Provide 'input_type', 'schema', or 'schema_file' parameter.",
                 context={
                     'function_name': f.__name__,
                     'module': f.__module__,
@@ -111,12 +134,24 @@ def udf_tool(
                     'operation': 'udf_tool_registration'
                 }
             )
-        
-        # Load schema from file or use inline
-        if schema_file:
+
+        # Resolve input schema (priority: input_type > schema > schema_file)
+        if input_type is not None:
+            from agent_actions.utilities.udf_management.type_conversion import derive_schema_from_type
+            resolved_schema = derive_schema_from_type(input_type)
+            schema_source = 'type_hint'
+        elif schema_file:
             resolved_schema = _load_schema_from_file_secure(schema_file, f)
+            schema_source = 'file'
         else:
             resolved_schema = _validate_inline_schema(schema, f)
+            schema_source = 'inline'
+
+        # Resolve output schema (optional)
+        resolved_output_schema = None
+        if output_type is not None:
+            from agent_actions.utilities.udf_management.type_conversion import derive_schema_from_type
+            resolved_output_schema = derive_schema_from_type(output_type)
         
         # Thread-safe registration
         with _registry_lock:
@@ -133,14 +168,23 @@ def udf_tool(
                     new_file=inspect.getfile(f)
                 )
             
-            # Pre-compile schema for performance (cache it)
+            # Pre-compile input schema for performance (cache it)
             from agent_actions.response_processing.schema_change import compile_unified_schema
             compiled_schema_cache = {
                 'openai': compile_unified_schema(resolved_schema, 'openai'),
                 'anthropic': compile_unified_schema(resolved_schema, 'anthropic'),
                 'gemini': compile_unified_schema(resolved_schema, 'gemini'),
             }
-            
+
+            # Pre-compile output schema if provided
+            compiled_output_cache = None
+            if resolved_output_schema is not None:
+                compiled_output_cache = {
+                    'openai': compile_unified_schema(resolved_output_schema, 'openai'),
+                    'anthropic': compile_unified_schema(resolved_output_schema, 'anthropic'),
+                    'gemini': compile_unified_schema(resolved_output_schema, 'gemini'),
+                }
+
             # Store with schema and granularity
             UDF_REGISTRY[func_name_lower] = {
                 'function': f,
@@ -149,11 +193,13 @@ def udf_tool(
                 'file': inspect.getfile(f),
                 'docstring': f.__doc__,
                 'signature': inspect.signature(f),
-                'schema': resolved_schema,  # Unified schema format
-                'schema_source': 'file' if schema_file else 'inline',
+                'schema': resolved_schema,  # Unified schema format (input)
+                'output_schema': resolved_output_schema,  # Unified schema format (output)
+                'schema_source': schema_source,
                 'schema_file': schema_file,
                 'granularity': granularity,  # Use Granularity enum
-                'compiled_schemas': compiled_schema_cache  # CACHED!
+                'compiled_schemas': compiled_schema_cache,  # CACHED input schemas
+                'compiled_output_schemas': compiled_output_cache  # CACHED output schemas
             }
         
         return f
