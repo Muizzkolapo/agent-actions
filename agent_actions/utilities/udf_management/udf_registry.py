@@ -116,22 +116,14 @@ def udf_tool(
                     new_file=inspect.getfile(f)
                 )
 
-            # Pre-compile input schema for performance (cache it)
-            from agent_actions.response_processing.schema_change import compile_unified_schema
-            compiled_schema_cache = {
-                'openai': compile_unified_schema(resolved_schema, 'openai'),
-                'anthropic': compile_unified_schema(resolved_schema, 'anthropic'),
-                'gemini': compile_unified_schema(resolved_schema, 'gemini'),
-            }
+            # Convert input schema to JSON Schema for validation (cache it)
+            from agent_actions.utilities.udf_management.type_conversion import unified_to_json_schema
+            json_schema = unified_to_json_schema(resolved_schema)
 
-            # Pre-compile output schema if provided
-            compiled_output_cache = None
+            # Convert output schema if provided
+            json_output_schema = None
             if resolved_output_schema is not None:
-                compiled_output_cache = {
-                    'openai': compile_unified_schema(resolved_output_schema, 'openai'),
-                    'anthropic': compile_unified_schema(resolved_output_schema, 'anthropic'),
-                    'gemini': compile_unified_schema(resolved_output_schema, 'gemini'),
-                }
+                json_output_schema = unified_to_json_schema(resolved_output_schema)
 
             # Store with schema and granularity
             UDF_REGISTRY[func_name_lower] = {
@@ -146,8 +138,8 @@ def udf_tool(
                 'schema': resolved_schema,
                 'output_schema': resolved_output_schema,
                 'granularity': granularity,
-                'compiled_schemas': compiled_schema_cache,
-                'compiled_output_schemas': compiled_output_cache,
+                'json_schema': json_schema,
+                'json_output_schema': json_output_schema,
             }
 
         return f

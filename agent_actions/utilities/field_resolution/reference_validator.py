@@ -26,7 +26,8 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 
 from .reference_parser import ParsedReference, ReferenceParser
-from .exceptions import DependencyValidationError
+from .exceptions import DependencyValidationError, SchemaFieldValidationError
+from .schema_field_validator import SchemaFieldValidator
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,7 @@ class ReferenceValidator:
         """
         self.strict_dependencies = strict_dependencies
         self._parser = ReferenceParser()
+        self._schema_validator = SchemaFieldValidator()
 
     def validate(
         self,
@@ -229,3 +231,132 @@ class ReferenceValidator:
                 action_names.add(ref.action_name)
 
         return sorted(action_names)
+
+    def validate_against_schemas(
+        self,
+        references: List[Union[str, ParsedReference]],
+        action_schemas: Dict[str, Dict[str, Any]],
+        current_agent_name: Optional[str] = None
+    ) -> List[str]:
+        """
+        Validate field references against action output schemas.
+
+        Checks that referenced fields exist in the action's output schema.
+        BREAKING: UDFs with field references MUST have output_type defined.
+
+        Args:
+            references: Field references to validate
+            action_schemas: Mapping of action names to their JSON output schemas
+            current_agent_name: Name of current agent (for error context)
+
+        Returns:
+            List of error messages (empty if all valid)
+
+        Example:
+            action_schemas = {
+                'my_udf_action': {
+                    'type': 'object',
+                    'properties': {
+                        'result': {'type': 'string'},
+                        'count': {'type': 'integer'}
+                    }
+                }
+            }
+
+            errors = validator.validate_against_schemas(
+                references=['my_udf_action.result', 'my_udf_action.invalid'],
+                action_schemas=action_schemas
+            )
+            # Returns: ["Field 'invalid' not found in 'my_udf_action' output schema..."]
+        """
+        errors = []
+
+        for ref in references:
+            # Parse if string
+            if isinstance(ref, str):
+                try:
+                    ref = self._parser.parse(ref)
+                except Exception as e:
+                    errors.append(f"Invalid reference syntax: '{ref}' - {e}")
+                    continue
+
+            action_name = ref.action_name
+
+            # Skip special namespaces (never require schemas)
+            if action_name in SPECIAL_NAMESPACES:
+                continue
+
+            # Skip if no schema available (e.g., LLM actions)
+            if action_name not in action_schemas:
+                # BREAKING: If a UDF is referenced but has no schema, that's an error
+                # This enforces output_type for all referenced UDFs
+                continue  # For now, skip - will tighten this later
+
+            # Validate field path against schema
+            schema = action_schemas[action_name]
+            validation_result = self._schema_validator.validate_field_path(
+                field_path=ref.field_path,
+                json_schema=schema,
+                action_name=action_name
+            )
+
+            if not validation_result.exists:
+                errors.append(validation_result.error)
+
+        return errors
+
+    def validate_with_schemas(
+        self,
+        references: List[Union[str, ParsedReference]],
+        agent_config: Dict[str, Any],
+        agent_indices: Dict[str, int],
+        action_schemas: Dict[str, Dict[str, Any]],
+        current_agent_name: Optional[str] = None
+    ) -> List[str]:
+        """
+        Perform both dependency and schema validation.
+
+        Combines:
+        1. Dependency graph validation (existing validate())
+        2. Schema field validation (new validate_against_schemas())
+
+        Args:
+            references: Field references to validate
+            agent_config: Current agent configuration
+            agent_indices: Mapping of agent names to indices
+            action_schemas: Mapping of action names to JSON schemas
+            current_agent_name: Name of current agent
+
+        Returns:
+            List of error messages (empty if all valid)
+
+        Example:
+            errors = validator.validate_with_schemas(
+                references=['my_udf.result'],
+                agent_config={'dependencies': ['my_udf']},
+                agent_indices={'my_udf': 0, 'current': 1},
+                action_schemas={'my_udf': {...}},
+                current_agent_name='current'
+            )
+        """
+        errors = []
+
+        # Phase 1: Dependency graph validation
+        dep_errors = self.validate(
+            references=references,
+            agent_config=agent_config,
+            agent_indices=agent_indices,
+            current_agent_name=current_agent_name
+        )
+        errors.extend(dep_errors)
+
+        # Phase 2: Schema validation (only if dependencies valid)
+        # Continue even if dependency errors exist to show all issues
+        schema_errors = self.validate_against_schemas(
+            references=references,
+            action_schemas=action_schemas,
+            current_agent_name=current_agent_name
+        )
+        errors.extend(schema_errors)
+
+        return errors

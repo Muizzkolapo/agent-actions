@@ -101,13 +101,13 @@ def execute_user_defined_function(
     udf = metadata['function']
     schema = metadata['schema']  # Always present (required)
     granularity = metadata['granularity']
-    compiled_schemas = metadata['compiled_schemas']  # Use cached!
-    compiled_output_schemas = metadata.get('compiled_output_schemas')  # May be None
-    
+    json_schema = metadata['json_schema']  # Direct JSON Schema
+    json_output_schema = metadata.get('json_output_schema')  # May be None
+
     # Validate input if enabled
     if validate_input:
-        # Use CACHED compiled schema (no recompilation!)
-        compiled_schema = compiled_schemas['openai']
+        # Use cached JSON Schema (direct, no wrapper)
+        compiled_schema = json_schema
         
         # Validate based on granularity
         if granularity == Granularity.FILE:
@@ -158,8 +158,8 @@ def execute_user_defined_function(
         ) from e
 
     # Validate output if enabled and output schema is defined
-    if validate_output and compiled_output_schemas is not None:
-        compiled_output = compiled_output_schemas['openai']
+    if validate_output and json_output_schema is not None:
+        compiled_output = json_output_schema
 
         if granularity == Granularity.FILE:
             # For FILE granularity, output should be a list - validate each item
@@ -207,14 +207,8 @@ def _validate_against_schema(
     from agent_actions.errors import SchemaValidationError
 
     try:
-        # Extract JSON schema from compiled format
-        if 'schema' in compiled_schema:
-            json_schema = compiled_schema['schema']
-        else:
-            json_schema = compiled_schema
-
-        # Validate using jsonschema
-        jsonschema.validate(instance=data, schema=json_schema)
+        # compiled_schema is now direct JSON Schema (no wrapper)
+        jsonschema.validate(instance=data, schema=compiled_schema)
 
     except JsonSchemaValidationError as e:
         # Build helpful error message

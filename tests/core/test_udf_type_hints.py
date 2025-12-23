@@ -43,7 +43,7 @@ class TestTypeHintRegistration:
         metadata = get_udf_metadata('process')
         assert metadata['schema'] is not None
         assert metadata['schema']['name'] == 'Input'
-        assert metadata['compiled_schemas'] is not None
+        assert metadata['json_schema'] is not None
 
     def test_register_with_output_type(self):
         """UDF with output_type should store output schema."""
@@ -60,7 +60,7 @@ class TestTypeHintRegistration:
         metadata = get_udf_metadata('process')
         assert metadata['output_schema'] is not None
         assert metadata['output_schema']['name'] == 'Output'
-        assert metadata['compiled_output_schemas'] is not None
+        assert metadata['json_output_schema'] is not None
 
     def test_register_with_dataclass(self):
         """UDF with dataclass input_type should work."""

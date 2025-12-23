@@ -352,3 +352,45 @@ def _nested_to_json_schema(unified_schema: Dict[str, Any]) -> Dict[str, Any]:
         result['required'] = required
 
     return result
+
+
+def unified_to_json_schema(unified_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Convert unified schema format to standard JSON Schema.
+
+    Used by UDF validation system for direct jsonschema.validate() calls.
+
+    Args:
+        unified_schema: Unified format with 'name' and 'fields'
+
+    Returns:
+        Standard JSON Schema dict ready for jsonschema.validate()
+
+    Example:
+        Input:
+        {
+            'name': 'UserInput',
+            'fields': [
+                {'id': 'name', 'type': 'string', 'required': True},
+                {'id': 'age', 'type': 'integer', 'required': False}
+            ]
+        }
+
+        Output:
+        {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string'},
+                'age': {'type': 'integer'}
+            },
+            'required': ['name'],
+            'additionalProperties': False
+        }
+    """
+    # Leverage existing _nested_to_json_schema for core conversion
+    json_schema = _nested_to_json_schema(unified_schema)
+
+    # Add additionalProperties: false (required by UDF validation)
+    json_schema['additionalProperties'] = False
+
+    return json_schema

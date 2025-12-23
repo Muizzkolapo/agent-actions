@@ -15,11 +15,12 @@ Example:
     # {'name': 'UserInput', 'fields': [{'id': 'name', 'type': 'string', 'required': True}, ...]}
 """
 
-from .converters import derive_schema_from_type
+from .converters import derive_schema_from_type, unified_to_json_schema
 from .detector import detect_type_category, is_typeddict, TypeCategory, HAS_PYDANTIC
 
 __all__ = [
     'derive_schema_from_type',
+    'unified_to_json_schema',
     'detect_type_category',
     'is_typeddict',
     'TypeCategory',
