@@ -245,11 +245,17 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     total_prompts = catalog['stats']['total_prompts']
     total_schemas = catalog['stats']['total_schemas']
 
+    # Show path relative to CWD if possible, otherwise absolute
+    try:
+        display_path = output_dir.relative_to(Path.cwd())
+    except ValueError:
+        display_path = output_dir
+
     print(f"\nBuilding catalog")
     print(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
     print(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
     print(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
     print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
-    print(f"\nDone. Documentation compiled to artefact/")
+    print(f"\nDone. Documentation compiled to {display_path}/")
 
     return True
