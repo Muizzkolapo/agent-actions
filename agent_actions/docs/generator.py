@@ -87,8 +87,25 @@ class CatalogGenerator:
 
         return enriched
 
-    def generate(self, prompts_data: Optional[Dict[str, Any]] = None, schemas_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def generate(
+        self,
+        prompts_data: Optional[Dict[str, Any]] = None,
+        schemas_data: Optional[Dict[str, Any]] = None,
+        tool_functions_data: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Generate the complete catalog structure."""
+        # Initialize prompts with used_by tracking
+        prompts_with_refs = {}
+        for prompt_name, prompt_data in (prompts_data or {}).items():
+            prompts_with_refs[prompt_name] = prompt_data.copy()
+            prompts_with_refs[prompt_name]['used_by'] = []
+
+        # Initialize schemas with used_by tracking
+        schemas_with_refs = {}
+        for schema_name, schema_data in (schemas_data or {}).items():
+            schemas_with_refs[schema_name] = schema_data.copy()
+            schemas_with_refs[schema_name]['used_by'] = []
+
         catalog = {
             'metadata': {
                 'generated_at': datetime.now().isoformat(),
@@ -96,15 +113,18 @@ class CatalogGenerator:
                 'generator_version': '1.0.0'
             },
             'workflows': {},
-            'prompts': prompts_data or {},
-            'schemas': schemas_data or {},
+            'actions': {},  # Flattened index for faster lookup
+            'prompts': prompts_with_refs,
+            'schemas': schemas_with_refs,
+            'tool_functions': tool_functions_data or {},
             'stats': {
                 'total_workflows': 0,
                 'total_actions': 0,
                 'llm_actions': 0,
                 'tool_actions': 0,
                 'total_prompts': 0,
-                'total_schemas': 0
+                'total_schemas': 0,
+                'total_tool_functions': 0
             }
         }
 
@@ -125,15 +145,42 @@ class CatalogGenerator:
 
             # Merge dependencies and enrich actions with field information
             enriched_actions = {}
+            workflow_id = workflow_name
+
             for action_name, action in workflow['actions'].items():
-                # Dependencies are already in action definition now
-                # action['dependencies'] = action.get('dependencies', []) 
-                
                 # Enrich with input/output fields for lineage
-                enriched_actions[action_name] = self._enrich_action_with_fields(action)
+                enriched_action = self._enrich_action_with_fields(action)
+
+                # Attach tool function details for tool actions
+                if action.get('type') == 'tool' and tool_functions_data:
+                    impl_name = action.get('implementation')
+                    if impl_name and impl_name in tool_functions_data:
+                        enriched_action['tool_function'] = tool_functions_data[impl_name]
+
+                enriched_actions[action_name] = enriched_action
+
+                # Add to flattened actions index with workflow reference
+                action_with_workflow = enriched_action.copy()
+                action_with_workflow['workflow_id'] = workflow_id
+                catalog['actions'][f"{workflow_id}.{action_name}"] = action_with_workflow
+
+                # Track prompt-to-action relationships
+                prompt_ref = action.get('prompt')
+                if prompt_ref and prompt_ref in catalog['prompts']:
+                    catalog['prompts'][prompt_ref]['used_by'].append({
+                        'workflow': workflow_id,
+                        'action': action_name
+                    })
+
+                # Track schema-to-action relationships
+                schema_ref = action.get('schema')
+                if schema_ref and isinstance(schema_ref, str) and schema_ref in catalog['schemas']:
+                    catalog['schemas'][schema_ref]['used_by'].append({
+                        'workflow': workflow_id,
+                        'action': action_name
+                    })
 
             # Create workflow entry
-            workflow_id = workflow_name
             catalog['workflows'][workflow_id] = {
                 'id': workflow_id,
                 'name': workflow['name'],
@@ -164,9 +211,10 @@ class CatalogGenerator:
                 if action.get('prompt') or (action.get('type') == 'llm' and action.get('intent')):
                     actions_with_prompts += 1
 
-        # Update global stats for schemas and prompts
+        # Update global stats for schemas, prompts, and tool functions
         catalog['stats']['total_schemas'] = len(schemas_data) if schemas_data else 0
         catalog['stats']['total_prompts'] = len(prompts_data) if prompts_data else 0
+        catalog['stats']['total_tool_functions'] = len(tool_functions_data) if tool_functions_data else 0
 
         return catalog
 
@@ -218,9 +266,16 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     # Step 1c: Scan schemas
     schemas_data = scanner.scan_schemas()
 
+    # Step 1d: Scan tool functions
+    tool_functions_data = scanner.scan_tool_functions()
+
     # Step 2: Generate catalog
     catalog_gen = CatalogGenerator(workflows_data, project_path=project_path)
-    catalog = catalog_gen.generate(prompts_data=prompts_data, schemas_data=schemas_data)
+    catalog = catalog_gen.generate(
+        prompts_data=prompts_data,
+        schemas_data=schemas_data,
+        tool_functions_data=tool_functions_data
+    )
 
     # Step 3: Write data files
     # Ensure output directory exists
@@ -244,6 +299,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     total_actions = catalog['stats']['total_actions']
     total_prompts = catalog['stats']['total_prompts']
     total_schemas = catalog['stats']['total_schemas']
+    total_tool_functions = catalog['stats']['total_tool_functions']
 
     # Show path relative to CWD if possible, otherwise absolute
     try:
@@ -256,6 +312,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     print(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
     print(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
     print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
+    print(f"  Indexed {total_tool_functions} tool function{'s' if total_tool_functions != 1 else ''}")
     print(f"\nDone. Documentation compiled to {display_path}/")
 
     return True

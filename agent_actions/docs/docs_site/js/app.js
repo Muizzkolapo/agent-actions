@@ -2461,10 +2461,10 @@ function showRunDetails(run) {
 
         ${run.error_message ? `
         <div class="section-header">
-            <h3>Error Message</h3>
+            <h3>Error / Exception</h3>
         </div>
-        <div style="background: #fee; border-left: 3px solid #dc2626; padding: 1rem; margin-bottom: 2rem; border-radius: 4px;">
-            <code style="color: #dc2626; white-space: pre-wrap; word-break: break-word; font-size: 0.875rem; line-height: 1.5;">${run.error_message}</code>
+        <div style="background: #fee; border-left: 3px solid #dc2626; padding: 1rem; margin-bottom: 2rem; border-radius: 4px; max-height: 400px; overflow-y: auto;">
+            <pre style="color: #dc2626; white-space: pre-wrap; word-break: break-word; font-size: 0.8rem; line-height: 1.5; margin: 0; font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;">${escapeHtml(run.error_message)}</pre>
         </div>
         ` : ''}
 
@@ -2606,12 +2606,34 @@ function renderActionDetails(action, workflowsUsingAction) {
     configSection.innerHTML = `<h2>Configuration</h2>`;
 
     if (action.type === 'llm') {
-        const schemaRef = action.schema && typeof action.schema === 'object' ? action.schema.reference : action.schema;
-        configSection.innerHTML += `
-            <p><strong>Model:</strong> <code>${action.model}</code></p>
-            ${schemaRef ? `<p><strong>Schema:</strong> <code>${schemaRef || 'inline'}</code></p>` : ''}
-            ${action.prompt ? `<p><strong>Prompt:</strong> <code>${action.prompt.reference || 'inline'}</code></p>` : ''}
-        `;
+        const isInlineSchema = action.schema && typeof action.schema === 'object';
+        const schemaRef = isInlineSchema ? null : action.schema;
+        const isInlinePrompt = action.prompt && typeof action.prompt === 'string';
+        const promptRef = isInlinePrompt ? null : (action.prompt?.reference || null);
+
+        configSection.innerHTML += `<p><strong>Model:</strong> <code>${action.model}</code></p>`;
+
+        // Schema - reference link or inline content
+        if (schemaRef) {
+            configSection.innerHTML += `<p><strong>Schema:</strong> <a href="#" class="schema-link" data-schema="${schemaRef}" style="color: var(--primary); text-decoration: none; font-family: monospace;">${schemaRef}</a></p>`;
+        } else if (isInlineSchema) {
+            configSection.innerHTML += `
+                <div style="margin: 1rem 0;">
+                    <p style="margin-bottom: 0.5rem;"><strong>Schema:</strong> <span class="badge badge-info">inline</span></p>
+                    <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 300px; font-size: 0.85rem; line-height: 1.4; margin-top: 0.5rem;">${escapeHtml(JSON.stringify(action.schema, null, 2))}</pre>
+                </div>`;
+        }
+
+        // Prompt - reference link or inline content
+        if (promptRef) {
+            configSection.innerHTML += `<p><strong>Prompt:</strong> <a href="#" class="prompt-link" data-prompt="${promptRef}" style="color: var(--primary); text-decoration: none; font-family: monospace;">${promptRef}</a></p>`;
+        } else if (isInlinePrompt) {
+            configSection.innerHTML += `
+                <div style="margin: 1rem 0;">
+                    <p style="margin-bottom: 0.5rem;"><strong>Prompt:</strong> <span class="badge badge-info">inline</span></p>
+                    <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto; max-height: 500px; font-size: 0.85rem; line-height: 1.4; white-space: pre-wrap; margin-top: 0.5rem;">${escapeHtml(action.prompt)}</pre>
+                </div>`;
+        }
     } else {
         configSection.innerHTML += `
             <p><strong>Implementation:</strong> <code>${action.impl}</code></p>
@@ -2621,9 +2643,92 @@ function renderActionDetails(action, workflowsUsingAction) {
     }
     container.appendChild(configSection);
 
+    // Add click handlers for schema and prompt links
+    configSection.querySelectorAll('.schema-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const schemaId = link.dataset.schema;
+            showSchema(schemaId);
+        });
+    });
+    configSection.querySelectorAll('.prompt-link').forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const promptId = link.dataset.prompt;
+            showPrompt(promptId);
+        });
+    });
+
     // Tool function source code section (for tool actions)
     if (action.type === 'tool' && action.tool_function && action.tool_function.found) {
         const toolFunc = action.tool_function;
+
+        // File location header with UDF badge
+        const locationSection = document.createElement('div');
+        locationSection.className = 'action-detail-section';
+        locationSection.innerHTML = `
+            <h2>Tool Implementation ${toolFunc.is_udf ? '<span class="badge badge-primary" style="font-size: 0.7rem; margin-left: 0.5rem;">UDF</span>' : ''}</h2>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">
+                <strong>File:</strong> ${escapeHtml(toolFunc.file_path)}:${toolFunc.line_start}-${toolFunc.line_end}
+            </p>
+        `;
+        container.appendChild(locationSection);
+
+        // UDF Input Schema section
+        if (toolFunc.is_udf && toolFunc.input_schema && toolFunc.input_schema.fields) {
+            const inputSection = document.createElement('div');
+            inputSection.className = 'action-detail-section';
+            const fieldsRows = toolFunc.input_schema.fields.map(field => `
+                <tr>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);"><code>${escapeHtml(field.name)}</code></td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color); color: var(--text-muted);">${escapeHtml(field.type)}</td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">${field.required ? '<span class="badge badge-warning" style="font-size: 0.65rem;">required</span>' : '<span style="color: var(--text-muted);">optional</span>'}</td>
+                </tr>
+            `).join('');
+            inputSection.innerHTML = `
+                <h2>Input Schema <span style="font-weight: normal; color: var(--text-muted); font-size: 0.85rem;">(${escapeHtml(toolFunc.input_schema.name)})</span></h2>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 2px solid var(--border-color);">
+                            <th style="padding: 0.5rem;">Field</th>
+                            <th style="padding: 0.5rem;">Type</th>
+                            <th style="padding: 0.5rem;">Required</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${fieldsRows}
+                    </tbody>
+                </table>
+            `;
+            container.appendChild(inputSection);
+        }
+
+        // UDF Output Schema section
+        if (toolFunc.is_udf && toolFunc.output_schema && toolFunc.output_schema.fields) {
+            const outputSection = document.createElement('div');
+            outputSection.className = 'action-detail-section';
+            const fieldsRows = toolFunc.output_schema.fields.map(field => `
+                <tr>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);"><code>${escapeHtml(field.name)}</code></td>
+                    <td style="padding: 0.5rem; border-bottom: 1px solid var(--border-color); color: var(--text-muted);">${escapeHtml(field.type)}</td>
+                </tr>
+            `).join('');
+            outputSection.innerHTML = `
+                <h2>Output Schema <span style="font-weight: normal; color: var(--text-muted); font-size: 0.85rem;">(${escapeHtml(toolFunc.output_schema.name)})</span></h2>
+                <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                    <thead>
+                        <tr style="text-align: left; border-bottom: 2px solid var(--border-color);">
+                            <th style="padding: 0.5rem;">Field</th>
+                            <th style="padding: 0.5rem;">Type</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${fieldsRows}
+                    </tbody>
+                </table>
+            `;
+            container.appendChild(outputSection);
+        }
 
         // Docstring section
         if (toolFunc.docstring) {

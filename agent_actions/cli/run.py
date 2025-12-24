@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 import asyncio
+import traceback
 import click
 
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
@@ -157,7 +158,8 @@ class RunCommand:  # pylint: disable=too-few-public-methods
 
         except Exception as e:  # pylint: disable=broad-exception-caught
             status = 'FAILED'
-            error_message = str(e)
+            # Capture full traceback for better debugging (like Airflow)
+            error_message = traceback.format_exc()
             raise  # Re-raise to maintain existing error handling
 
         finally:

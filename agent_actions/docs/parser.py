@@ -60,6 +60,22 @@ class WorkflowParser:
             if 'context_scope' in action_data:
                 action['context_scope'] = action_data['context_scope']
 
+            # Extract additional action configuration fields
+            action['granularity'] = action_data.get('granularity')  # RECORD or FILE
+            action['guard'] = action_data.get('guard')              # Conditional execution
+            action['drops'] = action_data.get('drops', [])          # Fields excluded from prompt
+            action['observe'] = action_data.get('observe', [])      # Pass-through fields
+            action['policy'] = action_data.get('policy')            # Execution policy
+            action['few_shot'] = action_data.get('few_shot')        # Few-shot example count
+            action['prompt'] = action_data.get('prompt')            # Prompt reference
+            action['idempotency_key'] = action_data.get('idempotency_key')
+
+            # Loop configuration
+            if 'loop' in action_data:
+                action['loop'] = action_data['loop']  # {param, range, mode}
+            if 'loop_consumption' in action_data:
+                action['loop_consumption'] = action_data['loop_consumption']
+
             workflow['actions'][action_name] = action
 
         return workflow
