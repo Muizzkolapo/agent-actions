@@ -2,10 +2,9 @@
 Project scanner for finding workflow files and prompts.
 """
 import ast
-import inspect
+import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-import re
 
 
 class ProjectScanner:
@@ -134,7 +133,8 @@ class ProjectScanner:
         Returns:
             Dict mapping schema names to schema data
         """
-        from .parser import WorkflowParser
+        # Import here to avoid circular import
+        from .parser import WorkflowParser  # pylint: disable=import-outside-toplevel
 
         schemas = {}
         schema_dir = self.project_root / 'schema'
@@ -165,6 +165,7 @@ class ProjectScanner:
 
         return schemas
 
+    # pylint: disable=too-many-nested-blocks
     def scan_tool_functions(self) -> Dict[str, Any]:
         """
         Scan project directory for tool function implementations.
@@ -231,6 +232,7 @@ class ProjectScanner:
 
         return tool_functions
 
+    # pylint: disable=too-many-nested-blocks
     def _extract_typed_dicts(self, tree: ast.AST) -> Dict[str, List[Dict[str, str]]]:
         """
         Extract TypedDict class definitions from AST.
@@ -284,6 +286,7 @@ class ProjectScanner:
 
         return typed_dicts
 
+    # pylint: disable=too-many-locals,too-many-branches
     def _extract_function_details(
         self,
         node: ast.FunctionDef,
@@ -381,5 +384,5 @@ class ProjectScanner:
 
             return result
 
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return None

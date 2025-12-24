@@ -1,9 +1,10 @@
 """
 Workflow YAML parser for documentation generation.
 """
-import yaml
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
+
+import yaml
 
 
 class WorkflowParser:
@@ -13,12 +14,12 @@ class WorkflowParser:
     def parse_workflow(yaml_path: str) -> Optional[Dict[str, Any]]:
         """Parse a workflow YAML file and extract all relevant information."""
         try:
-            with open(yaml_path, 'r') as f:
+            with open(yaml_path, 'r', encoding='utf-8') as f:
                 data = yaml.safe_load(f)
         except yaml.YAMLError as e:
             print(f"  ⚠ Warning: YAML parsing error - {e}")
             return None
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught
             print(f"  ⚠ Warning: Error reading file - {e}")
             return None
 
@@ -83,7 +84,7 @@ class WorkflowParser:
 
 
     @staticmethod
-    def load_schema(schema_name: str, schema_dir: Path) -> Optional[Dict[str, Any]]:
+    def load_schema(schema_name: str, schema_dir: Path) -> Optional[Dict[str, Any]]:  # pylint: disable=too-many-locals
         """
         Load and parse a schema YAML file.
 
@@ -100,9 +101,9 @@ class WorkflowParser:
             return None
 
         try:
-            with open(schema_file, 'r') as f:
+            with open(schema_file, 'r', encoding='utf-8') as f:
                 schema_data = yaml.safe_load(f)
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught
             return None
 
         # Extract field information from schema
@@ -113,7 +114,12 @@ class WorkflowParser:
         if 'fields' in schema_data and isinstance(schema_data['fields'], list):
             for field_def in schema_data['fields']:
                 # Nested format: {id, type: array, items: {properties: {...}}}
-                if field_def.get('type') == 'array' and 'items' in field_def and 'properties' in field_def['items']:
+                is_nested_array = (
+                    field_def.get('type') == 'array'
+                    and 'items' in field_def
+                    and 'properties' in field_def['items']
+                )
+                if is_nested_array:
                     items = field_def['items']
                     required_fields = items.get('required', [])
                     for prop_name, prop_def in items['properties'].items():

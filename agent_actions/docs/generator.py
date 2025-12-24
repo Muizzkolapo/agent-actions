@@ -10,7 +10,7 @@ from .parser import WorkflowParser
 from .scanner import ProjectScanner
 
 
-class CatalogGenerator:
+class CatalogGenerator:  # pylint: disable=too-few-public-methods
     """Generate catalog.json from workflows."""
 
     def __init__(self, workflows_data: Dict[str, Dict], project_path: Optional[str] = None):
@@ -87,6 +87,7 @@ class CatalogGenerator:
 
         return enriched
 
+    # pylint: disable=too-many-locals,too-many-branches
     def generate(
         self,
         prompts_data: Optional[Dict[str, Any]] = None,
@@ -214,12 +215,14 @@ class CatalogGenerator:
         # Update global stats for schemas, prompts, and tool functions
         catalog['stats']['total_schemas'] = len(schemas_data) if schemas_data else 0
         catalog['stats']['total_prompts'] = len(prompts_data) if prompts_data else 0
-        catalog['stats']['total_tool_functions'] = len(tool_functions_data) if tool_functions_data else 0
+        catalog['stats']['total_tool_functions'] = (
+            len(tool_functions_data) if tool_functions_data else 0
+        )
 
         return catalog
 
 
-class RunsGenerator:
+class RunsGenerator:  # pylint: disable=too-few-public-methods
     """Initialize runs data structure."""
 
     @staticmethod
@@ -241,7 +244,7 @@ class RunsGenerator:
         return runs
 
 
-def generate_docs(project_path: str, output_dir: Path) -> bool:
+def generate_docs(project_path: str, output_dir: Path) -> bool:  # pylint: disable=too-many-locals
     """
     Main entry point for docs generation.
 
@@ -283,7 +286,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
 
     # Write catalog.json
     catalog_path = output_dir / 'catalog.json'
-    with open(catalog_path, 'w') as f:
+    with open(catalog_path, 'w', encoding='utf-8') as f:
         json.dump(catalog, f, indent=2)
 
     # Initialize runs.json only if it doesn't exist
@@ -291,7 +294,7 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     runs_path = output_dir / 'runs.json'
     if not runs_path.exists():
         runs = RunsGenerator.initialize_empty()
-        with open(runs_path, 'w') as f:
+        with open(runs_path, 'w', encoding='utf-8') as f:
             json.dump(runs, f, indent=2)
 
     # Print summary
@@ -307,12 +310,13 @@ def generate_docs(project_path: str, output_dir: Path) -> bool:
     except ValueError:
         display_path = output_dir
 
-    print(f"\nBuilding catalog")
+    print("\nBuilding catalog")
     print(f"  Found {total_workflows} workflow{'s' if total_workflows != 1 else ''}")
     print(f"  Compiled {total_actions} action{'s' if total_actions != 1 else ''}")
     print(f"  Discovered {total_prompts} prompt{'s' if total_prompts != 1 else ''}")
     print(f"  Loaded {total_schemas} schema{'s' if total_schemas != 1 else ''}")
-    print(f"  Indexed {total_tool_functions} tool function{'s' if total_tool_functions != 1 else ''}")
+    func_suffix = 's' if total_tool_functions != 1 else ''
+    print(f"  Indexed {total_tool_functions} tool function{func_suffix}")
     print(f"\nDone. Documentation compiled to {display_path}/")
 
     return True

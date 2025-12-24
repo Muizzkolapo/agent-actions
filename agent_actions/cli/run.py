@@ -156,7 +156,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                     'Run again to check status and continue.'
                 )
 
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught
             status = 'FAILED'
             # Capture full traceback for better debugging (like Airflow)
             error_message = traceback.format_exc()
