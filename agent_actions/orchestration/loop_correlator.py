@@ -148,7 +148,7 @@ class LoopOutputCorrelator:
                 corrupted_files.append(str(json_file.name))
                 continue
             except Exception as e:
-                logger.error(
+                logger.exception(
                     "Unexpected error loading loop output file",
                     extra={
                         'operation': 'load_loop_outputs',
@@ -156,8 +156,7 @@ class LoopOutputCorrelator:
                         'output_dir': str(output_dir),
                         'error': str(e),
                         'error_type': type(e).__name__
-                    },
-                    exc_info=True
+                    }
                 )
                 corrupted_files.append(str(json_file.name))
                 continue
@@ -220,7 +219,7 @@ class LoopOutputCorrelator:
                 corrupted_files.append(str(json_file.name))
                 continue
             except Exception as e:
-                logger.error(
+                logger.exception(
                     "Unexpected error loading loop output file",
                     extra={
                         'operation': 'load_loop_outputs_with_filenames',
@@ -228,8 +227,7 @@ class LoopOutputCorrelator:
                         'output_dir': str(output_dir),
                         'error': str(e),
                         'error_type': type(e).__name__
-                    },
-                    exc_info=True
+                    }
                 )
                 corrupted_files.append(str(json_file.name))
                 continue

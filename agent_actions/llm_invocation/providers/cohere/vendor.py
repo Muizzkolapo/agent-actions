@@ -68,7 +68,7 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             )
             return [response_message]
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Cohere non-JSON API call failed",
                 extra={
                     "operation": "cohere_call_non_json",
@@ -76,7 +76,6 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                exc_info=True,
             )
             raise VendorAPIError(
                 f"Cohere non-JSON API call failed: {e}",

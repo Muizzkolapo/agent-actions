@@ -215,10 +215,9 @@ class CLI:  # pylint: disable=too-few-public-methods
 
             # Only log details in debug mode
             if '--debug' in (argv or []):
-                self.logger.error(
+                self.logger.exception(
                     'CLI execution failed',
-                    extra={'error': str(e)},
-                    exc_info=True
+                    extra={'error': str(e)}
                 )
                 self.logger.debug("Debug Information:")
                 self.logger.debug("Exception Chain:")

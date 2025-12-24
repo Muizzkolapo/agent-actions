@@ -85,6 +85,8 @@ dev-dependencies = [
     "pytest-mock>=3.15.1",
     "pytest-benchmark>=5.1.0",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.8.0",
+    "pre-commit>=3.6.0",
 ]
 
 [tool.mypy]
@@ -130,3 +132,19 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = "agent_actions.vendors.*"
 ignore_errors = true
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "LOG",  # flake8-logging rules
+    "G",    # flake8-logging-format rules
+]
+ignore = [
+    "G004",  # Allow f-strings in logging (project standard)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["LOG", "G"]

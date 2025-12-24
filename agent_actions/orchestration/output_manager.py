@@ -125,7 +125,7 @@ class AgentOutputManager:
                             )
                             agent_output['passthrough_reason'] = 'Unknown'
                         except Exception as e:
-                            logger.error(
+                            logger.exception(
                                 "Unexpected error reading passthrough marker",
                                 extra={
                                     'operation': 'read_passthrough_marker',
@@ -133,8 +133,7 @@ class AgentOutputManager:
                                     'agent': prev_agent_name,
                                     'error': str(e),
                                     'error_type': type(e).__name__
-                                },
-                                exc_info=True
+                                }
                             )
                             agent_output['passthrough_reason'] = 'Unknown'
 
@@ -157,7 +156,7 @@ class AgentOutputManager:
                             )
                             agent_output['skip_reason'] = 'Unknown'
                         except Exception as e:
-                            logger.error(
+                            logger.exception(
                                 "Unexpected error reading skip marker",
                                 extra={
                                     'operation': 'read_skip_marker',
@@ -165,8 +164,7 @@ class AgentOutputManager:
                                     'agent': prev_agent_name,
                                     'error': str(e),
                                     'error_type': type(e).__name__
-                                },
-                                exc_info=True
+                                }
                             )
                             agent_output['skip_reason'] = 'Unknown'
 

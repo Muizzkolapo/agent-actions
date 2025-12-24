@@ -52,7 +52,7 @@ class OperatorRegistry:
                             name, e,
                             extra={
                                 'operator_class': name,
-                                'module': module.__name__ if hasattr(module, '__name__') else 'unknown',
+                                'module_name': module.__name__ if hasattr(module, '__name__') else 'unknown',
                                 'operation': 'operator_discovery'
                             }
                         )

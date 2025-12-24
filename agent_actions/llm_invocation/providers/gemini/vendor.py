@@ -75,7 +75,7 @@ class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             )
             return [response_list]
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Gemini non-JSON API call failed",
                 extra={
                     "operation": "gemini_call_non_json",
@@ -83,7 +83,6 @@ class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                exc_info=True,
             )
             raise VendorAPIError(
                 f"Gemini non-JSON API call failed: {e}",

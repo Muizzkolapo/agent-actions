@@ -1,0 +1,18 @@
+repos:
+  # Ruff linter - fast Python linter with logging rules
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff
+        args: [--select, "LOG,G", --ignore, "G004"]
+
+  # Custom AST-based logging format checker
+  - repo: local
+    hooks:
+      - id: check-logging-format
+        name: Check logging format (AST)
+        description: Detect malformed logging statements with {var} but no f-string prefix
+        entry: uv run python scripts/check_logging_format.py
+        language: system
+        types: [python]
+        pass_filenames: true

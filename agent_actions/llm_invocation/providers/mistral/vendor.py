@@ -70,7 +70,7 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
             )
             return [response_output]
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Mistral non-JSON API call failed",
                 extra={
                     "operation": "mistral_call_non_json",
@@ -78,7 +78,6 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                exc_info=True,
             )
             raise VendorAPIError(
                 f"Mistral non-JSON API call failed: {e}",

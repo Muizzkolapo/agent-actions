@@ -63,7 +63,7 @@ class JSONResponseMixin:
             )
             return response_data
         except json.JSONDecodeError as e:
-            logger.error(
+            logger.exception(
                 "%s returned invalid JSON",
                 vendor_name,
                 extra={
@@ -73,7 +73,6 @@ class JSONResponseMixin:
                     "error": str(e),
                     "line": e.lineno if hasattr(e, "lineno") else None,
                 },
-                exc_info=True,
             )
             raise VendorAPIError(
                 f"{vendor_name} returned invalid JSON: {e}",
@@ -114,7 +113,6 @@ class GenericErrorHandlerMixin:
                 "error": str(error),
                 "error_type": type(error).__name__,
             },
-            exc_info=True,
         )
         raise VendorAPIError(
             f"{vendor_name} API call failed: {error}",

@@ -618,7 +618,7 @@ class AgentWorkflow:
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
-            logger.error(
+            logger.exception(
                 "Workflow failed (async)",
                 extra={
                     'operation': 'workflow_failed_async',
@@ -627,8 +627,7 @@ class AgentWorkflow:
                     'agent_count': len(self.execution_order),
                     'error': str(e),
                     'error_type': type(e).__name__
-                },
-                exc_info=True
+                }
             )
             self._handle_workflow_error(e)
             raise

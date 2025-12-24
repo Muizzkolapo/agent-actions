@@ -191,9 +191,24 @@ tasks:
     cmds:
       - uv run mypy {{.PACKAGE}}
 
+  lint:ruff:
+    desc: Run ruff linter (logging rules)
+    cmds:
+      - uv run ruff check {{.PACKAGE}}
+
+  lint:ruff:fix:
+    desc: Run ruff with auto-fix
+    cmds:
+      - uv run ruff check --fix {{.PACKAGE}}
+
+  lint:logging:
+    desc: Check logging format patterns with AST checker
+    cmds:
+      - uv run python scripts/check_logging_format.py {{.PACKAGE}}
+
   check:
-    desc: Run all checks (lint and type check)
-    deps: [lint, mypy]
+    desc: Run all checks (lint, ruff, logging, and type check)
+    deps: [lint, lint:ruff, lint:logging, mypy]
 
   # Utility tasks
   deps:tree:
@@ -216,6 +231,17 @@ tasks:
     desc: Show agent CLI help
     cmds:
       - uv run agent --help
+
+  # Pre-commit hooks
+  hooks:install:
+    desc: Install pre-commit hooks
+    cmds:
+      - uv run pre-commit install
+
+  hooks:run:
+    desc: Run all pre-commit hooks on all files
+    cmds:
+      - uv run pre-commit run --all-files
 
   # Default task
   default:

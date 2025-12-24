@@ -79,27 +79,25 @@ class ValidationInterceptor(ResponseInterceptor):
             merged_kwargs = {**self.validator_args, **context}
             success, error_message = validator_func(response, **merged_kwargs)
         except (ConfigurationError, AgentActionsException) as e:
-            logger.error(
+            logger.exception(
                 "Error loading or executing validator function",
                 extra={
                     'operation': 'validation_error',
                     'validator_function': self.validator_function,
                     'error': str(e),
                     'error_type': type(e).__name__
-                },
-                exc_info=True
+                }
             )
             success, error_message = (False, f'Validator function error: {str(e)}')
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Unexpected error during validation",
                 extra={
                     'operation': 'validation_unexpected_error',
                     'validator_function': self.validator_function,
                     'error': str(e),
                     'error_type': type(e).__name__
-                },
-                exc_info=True
+                }
             )
             success, error_message = (False, f'Unexpected validation error: {str(e)}')
 

@@ -580,7 +580,7 @@ class AgentExecutor:
 
         except Exception as e:
             duration = (datetime.now() - start_time).total_seconds()
-            logger.error(
+            logger.exception(
                 "Async agent execution failed",
                 extra={
                     'operation': 'execute_agent_run_async',
@@ -590,8 +590,7 @@ class AgentExecutor:
                     'is_last_agent': is_last_agent,
                     'error': str(e),
                     'error_type': type(e).__name__
-                },
-                exc_info=True
+                }
             )
             self.console.print(f'  [red]✗ {agent_name} failed: {e}[/red]')
             self.state_manager.update_status(agent_name, 'failed')
