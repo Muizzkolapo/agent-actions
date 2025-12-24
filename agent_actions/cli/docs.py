@@ -34,7 +34,13 @@ def generate(output: str):
     """
     # Use current working directory as project path
     project_path = Path.cwd()
+
+    # Resolve output_dir relative to project path if not absolute
     output_dir = Path(output)
+    if not output_dir.is_absolute():
+        output_dir = (project_path / output_dir).resolve()
+    else:
+        output_dir = output_dir.resolve()
 
     success = generate_docs(str(project_path), output_dir)
 
@@ -46,7 +52,9 @@ def generate(output: str):
 @docs.command()
 @click.option('--port', '-p', default=8000,
               help='Port to run server on (default: 8000)')
-def serve(port: int):
+@click.option('--artefact', '-a', default=None,
+              help='Path to artefact directory (default: ./artefact)')
+def serve(port: int, artefact: str):
     """
     Start HTTP server to view documentation.
 
@@ -57,8 +65,9 @@ def serve(port: int):
     Examples:
         agent-actions docs serve
         agent-actions docs serve --port 3000
+        agent-actions docs serve --artefact ./my-docs
     """
-    success = serve_docs(port)
+    success = serve_docs(port, artefact_path=artefact)
     if not success:
         raise click.Abort()
 

@@ -65,3 +65,6 @@ pdoc_docs/
 Taskfile.yml
 artefact/
 .agent-actions/
+
+# Ignore docs_site artefact symlink (created by docs serve, should never be committed)
+agent_actions/docs/docs_site/artefact

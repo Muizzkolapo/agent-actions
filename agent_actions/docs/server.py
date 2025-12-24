@@ -1,82 +1,115 @@
 """
 Documentation HTTP server.
+
+Serves static files from the docs_site package directory and data files
+from the user's project artefact directory without modifying the package.
 """
-import sys
-import os
-import subprocess
-import shutil
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+from functools import partial
 from pathlib import Path
+from typing import Optional
+import urllib.parse
 
 
-def serve_docs(port: int = 8000) -> bool:
+class DocsRequestHandler(SimpleHTTPRequestHandler):
+    """
+    HTTP handler that serves from two directories:
+    - Static site files from docs_site/ (in package)
+    - Data files from artefact/ (in user's project)
+    """
+
+    def __init__(self, *args, docs_site_dir: Path, artefact_dir: Path, **kwargs):
+        self.docs_site_dir = docs_site_dir
+        self.artefact_dir = artefact_dir
+        # Must set directory before calling super().__init__
+        super().__init__(*args, directory=str(docs_site_dir), **kwargs)
+
+    def translate_path(self, path: str) -> str:
+        """
+        Map URL path to filesystem path.
+
+        - /artefact/* -> user's artefact directory
+        - /* -> docs_site directory (static files)
+        """
+        # Decode URL and remove query string
+        path = urllib.parse.unquote(path)
+        path = path.split('?')[0].split('#')[0]
+        path = path.lstrip('/')
+
+        # Route artefact requests to user's directory
+        if path.startswith('artefact/') or path == 'artefact':
+            relative = path[len('artefact'):].lstrip('/')
+            if relative:
+                return str(self.artefact_dir / relative)
+            return str(self.artefact_dir)
+
+        # Route everything else to docs_site
+        if path:
+            return str(self.docs_site_dir / path)
+        return str(self.docs_site_dir)
+
+    def log_message(self, format, *args):
+        """Suppress default logging for cleaner output."""
+        pass
+
+
+def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
     """
     Start HTTP server to serve documentation.
 
     Args:
         port: Port number to serve on
+        artefact_path: Path to artefact directory (defaults to ./artefact)
 
     Returns:
         True if started successfully
     """
-    # Find docs_site directory (in docs package)
+    # Find docs_site directory (in package)
     docs_site_dir = Path(__file__).parent / 'docs_site'
 
     if not docs_site_dir.exists():
-        print("❌ Error: docs_site directory not found!")
+        print("Error: docs_site directory not found!")
         print(f"   Expected at: {docs_site_dir}")
         return False
 
-    # Check if artefact/ exists in current working directory
-    artefact_dir = Path.cwd() / 'artefact'
+    # Find artefact directory (in user's project)
+    if artefact_path:
+        artefact_dir = Path(artefact_path)
+        if not artefact_dir.is_absolute():
+            artefact_dir = (Path.cwd() / artefact_dir).resolve()
+        else:
+            artefact_dir = artefact_dir.resolve()
+    else:
+        artefact_dir = Path.cwd() / 'artefact'
+
     if not artefact_dir.exists():
-        print("❌ Error: artefact/ directory not found!")
+        print("Error: artefact/ directory not found!")
         print("   Run 'agac docs generate' first.\n")
         return False
 
-    # Check if data files exist
+    # Check for required data files
     catalog_path = artefact_dir / 'catalog.json'
     runs_path = artefact_dir / 'runs.json'
 
     if not catalog_path.exists() or not runs_path.exists():
-        print("❌ Error: Data files not found in artefact/")
+        print("Error: Data files not found in artefact/")
         print("   Run 'agac docs generate' first.\n")
         return False
 
-    # Create symlink or copy artefact/ into docs_site/ so the web server can access it
-    docs_artefact_link = docs_site_dir / 'artefact'
-
-    # Remove existing symlink/directory if it exists
-    if docs_artefact_link.exists() or docs_artefact_link.is_symlink():
-        if docs_artefact_link.is_symlink():
-            docs_artefact_link.unlink()
-        elif docs_artefact_link.is_dir():
-            shutil.rmtree(docs_artefact_link)
-
-    # Try to create symlink (works on Unix/Mac), fall back to copy on Windows
-    try:
-        os.symlink(artefact_dir, docs_artefact_link)
-    except (OSError, NotImplementedError):
-        # Windows or permission issue - copy instead
-        shutil.copytree(artefact_dir, docs_artefact_link)
+    # Create handler class with bound directories
+    handler = partial(
+        DocsRequestHandler,
+        docs_site_dir=docs_site_dir,
+        artefact_dir=artefact_dir
+    )
 
     print(f"\nServing docs at http://localhost:{port}")
     print("Press Ctrl+C to exit\n")
 
     try:
-        # Start HTTP server from docs_site directory
-        subprocess.run([
-            sys.executable, '-m', 'http.server',
-            str(port),
-            '--directory', str(docs_site_dir)
-        ])
+        with HTTPServer(('', port), handler) as httpd:
+            httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down server...")
-    finally:
-        # Clean up the symlink/copy when server stops
-        if docs_artefact_link.exists() or docs_artefact_link.is_symlink():
-            if docs_artefact_link.is_symlink():
-                docs_artefact_link.unlink()
-            elif docs_artefact_link.is_dir():
-                shutil.rmtree(docs_artefact_link)
 
     return True
