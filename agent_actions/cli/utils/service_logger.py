@@ -78,7 +78,7 @@ class ServiceLogger:
             'operation': operation,
             'error': str(error),
             **context
-        }, exc_info=True)
+        })
 
     @staticmethod
     def log_validation_start(
@@ -138,7 +138,7 @@ class ServiceLogger:
             'target': target,
             'error': str(error),
             **context
-        }, exc_info=True)
+        })
 
     @staticmethod
     def log_file_operation(

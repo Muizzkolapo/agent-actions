@@ -61,7 +61,6 @@ class ErrorHandler:
         # Only log at DEBUG level (to avoid duplicate error logs)
         # The top-level error handler (main.py) will log at ERROR level
         logger.debug("%s: %s", message, str(error), extra=error_details)
-        logger.debug("%s - Full traceback:", message, exc_info=True)
         if error_type:
             raise error_type(f'{message}: {str(error)}', context=context, cause=error)
 

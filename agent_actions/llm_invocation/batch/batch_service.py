@@ -354,12 +354,11 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                     continue
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Catch all exceptions to prevent one status check from breaking entire batch
-                logger.error(
+                logger.exception(
                     "Failed to check batch status for %s (%s): %s",
                     batch_id,
                     file_name,
                     e,
-                    exc_info=True,
                     extra={
                         "batch_id": batch_id,
                         "file_name": file_name,
@@ -434,12 +433,11 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                 processed_files.append(str(output_file))
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Catch all exceptions to prevent one batch from breaking entire processing
-                logger.error(
+                logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,
                     file_name,
                     e,
-                    exc_info=True,
                     extra={
                         "batch_id": batch_id,
                         "file_name": file_name,

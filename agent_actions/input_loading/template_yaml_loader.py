@@ -24,25 +24,24 @@ class TemplateYamlLoader:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
         except FileNotFoundError:
-            logger.error("Template YAML file not found: %s", file_path, exc_info=True)
+            logger.exception("Template YAML file not found: %s", file_path)
             raise
         except PermissionError:
-            logger.error(
-                "Permission denied reading template YAML: %s", file_path, exc_info=True
+            logger.exception(
+                "Permission denied reading template YAML: %s", file_path
             )
             raise
         except (UnicodeDecodeError, IOError):
-            logger.error("Error reading template YAML: %s", file_path, exc_info=True)
+            logger.exception("Error reading template YAML: %s", file_path)
             raise
 
         # Preprocess the content to handle templates
         try:
             processed_content = self._preprocess_templates(content)
         except Exception as e:
-            logger.error(
+            logger.exception(
                 "Error preprocessing template syntax in %s: %s",
                 file_path, e,
-                exc_info=True,
                 extra={'file_path': file_path}
             )
             raise
@@ -51,10 +50,9 @@ class TemplateYamlLoader:
         try:
             return yaml.safe_load(processed_content)
         except yaml.YAMLError as e:
-            logger.error(
+            logger.exception(
                 "YAML parsing error in %s after template preprocessing: %s",
                 file_path, e,
-                exc_info=True,
                 extra={'file_path': file_path}
             )
             raise

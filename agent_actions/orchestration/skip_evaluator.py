@@ -135,7 +135,6 @@ class WhereClauseStrategy(SkipStrategy):
                 logger.warning(
                     "WHERE clause evaluation failed for %s: %s",
                     agent_name, error_msg,
-                    exc_info=True,
                     extra={
                         'agent_name': agent_name,
                         'where_clause': where_clause,
@@ -286,10 +285,9 @@ class SkipEvaluator:
                     return True
             except Exception as e:
                 agent_name = agent_config.get('agent_type', 'unknown')
-                logger.error(
+                logger.exception(
                     "Unexpected error in skip strategy %s for %s: %s",
                     strategy.get_strategy_name(), agent_name, e,
-                    exc_info=True,
                     extra={
                         'agent_name': agent_name,
                         'strategy_name': strategy.get_strategy_name(),
