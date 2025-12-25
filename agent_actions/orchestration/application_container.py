@@ -18,7 +18,9 @@ from agent_actions.configuration.interfaces import (
     IGenerator,
     ISourceDataLoader
 )
-from agent_actions.errors import ConfigValidationError
+from agent_actions.errors import ConfigValidationError, DependencyError
+from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
+from agent_actions.state_management.path_manager import PathManager
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import (
     DependencyContainer,
@@ -117,7 +119,7 @@ class ApplicationContainer:
                 extra={'agent_name': agent_name, 'idx': idx}
             )
             return source_loader
-        except (KeyError, ValueError, AttributeError, TypeError):
+        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             pass
 
         try:
@@ -127,12 +129,13 @@ class ApplicationContainer:
                 extra={'agent_name': agent_name, 'idx': idx}
             )
             return source_loader
-        except (KeyError, ValueError, AttributeError, TypeError):
+        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             logger.debug(
                 "Creating source_loader via processor_factory",
                 extra={'agent_name': agent_name, 'idx': idx}
             )
-            return self.processor_factory.create_source_data_loader(agent_name)
+            path_manager = self.container.get(PathManager)
+            return SourceDataLoader(agent_name=agent_name, path_manager=path_manager)
 
     def _get_data_generator(
         self,
@@ -145,7 +148,7 @@ class ApplicationContainer:
         """Get data generator from container or create manually."""
         try:
             return self.container.get(IGenerator)
-        except (KeyError, ValueError, AttributeError, TypeError):
+        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             dependency_configs = self._get_dependency_configs_for_agent(
                 agent_config, agent_configs
             )
@@ -157,7 +160,7 @@ class ApplicationContainer:
         """Get data processor from container or create manually."""
         try:
             return self.container.get(IDataProcessor)
-        except (KeyError, ValueError, AttributeError, TypeError):
+        except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             return DataProcessor(agent_config)
 
     def create_target_content_processor(

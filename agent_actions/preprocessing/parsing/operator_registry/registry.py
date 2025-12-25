@@ -38,9 +38,10 @@ class OperatorRegistry:
         for module in operator_modules:
             # Get all classes from the module
             for name, obj in inspect.getmembers(module, inspect.isclass):
-                # Skip base classes and check if it's an operator
+                # Skip abstract base classes and check if it's a concrete operator
                 if (issubclass(obj, BaseOperator) and
-                    obj not in [BaseOperator] and
+                    obj is not BaseOperator and
+                    not inspect.isabstract(obj) and
                     not name.startswith('_')):
                     try:
                         # Instantiate and register the operator

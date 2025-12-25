@@ -74,9 +74,6 @@ class AgentWorkflow:
             )
         self._load_configs()
 
-        # Discover UDFs
-        self._discover_udfs()
-
         # Initialize services
         self.services = self._initialize_services()
 
@@ -194,6 +191,9 @@ class AgentWorkflow:
         manager.validate_agent_name()
         manager.check_child_pipeline()
 
+        # Discover UDFs BEFORE expanding actions (which needs UDF metadata)
+        self._discover_udfs()
+
         user_agents = manager.get_user_agents()
         manager.merge_agent_configs(user_agents)
         manager.determine_execution_order()
@@ -282,7 +282,7 @@ class AgentWorkflow:
     def _generate_workflow_session_id(self) -> str:
         """Generate a deterministic yet unique workflow session ID."""
         timestamp = int(time.time())
-        config_content = f'{self.config.constructor_path}:{self.agent_name}'
+        config_content = f'{self.config.paths.constructor_path}:{self.agent_name}'
         config_hash = hashlib.md5(config_content.encode()).hexdigest()[:8]
         return f'workflow_{timestamp}_{config_hash}'
 
@@ -329,7 +329,7 @@ class AgentWorkflow:
         # Assumes: .../workflows/CURRENT/agent_config/current.yml
         # Target:  .../workflows/UPSTREAM/agent_config/upstream.yml
         try:
-            current_config_path = Path(self.config.constructor_path)
+            current_config_path = Path(self.config.paths.constructor_path)
             # .../samples/agent_workflow
             workflows_root = current_config_path.parents[2]
             upstream_config_path = (
@@ -546,7 +546,7 @@ class AgentWorkflow:
 
     def _get_workflows_root(self) -> Path:
         """Get the root directory containing all workflows."""
-        current_config_path = Path(self.config.constructor_path)
+        current_config_path = Path(self.config.paths.constructor_path)
         # Assumes: .../workflows/CURRENT/agent_config/current.yml
         return current_config_path.parents[2]
 

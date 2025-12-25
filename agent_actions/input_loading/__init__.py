@@ -17,8 +17,4 @@ from .text_loader import *
 from .xml_loader import *
 
 # Register loaders after imports to avoid circular dependencies
-def _register_loaders():
-    """Register all loaders with dependency injection."""
-    _registry.register_loader('source_data')(SourceDataLoader)
-
-_register_loaders()
+_registry.register_loader('source_data')(SourceDataLoader)

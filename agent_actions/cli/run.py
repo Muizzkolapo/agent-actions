@@ -77,7 +77,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                 'Using sequential execution (forced via --no-parallel flag)...'
             )
             return False
-        if workflow.action_level_orchestrator.should_use_parallel_execution():
+        if workflow.services.core.action_level_orchestrator.should_use_parallel_execution():
             click.echo('🔀 Using parallel execution (auto-detected)...')
             return True
 

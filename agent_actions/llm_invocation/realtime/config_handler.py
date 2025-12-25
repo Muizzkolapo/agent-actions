@@ -65,39 +65,57 @@ class ConfigManager:
                 },
                 cause=e,
             )
-        try:
-            default_config_data = render_pipeline_with_templates(
-                self.default_path, self.template_dir
-            )
-            self.default_config = yaml.safe_load(default_config_data)
-        except (TemplateRenderingError, ConfigurationError) as e:
-            raise ConfigurationError(
-                "Error rendering or loading default config",
-                context={"config_path": str(self.default_path), "operation": "load_default_config"},
-                cause=e,
-            )
-        except yaml.YAMLError as e:
-            raise ConfigurationError(
-                "Error parsing YAML for default config",
-                context={"config_path": str(self.default_path), "operation": "parse_yaml"},
-                cause=e,
-            )
-        except Exception as e:
-            raise ConfigurationError(
-                "Unexpected error loading default config",
-                context={"config_path": str(self.default_path), "operation": "load_default_config"},
-                cause=e,
-            )
+        # Load default config only if path is provided
+        if self.default_path:
+            try:
+                default_config_data = render_pipeline_with_templates(
+                    self.default_path, self.template_dir
+                )
+                self.default_config = yaml.safe_load(default_config_data)
+            except (TemplateRenderingError, ConfigurationError) as e:
+                raise ConfigurationError(
+                    "Error rendering or loading default config",
+                    context={"config_path": str(self.default_path), "operation": "load_default_config"},
+                    cause=e,
+                )
+            except yaml.YAMLError as e:
+                raise ConfigurationError(
+                    "Error parsing YAML for default config",
+                    context={"config_path": str(self.default_path), "operation": "parse_yaml"},
+                    cause=e,
+                )
+            except Exception as e:
+                raise ConfigurationError(
+                    "Unexpected error loading default config",
+                    context={"config_path": str(self.default_path), "operation": "load_default_config"},
+                    cause=e,
+                )
+        # Resolve tool_path with priority: workflow > default > project config
         user_tool_path = None
         if isinstance(self.user_config, dict):
             user_tool_path = self.user_config.get("tool_path")
         default_tool_path = None
         if isinstance(self.default_config, dict):
             default_tool_path = self.default_config.get("tool_path")
+
+        # Also check project config (agent_actions.yml) as fallback
+        project_tool_path = None
+        try:
+            path_manager = PathManager()
+            project_root = path_manager.get_project_root()
+            project_config = load_project_config(project_root)
+            project_tool_path = project_config.get("tool_path")
+        except Exception:
+            # Silently ignore if project config can't be loaded
+            pass
+
+        # Priority: workflow config > default config > project config
         if user_tool_path is not None:
             self.tool_path = user_tool_path
-        else:
+        elif default_tool_path is not None:
             self.tool_path = default_tool_path
+        else:
+            self.tool_path = project_tool_path
 
     def find_agent_name(self, config: Dict[str, Any]) -> str:
         """

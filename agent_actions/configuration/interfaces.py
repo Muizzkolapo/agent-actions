@@ -230,12 +230,20 @@ class IDataProcessor(IProcessor):
 
     @abstractmethod
     def process_item(
-        self, contents: Dict, generated_data: List[Dict], source_guid: str
+        self,
+        contents: Dict,
+        generated_data: List[Dict],
+        source_guid: str,
+        passthrough_fields: Optional[Dict] = None
     ) -> List[Dict]:
         """Process a single data item."""
 
     async def process_item_async(
-        self, contents: Dict, generated_data: List[Dict], source_guid: str
+        self,
+        contents: Dict,
+        generated_data: List[Dict],
+        source_guid: str,
+        passthrough_fields: Optional[Dict] = None
     ) -> List[Dict]:
         """
         Async version of process_item. Default implementation uses sync version.
@@ -244,10 +252,11 @@ class IDataProcessor(IProcessor):
             contents: Content data to process
             generated_data: Previously generated data
             source_guid: Source identifier
+            passthrough_fields: Optional fields to merge into output
 
         Returns:
             List of processed data items
         """
         return await asyncio.to_thread(
-            self.process_item, contents, generated_data, source_guid
+            self.process_item, contents, generated_data, source_guid, passthrough_fields
         )

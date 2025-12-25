@@ -13,11 +13,6 @@ from agent_actions.errors import (
     DependencyError,
     ConfigurationError
 )
-from agent_actions.input_loading.extractors_source_data_loader import (
-    SourceDataLoader
-)
-from agent_actions.state_management.path_manager import PathManager
-
 T = TypeVar('T')
 
 
@@ -307,15 +302,5 @@ class ProcessorFactory:
                     }
                 )
         return cls(**init_kwargs)
-
-    def create_source_data_loader(self, agent_name: str):
-        """
-        Create a SourceDataLoader with the required agent_name parameter.
-        """
-        path_manager = self.container.get(PathManager)
-        return SourceDataLoader(
-            agent_name=agent_name, path_manager=path_manager
-        )
-
 
 registry = ProcessorRegistry()
