@@ -69,8 +69,16 @@ class StringProcessor:
                 module_name = full_function_name
                 function_name = full_function_name
 
-            if tools_path and tools_path not in sys.path:
-                sys.path.insert(0, str(Path(tools_path).resolve()))
+            if tools_path:
+                tools_path_resolved = Path(tools_path).resolve()
+                # Add tools_path and all subdirectories to sys.path for nested module discovery
+                if str(tools_path_resolved) not in sys.path:
+                    sys.path.insert(0, str(tools_path_resolved))
+                for subdir in tools_path_resolved.rglob('*'):
+                    if subdir.is_dir() and not subdir.name.startswith('_'):
+                        subdir_str = str(subdir)
+                        if subdir_str not in sys.path:
+                            sys.path.insert(0, subdir_str)
 
             module = importlib.import_module(module_name)
             function = getattr(module, function_name)
