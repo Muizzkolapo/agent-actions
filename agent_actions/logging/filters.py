@@ -7,6 +7,7 @@ import re
 from typing import List, Pattern
 
 from agent_actions.logging.context import CorrelationContext
+from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 
 
 class ContextInjectingFilter(logging.Filter):
@@ -23,6 +24,10 @@ class ContextInjectingFilter(logging.Filter):
         batch_id: Identifier for batch operations
         item_id: Identifier for individual item processing
     """
+
+    def __repr__(self) -> str:
+        """Return string representation of filter."""
+        return f'{self.__class__.__name__}()'
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Add context fields to log record.
@@ -118,6 +123,10 @@ class RedactingFilter(logging.Filter):
                 # Skip invalid patterns
                 pass
 
+    def __repr__(self) -> str:
+        """Return string representation of filter."""
+        return f'{self.__class__.__name__}(patterns={len(self._compiled_patterns)})'
+
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive patterns from message and extra fields.
 
@@ -193,5 +202,4 @@ class RedactingFilter(logging.Filter):
         Returns:
             Redacted copy of the data.
         """
-        from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
         return BaseVendorHandler.redact_sensitive_data(data)

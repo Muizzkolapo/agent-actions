@@ -326,7 +326,9 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         if not vendor:
             vendor = type(provider).__name__.replace("BatchProvider", "").lower()
 
-        return prepare_schema_unified(agent_config, vendor)
+        # prepare_schema_unified returns (schema, captured_results) tuple - extract just the schema
+        schema, _captured_results = prepare_schema_unified(agent_config, vendor)
+        return schema
 
     def _add_tools_to_path(self, tools_path: Optional[str]) -> None:
         """Add tools path to sys.path if not already present."""

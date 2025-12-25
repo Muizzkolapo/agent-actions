@@ -129,6 +129,27 @@ class OpenAIBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
             )
 
         result_file_id = batch_job.output_file_id
+        if not result_file_id:
+            from agent_actions.errors import VendorAPIError
+
+            # Check if there's an error file instead
+            error_file_id = getattr(batch_job, 'error_file_id', None)
+            raise VendorAPIError(
+                vendor="openai",
+                endpoint="batches.retrieve",
+                context={
+                    "message": "Batch completed but has no output file (all requests may have failed)",
+                    "batch_id": batch_id,
+                    "status": batch_job.status,
+                    "error_file_id": error_file_id,
+                    "request_counts": getattr(batch_job, 'request_counts', None),
+                    "suggestion": (
+                        f"Check error file: {error_file_id}" if error_file_id
+                        else "Clear batch registry and resubmit"
+                    ),
+                },
+            )
+
         result_content = self.client.files.content(result_file_id).content
 
         if not result_content or len(result_content) == 0:

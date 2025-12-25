@@ -23,6 +23,18 @@ class HandlerConfig:
 
 
 @dataclass
+class FileHandlerSettings:
+    """File handler configuration settings."""
+
+    enabled: bool = True
+    path: Optional[str] = None
+    level: LogLevel = 'DEBUG'
+    max_bytes: int = 10_485_760  # 10MB
+    backup_count: int = 5
+    format: Literal['human', 'json'] = 'human'
+
+
+@dataclass
 class LoggingConfig:
     """Central logging configuration."""
 
@@ -30,7 +42,7 @@ class LoggingConfig:
     handlers: List[HandlerConfig] = field(default_factory=list)
     module_levels: Dict[str, LogLevel] = field(default_factory=dict)
     include_timestamps: bool = True
-    include_source_location: bool = False  # Off by default for clean user-facing output
+    include_source_location: bool = False
     redact_patterns: List[str] = field(
         default_factory=lambda: [
             r'api[_-]?key',
@@ -40,14 +52,38 @@ class LoggingConfig:
             r'credential',
         ]
     )
+    file_handler: FileHandlerSettings = field(default_factory=FileHandlerSettings)
 
-    # File handler configuration
-    file_handler_enabled: bool = True
-    log_file_path: Optional[str] = None
-    file_log_level: LogLevel = 'DEBUG'
-    file_max_bytes: int = 10_485_760  # 10MB
-    file_backup_count: int = 5
-    file_format: Literal['human', 'json'] = 'human'
+    # Legacy properties for backward compatibility
+    @property
+    def file_handler_enabled(self) -> bool:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.enabled
+
+    @property
+    def log_file_path(self) -> Optional[str]:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.path
+
+    @property
+    def file_log_level(self) -> LogLevel:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.level
+
+    @property
+    def file_max_bytes(self) -> int:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.max_bytes
+
+    @property
+    def file_backup_count(self) -> int:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.backup_count
+
+    @property
+    def file_format(self) -> Literal['human', 'json']:
+        """Legacy property for backward compatibility."""
+        return self.file_handler.format
 
     @classmethod
     def from_project_config(cls, config: dict) -> LoggingConfig:
@@ -77,19 +113,23 @@ class LoggingConfig:
 
         # Parse file handler configuration from YAML
         file_config = logging_config.get('file', {})
-        file_handler_enabled = file_config.get('enabled', True)
-        log_file_path = file_config.get('path')
-        file_log_level = file_config.get('level', 'DEBUG')
-        file_max_bytes = file_config.get('max_bytes', 10_485_760)
-        file_backup_count = file_config.get('backup_count', 5)
-        file_format = file_config.get('format', 'human')
+        file_settings = FileHandlerSettings(
+            enabled=file_config.get('enabled', True),
+            path=file_config.get('path'),
+            level=file_config.get('level', 'DEBUG'),
+            max_bytes=file_config.get('max_bytes', 10_485_760),
+            backup_count=file_config.get('backup_count', 5),
+            format=file_config.get('format', 'human')
+        )
 
         return cls(
             default_level=logging_config.get('level', 'INFO'),
             handlers=handlers,
             module_levels=logging_config.get('module_levels', {}),
             include_timestamps=logging_config.get('include_timestamps', True),
-            include_source_location=logging_config.get('include_source_location', True),
+            include_source_location=logging_config.get(
+                'include_source_location', True
+            ),
             redact_patterns=logging_config.get(
                 'redact_patterns',
                 [
@@ -100,12 +140,7 @@ class LoggingConfig:
                     r'credential',
                 ],
             ),
-            file_handler_enabled=file_handler_enabled,
-            log_file_path=log_file_path,
-            file_log_level=file_log_level,
-            file_max_bytes=file_max_bytes,
-            file_backup_count=file_backup_count,
-            file_format=file_format,
+            file_handler=file_settings,
         )
 
     @classmethod
@@ -149,23 +184,29 @@ class LoggingConfig:
         ]
 
         # File handler configuration from environment
-        file_handler_enabled = os.environ.get('AGENT_ACTIONS_NO_LOG_FILE', '0') != '1'
+        file_enabled = os.environ.get('AGENT_ACTIONS_NO_LOG_FILE', '0') != '1'
 
-        log_file_path = os.environ.get('AGENT_ACTIONS_LOG_FILE') or None
-        if not log_file_path:
+        file_path = os.environ.get('AGENT_ACTIONS_LOG_FILE') or None
+        if not file_path:
             log_dir = os.environ.get('AGENT_ACTIONS_LOG_DIR')
             if log_dir:
-                log_file_path = str(Path(log_dir) / 'agent_actions.log')
+                file_path = str(Path(log_dir) / 'agent_actions.log')
 
-        file_log_level = os.environ.get('AGENT_ACTIONS_FILE_LOG_LEVEL', 'DEBUG').upper()
-        if file_log_level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
-            file_log_level = 'DEBUG'
+        file_level = os.environ.get(
+            'AGENT_ACTIONS_FILE_LOG_LEVEL', 'DEBUG'
+        ).upper()
+        if file_level not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
+            file_level = 'DEBUG'
+
+        file_settings = FileHandlerSettings(
+            enabled=file_enabled,
+            path=file_path,
+            level=file_level
+        )
 
         return cls(
             default_level=level,
             handlers=handlers,
             include_source_location=include_source,
-            file_handler_enabled=file_handler_enabled,
-            log_file_path=log_file_path,
-            file_log_level=file_log_level,
+            file_handler=file_settings,
         )

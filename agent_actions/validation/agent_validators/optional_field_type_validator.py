@@ -37,25 +37,41 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
         Returns:
             Validation result with type errors
         """
-        normalized_entry = context.normalized_entry
-        desc = context.description
-
         errors = []
 
-        # Check 'description' field type
-        if 'description' in normalized_entry:
-            if not isinstance(normalized_entry['description'], str):
-                errors.append(f"{desc} 'description' should be a string.")
+        # Validate each optional field type
+        self._validate_description_field(context, errors)
+        self._validate_version_field(context, errors)
+        self._validate_dependencies_field(context, errors)
+        self._validate_boolean_fields(context, errors)
 
-        # Check 'version' field type
-        if 'version' in normalized_entry:
-            if not isinstance(normalized_entry['version'], (str, int, float)):
-                errors.append(f"{desc} 'version' should be a string or number.")
+        if errors:
+            return AgentEntryValidationResult.with_errors(errors)
 
-        # Check 'dependencies' field type
-        if 'dependencies' in normalized_entry:
-            if not isinstance(normalized_entry['dependencies'], list):
-                errors.append(f"{desc} 'dependencies' should be a list.")
+        return AgentEntryValidationResult.success()
+
+    def _validate_description_field(self, context, errors: list) -> None:
+        """Validate description field type."""
+        if 'description' in context.normalized_entry:
+            if not isinstance(context.normalized_entry['description'], str):
+                errors.append(f"{context.description} 'description' should be a string.")
+
+    def _validate_version_field(self, context, errors: list) -> None:
+        """Validate version field type."""
+        if 'version' in context.normalized_entry:
+            if not isinstance(context.normalized_entry['version'], (str, int, float)):
+                errors.append(f"{context.description} 'version' should be a string or number.")
+
+    def _validate_dependencies_field(self, context, errors: list) -> None:
+        """Validate dependencies field type."""
+        if 'dependencies' in context.normalized_entry:
+            if not isinstance(context.normalized_entry['dependencies'], list):
+                errors.append(f"{context.description} 'dependencies' should be a list.")
+
+    def _validate_boolean_fields(self, context, errors: list) -> None:
+        """Validate boolean field types."""
+        normalized_entry = context.normalized_entry
+        desc = context.description
 
         # Check 'is_operational' field type
         if 'is_operational' in normalized_entry:
@@ -71,8 +87,3 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
         if 'prompt_debug' in normalized_entry:
             if not isinstance(normalized_entry['prompt_debug'], bool):
                 errors.append(f"{desc} 'prompt_debug' should be a boolean.")
-
-        if errors:
-            return AgentEntryValidationResult.with_errors(errors)
-
-        return AgentEntryValidationResult.success()

@@ -40,11 +40,15 @@ class AgentStateManager:
         """Load agent status from file, or initialize with defaults."""
         if self.status_file.exists():
             try:
-                with open(self.status_file, 'r') as f:
+                with open(self.status_file, 'r', encoding='utf-8') as f:
                     self.agent_status = json.load(f)
-                self.console.print(f'[dim]Loaded status for {len(self.agent_status)} agents[/dim]')
-            except Exception as e:
-                self.console.print(f'[yellow]Warning: Could not load status file: {e}[/yellow]')
+                self.console.print(
+                    f'[dim]Loaded status for {len(self.agent_status)} agents[/dim]'
+                )
+            except (OSError, IOError, json.JSONDecodeError, ValueError) as e:
+                self.console.print(
+                    f'[yellow]Warning: Could not load status file: {e}[/yellow]'
+                )
                 self._initialize_default_status()
         else:
             self._initialize_default_status()
@@ -60,9 +64,9 @@ class AgentStateManager:
         """Persist current status to file."""
         try:
             self.status_file.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.status_file, 'w') as f:
+            with open(self.status_file, 'w', encoding='utf-8') as f:
                 json.dump(self.agent_status, f, indent=4)
-        except Exception as e:
+        except (OSError, IOError, ValueError, TypeError) as e:
             self.console.print(f'[red]Error saving status: {e}[/red]')
 
     def update_status(self, agent_name: str, status: str, **metadata):

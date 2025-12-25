@@ -94,55 +94,17 @@ def execute_user_defined_function(
         AgentActionsException: If execution fails
     """
     from agent_actions.utilities.udf_management.udf_registry import get_udf_metadata
-    from agent_actions.configuration.new_format_schema import Granularity
-    from agent_actions.errors import SchemaValidationError
-    
+
     metadata = get_udf_metadata(udf_name)
     udf = metadata['function']
-    schema = metadata['schema']  # Always present (required)
     granularity = metadata['granularity']
     json_schema = metadata['json_schema']  # Direct JSON Schema
     json_output_schema = metadata.get('json_output_schema')  # May be None
 
     # Validate input if enabled
     if validate_input:
-        # Use cached JSON Schema (direct, no wrapper)
-        compiled_schema = json_schema
-        
-        # Validate based on granularity
-        if granularity == Granularity.FILE:
-            # Expect array input
-            if not isinstance(input_data, list):
-                raise SchemaValidationError(
-                    f"UDF '{udf_name}' expects array input (FILE granularity) "
-                    f"but received {type(input_data).__name__}",
-                    context={
-                        'function': udf_name,
-                        'granularity': 'FILE',
-                        'expected_type': 'list',
-                        'received_type': type(input_data).__name__
-                    }
-                )
-            # Validate each item in array
-            for idx, item in enumerate(input_data):
-                _validate_against_schema(item, compiled_schema, udf_name, item_index=idx)
-        else:  # RECORD granularity
-            # Expect single object input
-            if not isinstance(input_data, dict):
-                raise SchemaValidationError(
-                    f"UDF '{udf_name}' expects object input (RECORD granularity) "
-                    f"but received {type(input_data).__name__}",
-                    context={
-                        'function': udf_name,
-                        'granularity': 'RECORD',
-                        'expected_type': 'dict',
-                        'received_type': type(input_data).__name__
-                    }
-                )
-            
-            # Validate against schema
-            _validate_against_schema(input_data, compiled_schema, udf_name)
-    
+        _validate_udf_input(udf_name, input_data, granularity, json_schema)
+
     # Execute function
     try:
         result = udf(input_data, **kwargs)
@@ -159,28 +121,82 @@ def execute_user_defined_function(
 
     # Validate output if enabled and output schema is defined
     if validate_output and json_output_schema is not None:
-        compiled_output = json_output_schema
-
-        if granularity == Granularity.FILE:
-            # For FILE granularity, output should be a list - validate each item
-            if isinstance(result, list):
-                for idx, item in enumerate(result):
-                    _validate_against_schema(
-                        item, compiled_output, udf_name,
-                        item_index=idx, validation_type='output'
-                    )
-            else:
-                # Single result - validate as-is
-                _validate_against_schema(
-                    result, compiled_output, udf_name, validation_type='output'
-                )
-        else:
-            # RECORD granularity - validate single result
-            _validate_against_schema(
-                result, compiled_output, udf_name, validation_type='output'
-            )
+        _validate_udf_output(udf_name, result, granularity, json_output_schema)
 
     return result
+
+
+def _validate_udf_input(
+    udf_name: str,
+    input_data: Union[Dict[str, Any], List[Any]],
+    granularity: Any,
+    json_schema: Dict[str, Any]
+) -> None:
+    """Validate UDF input data against schema."""
+    from agent_actions.configuration.new_format_schema import Granularity
+    from agent_actions.errors import SchemaValidationError
+
+    if granularity == Granularity.FILE:
+        # Expect array input
+        if not isinstance(input_data, list):
+            raise SchemaValidationError(
+                f"UDF '{udf_name}' expects array input (FILE granularity) "
+                f"but received {type(input_data).__name__}",
+                context={
+                    'function': udf_name,
+                    'granularity': 'FILE',
+                    'expected_type': 'list',
+                    'received_type': type(input_data).__name__
+                }
+            )
+        # Validate each item in array
+        for idx, item in enumerate(input_data):
+            _validate_against_schema(item, json_schema, udf_name, item_index=idx)
+    else:  # RECORD granularity
+        # Expect single object input
+        if not isinstance(input_data, dict):
+            raise SchemaValidationError(
+                f"UDF '{udf_name}' expects object input (RECORD granularity) "
+                f"but received {type(input_data).__name__}",
+                context={
+                    'function': udf_name,
+                    'granularity': 'RECORD',
+                    'expected_type': 'dict',
+                    'received_type': type(input_data).__name__
+                }
+            )
+
+        # Validate against schema
+        _validate_against_schema(input_data, json_schema, udf_name)
+
+
+def _validate_udf_output(
+    udf_name: str,
+    result: Any,
+    granularity: Any,
+    json_output_schema: Dict[str, Any]
+) -> None:
+    """Validate UDF output data against schema."""
+    from agent_actions.configuration.new_format_schema import Granularity
+
+    if granularity == Granularity.FILE:
+        # For FILE granularity, output should be a list - validate each item
+        if isinstance(result, list):
+            for idx, item in enumerate(result):
+                _validate_against_schema(
+                    item, json_output_schema, udf_name,
+                    item_index=idx, validation_type='output'
+                )
+        else:
+            # Single result - validate as-is
+            _validate_against_schema(
+                result, json_output_schema, udf_name, validation_type='output'
+            )
+    else:
+        # RECORD granularity - validate single result
+        _validate_against_schema(
+            result, json_output_schema, udf_name, validation_type='output'
+        )
 
 
 def _validate_against_schema(

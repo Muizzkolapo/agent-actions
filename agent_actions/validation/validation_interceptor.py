@@ -1,10 +1,29 @@
+"""
+Interceptor that validates responses using user-defined functions.
+
+User-defined validators must:
+1. Accept (response: Any, **kwargs) where response is the raw API response
+2. Extract content from the response structure as needed
+3. Return Tuple[bool, str | None] - (success, error_message)
+"""
 from __future__ import annotations
-'Interceptor that validates responses using user-defined functions.\n\nUser-defined validators must:\n1. Accept (response: Any, **kwargs) where response is the raw API response\n2. Extract content from the response structure as needed\n3. Return Tuple[bool, str | None] - (success, error_message)\n'
+
 import logging
 from typing import Any, Dict
-from agent_actions.response_processing.base import InterceptorResult, ResponseInterceptor
-from agent_actions.utilities.udf_management.tooling import load_user_defined_function, _split_udf_name
-from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
+
+from agent_actions.errors import (
+    AgentActionsException,
+    ConfigurationError,
+    ValidationError,
+)
+from agent_actions.response_processing.base import (
+    InterceptorResult,
+    ResponseInterceptor,
+)
+from agent_actions.utilities.udf_management.tooling import (
+    _split_udf_name,
+    load_user_defined_function,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +62,13 @@ class ValidationInterceptor(ResponseInterceptor):
         )
 
         if not self.validator_function:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
-            raise ConfigurationError('validator_function is required', context={'interceptor_type': 'validation', 'config_keys': list(config.keys())})
+            raise ConfigurationError(
+                'validator_function is required',
+                context={
+                    'interceptor_type': 'validation',
+                    'config_keys': list(config.keys())
+                }
+            )
 
     def intercept(self, response: Any, context: Dict) -> InterceptorResult:
         logger.debug(
@@ -78,7 +102,7 @@ class ValidationInterceptor(ResponseInterceptor):
             validator_func = load_user_defined_function(module_name, func_name)
             merged_kwargs = {**self.validator_args, **context}
             success, error_message = validator_func(response, **merged_kwargs)
-        except (ConfigurationError, AgentActionsException) as e:
+        except (ConfigurationError, AgentActionsException, ValueError, TypeError) as e:
             logger.exception(
                 "Error loading or executing validator function",
                 extra={
@@ -89,17 +113,6 @@ class ValidationInterceptor(ResponseInterceptor):
                 }
             )
             success, error_message = (False, f'Validator function error: {str(e)}')
-        except Exception as e:
-            logger.exception(
-                "Unexpected error during validation",
-                extra={
-                    'operation': 'validation_unexpected_error',
-                    'validator_function': self.validator_function,
-                    'error': str(e),
-                    'error_type': type(e).__name__
-                }
-            )
-            success, error_message = (False, f'Unexpected validation error: {str(e)}')
 
         logger.info(
             "Validation result",
@@ -127,7 +140,15 @@ class ValidationInterceptor(ResponseInterceptor):
                     'validator_function': self.validator_function
                 }
             )
-            return InterceptorResult(continue_processing=False, retry_context={'validation_error': error_message, 'validator_function': self.validator_function, 'validator_args': self.validator_args, 'failed_response': response})
+            return InterceptorResult(
+                continue_processing=False,
+                retry_context={
+                    'validation_error': error_message,
+                    'validator_function': self.validator_function,
+                    'validator_args': self.validator_args,
+                    'failed_response': response
+                }
+            )
 
         if self.on_failure == 'fail':
             logger.error(
@@ -138,8 +159,14 @@ class ValidationInterceptor(ResponseInterceptor):
                     'validator_function': self.validator_function
                 }
             )
-            from agent_actions.errors import ValidationError  # New modular pattern!
-            raise ValidationError('Validation failed', context={'validator_function': self.validator_function, 'error_message': error_message, 'validator_args': self.validator_args})
+            raise ValidationError(
+                'Validation failed',
+                context={
+                    'validator_function': self.validator_function,
+                    'error_message': error_message,
+                    'validator_args': self.validator_args
+                }
+            )
 
         logger.warning(
             "Validation failed, continuing with warning",
@@ -149,4 +176,7 @@ class ValidationInterceptor(ResponseInterceptor):
                 'validator_function': self.validator_function
             }
         )
-        return InterceptorResult(continue_processing=True, metadata={'validation_warning': error_message})
+        return InterceptorResult(
+            continue_processing=True,
+            metadata={'validation_warning': error_message}
+        )

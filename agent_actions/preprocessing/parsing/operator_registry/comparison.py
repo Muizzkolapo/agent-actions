@@ -15,81 +15,171 @@ from .base import ComparisonOperator, OperatorInfo, OperatorType
 class EqualOperator(ComparisonOperator):
     """Equality comparison operator (==)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return left == right
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("EQ", "==", OperatorType.COMPARISON, 7, "left", 2, "Equality comparison")
+        return OperatorInfo(
+            "EQ",
+            "==",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "Equality comparison"
+        )
 
 
 class NotEqualOperator(ComparisonOperator):
     """Not equal comparison operator (!=)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return left != right
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("NE", "!=", OperatorType.COMPARISON, 7, "left", 2, "Not equal comparison")
+        return OperatorInfo(
+            "NE",
+            "!=",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "Not equal comparison"
+        )
 
 
 # Relational operators
 class LessThanOperator(ComparisonOperator):
     """Less than comparison operator (<)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         try:
             return left < right
         except TypeError:
             return False
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("LT", "<", OperatorType.COMPARISON, 6, "left", 2, "Less than comparison")
+        return OperatorInfo(
+            "LT",
+            "<",
+            OperatorType.COMPARISON,
+            6,
+            "left",
+            2,
+            "Less than comparison"
+        )
 
 
 class LessEqualOperator(ComparisonOperator):
     """Less than or equal comparison operator (<=)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         try:
             return left <= right
         except TypeError:
             return False
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("LE", "<=", OperatorType.COMPARISON, 6, "left", 2, "Less than or equal comparison")
+        return OperatorInfo(
+            "LE",
+            "<=",
+            OperatorType.COMPARISON,
+            6,
+            "left",
+            2,
+            "Less than or equal comparison"
+        )
 
 
 class GreaterThanOperator(ComparisonOperator):
     """Greater than comparison operator (>)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         try:
             return left > right
         except TypeError:
             return False
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("GT", ">", OperatorType.COMPARISON, 6, "left", 2, "Greater than comparison")
+        return OperatorInfo(
+            "GT",
+            ">",
+            OperatorType.COMPARISON,
+            6,
+            "left",
+            2,
+            "Greater than comparison"
+        )
 
 
 class GreaterEqualOperator(ComparisonOperator):
     """Greater than or equal comparison operator (>=)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         try:
             return left >= right
         except TypeError:
             return False
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("GE", ">=", OperatorType.COMPARISON, 6, "left", 2, "Greater than or equal comparison")
+        return OperatorInfo(
+            "GE",
+            ">=",
+            OperatorType.COMPARISON,
+            6,
+            "left",
+            2,
+            "Greater than or equal comparison"
+        )
 
 
 # Membership operators
 class InOperator(ComparisonOperator):
     """In array/list operator (IN)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if not isinstance(right, (list, tuple, set)):
             return False
         return left in right
@@ -101,44 +191,92 @@ class InOperator(ComparisonOperator):
 class NotInOperator(ComparisonOperator):
     """Not in array/list operator (NOT IN)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if not isinstance(right, (list, tuple, set)):
             return True
         return left not in right
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("NOT_IN", "NOT IN", OperatorType.COMPARISON, 7, "left", 2, "Not in array/list")
+        return OperatorInfo(
+            "NOT_IN",
+            "NOT IN",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "Not in array/list"
+        )
 
 
 # String operators
 class ContainsOperator(ComparisonOperator):
     """String contains operator (CONTAINS)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if left is None:
             return False
         return str(right) in str(left)
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("CONTAINS", "CONTAINS", OperatorType.COMPARISON, 7, "left", 2, "String contains")
+        return OperatorInfo(
+            "CONTAINS",
+            "CONTAINS",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "String contains"
+        )
 
 
 class NotContainsOperator(ComparisonOperator):
     """String not contains operator (NOT CONTAINS)."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if left is None:
             return True
         return str(right) not in str(left)
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("NOT_CONTAINS", "NOT CONTAINS", OperatorType.COMPARISON, 7, "left", 2, "String not contains")
+        return OperatorInfo(
+            "NOT_CONTAINS",
+            "NOT CONTAINS",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "String not contains"
+        )
 
 
 class LikeOperator(ComparisonOperator):
     """SQL LIKE pattern matching operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if left is None or right is None:
             return False
 
@@ -176,25 +314,53 @@ class LikeOperator(ComparisonOperator):
         return f'^{regex_pattern}$'
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("LIKE", "LIKE", OperatorType.COMPARISON, 7, "left", 2, "SQL LIKE pattern matching")
+        return OperatorInfo(
+            "LIKE",
+            "LIKE",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "SQL LIKE pattern matching"
+        )
 
 
 class NotLikeOperator(ComparisonOperator):
     """SQL NOT LIKE pattern matching operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         like_op = LikeOperator()
         return not like_op.evaluate(left, right, context)
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("NOT_LIKE", "NOT LIKE", OperatorType.COMPARISON, 7, "left", 2, "SQL NOT LIKE pattern matching")
+        return OperatorInfo(
+            "NOT_LIKE",
+            "NOT LIKE",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "SQL NOT LIKE pattern matching"
+        )
 
 
 # Range operators
 class BetweenOperator(ComparisonOperator):
     """BETWEEN range operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         if not self._validate_range(right):
             return False
         try:
@@ -215,36 +381,86 @@ class BetweenOperator(ComparisonOperator):
         return isinstance(range_val, (list, tuple)) and len(range_val) == 2
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("BETWEEN", "BETWEEN", OperatorType.COMPARISON, 7, "left", 2, "Between range")
+        return OperatorInfo(
+            "BETWEEN",
+            "BETWEEN",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "Between range"
+        )
 
 
 class NotBetweenOperator(ComparisonOperator):
     """NOT BETWEEN range operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         between_op = BetweenOperator()
         return not between_op.evaluate(left, right, context)
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("NOT_BETWEEN", "NOT BETWEEN", OperatorType.COMPARISON, 7, "left", 2, "Not between range")
+        return OperatorInfo(
+            "NOT_BETWEEN",
+            "NOT BETWEEN",
+            OperatorType.COMPARISON,
+            7,
+            "left",
+            2,
+            "Not between range"
+        )
 
 
 # Null operators
 class IsNullOperator(ComparisonOperator):
     """IS NULL operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return left is None
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("IS_NULL", "IS NULL", OperatorType.COMPARISON, 8, "none", 1, "Is null/None")
+        return OperatorInfo(
+            "IS_NULL",
+            "IS NULL",
+            OperatorType.COMPARISON,
+            8,
+            "none",
+            1,
+            "Is null/None"
+        )
 
 
 class IsNotNullOperator(ComparisonOperator):
     """IS NOT NULL operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return left is not None
 
     def get_info(self) -> OperatorInfo:
-        return OperatorInfo("IS_NOT_NULL", "IS NOT NULL", OperatorType.COMPARISON, 8, "none", 1, "Is not null/None")
+        return OperatorInfo(
+            "IS_NOT_NULL",
+            "IS NOT NULL",
+            OperatorType.COMPARISON,
+            8,
+            "none",
+            1,
+            "Is not null/None"
+        )

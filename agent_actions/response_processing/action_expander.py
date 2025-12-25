@@ -13,12 +13,15 @@ from agent_actions.response_processing.guard_parser import GuardParser
 from agent_actions.response_processing.consolidated_guard import (
     GuardBehavior, parse_guard_config
 )
+from agent_actions.response_processing.schema_change import compile_unified_schema
+from agent_actions.utilities.udf_management import get_udf_metadata
+from agent_actions.utilities.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_field_definitions import inherit_simple_fields
 
 logger = logging.getLogger(__name__)
 
-# pylint: disable=too-few-public-methods
+
 class ActionExpander:
     """
     Converts action-based workflow configurations to agent configurations.
@@ -26,7 +29,9 @@ class ActionExpander:
     Supports loop expansion for iterative action processing.
     """
 
-
+    def __init__(self):
+        """Initialize the ActionExpander."""
+        # This class uses static methods for utility functions
 
     @staticmethod
     def _validate_vendor_exists(vendor: Optional[str], action_name: str) -> None:
@@ -237,8 +242,6 @@ class ActionExpander:
         # Add UDF output schema to agent config (REQUIRED for schema validation)
         impl_name = action.get('impl')
         if impl_name:
-            from agent_actions.utilities.udf_management import get_udf_metadata
-
             try:
                 udf_metadata = get_udf_metadata(impl_name)
 
@@ -247,7 +250,7 @@ class ActionExpander:
                 if udf_metadata.get('json_output_schema'):
                     agent['output_schema'] = udf_metadata['output_schema']
                     agent['json_output_schema'] = udf_metadata['json_output_schema']
-            except Exception:
+            except (ValueError, KeyError, ImportError):
                 # UDF not found or not yet registered - continue without schema
                 # Schema validation will fail later if fields are referenced
                 pass
@@ -311,14 +314,12 @@ class ActionExpander:
             return
 
         # Compile to JSON Schema for validation
-        from agent_actions.response_processing.schema_change import compile_unified_schema
-
         try:
             # Use 'openai' format as canonical JSON Schema
             compiled = compile_unified_schema(unified_schema, 'openai')
             agent['output_schema'] = unified_schema
             agent['json_output_schema'] = compiled.get('schema', compiled)
-        except Exception:
+        except (ValueError, KeyError, TypeError):
             # Schema compilation failed - skip validation for this action
             pass
 
@@ -590,6 +591,83 @@ class ActionExpander:
         return {workflow_name: agents}
 
     @staticmethod
+    def _build_schema_registry(agents: AgentConfigList) -> Dict[str, Any]:
+        """
+        Build schema registry from agent configs.
+
+        Args:
+            agents: List of agent configurations
+
+        Returns:
+            Dictionary mapping agent names to their JSON output schemas
+        """
+        action_schemas = {}
+        for agent in agents:
+            agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
+
+            # Add schema if present (both LLM and UDF actions can have schemas)
+            if agent.get('json_output_schema'):
+                action_schemas[agent_name] = agent['json_output_schema']
+
+        return action_schemas
+
+    @staticmethod
+    def _validate_agent_guards(
+        agent: AgentEntryDict,
+        validator: ReferenceValidator,
+        agent_indices: Dict[str, int],
+        action_schemas: Dict[str, Any]
+    ) -> list[str]:
+        """
+        Validate guard references for a single agent.
+
+        Args:
+            agent: Agent configuration
+            validator: Reference validator instance
+            agent_indices: Mapping of agent names to indices
+            action_schemas: Mapping of agent names to schemas
+
+        Returns:
+            List of error messages
+        """
+        errors = []
+        agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
+
+        # Check WHERE clause guards
+        where_clause = agent.get('where_clause')
+        if where_clause and isinstance(where_clause, dict):
+            clause = where_clause.get('clause', '')
+            if clause:
+                parser = ReferenceParser()
+                references = parser.parse_batch(clause)
+
+                guard_errors = validator.validate_with_schemas(
+                    references=references,
+                    agent_config=agent,
+                    agent_indices=agent_indices,
+                    action_schemas=action_schemas,
+                    current_agent_name=agent_name
+                )
+                errors.extend(guard_errors)
+
+        # Check conditional_clause (UDF guards)
+        conditional_clause = agent.get('conditional_clause')
+        if conditional_clause and isinstance(conditional_clause, str):
+            parser = ReferenceParser()
+            references = parser.parse_batch(conditional_clause)
+
+            guard_errors = validator.validate_with_schemas(
+                references=references,
+                agent_config=agent,
+                agent_indices=agent_indices,
+                action_schemas=action_schemas,
+                current_agent_name=agent_name
+            )
+            errors.extend(guard_errors)
+
+        return errors
+
+    @staticmethod
     def validate_guard_references(
         agents: AgentConfigList,
         strict: bool = True
@@ -623,9 +701,6 @@ class ActionExpander:
                 for error in errors:
                     logger.warning(error)
         """
-        # Import here to avoid circular dependency
-        from agent_actions.utilities.field_resolution import ReferenceValidator
-
         errors = []
         validator = ReferenceValidator(strict_dependencies=True)
 
@@ -636,56 +711,14 @@ class ActionExpander:
             agent_indices[agent_name] = idx
 
         # Build schema registry from agent configs
-        # BREAKING: All tool actions must have output schemas
-        action_schemas = {}
-        for agent in agents:
-            agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
-
-            # Add schema if present (both LLM and UDF actions can have schemas)
-            if agent.get('json_output_schema'):
-                action_schemas[agent_name] = agent['json_output_schema']
+        action_schemas = ActionExpander._build_schema_registry(agents)
 
         # Validate each agent's guard references with schemas
         for agent in agents:
-            agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
-
-            # Check WHERE clause guards
-            where_clause = agent.get('where_clause')
-            if where_clause and isinstance(where_clause, dict):
-                clause = where_clause.get('clause', '')
-                if clause:
-                    # Parse references from guard condition
-                    from agent_actions.utilities.field_resolution import ReferenceParser
-                    parser = ReferenceParser()
-                    references = parser.parse_batch(clause)
-
-                    # Validate with both dependency and schema checks
-                    guard_errors = validator.validate_with_schemas(
-                        references=references,
-                        agent_config=agent,
-                        agent_indices=agent_indices,
-                        action_schemas=action_schemas,
-                        current_agent_name=agent_name
-                    )
-                    errors.extend(guard_errors)
-
-            # Check conditional_clause (UDF guards)
-            conditional_clause = agent.get('conditional_clause')
-            if conditional_clause and isinstance(conditional_clause, str):
-                # Parse references from conditional clause
-                from agent_actions.utilities.field_resolution import ReferenceParser
-                parser = ReferenceParser()
-                references = parser.parse_batch(conditional_clause)
-
-                # UDF guards may also contain field references
-                guard_errors = validator.validate_with_schemas(
-                    references=references,
-                    agent_config=agent,
-                    agent_indices=agent_indices,
-                    action_schemas=action_schemas,
-                    current_agent_name=agent_name
-                )
-                errors.extend(guard_errors)
+            agent_errors = ActionExpander._validate_agent_guards(
+                agent, validator, agent_indices, action_schemas
+            )
+            errors.extend(agent_errors)
 
         # Handle strict mode
         if strict and errors:

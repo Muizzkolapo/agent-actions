@@ -1,4 +1,9 @@
-# Suggested content for validators/base_validator.py
+"""
+Base validator class for all validation operations.
+
+Provides common validation infrastructure including error/warning collection
+and utility methods for path validation.
+"""
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, List, Dict, Optional
@@ -38,7 +43,7 @@ class BaseValidator(ABC):
             bool: True if validation is successful (no errors reported),
                   False otherwise.
         """
-        pass
+        raise NotImplementedError("Subclasses must implement validate()")
 
     def add_error(self, message: str) -> None:
         """Adds a validation error message to the internal list."""
@@ -72,6 +77,26 @@ class BaseValidator(ABC):
             bool: True if errors have been added, False otherwise.
         """
         return bool(self._errors)
+
+    def _prepare_validation(self, data: Any) -> bool:
+        """
+        Common validation preparation: clear errors/warnings and check dict type.
+
+        This helper method reduces code duplication across validators.
+
+        Args:
+            data: Data to validate (should be a dict)
+
+        Returns:
+            bool: True if data is a dict and validation can proceed,
+                  False if data is not a dict (error added)
+        """
+        self.clear_errors()
+        self.clear_warnings()
+        if not isinstance(data, dict):
+            self.add_error('Validation data must be a dictionary.')
+            return False
+        return True
 
     # --- Static Utility Helper Methods ---
     @staticmethod

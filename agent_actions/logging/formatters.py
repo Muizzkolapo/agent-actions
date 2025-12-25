@@ -16,7 +16,13 @@ class JSONFormatter(logging.Formatter):
     suitable for log aggregation systems like ELK, Splunk, or CloudWatch.
 
     Example output:
-        {"timestamp": "2024-01-15T10:30:45.123Z", "level": "INFO", "logger": "agent_actions.workflow", "message": "Starting workflow", "correlation_id": "abc123"}
+        {
+            "timestamp": "2024-01-15T10:30:45.123Z",
+            "level": "INFO",
+            "logger": "agent_actions.workflow",
+            "message": "Starting workflow",
+            "correlation_id": "abc123"
+        }
     """
 
     # Fields that are handled explicitly and shouldn't be added from record.__dict__
@@ -172,27 +178,15 @@ class HumanFormatter(logging.Formatter):
             self.use_colors = use_colors
         self.include_source_location = include_source_location
 
-    def format(self, record: logging.LogRecord) -> str:
-        """Format record for human readability.
-
-        Args:
-            record: The log record to format.
-
-        Returns:
-            Formatted string suitable for console output.
-        """
-        # Format timestamp
-        timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
-
-        # Format level with color
-        level = record.levelname
+    def _format_level(self, level: str) -> str:
+        """Format log level with optional color."""
         if self.use_colors:
             color = self.LEVEL_COLORS.get(level, '')
-            level_str = f'{color}{level:8}{self.RESET}'
-        else:
-            level_str = f'{level:8}'
+            return f'{color}{level:8}{self.RESET}'
+        return f'{level:8}'
 
-        # Build context prefix
+    def _build_context_prefix(self, record: logging.LogRecord) -> str:
+        """Build context prefix from record attributes."""
         prefix_parts = []
 
         # Add correlation ID if present
@@ -212,8 +206,43 @@ class HumanFormatter(logging.Formatter):
                 prefix_parts.append(f'[{agent_name}]')
 
         prefix = ' '.join(prefix_parts)
-        if prefix:
-            prefix = f'{prefix} '
+        return f'{prefix} ' if prefix else ''
+
+    def _add_source_location(self, formatted: str, record: logging.LogRecord) -> str:
+        """Add source location to formatted string."""
+        location = f'{record.filename}:{record.lineno}'
+        if self.use_colors:
+            return f'{formatted} {self.DIM}({location}){self.RESET}'
+        return f'{formatted} ({location})'
+
+    def _add_extra_info(self, formatted: str, record: logging.LogRecord) -> str:
+        """Add exception and stack info to formatted string."""
+        if record.exc_info:
+            exc_text = self.formatException(record.exc_info)
+            formatted = f'{formatted}\n{exc_text}'
+
+        if record.stack_info:
+            formatted = f'{formatted}\n{record.stack_info}'
+
+        return formatted
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format record for human readability.
+
+        Args:
+            record: The log record to format.
+
+        Returns:
+            Formatted string suitable for console output.
+        """
+        # Format timestamp
+        timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+
+        # Format level with color
+        level_str = self._format_level(record.levelname)
+
+        # Build context prefix
+        prefix = self._build_context_prefix(record)
 
         # Build the main message
         message = record.getMessage()
@@ -223,20 +252,10 @@ class HumanFormatter(logging.Formatter):
 
         # Add source location if enabled
         if self.include_source_location:
-            location = f'{record.filename}:{record.lineno}'
-            if self.use_colors:
-                formatted = f'{formatted} {self.DIM}({location}){self.RESET}'
-            else:
-                formatted = f'{formatted} ({location})'
+            formatted = self._add_source_location(formatted, record)
 
-        # Add exception info if present
-        if record.exc_info:
-            exc_text = self.formatException(record.exc_info)
-            formatted = f'{formatted}\n{exc_text}'
-
-        # Add stack info if present
-        if record.stack_info:
-            formatted = f'{formatted}\n{record.stack_info}'
+        # Add exception and stack info
+        formatted = self._add_extra_info(formatted, record)
 
         return formatted
 

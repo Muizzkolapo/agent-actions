@@ -19,14 +19,12 @@ Example:
     if errors:
         raise WorkflowValidationError("\\n".join(errors))
 """
-# pylint: disable=line-too-long
-# Line-too-long: Error messages require longer lines for clarity
 
 import logging
 from typing import Any, Dict, List, Optional, Union
 
 from .reference_parser import ParsedReference, ReferenceParser
-from .exceptions import DependencyValidationError, SchemaFieldValidationError
+from .exceptions import DependencyValidationError
 from .schema_field_validator import SchemaFieldValidator
 
 logger = logging.getLogger(__name__)
@@ -102,7 +100,7 @@ class ReferenceValidator:
             if isinstance(ref, str):
                 try:
                     ref = self._parser.parse(ref)
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     errors.append(f"Invalid reference syntax: '{ref}' - {e}")
                     continue
 
@@ -236,7 +234,7 @@ class ReferenceValidator:
         self,
         references: List[Union[str, ParsedReference]],
         action_schemas: Dict[str, Dict[str, Any]],
-        current_agent_name: Optional[str] = None
+        _current_agent_name: Optional[str] = None
     ) -> List[str]:
         """
         Validate field references against action output schemas.
@@ -276,7 +274,7 @@ class ReferenceValidator:
             if isinstance(ref, str):
                 try:
                     ref = self._parser.parse(ref)
-                except Exception as e:
+                except (ValueError, TypeError) as e:
                     errors.append(f"Invalid reference syntax: '{ref}' - {e}")
                     continue
 
@@ -308,10 +306,7 @@ class ReferenceValidator:
     def validate_with_schemas(
         self,
         references: List[Union[str, ParsedReference]],
-        agent_config: Dict[str, Any],
-        agent_indices: Dict[str, int],
-        action_schemas: Dict[str, Dict[str, Any]],
-        current_agent_name: Optional[str] = None
+        validation_context: Dict[str, Any]
     ) -> List[str]:
         """
         Perform both dependency and schema validation.
@@ -322,10 +317,11 @@ class ReferenceValidator:
 
         Args:
             references: Field references to validate
-            agent_config: Current agent configuration
-            agent_indices: Mapping of agent names to indices
-            action_schemas: Mapping of action names to JSON schemas
-            current_agent_name: Name of current agent
+            validation_context: Dict containing:
+                - agent_config: Current agent configuration
+                - agent_indices: Mapping of agent names to indices
+                - action_schemas: Mapping of action names to JSON schemas
+                - current_agent_name: (optional) Name of current agent
 
         Returns:
             List of error messages (empty if all valid)
@@ -333,30 +329,27 @@ class ReferenceValidator:
         Example:
             errors = validator.validate_with_schemas(
                 references=['my_udf.result'],
-                agent_config={'dependencies': ['my_udf']},
-                agent_indices={'my_udf': 0, 'current': 1},
-                action_schemas={'my_udf': {...}},
-                current_agent_name='current'
+                validation_context={
+                    'agent_config': {'dependencies': ['my_udf']},
+                    'agent_indices': {'my_udf': 0, 'current': 1},
+                    'action_schemas': {'my_udf': {...}},
+                    'current_agent_name': 'current'
+                }
             )
         """
-        errors = []
-
         # Phase 1: Dependency graph validation
         dep_errors = self.validate(
             references=references,
-            agent_config=agent_config,
-            agent_indices=agent_indices,
-            current_agent_name=current_agent_name
+            agent_config=validation_context['agent_config'],
+            agent_indices=validation_context['agent_indices'],
+            current_agent_name=validation_context.get('current_agent_name')
         )
-        errors.extend(dep_errors)
 
-        # Phase 2: Schema validation (only if dependencies valid)
-        # Continue even if dependency errors exist to show all issues
+        # Phase 2: Schema validation
         schema_errors = self.validate_against_schemas(
             references=references,
-            action_schemas=action_schemas,
-            current_agent_name=current_agent_name
+            action_schemas=validation_context['action_schemas']
         )
-        errors.extend(schema_errors)
 
-        return errors
+        # Combine all errors
+        return dep_errors + schema_errors

@@ -20,6 +20,13 @@ class SchemaFieldValidationResult:
     error: Optional[str] = None       # Error message if validation failed
     is_required: bool = False         # Whether field is in 'required' list
 
+    def __repr__(self) -> str:
+        """String representation for debugging."""
+        return (
+            f"SchemaFieldValidationResult(field_path={self.field_path}, "
+            f"action_name={self.action_name}, exists={self.exists})"
+        )
+
 
 class SchemaFieldValidator:
     """Validates field paths against JSON Schema definitions.
@@ -56,6 +63,28 @@ class SchemaFieldValidator:
         assert result.exists
         assert result.field_type == 'integer'
     """
+
+    def validate_multiple_paths(
+        self,
+        field_paths: List[List[str]],
+        json_schema: Dict[str, Any],
+        action_name: str
+    ) -> List[SchemaFieldValidationResult]:
+        """
+        Validate multiple field paths at once.
+
+        Args:
+            field_paths: List of field path components
+            json_schema: JSON Schema to validate against
+            action_name: Name of action for error messages
+
+        Returns:
+            List of SchemaFieldValidationResult for each path
+        """
+        return [
+            self.validate_field_path(path, json_schema, action_name)
+            for path in field_paths
+        ]
 
     def validate_field_path(
         self,
@@ -95,11 +124,14 @@ class SchemaFieldValidator:
         if not exists:
             # Build helpful error message
             available_fields = self._extract_available_fields(json_schema)
-            available_msg = f". Available fields: {', '.join(available_fields)}" if available_fields else ""
+            available_msg = (
+                f". Available fields: {', '.join(available_fields)}"
+                if available_fields else ""
+            )
 
             error = (
-                f"Field '{'.'.join(field_path)}' not found in '{action_name}' output schema"
-                f"{available_msg}"
+                f"Field '{'.'.join(field_path)}' not found in "
+                f"'{action_name}' output schema{available_msg}"
             )
 
             return SchemaFieldValidationResult(
@@ -161,36 +193,52 @@ class SchemaFieldValidator:
         field_name = path[0]
         remaining_path = path[1:]
 
-        # Check if current schema is an object with properties
+        # Handle object types
         if schema.get('type') == 'object':
-            properties = schema.get('properties', {})
-
-            # Field not in properties
-            if field_name not in properties:
-                return (False, None)
-
-            field_schema = properties[field_name]
-
-            # If no more path, we found the field
-            if not remaining_path:
-                return (True, field_schema.get('type'))
-
-            # Continue traversing for nested fields
-            return self._traverse_schema_path(field_schema, remaining_path)
+            return self._traverse_object_schema(schema, field_name, remaining_path)
 
         # Handle array types - traverse into items schema
-        elif schema.get('type') == 'array':
-            items_schema = schema.get('items')
-            if not items_schema:
-                return (False, None)
+        if schema.get('type') == 'array':
+            return self._traverse_array_schema(schema, path)
 
-            # Traverse the items schema with the full remaining path
-            # This allows accessing properties of array item objects
-            return self._traverse_schema_path(items_schema, path)
+        # Not an object or array - can't traverse further
+        return (False, None)
 
-        else:
-            # Not an object or array - can't traverse further
+    def _traverse_object_schema(
+        self,
+        schema: Dict[str, Any],
+        field_name: str,
+        remaining_path: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """Traverse object schema properties."""
+        properties = schema.get('properties', {})
+
+        # Field not in properties
+        if field_name not in properties:
             return (False, None)
+
+        field_schema = properties[field_name]
+
+        # If no more path, we found the field
+        if not remaining_path:
+            return (True, field_schema.get('type'))
+
+        # Continue traversing for nested fields
+        return self._traverse_schema_path(field_schema, remaining_path)
+
+    def _traverse_array_schema(
+        self,
+        schema: Dict[str, Any],
+        path: List[str]
+    ) -> Tuple[bool, Optional[str]]:
+        """Traverse array schema items."""
+        items_schema = schema.get('items')
+        if not items_schema:
+            return (False, None)
+
+        # Traverse the items schema with the full remaining path
+        # This allows accessing properties of array item objects
+        return self._traverse_schema_path(items_schema, path)
 
     def _extract_available_fields(self, schema: Dict[str, Any]) -> List[str]:
         """

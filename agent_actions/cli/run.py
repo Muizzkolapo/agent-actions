@@ -15,7 +15,7 @@ from agent_actions.cli.cli_decorators import requires_project, handles_user_erro
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.docs.run_tracker import RunTracker
 from agent_actions.errors import FileLoadError  # New modular pattern!
-from agent_actions.orchestration.agent_workflow import AgentWorkflow
+from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
@@ -77,7 +77,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                 'Using sequential execution (forced via --no-parallel flag)...'
             )
             return False
-        if workflow.action_level_orchestrator.should_use_parallel_execution():
+        if workflow.services.core.action_level_orchestrator.should_use_parallel_execution():
             click.echo('🔀 Using parallel execution (auto-detected)...')
             return True
 
@@ -115,12 +115,16 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         )
         click.echo('Initializing agent workflow...')
         workflow = AgentWorkflow(
-            constructor_path=str(full_path),
-            user_code_path=str(self.args.user_code) if self.args.user_code else None,
-            default_path=str(paths.default_config_path),
-            use_tools=self.args.use_tools,
-            run_upstream=self.args.upstream,
-            run_downstream=self.args.downstream
+            WorkflowConfig(
+                paths=WorkflowPaths(
+                    constructor_path=str(full_path),
+                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
+                    default_path=str(paths.default_config_path)
+                ),
+                use_tools=self.args.use_tools,
+                run_upstream=self.args.upstream,
+                run_downstream=self.args.downstream
+            )
         )
 
         # Initialize run tracker
@@ -132,8 +136,8 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         )
 
         # Pass tracker and run_id to executor for action-level tracking
-        workflow.agent_executor.run_tracker = tracker
-        workflow.agent_executor.run_id = run_id
+        workflow.services.core.agent_executor.run_tracker = tracker
+        workflow.services.core.agent_executor.run_id = run_id
 
         click.echo('Starting workflow execution...')
 
@@ -146,7 +150,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
             self._run_workflow_execution(workflow, use_parallel)
 
             # Determine final status
-            if workflow.state_manager.is_workflow_complete():
+            if workflow.services.core.state_manager.is_workflow_complete():
                 status = 'SUCCESS'
                 click.echo(f'Successfully completed agent run for: {self.args.agent}')
             else:
@@ -165,7 +169,9 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         finally:
             # Finalize run tracking
             try:
-                tracker.finalize_workflow_run(run_id, status, error_message)
+                tracker.finalize_workflow_run(
+                    run_id=run_id, status=status, error_message=error_message
+                )
             except Exception as track_error:  # pylint: disable=broad-exception-caught
                 # Don't fail the workflow if tracking fails
                 click.echo(

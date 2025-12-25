@@ -444,7 +444,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                         "output_directory": output_directory,
                         "operation": "batch_result_processing",
                         "total_processed": len(processed_files),
-                        "registry_size": len(registry),
+                        "registry_size": len(all_jobs),
                     },
                 )
                 continue
@@ -558,6 +558,14 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             return True
         except (json.JSONDecodeError, KeyError):
             return True
+
+    def are_all_batch_jobs_completed(self, output_directory: str) -> bool:
+        """Check if all batch jobs in the registry are completed (public API)."""
+        return self._are_all_batch_jobs_completed(output_directory)
+
+    def get_batch_registry_status(self, output_directory: str) -> str:
+        """Get the overall status of all batch jobs in the registry (public API)."""
+        return self._get_batch_registry_status(output_directory)
 
     # pylint: disable=too-many-return-statements,too-many-branches
     def _get_batch_registry_status(self, output_directory: str) -> str:

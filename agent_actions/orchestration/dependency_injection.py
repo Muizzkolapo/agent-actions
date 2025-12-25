@@ -7,7 +7,14 @@ for managing processor dependencies and improving testability.
 from typing import Dict, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
+from dataclasses import dataclass
+
+from agent_actions.errors import (
+    DependencyError,
+    ConfigurationError
+)
 T = TypeVar('T')
+
 
 class ServiceLifetime:
     """Service lifetime constants."""
@@ -15,13 +22,21 @@ class ServiceLifetime:
     TRANSIENT = 'transient'
     SCOPED = 'scoped'
 
+    @classmethod
+    def is_valid(cls, lifetime: str) -> bool:
+        """Check if a lifetime value is valid."""
+        return lifetime in (cls.SINGLETON, cls.TRANSIENT, cls.SCOPED)
+
+    def __repr__(self):
+        """Return string representation."""
+        return f"ServiceLifetime({self.SINGLETON}, {self.TRANSIENT}, {self.SCOPED})"
+
+@dataclass
 class ServiceDescriptor:
     """Describes how a service should be created and managed."""
-
-    def __init__(self, service_type: Type, implementation: Type, lifetime: str):
-        self.service_type = service_type
-        self.implementation = implementation
-        self.lifetime = lifetime
+    service_type: Type
+    implementation: Type
+    lifetime: str
 
 class DependencyContainer:
     """Lightweight dependency injection container."""
@@ -32,22 +47,34 @@ class DependencyContainer:
         self._instances: Dict[Type, Any] = {}
         self._lock = threading.Lock()
 
-    def register_singleton(self, interface: Type[T], implementation: Type[T]) -> 'DependencyContainer':
+    def register_singleton(
+        self, interface: Type[T], implementation: Type[T]
+    ) -> 'DependencyContainer':
         """Register a singleton service."""
-        self._services[interface] = ServiceDescriptor(interface, implementation, ServiceLifetime.SINGLETON)
+        self._services[interface] = ServiceDescriptor(
+            interface, implementation, ServiceLifetime.SINGLETON
+        )
         return self
 
-    def register_transient(self, interface: Type[T], implementation: Type[T]) -> 'DependencyContainer':
+    def register_transient(
+        self, interface: Type[T], implementation: Type[T]
+    ) -> 'DependencyContainer':
         """Register a transient service."""
-        self._services[interface] = ServiceDescriptor(interface, implementation, ServiceLifetime.TRANSIENT)
+        self._services[interface] = ServiceDescriptor(
+            interface, implementation, ServiceLifetime.TRANSIENT
+        )
         return self
 
-    def register_factory(self, interface: Type[T], factory: Callable[[], T]) -> 'DependencyContainer':
+    def register_factory(
+        self, interface: Type[T], factory: Callable[[], T]
+    ) -> 'DependencyContainer':
         """Register a factory function."""
         self._factories[interface] = factory
         return self
 
-    def register_instance(self, interface: Type[T], instance: T) -> 'DependencyContainer':
+    def register_instance(
+        self, interface: Type[T], instance: T
+    ) -> 'DependencyContainer':
         """Register a specific instance."""
         with self._lock:
             self._instances[interface] = instance
@@ -64,16 +91,25 @@ class DependencyContainer:
             if descriptor.lifetime == ServiceLifetime.SINGLETON:
                 with self._lock:
                     if interface not in self._instances:
-                        self._instances[interface] = self._create_instance(descriptor.implementation)
+                        instance = self._create_instance(
+                            descriptor.implementation
+                        )
+                        self._instances[interface] = instance
                     return self._instances[interface]
-            else:
-                return self._create_instance(descriptor.implementation)
-        from agent_actions.errors import DependencyError  # New modular pattern!
-        raise DependencyError('DependencyContainer', f'Service {interface.__name__}', context={'interface': interface.__name__, 'operation': 'get_service'})
+            return self._create_instance(descriptor.implementation)
+
+        raise DependencyError(
+            f'DependencyContainer: Service {interface.__name__} not found',
+            {'interface': interface.__name__, 'operation': 'get_service'}
+        )
 
     def has(self, interface: Type) -> bool:
         """Check if a service is registered."""
-        return interface in self._services or interface in self._factories or interface in self._instances
+        return (
+            interface in self._services or
+            interface in self._factories or
+            interface in self._instances
+        )
 
     def _create_instance(self, cls: Type[T]) -> T:
         """Create instance with dependency resolution."""
@@ -81,7 +117,10 @@ class DependencyContainer:
         type_hints = get_type_hints(cls.__init__)
         init_kwargs = {}
         for param_name, param in signature.parameters.items():
-            if param_name == 'self' or param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+            if param_name == 'self' or param.kind in (
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD
+            ):
                 continue
             param_type = type_hints.get(param_name)
             if param_type and self.has(param_type):
@@ -89,8 +128,15 @@ class DependencyContainer:
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                from agent_actions.errors import DependencyError  # New modular pattern!
-                raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_instance'})
+                raise DependencyError(
+                    f'{cls.__name__}: Missing required dependency '
+                    f'{param_name}',
+                    {
+                        'param_name': param_name,
+                        'class': cls.__name__,
+                        'operation': '_create_instance'
+                    }
+                )
         return cls(**init_kwargs)
 
 class ProcessorRegistry:
@@ -137,29 +183,49 @@ class ProcessorRegistry:
     def get_processor(self, name: str) -> Type:
         """Get a processor class by name."""
         if name not in self._processors:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
-            raise ConfigurationError(f"Processor '{name}' not registered", context={'processor_name': name, 'operation': 'get_processor'})
+            raise ConfigurationError(
+                f"Processor '{name}' not registered",
+                context={
+                    'processor_name': name,
+                    'operation': 'get_processor'
+                }
+            )
         return self._processors[name]
 
     def get_loader(self, name: str) -> Type:
         """Get a loader class by name."""
         if name not in self._loaders:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
-            raise ConfigurationError(f"Loader '{name}' not registered", context={'loader_name': name, 'operation': 'get_loader'})
+            raise ConfigurationError(
+                f"Loader '{name}' not registered",
+                context={
+                    'loader_name': name,
+                    'operation': 'get_loader'
+                }
+            )
         return self._loaders[name]
 
     def get_generator(self, name: str) -> Type:
         """Get a generator class by name."""
         if name not in self._generators:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
-            raise ConfigurationError(f"Generator '{name}' not registered", context={'generator_name': name, 'operation': 'get_generator'})
+            raise ConfigurationError(
+                f"Generator '{name}' not registered",
+                context={
+                    'generator_name': name,
+                    'operation': 'get_generator'
+                }
+            )
         return self._generators[name]
 
     def get_service(self, name: str) -> Type:
         """Get a service class by name."""
         if name not in self._services:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!
-            raise ConfigurationError(f"Service '{name}' not registered", context={'service_name': name, 'operation': 'get_service'})
+            raise ConfigurationError(
+                f"Service '{name}' not registered",
+                context={
+                    'service_name': name,
+                    'operation': 'get_service'
+                }
+            )
         return self._services[name]
 
     def list_processors(self) -> Dict[str, Type]:
@@ -181,9 +247,13 @@ class ProcessorRegistry:
 class ProcessorFactory:
     """Factory for creating processors with dependency injection."""
 
-    def __init__(self, container: DependencyContainer, registry: ProcessorRegistry):
+    def __init__(
+        self,
+        container: DependencyContainer,
+        processor_registry: ProcessorRegistry,
+    ):
         self.container = container
-        self.registry = registry
+        self.registry = processor_registry
 
     def create_processor(self, processor_name: str, **kwargs) -> Any:
         """Create a processor instance with injected dependencies."""
@@ -222,14 +292,15 @@ class ProcessorFactory:
             elif param.default != inspect.Parameter.empty:
                 init_kwargs[param_name] = param.default
             else:
-                from agent_actions.errors import DependencyError  # New modular pattern!
-                raise DependencyError(cls.__name__, param_name, context={'param_name': param_name, 'class': cls.__name__, 'operation': '_create_with_dependencies'})
+                raise DependencyError(
+                    f'{cls.__name__}: Missing required dependency '
+                    f'{param_name}',
+                    {
+                        'param_name': param_name,
+                        'class': cls.__name__,
+                        'operation': '_create_with_dependencies'
+                    }
+                )
         return cls(**init_kwargs)
 
-    def create_source_data_loader(self, agent_name: str):
-        """Create a SourceDataLoader with the required agent_name parameter."""
-        from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
-        from agent_actions.state_management.path_manager import PathManager
-        path_manager = self.container.get(PathManager)
-        return SourceDataLoader(agent_name=agent_name, path_manager=path_manager)
 registry = ProcessorRegistry()

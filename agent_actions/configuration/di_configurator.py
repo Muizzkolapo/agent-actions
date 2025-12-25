@@ -51,15 +51,17 @@ class DIConfigurator:
     ):
         """Register processor implementations."""
         # pylint: disable=import-outside-toplevel
-        from agent_actions.input_loading.extractors_source_data_loader import (
-            SourceDataLoader,
-        )
         from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
+        # Import to trigger decorator-based registration with ProcessorRegistry
+        # pylint: disable-next=unused-import
+        from agent_actions.prompt_generation import target_content_processor  # noqa: F401
 
         container.register_transient(IDataProcessor, DataProcessor)
         container.register_transient(IGenerator, DataGenerator)
-        container.register_transient(ISourceDataLoader, SourceDataLoader)
+        # Note: ISourceDataLoader is NOT registered here because SourceDataLoader
+        # requires runtime parameters (agent_name) that can't be auto-injected.
+        # Use ApplicationContainer._get_source_loader() factory method instead.
 
     @staticmethod
     def _register_utilities(

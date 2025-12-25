@@ -13,9 +13,10 @@ Benefits over regex:
 """
 
 import logging
-from typing import Set, List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
-from jinja2 import Environment, meta, TemplateSyntaxError
+from typing import Any, Dict, List, Optional, Set, Tuple
+
+from jinja2 import Environment, TemplateSyntaxError, meta, nodes
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class PromptASTAnalyzer:
             return undeclared
 
         except TemplateSyntaxError as e:
-            logger.error(f"Jinja2 syntax error in template: {e}")
+            logger.error("Jinja2 syntax error in template: %s", e)
             raise ValueError(f"Template syntax error: {e}") from e
 
     def extract_referenced_variables(
@@ -110,12 +111,12 @@ class PromptASTAnalyzer:
             referenced = meta.find_undeclared_variables(ast)
 
             # Extract root variables (before first dot)
-            roots = set()
+            root_vars = set()
             for var in referenced:
-                root = var.split('.')[0]
-                roots.add(root)
+                root_var = var.split('.')[0]
+                root_vars.add(root_var)
 
-            return roots, referenced
+            return root_vars, referenced
 
         except TemplateSyntaxError as e:
             raise ValueError(f"Template syntax error: {e}") from e
@@ -180,32 +181,32 @@ class PromptASTAnalyzer:
             ['missing']
         """
         # Extract all referenced variables
-        roots, full_paths = self.extract_referenced_variables(template_source)
+        root_vars, full_paths = self.extract_referenced_variables(template_source)
 
         # Check which root references are missing
         missing_references = [
-            root for root in roots
-            if root not in available_context
+            root_var for root_var in root_vars
+            if root_var not in available_context
         ]
 
         # Check which fields are missing
         missing_fields = []
         for var_path in full_paths:
             parts = var_path.split('.')
-            root = parts[0]
+            root_var = parts[0]
 
-            if root in available_context and len(parts) > 1:
+            if root_var in available_context and len(parts) > 1:
                 first_field = parts[1]
-                if first_field not in available_context[root]:
+                if first_field not in available_context[root_var]:
                     missing_fields.append({
-                        'reference': root,
+                        'reference': root_var,
                         'field': first_field,
                         'full_path': var_path,
-                        'available': sorted(available_context[root])
+                        'available': sorted(available_context[root_var])
                     })
 
         return {
-            'required_roots': sorted(roots),
+            'required_roots': sorted(root_vars),
             'required_paths': sorted(full_paths),
             'missing_references': missing_references,
             'missing_fields': missing_fields,
@@ -242,7 +243,7 @@ class PromptASTAnalyzer:
         usage_list = []
 
         # Use Jinja2's visitor pattern to walk AST
-        for node in ast.find_all(self.env.environment.nodes.Name):
+        for node in ast.find_all(nodes.Name):
             usage_list.append({
                 'name': node.name,
                 'type': node.__class__.__name__,
@@ -253,12 +254,12 @@ class PromptASTAnalyzer:
         return usage_list
 
 
-def scan_prompt_fields_ast(template: str) -> Set[str]:
+def scan_prompt_fields_ast(template_str: str) -> Set[str]:
     """
     Quick utility to extract field references using AST (NO REGEX).
 
     Args:
-        template: Jinja2 template string
+        template_str: Jinja2 template string
 
     Returns:
         Set of variable references
@@ -268,19 +269,19 @@ def scan_prompt_fields_ast(template: str) -> Set[str]:
         >>> print(sorted(fields))
         ['seed.exam', 'source.data']
     """
-    analyzer = PromptASTAnalyzer()
-    return analyzer.extract_variables(template)
+    prompt_analyzer = PromptASTAnalyzer()
+    return prompt_analyzer.extract_variables(template_str)
 
 
 def validate_prompt_fields_ast(
-    template: str,
+    template_str: str,
     available_context: Dict[str, Set[str]]
 ) -> Tuple[bool, List[str]]:
     """
     Validate prompt fields using AST parsing (NO REGEX).
 
     Args:
-        template: Jinja2 template
+        template_str: Jinja2 template
         available_context: Available field context
 
     Returns:
@@ -300,20 +301,23 @@ def validate_prompt_fields_ast(
         >>> print(errors[0])
         Missing reference: 'source'
     """
-    analyzer = PromptASTAnalyzer()
-    results = analyzer.analyze_field_requirements(template, available_context)
+    prompt_analyzer = PromptASTAnalyzer()
+    analysis_results = prompt_analyzer.analyze_field_requirements(
+        template_str, available_context
+    )
 
     errors = []
 
-    for missing_ref in results['missing_references']:
+    for missing_ref in analysis_results['missing_references']:
         errors.append(
             f"Missing reference: '{missing_ref}' "
             f"(Available: {', '.join(available_context.keys())})"
         )
 
-    for missing_field in results['missing_fields']:
+    for missing_field in analysis_results['missing_fields']:
         errors.append(
-            f"Missing field: '{missing_field['field']}' in '{missing_field['reference']}' "
+            f"Missing field: '{missing_field['field']}' in "
+            f"'{missing_field['reference']}' "
             f"(Available: {', '.join(missing_field['available'])})"
         )
 
@@ -322,10 +326,10 @@ def validate_prompt_fields_ast(
 
 # Example usage
 if __name__ == '__main__':
-    analyzer = PromptASTAnalyzer()
+    EXAMPLE_ANALYZER = PromptASTAnalyzer()
 
     # Example template
-    template = """
+    EXAMPLE_TEMPLATE = """
     Extract facts about {{ seed.exam_syllabus.platform_name }}
 
     {% if source.url %}
@@ -343,32 +347,39 @@ if __name__ == '__main__':
     print("=== Analyzing Template ===\n")
 
     # Extract variables (NO REGEX!)
-    roots, paths = analyzer.extract_referenced_variables(template)
+    example_roots, example_paths = EXAMPLE_ANALYZER.extract_referenced_variables(
+        EXAMPLE_TEMPLATE
+    )
 
     print("Root variables:")
-    for root in sorted(roots):
-        print(f"  - {root}")
+    for example_root in sorted(example_roots):
+        print(f"  - {example_root}")
 
     print("\nFull variable paths:")
-    for path in sorted(paths):
-        print(f"  - {path}")
+    for example_path in sorted(example_paths):
+        print(f"  - {example_path}")
 
     # Validate against available context
-    available = {
+    EXAMPLE_AVAILABLE = {
         'seed': {'exam_syllabus'},
         'source': {'url', 'content'},
         'flatten_clusters': {'grouped_facts', 'num_similar_facts'}
     }
 
     print("\n=== Validation ===\n")
-    results = analyzer.analyze_field_requirements(template, available)
+    example_results = EXAMPLE_ANALYZER.analyze_field_requirements(
+        EXAMPLE_TEMPLATE, EXAMPLE_AVAILABLE
+    )
 
-    if results['is_valid']:
+    if example_results['is_valid']:
         print("✓ All field references are valid!")
     else:
         print("✗ Found issues:")
-        for ref in results['missing_references']:
-            print(f"  - Missing reference: {ref}")
-        for field in results['missing_fields']:
-            print(f"  - Missing field: {field['full_path']}")
-            print(f"    Available in '{field['reference']}': {', '.join(field['available'])}")
+        for example_ref in example_results['missing_references']:
+            print(f"  - Missing reference: {example_ref}")
+        for example_field in example_results['missing_fields']:
+            print(f"  - Missing field: {example_field['full_path']}")
+            print(
+                f"    Available in '{example_field['reference']}': "
+                f"{', '.join(example_field['available'])}"
+            )

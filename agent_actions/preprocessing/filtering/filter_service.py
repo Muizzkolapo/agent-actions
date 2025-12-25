@@ -107,6 +107,11 @@ import logging
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 
+from agent_actions.response_processing.where_parser import get_global_filter
+from agent_actions.utilities.udf_management.tooling import (
+    execute_user_defined_function
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -129,8 +134,112 @@ class FilterService:
 
     def __init__(self):
         """Initialize the filter service."""
-        from agent_actions.response_processing.where_parser import get_global_filter
         self.where_filter = get_global_filter()
+
+    def _handle_filter_result_object(
+        self,
+        filter_result,
+        behavior: str,
+        passthrough_on_error: bool
+    ) -> FilterStatus:
+        """Handle FilterResult object from where_filter."""
+        logger.info(
+            'Filter result - success: %s, matched: %s',
+            filter_result.success,
+            filter_result.matched
+        )
+
+        # Evaluation failed
+        if not filter_result.success:
+            if filter_result.error:
+                logger.warning('Filter error: %s', filter_result.error)
+            return self._handle_evaluation_error(
+                filter_result.error, behavior, passthrough_on_error
+            )
+
+        # Evaluation succeeded but didn't match
+        if not filter_result.matched:
+            logger.info('WHERE clause not matched')
+            status = 'filtered' if behavior == 'filter' else 'skipped'
+            return FilterStatus(should_include=False, status=status)
+
+        # Evaluation succeeded and matched
+        return FilterStatus(should_include=True, status='included')
+
+    def _handle_evaluation_error(
+        self,
+        error: Optional[str],
+        behavior: str,
+        passthrough_on_error: bool
+    ) -> FilterStatus:
+        """Handle evaluation errors with passthrough logic."""
+        if not passthrough_on_error:
+            status = 'filtered' if behavior == 'filter' else 'skipped'
+            return FilterStatus(should_include=False, status=status, error=error)
+        # Error + passthrough_on_error=True: include item
+        return FilterStatus(should_include=True, status='included', error=error)
+
+    def _evaluate_where_clause(
+        self,
+        item_content: Dict[str, Any],
+        where_clause_config: Dict[str, Any]
+    ) -> FilterStatus:
+        """Evaluate WHERE clause for item."""
+        scope = where_clause_config.get('scope', 'item')
+        if scope != 'item':
+            return FilterStatus(should_include=True, status='included')
+
+        behavior = where_clause_config.get('behavior', 'filter')
+        clause = where_clause_config.get('clause')
+        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+
+        try:
+            logger.info(
+                "WHERE clause evaluation: '%s' (behavior: %s)",
+                clause,
+                behavior
+            )
+            filter_result = self.where_filter.filter_item(item_content, clause)
+
+            # Handle FilterResult object (from preprocessing/where_filter.py)
+            if hasattr(filter_result, 'success'):
+                return self._handle_filter_result_object(
+                    filter_result, behavior, passthrough_on_error
+                )
+
+            # Handle boolean result (legacy SimpleWhereFilter)
+            matched = bool(filter_result)
+            logger.info('Filter result (boolean): %s', matched)
+
+            if not matched:
+                status = 'filtered' if behavior == 'filter' else 'skipped'
+                return FilterStatus(should_include=False, status=status)
+            return FilterStatus(should_include=True, status='included')
+
+        except ValueError as e:
+            logger.warning('Error in WHERE clause evaluation: %s', e)
+            return self._handle_evaluation_error(
+                str(e), behavior, passthrough_on_error
+            )
+
+    def _evaluate_conditional_clause(
+        self,
+        item_content: Dict[str, Any],
+        conditional_clause: str
+    ) -> FilterStatus:
+        """Evaluate conditional clause for item."""
+        try:
+            result = execute_user_defined_function(conditional_clause, item_content)
+
+            if not result:
+                logger.info('Conditional clause failed: %s', conditional_clause)
+                return FilterStatus(should_include=False, status='skipped')
+            return FilterStatus(should_include=True, status='included')
+
+        except ValueError as e:
+            logger.warning('Error in conditional clause evaluation: %s', e)
+            # Conditional clauses always passthrough on error (legacy behavior)
+            return FilterStatus(should_include=True, status='included', error=str(e))
 
     def filter_single_item(
         self,
@@ -173,88 +282,11 @@ class FilterService:
         """
         # Handle WHERE clause filtering
         if where_clause_config:
-            scope = where_clause_config.get('scope', 'item')
-            if scope == 'item':
-                behavior = where_clause_config.get('behavior', 'filter')
-                clause = where_clause_config.get('clause')
-                passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-
-                try:
-                    logger.info(f"WHERE clause evaluation: '{clause}' (behavior: {behavior})")
-                    filter_result = self.where_filter.filter_item(item_content, clause)
-
-                    # Handle FilterResult object (from preprocessing/where_filter.py)
-                    if hasattr(filter_result, 'success'):
-                        logger.info(f'Filter result - success: {filter_result.success}, matched: {filter_result.matched}')
-
-                        # Evaluation failed
-                        if not filter_result.success:
-                            if filter_result.error:
-                                logger.warning(f'Filter error: {filter_result.error}')
-
-                            if not passthrough_on_error:
-                                # Error + passthrough_on_error=False
-                                if behavior == 'filter':
-                                    return FilterStatus(should_include=False, status='filtered', error=filter_result.error)
-                                else:  # skip
-                                    return FilterStatus(should_include=False, status='skipped', error=filter_result.error)
-                            else:
-                                # Error + passthrough_on_error=True: include item
-                                return FilterStatus(should_include=True, status='included', error=filter_result.error)
-
-                        # Evaluation succeeded but didn't match
-                        elif not filter_result.matched:
-                            logger.info(f'WHERE clause not matched')
-                            if behavior == 'filter':
-                                return FilterStatus(should_include=False, status='filtered')
-                            else:  # skip
-                                return FilterStatus(should_include=False, status='skipped')
-
-                        # Evaluation succeeded and matched
-                        else:
-                            return FilterStatus(should_include=True, status='included')
-
-                    # Handle boolean result (legacy SimpleWhereFilter)
-                    else:
-                        matched = bool(filter_result)
-                        logger.info(f'Filter result (boolean): {matched}')
-
-                        if not matched:
-                            if behavior == 'filter':
-                                return FilterStatus(should_include=False, status='filtered')
-                            else:  # skip
-                                return FilterStatus(should_include=False, status='skipped')
-                        else:
-                            return FilterStatus(should_include=True, status='included')
-
-                except Exception as e:
-                    logger.warning(f'Error in WHERE clause evaluation: {e}')
-
-                    if not passthrough_on_error:
-                        if behavior == 'filter':
-                            return FilterStatus(should_include=False, status='filtered', error=str(e))
-                        else:  # skip
-                            return FilterStatus(should_include=False, status='skipped', error=str(e))
-                    else:
-                        # Passthrough on error
-                        return FilterStatus(should_include=True, status='included', error=str(e))
+            return self._evaluate_where_clause(item_content, where_clause_config)
 
         # Handle conditional clause (legacy feature)
         if conditional_clause:
-            try:
-                from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
-                result = execute_user_defined_function(conditional_clause, item_content)
-
-                if not result:
-                    logger.info(f'Conditional clause failed: {conditional_clause}')
-                    return FilterStatus(should_include=False, status='skipped')
-                else:
-                    return FilterStatus(should_include=True, status='included')
-
-            except Exception as e:
-                logger.warning(f'Error in conditional clause evaluation: {e}')
-                # Conditional clauses always passthrough on error (legacy behavior)
-                return FilterStatus(should_include=True, status='included', error=str(e))
+            return self._evaluate_conditional_clause(item_content, conditional_clause)
 
         # No filtering configured
         return FilterStatus(should_include=True, status='included')
@@ -308,12 +340,12 @@ class FilterService:
 
 
 # Global instance for convenience
-_global_filter_service = None
+_GLOBAL_FILTER_SERVICE = None
 
 
 def get_filter_service() -> FilterService:
     """Get the global FilterService instance."""
-    global _global_filter_service
-    if _global_filter_service is None:
-        _global_filter_service = FilterService()
-    return _global_filter_service
+    global _GLOBAL_FILTER_SERVICE  # pylint: disable=global-statement
+    if _GLOBAL_FILTER_SERVICE is None:
+        _GLOBAL_FILTER_SERVICE = FilterService()
+    return _GLOBAL_FILTER_SERVICE

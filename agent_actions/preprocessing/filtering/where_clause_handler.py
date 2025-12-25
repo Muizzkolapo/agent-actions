@@ -78,6 +78,9 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Tuple, Optional, Any
 from enum import Enum
 
+from agent_actions.preprocessing.filtering.filter_service import get_filter_service
+from agent_actions.utilities.field_management.field_manager import FieldManager
+
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +106,11 @@ class WhereClauseConfig:
 
         try:
             behavior_str = config.get('behavior', 'filter')
-            behavior = FilterBehavior(behavior_str) if isinstance(behavior_str, str) else behavior_str
+            behavior = (
+                FilterBehavior(behavior_str)
+                if isinstance(behavior_str, str)
+                else behavior_str
+            )
 
             return WhereClauseConfig(
                 clause=config.get('clause'),
@@ -112,7 +119,7 @@ class WhereClauseConfig:
                 passthrough_on_error=config.get('passthrough_on_error', True)
             )
         except (ValueError, TypeError) as e:
-            logger.warning(f"Invalid WHERE clause config: {e}")
+            logger.warning("Invalid WHERE clause config: %s", e)
             return None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -120,7 +127,11 @@ class WhereClauseConfig:
         return {
             'clause': self.clause,
             'scope': self.scope,
-            'behavior': self.behavior.value if isinstance(self.behavior, FilterBehavior) else self.behavior,
+            'behavior': (
+                self.behavior.value
+                if isinstance(self.behavior, FilterBehavior)
+                else self.behavior
+            ),
             'passthrough_on_error': self.passthrough_on_error
         }
 
@@ -415,9 +426,11 @@ class WhereClauseHandler:
                 filtered_items.append(item)
 
         logger.info(
-            f"Batch filtering complete: {context.included_items} included, "
-            f"{context.filtered_items} filtered, {context.skipped_items} skipped, "
-            f"{context.error_items} errors"
+            "Batch filtering complete: %s included, %s filtered, %s skipped, %s errors",
+            context.included_items,
+            context.filtered_items,
+            context.skipped_items,
+            context.error_items
         )
 
         return filtered_items, context
@@ -479,8 +492,9 @@ class WhereClauseHandler:
             context.track(target_id, status)
 
         logger.info(
-            f"Online filtering complete: {context.included_items} included, "
-            f"{context.filtered_items} filtered"
+            "Online filtering complete: %s included, %s filtered",
+            context.included_items,
+            context.filtered_items
         )
 
         return filtered_items, context
@@ -507,8 +521,6 @@ class WhereClauseHandler:
         Returns:
             Passthrough item with metadata
         """
-        from agent_actions.utilities.field_management.field_manager import FieldManager
-
         processed_item = FieldManager().create_processed_item(
             source_guid=source_guid,
             content=original_item.get('content'),
@@ -529,7 +541,7 @@ class WhereClauseHandler:
 
 
 # Convenience function for getting singleton instance
-_global_where_clause_handler = None
+_GLOBAL_WHERE_CLAUSE_HANDLER = None
 
 
 def get_where_clause_handler() -> WhereClauseHandler:
@@ -539,8 +551,7 @@ def get_where_clause_handler() -> WhereClauseHandler:
     Returns:
         Singleton WhereClauseHandler instance
     """
-    global _global_where_clause_handler
-    if _global_where_clause_handler is None:
-        from agent_actions.preprocessing.filtering.filter_service import get_filter_service
-        _global_where_clause_handler = WhereClauseHandler(get_filter_service())
-    return _global_where_clause_handler
+    global _GLOBAL_WHERE_CLAUSE_HANDLER  # pylint: disable=global-statement
+    if _GLOBAL_WHERE_CLAUSE_HANDLER is None:
+        _GLOBAL_WHERE_CLAUSE_HANDLER = WhereClauseHandler(get_filter_service())
+    return _GLOBAL_WHERE_CLAUSE_HANDLER
