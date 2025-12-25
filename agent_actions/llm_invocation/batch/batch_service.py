@@ -559,6 +559,10 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         except (json.JSONDecodeError, KeyError):
             return True
 
+    def are_all_batch_jobs_completed(self, output_directory: str) -> bool:
+        """Check if all batch jobs in the registry are completed (public API)."""
+        return self._are_all_batch_jobs_completed(output_directory)
+
     def get_batch_registry_status(self, output_directory: str) -> str:
         """Get the overall status of all batch jobs in the registry (public API)."""
         return self._get_batch_registry_status(output_directory)
