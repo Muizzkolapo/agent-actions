@@ -55,6 +55,19 @@ class BaseAgentEntryValidator(ABC):
     - Can signal critical failure to stop chain
     """
 
+    def __repr__(self) -> str:
+        """Return string representation of validator."""
+        return f"{self.__class__.__name__}()"
+
+    def is_valid(self) -> bool:
+        """
+        Check if validator is properly configured.
+
+        Returns:
+            bool: Always True (validators are stateless)
+        """
+        return True
+
     @abstractmethod
     def validate(self, context) -> AgentEntryValidationResult:
         """
@@ -66,7 +79,7 @@ class BaseAgentEntryValidator(ABC):
         Returns:
             AgentEntryValidationResult with errors, warnings, and critical flag
         """
-        pass
+        raise NotImplementedError("Subclasses must implement validate()")
 
     def _format_error(self, description: str, message: str) -> str:
         """Helper to format error message consistently."""

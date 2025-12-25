@@ -8,6 +8,10 @@ from agent_actions.preprocessing.transformation.string_transformer import Tokeni
 class ChunkingStrategy(ABC):
     """Abstract base class for text chunking strategies."""
 
+    def __repr__(self):
+        """Return string representation of ChunkingStrategy."""
+        return f"{self.__class__.__name__}()"
+
     @abstractmethod
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
@@ -23,7 +27,6 @@ class ChunkingStrategy(ABC):
         Returns:
             List of text chunks with applied overlap
         """
-        pass
 
 
 class TiktokenChunkingStrategy(ChunkingStrategy):
@@ -37,6 +40,10 @@ class TiktokenChunkingStrategy(ChunkingStrategy):
             tokenizer_model_name: The tiktoken model name to use for tokenization
         """
         self.tokenizer_model_name = tokenizer_model_name
+
+    def __repr__(self):
+        """Return string representation of TiktokenChunkingStrategy."""
+        return f"TiktokenChunkingStrategy(tokenizer_model_name={self.tokenizer_model_name!r})"
 
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
@@ -67,6 +74,10 @@ class TiktokenChunkingStrategy(ChunkingStrategy):
 class CharBasedChunkingStrategy(ChunkingStrategy):
     """Character-based chunking strategy that splits on character boundaries."""
 
+    def __repr__(self):
+        """Return string representation of CharBasedChunkingStrategy."""
+        return "CharBasedChunkingStrategy()"
+
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int
     ) -> List[str]:
@@ -94,6 +105,10 @@ class CharBasedChunkingStrategy(ChunkingStrategy):
 
 class SpacyChunkingStrategy(ChunkingStrategy):
     """Semantic chunking strategy using spaCy sentence boundaries."""
+
+    def __repr__(self):
+        """Return string representation of SpacyChunkingStrategy."""
+        return "SpacyChunkingStrategy()"
 
     def split_text_into_chunks(
         self, text_content: str, maximum_chunk_size: int, overlap_size: int

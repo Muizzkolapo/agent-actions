@@ -34,7 +34,6 @@ Usage:
     def batch_function(data):
         return [{'result': item['text']} for item in data]
 """
-# pylint: disable=line-too-long
 
 import inspect
 import threading
@@ -42,6 +41,10 @@ from typing import Any, Callable, Dict, List, Optional
 
 from agent_actions.configuration.new_format_schema import Granularity
 from agent_actions.errors import ConfigurationError, DuplicateFunctionError, FunctionNotFoundError
+from agent_actions.utilities.udf_management.type_conversion import (
+    derive_schema_from_type,
+    unified_to_json_schema
+)
 
 # Thread safety
 _registry_lock = threading.RLock()
@@ -91,8 +94,6 @@ def udf_tool(
     """
 
     def decorator(f: Callable) -> Callable:
-        from agent_actions.utilities.udf_management.type_conversion import derive_schema_from_type
-
         # Derive input schema from type
         resolved_schema = derive_schema_from_type(input_type)
 
@@ -117,7 +118,6 @@ def udf_tool(
                 )
 
             # Convert input schema to JSON Schema for validation (cache it)
-            from agent_actions.utilities.udf_management.type_conversion import unified_to_json_schema
             json_schema = unified_to_json_schema(resolved_schema)
 
             # Convert output schema if provided

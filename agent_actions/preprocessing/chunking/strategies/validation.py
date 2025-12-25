@@ -1,6 +1,14 @@
 """Configuration validation utilities for field chunking."""
 
-from typing import Dict, Any, List
+from typing import TYPE_CHECKING, Dict, Any, List
+
+if TYPE_CHECKING:
+    from agent_actions.preprocessing.chunking.field_chunking import (
+        FieldChunkingValidationError
+    )
+else:
+    class FieldChunkingValidationError(ValueError):
+        """Raised when field chunking configuration is invalid."""
 
 
 class ConfigValidator:
@@ -48,10 +56,6 @@ class ConfigValidator:
         errors.extend(ConfigValidator._validate_field_rules(field_rules))
 
         if errors:
-            from agent_actions.preprocessing.chunking.field_chunking import (
-                FieldChunkingValidationError,
-            )
-
             raise FieldChunkingValidationError(
                 f"Invalid field chunking configuration: {'; '.join(errors)}"
             )
@@ -100,10 +104,6 @@ class ConfigValidator:
                 )
 
         if errors:
-            from agent_actions.preprocessing.chunking.field_chunking import (
-                FieldChunkingValidationError,
-            )
-
             raise FieldChunkingValidationError(
                 f"Invalid chunk configuration: {'; '.join(errors)}"
             )

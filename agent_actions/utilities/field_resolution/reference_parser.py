@@ -229,9 +229,9 @@ class ReferenceParser:
         try:
             if fmt == ReferenceFormat.SELECTOR:
                 return self._parse_selector_format(reference, fmt)
-            elif fmt == ReferenceFormat.TEMPLATE:
+            if fmt == ReferenceFormat.TEMPLATE:
                 return self._parse_template_format(reference, fmt)
-            elif fmt == ReferenceFormat.JINJA:
+            if fmt == ReferenceFormat.JINJA:
                 return self._parse_jinja_format(reference, fmt)
         except (InvalidReferenceError, ValueError):
             if strict:
@@ -334,17 +334,16 @@ class ReferenceParser:
         """Get regex patterns to use based on format hint."""
         if format_hint == ReferenceFormat.TEMPLATE:
             return [(self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE)]
-        elif format_hint == ReferenceFormat.JINJA:
+        if format_hint == ReferenceFormat.JINJA:
             return [(self.JINJA_PATTERN, ReferenceFormat.JINJA)]
-        elif format_hint == ReferenceFormat.SELECTOR:
+        if format_hint == ReferenceFormat.SELECTOR:
             return [(self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR)]
-        else:
-            # Try all patterns in order of specificity
-            return [
-                (self.JINJA_PATTERN, ReferenceFormat.JINJA),
-                (self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE),
-                (self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR),
-            ]
+        # Try all patterns in order of specificity
+        return [
+            (self.JINJA_PATTERN, ReferenceFormat.JINJA),
+            (self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE),
+            (self.SELECTOR_PATTERN, ReferenceFormat.SELECTOR),
+        ]
 
     def _create_fallback_reference(self, reference: str) -> ParsedReference:
         """Create a fallback reference for invalid input."""

@@ -48,9 +48,9 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
             return str(self.docs_site_dir / path)
         return str(self.docs_site_dir)
 
-    def log_message(self, format, *args):
+    def log_message(self, format, *args):  # pylint: disable=redefined-builtin
         """Suppress default logging for cleaner output."""
-        pass
+        # Override to suppress logs - intentionally ignore all arguments
 
 
 def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:

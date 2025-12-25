@@ -29,8 +29,6 @@ Example:
     )
     # "Found My Document with 5 items"
 """
-# pylint: disable=line-too-long
-# Line-too-long: Complex method signatures require longer lines
 
 import json
 import logging
@@ -39,6 +37,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from .reference_parser import ParsedReference, ReferenceFormat, ReferenceParser
 from .exceptions import ReferenceNotFoundError
+from .reference_validator import ReferenceValidator
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +199,7 @@ class FieldReferenceResolver:
         if isinstance(reference, str):
             try:
                 reference = self.parse(reference)
-            except Exception as e:
+            except (ValueError, TypeError, KeyError) as e:
                 return ResolvedReference(
                     value=fallback_value,
                     source_action="",
@@ -246,9 +245,14 @@ class FieldReferenceResolver:
                 success=value is not None
             )
 
-        except ReferenceNotFoundError:
+        except ReferenceNotFoundError as e:
+            # Re-raise with additional context
+            if self.strict_mode:
+                raise ReferenceNotFoundError(
+                    f"{e}. Reference: {reference.action_name}.{'.'.join(reference.field_path)}"
+                ) from e
             raise
-        except Exception as e:
+        except (ValueError, TypeError, KeyError, AttributeError) as e:
             if self.strict_mode:
                 raise
 
@@ -344,9 +348,6 @@ class FieldReferenceResolver:
         Returns:
             List of error messages (empty if all valid)
         """
-        # Import here to avoid circular dependency
-        from .reference_validator import ReferenceValidator
-
         validator = ReferenceValidator()
         return validator.validate(
             references=references,
@@ -388,9 +389,8 @@ class FieldReferenceResolver:
         """Format a resolved value for string substitution."""
         if value is None:
             return ""
-        elif isinstance(value, (dict, list)):
+        if isinstance(value, (dict, list)):
             return json.dumps(value, indent=2, ensure_ascii=False)
-        elif isinstance(value, bool):
+        if isinstance(value, bool):
             return str(value).lower()
-        else:
-            return str(value)
+        return str(value)

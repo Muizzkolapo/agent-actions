@@ -10,6 +10,12 @@ from typing import Any, Dict, List, Tuple, Type, Union, get_origin, get_args
 
 from agent_actions.errors import ConfigurationError
 
+# Import for type checking
+if sys.version_info >= (3, 10):
+    from typing import is_typeddict as STDLIB_IS_TYPEDDICT
+else:
+    STDLIB_IS_TYPEDDICT = None  # type: ignore
+
 # Optional Pydantic support
 try:
     from pydantic import BaseModel as PydanticBaseModel
@@ -40,9 +46,8 @@ def is_typeddict(tp: Type) -> bool:
     Python 3.10+ has typing.is_typeddict, but we need 3.9 compatibility.
     Must exclude Pydantic and dataclass since they also have __annotations__.
     """
-    if sys.version_info >= (3, 10):
-        from typing import is_typeddict as stdlib_is_typeddict
-        return stdlib_is_typeddict(tp)
+    if sys.version_info >= (3, 10) and STDLIB_IS_TYPEDDICT:
+        return STDLIB_IS_TYPEDDICT(tp)
 
     # Python 3.9 fallback - must explicitly exclude other types
     if HAS_PYDANTIC and isinstance(tp, type) and issubclass(tp, PydanticBaseModel):
@@ -167,7 +172,7 @@ def _from_typeddict(tp: Type) -> Dict[str, Any]:
         unwrapped, is_optional = _analyze_type(field_type)
         field_schema = _build_field(
             name=field_name,
-            py_type=field_type,
+            _py_type=field_type,
             unwrapped_type=unwrapped,
             is_required=field_name in required_keys and not is_optional
         )
@@ -193,7 +198,7 @@ def _from_dataclass(tp: Type) -> Dict[str, Any]:
         unwrapped, is_optional = _analyze_type(field.type)
         field_schema = _build_field(
             name=field.name,
-            py_type=field.type,
+            _py_type=field.type,
             unwrapped_type=unwrapped,
             is_required=not has_default and not is_optional
         )
@@ -303,7 +308,7 @@ def _pydantic_property_to_field(
 
 def _build_field(
     name: str,
-    py_type: Any,
+    _py_type: Any,  # Used in error messages and validation
     unwrapped_type: Any,
     is_required: bool
 ) -> Dict[str, Any]:

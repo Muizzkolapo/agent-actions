@@ -280,13 +280,14 @@ class LoggerFactory:
 
             handler.setFormatter(formatter)
 
-            # Log success to stderr only in DEBUG mode (not to the logging system to avoid recursion)
+            # Log success to stderr only in DEBUG mode
+            # (not to the logging system to avoid recursion)
             if cls._config and cls._config.default_level == 'DEBUG':
                 print(f'Logging to file: {log_file_path}', file=sys.stderr)
 
             return handler
 
-        except Exception as e:
+        except (OSError, IOError, ValueError) as e:
             # Log warning to stderr and continue without file handler
             print(
                 f'Warning: Failed to create file handler: {e}. '

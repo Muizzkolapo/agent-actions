@@ -9,9 +9,32 @@ if they have no inter-dependencies.
 """
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from rich.console import Console
+from agent_actions.errors import WorkflowError
+
+
+@dataclass
+class ParallelExecutionParams:
+    """Parameters for executing parallel agents."""
+    pending_agents: List[str]
+    agent_indices: Dict
+    agent_executor: Any
+    concurrency_limit: int
+    level_idx: int
+
+
+@dataclass
+class LevelExecutionParams:
+    """Parameters for executing a level."""
+    level_idx: int
+    level_agents: List[str]
+    agent_indices: Dict[str, int]
+    state_manager: Any
+    agent_executor: Any
+    concurrency_limit: int = 5
 
 
 class ActionLevelOrchestrator:
@@ -55,11 +78,12 @@ class ActionLevelOrchestrator:
         Raises:
             WorkflowError: If circular dependencies detected
         """
-        from agent_actions.errors import WorkflowError  # New modular pattern!
-
         # Build dependency map
         deps_map = {
-            agent: [d for d in self.agent_configs[agent].get('dependencies', []) if isinstance(d, str)]
+            agent: [
+                d for d in self.agent_configs[agent].get('dependencies', [])
+                if isinstance(d, str)
+            ]
             for agent in self.execution_order
         }
 
@@ -88,10 +112,10 @@ class ActionLevelOrchestrator:
                 ])
 
                 raise WorkflowError(
-                    'circular_dependency',
                     f'Circular dependency detected - cannot compute execution levels.\n\n'
                     f'Agents blocked:\n{error_details}',
-                    context={
+                    {
+                        'error_type': 'circular_dependency',
                         'assigned': list(assigned),
                         'remaining': list(remaining_agents),
                         'unsatisfied_dependencies': unsatisfied_deps
@@ -133,102 +157,71 @@ class ActionLevelOrchestrator:
             else:
                 self.console.print(f'[dim]  Action {i}: {level[0]} (sequential)[/dim]')
 
-    async def execute_level_async(
-        self,
-        level_idx: int,
-        level_agents: List[str],
-        agent_indices: Dict[str, int],
-        state_manager,
-        agent_executor,
-        concurrency_limit: int = 5
-    ) -> bool:
-        """
-        Execute all agents in a level asynchronously.
+    async def _execute_single_agent(
+        self, agent_name: str, agent_indices: Dict, agent_executor
+    ):
+        """Execute a single agent asynchronously."""
+        original_idx = agent_indices[agent_name]
+        agent_config = self.agent_configs[agent_name]
+        is_last = original_idx == len(self.execution_order) - 1
 
-        Args:
-            level_idx: Index of the level
-            level_agents: List of agent names in this level
-            agent_indices: Dictionary mapping agent names to indices
-            state_manager: AgentStateManager instance
-            agent_executor: AgentExecutor instance
-            concurrency_limit: Maximum concurrent agents
+        result = await agent_executor.execute_agent_async(
+            agent_name,
+            agent_idx=original_idx,
+            agent_config=agent_config,
+            is_last_agent=is_last
+        )
 
-        Returns:
-            True if level completed successfully, False if batch jobs pending
+        if not result.success:
+            raise result.error
 
-        Raises:
-            WorkflowError: If any agent fails during execution
-        """
-        from agent_actions.errors import WorkflowError  # New modular pattern!
+    async def _execute_parallel_agents(self, params: ParallelExecutionParams):
+        """Execute multiple agents in parallel."""
+        self.console.print(f'[blue]  → {len(params.pending_agents)} agents in parallel[/blue]')
+        semaphore = asyncio.Semaphore(params.concurrency_limit)
 
-        start_time = datetime.now()
+        async def run_with_limit(agent):
+            """Run agent with semaphore limit."""
+            async with semaphore:
+                original_idx = params.agent_indices[agent]
+                agent_config = self.agent_configs[agent]
+                is_last = original_idx == len(self.execution_order) - 1
 
-        # Filter to pending agents only
-        pending_agents = state_manager.get_pending_agents(level_agents)
+                return await params.agent_executor.execute_agent_async(
+                    agent,
+                    agent_idx=original_idx,
+                    agent_config=agent_config,
+                    is_last_agent=is_last
+                )
 
-        if not pending_agents:
-            self.console.print(f'[yellow]Action {level_idx}: All agents complete (skipped)[/yellow]')
-            return True
+        # Execute all agents concurrently
+        tasks = [run_with_limit(agent) for agent in params.pending_agents]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        self.console.print(f'[cyan]Action {level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]')
+        # Check for errors
+        errors = []
+        for agent, result in zip(params.pending_agents, results):
+            if isinstance(result, Exception):
+                errors.append((agent, result))
+            elif not result.success:
+                errors.append((agent, result.error))
 
-        # Single agent - execute directly
-        if len(pending_agents) == 1:
-            agent_name = pending_agents[0]
-            original_idx = agent_indices[agent_name]
-            agent_config = self.agent_configs[agent_name]
-            is_last = original_idx == len(self.execution_order) - 1
-
-            result = await agent_executor.execute_agent_async(
-                agent_name,
-                original_idx,
-                agent_config,
-                is_last
+        if errors:
+            error_details = '\n'.join([
+                f'  - {agent}: {str(exc)}'
+                for agent, exc in errors
+            ])
+            error_msg = (
+                f'Multiple agents failed in parallel action '
+                f'{params.level_idx}:\n{error_details}'
             )
+            raise WorkflowError('parallel_execution_failures', error_msg)
 
-            if not result.success:
-                raise result.error
-
-        # Multiple agents - execute in parallel
-        else:
-            self.console.print(f'[blue]  → {len(pending_agents)} agents in parallel[/blue]')
-            semaphore = asyncio.Semaphore(concurrency_limit)
-
-            async def run_with_limit(agent):
-                """Run agent with semaphore limit."""
-                async with semaphore:
-                    original_idx = agent_indices[agent]
-                    agent_config = self.agent_configs[agent]
-                    is_last = original_idx == len(self.execution_order) - 1
-
-                    return await agent_executor.execute_agent_async(
-                        agent,
-                        original_idx,
-                        agent_config,
-                        is_last
-                    )
-
-            # Execute all agents concurrently
-            tasks = [run_with_limit(agent) for agent in pending_agents]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-
-            # Check for errors
-            errors = []
-            for agent, result in zip(pending_agents, results):
-                if isinstance(result, Exception):
-                    errors.append((agent, result))
-                elif not result.success:
-                    errors.append((agent, result.error))
-
-            if errors:
-                error_details = '\n'.join([
-                    f'  - {agent}: {str(exc)}'
-                    for agent, exc in errors
-                ])
-                error_msg = f'Multiple agents failed in parallel action {level_idx}:\n{error_details}'
-                raise WorkflowError('parallel_execution_failures', error_msg)
-
-        # Check for batch submissions
+    def _check_batch_status(
+        self, level_idx: int, level_agents: List[str],
+        state_manager, start_time: datetime
+    ) -> bool:
+        """Check batch submission status and handle accordingly."""
         batch_pending = state_manager.get_batch_submitted_agents(level_agents)
 
         if batch_pending:
@@ -237,19 +230,76 @@ class ActionLevelOrchestrator:
             if failed_agents:
                 error_msg = (
                     f"Partial failure in parallel action {level_idx}: "
-                    f"{', '.join(failed_agents)} failed while batch jobs were submitted"
+                    f"{', '.join(failed_agents)} failed while "
+                    "batch jobs were submitted"
                 )
                 raise WorkflowError('batch_submission_partial_failure', error_msg)
 
             # Batch jobs submitted, need to wait
             duration = (datetime.now() - start_time).total_seconds()
             self.console.print(
-                f'[yellow]Action {level_idx}: {len(batch_pending)} batch job(s) submitted ({duration:.2f}s)[/yellow]'
+                f'[yellow]Action {level_idx}: {len(batch_pending)} '
+                f'batch job(s) submitted ({duration:.2f}s)[/yellow]'
             )
             self.console.print('[yellow]Run workflow again to check batch status[/yellow]')
             return False  # Level not complete
 
+        return True  # No batch pending
+
+    async def execute_level_async(self, params: LevelExecutionParams) -> bool:
+        """
+        Execute all agents in a level asynchronously.
+
+        Args:
+            params: LevelExecutionParams containing all execution parameters
+
+        Returns:
+            True if level completed successfully, False if batch jobs pending
+
+        Raises:
+            WorkflowError: If any agent fails during execution
+        """
+        start_time = datetime.now()
+
+        # Filter to pending agents only
+        pending_agents = params.state_manager.get_pending_agents(params.level_agents)
+
+        if not pending_agents:
+            self.console.print(
+                f'[yellow]Action {params.level_idx}: All agents complete '
+                '(skipped)[/yellow]'
+            )
+            return True
+
+        self.console.print(
+            f'[cyan]Action {params.level_idx}: Starting '
+            f'{len(pending_agents)} agent(s)...[/cyan]'
+        )
+
+        # Single agent - execute directly
+        if len(pending_agents) == 1:
+            await self._execute_single_agent(
+                pending_agents[0], params.agent_indices, params.agent_executor
+            )
+        # Multiple agents - execute in parallel
+        else:
+            await self._execute_parallel_agents(
+                ParallelExecutionParams(
+                    pending_agents=pending_agents,
+                    agent_indices=params.agent_indices,
+                    agent_executor=params.agent_executor,
+                    concurrency_limit=params.concurrency_limit,
+                    level_idx=params.level_idx
+                )
+            )
+
+        # Check for batch submissions
+        if not self._check_batch_status(
+            params.level_idx, params.level_agents, params.state_manager, start_time
+        ):
+            return False  # Batch pending
+
         # Level completed
         duration = (datetime.now() - start_time).total_seconds()
-        self.console.print(f'[green]Action {level_idx} complete ({duration:.2f}s)[/green]')
+        self.console.print(f'[green]Action {params.level_idx} complete ({duration:.2f}s)[/green]')
         return True

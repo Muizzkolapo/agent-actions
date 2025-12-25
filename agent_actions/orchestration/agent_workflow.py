@@ -1,34 +1,50 @@
 """
-Agent workflow orchestration 
+Agent workflow orchestration
 """
 
-import sys
 import hashlib
+import json
 import logging
-import time
-from pathlib import Path
-from datetime import datetime
-from typing import Dict, Any, List, Optional
-
-from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
-from agent_actions.logging import CorrelationContext
 import os
 import shutil
-from agent_actions.io.file_handler import FileHandler
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
 
-logger = logging.getLogger(__name__)
-from agent_actions.prompt_generation.output_processor import OutputProcessor
-from agent_actions.llm_invocation.batch.batch_service import BatchService
-from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
 from rich.console import Console
 
-# Import new modular components
-from agent_actions.orchestration.state_manager import AgentStateManager
-from agent_actions.orchestration.skip_evaluator import SkipEvaluator
+from agent_actions.configuration.bootstrap_factory import create_agent_runner
+from agent_actions.input_loading.udf_loader import discover_udfs
+from agent_actions.llm_invocation.batch.batch_service import BatchService
+from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
+from agent_actions.logging import CorrelationContext
+from agent_actions.orchestration.action_level_executor import (
+    ActionLevelOrchestrator,
+    LevelExecutionParams
+)
+from agent_actions.orchestration.agent_executor import AgentExecutor, ExecutorDependencies
 from agent_actions.orchestration.batch_manager import BatchLifecycleManager
-from agent_actions.orchestration.output_manager import AgentOutputManager
-from agent_actions.orchestration.agent_executor import AgentExecutor
-from agent_actions.orchestration.action_level_executor import ActionLevelOrchestrator
+from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
+from agent_actions.orchestration.output_manager import AgentOutputManager, OutputManagerConfig
+from agent_actions.orchestration.skip_evaluator import SkipEvaluator
+from agent_actions.orchestration.state_manager import AgentStateManager
+from agent_actions.orchestration.workflow_models import (
+    WorkflowPaths,
+    WorkflowConfig,
+    WorkflowState,
+    RuntimeContext,
+    WorkflowMetadata,
+    AgentLogParams,
+    CoreServices,
+    SupportServices,
+    WorkflowServices,
+)
+from agent_actions.orchestration.workspace_index import WorkspaceIndex
+from agent_actions.prompt_generation.output_processor import OutputProcessor
+
+logger = logging.getLogger(__name__)
 
 
 class AgentWorkflow:
@@ -44,138 +60,199 @@ class AgentWorkflow:
     - ActionLevelOrchestrator: Parallel execution coordination by action level
     """
 
-    def __init__(
-        self,
-        constructor_path: str,
-        user_code_path: Optional[str],
-        default_path: str,
-        use_tools: bool,
-        parent_output: Optional[str] = None,
-        parent_source: Optional[str] = None,
-        parent_pipeline: Optional[str] = None,
-        run_upstream: bool = False,
-        run_downstream: bool = False
-    ):
+    def __init__(self, config: WorkflowConfig):
         """Initialize workflow with configuration and dependencies."""
         # Store configuration
-        self.constructor_path = constructor_path
-        self.user_code_path = user_code_path
-        self.default_path = default_path
-        self.use_tools = use_tools
-        self.parent_output = parent_output
-        self.parent_source = parent_source
-        self.parent_pipeline = parent_pipeline
-        self.run_upstream = run_upstream
-        self.run_downstream = run_downstream
-        self._workspace_index = None  # Lazy-initialized for downstream
-
-        # Initialize state
-        self.previous_agent_type = None
-        self.ephemeral_directories = []
-        self.failed = False
-        self.console = Console()
+        self.config = config
+        self.runtime = RuntimeContext(state=WorkflowState(), console=Console())
 
         # Load configuration
-        self.config_manager = ConfigManager(self.constructor_path, self.default_path)
+        if config.manager is None:
+            config.manager = ConfigManager(
+                config.paths.constructor_path,
+                config.paths.default_path
+            )
         self._load_configs()
 
         # Discover UDFs
         self._discover_udfs()
 
-        # Create agent runner
-        from agent_actions.configuration.bootstrap_factory import create_agent_runner
-        self.agent_runner = create_agent_runner(
-            use_tools=self.use_tools,
-            constructor_path=self.constructor_path,
-            default_path=getattr(self.config_manager, 'default_path', None)
-        )
-        self.agent_runner.execution_order = self.execution_order
-        self.agent_runner.agent_indices = self.agent_indices
-        self.agent_runner.agent_configs = self.agent_configs
-        self.agent_runner.workflow_name = self.agent_name
-
-        # Initialize supporting services
-        self.output_processor = OutputProcessor(self.parent_output, self.constructor_path)
-        self.batch_service = BatchService(
-            agent_indices=self.agent_indices,
-            dependency_configs=self.agent_configs
-        )
-
-        # Get agent folder
-        agent_folder = Path(self.agent_runner.get_agent_folder(self.agent_name))
-        status_file = agent_folder / '.agent_status.json'
-
-        # Initialize loop correlator
-        self.loop_correlator = LoopOutputCorrelator(agent_folder)
-
-        # Initialize modular components
-        self.state_manager = AgentStateManager(status_file, self.execution_order)
-        self.skip_evaluator = SkipEvaluator(self.console)
-        self.batch_manager = BatchLifecycleManager(self.batch_service, self.console)
-        self.output_manager = AgentOutputManager(
-            agent_folder,
-            self.execution_order,
-            self.agent_configs,
-            self.state_manager.agent_status,
-            self.loop_correlator,
-            self.console
-        )
-
-        # Initialize agent executor
-        self.agent_executor = AgentExecutor(
-            self.agent_runner,
-            self.state_manager,
-            self.skip_evaluator,
-            self.batch_manager,
-            self.output_manager,
-            self.console
-        )
-
-        # Initialize action-level orchestrator
-        self.action_level_orchestrator = ActionLevelOrchestrator(
-            self.execution_order,
-            self.agent_configs,
-            self.console
-        )
+        # Initialize services
+        self.services = self._initialize_services()
 
         # Generate and inject workflow session ID
         self.workflow_session_id = self._generate_workflow_session_id()
         self._inject_workflow_session_id()
 
+    @property
+    def state(self):
+        """Get workflow state from runtime context."""
+        return self.runtime.state
+
+    @property
+    def console(self):
+        """Get console from runtime context."""
+        return self.runtime.console
+
+    @property
+    def _workspace_index(self):
+        """Get or create workspace index (lazy initialization)."""
+        if not hasattr(self, '_workspace_index_cached'):
+            self._workspace_index_cached = None
+        return self._workspace_index_cached
+
+    @_workspace_index.setter
+    def _workspace_index(self, value):
+        """Set workspace index."""
+        self._workspace_index_cached = value
+
+    def _initialize_services(self) -> WorkflowServices:
+        """Initialize all workflow services."""
+        # Create agent runner
+        agent_runner = create_agent_runner(
+            use_tools=self.config.use_tools,
+            constructor_path=self.config.paths.constructor_path,
+            default_path=getattr(self.config.manager, 'default_path', None)
+        )
+        agent_runner.execution_order = self.execution_order
+        agent_runner.agent_indices = self.agent_indices
+        agent_runner.agent_configs = self.agent_configs
+        agent_runner.workflow_name = self.agent_name
+
+        # Initialize supporting services
+        output_processor = OutputProcessor(
+            self.config.paths.parent_output,
+            self.config.paths.constructor_path
+        )
+        batch_service = BatchService(
+            agent_indices=self.agent_indices,
+            dependency_configs=self.agent_configs
+        )
+
+        # Get agent folder
+        agent_folder = Path(agent_runner.get_agent_folder(self.agent_name))
+        status_file = agent_folder / '.agent_status.json'
+
+        # Initialize loop correlator
+        loop_correlator = LoopOutputCorrelator(agent_folder)
+
+        # Initialize modular components
+        state_manager = AgentStateManager(status_file, self.execution_order)
+        skip_evaluator = SkipEvaluator(self.console)
+        batch_manager = BatchLifecycleManager(batch_service, self.console)
+        output_manager = AgentOutputManager(
+            OutputManagerConfig(
+                agent_folder=agent_folder,
+                execution_order=self.execution_order,
+                agent_configs=self.agent_configs,
+                agent_status=state_manager.agent_status,
+                loop_correlator=loop_correlator,
+                console=self.console
+            )
+        )
+
+        # Initialize agent executor
+        agent_executor = AgentExecutor(
+            ExecutorDependencies(
+                agent_runner=agent_runner,
+                state_manager=state_manager,
+                skip_evaluator=skip_evaluator,
+                batch_manager=batch_manager,
+                output_manager=output_manager
+            ),
+            console=self.console
+        )
+
+        # Initialize action-level orchestrator
+        action_level_orchestrator = ActionLevelOrchestrator(
+            self.execution_order,
+            self.agent_configs,
+            self.console
+        )
+
+        return WorkflowServices(
+            core=CoreServices(
+                agent_runner=agent_runner,
+                state_manager=state_manager,
+                agent_executor=agent_executor,
+                action_level_orchestrator=action_level_orchestrator
+            ),
+            support=SupportServices(
+                output_processor=output_processor,
+                batch_service=batch_service,
+                loop_correlator=loop_correlator,
+                skip_evaluator=skip_evaluator,
+                batch_manager=batch_manager,
+                output_manager=output_manager
+            )
+        )
+
     def _load_configs(self):
         """Load and process configuration files."""
-        self.config_manager.load_configs()
-        self.config_manager.validate_agent_name()
-        self.config_manager.check_child_pipeline()
+        manager = self.config.manager
+        manager.load_configs()
+        manager.validate_agent_name()
+        manager.check_child_pipeline()
 
-        user_agents = self.config_manager.get_user_agents()
-        self.config_manager.merge_agent_configs(user_agents)
-        self.config_manager.determine_execution_order()
+        user_agents = manager.get_user_agents()
+        manager.merge_agent_configs(user_agents)
+        manager.determine_execution_order()
 
-        self.agent_name = self.config_manager.agent_name
-        self.execution_order = self.config_manager.execution_order
-        self.agent_indices = {agent: i for i, agent in enumerate(self.execution_order)}
-        self.agent_configs = self.config_manager.get_all_agent_configs_as_dicts()
+        execution_order = manager.execution_order
+        agent_configs = manager.get_all_agent_configs_as_dicts()
+        agent_indices = {agent: i for i, agent in enumerate(execution_order)}
 
         # Add idx and workflow_config_path fields to each agent config
-        for agent_name, agent_config in self.agent_configs.items():
-            # Skip None configs (defensive check for malformed config dictionaries)
+        for agent_name, agent_config in agent_configs.items():
+            # Skip None configs (defensive check for malformed dictionaries)
             if agent_config is None:
                 continue
-            if agent_name in self.agent_indices:
-                agent_config['idx'] = self.agent_indices[agent_name]
+            if agent_name in agent_indices:
+                agent_config['idx'] = agent_indices[agent_name]
             # Add workflow config path for static data loading
-            agent_config['workflow_config_path'] = self.constructor_path
+            agent_config['workflow_config_path'] = self.config.paths.constructor_path
 
-        self.child_pipeline = self.config_manager.child_pipeline
+        # Create metadata object
+        self.metadata = WorkflowMetadata(
+            agent_name=manager.agent_name,
+            execution_order=execution_order,
+            agent_indices=agent_indices,
+            agent_configs=agent_configs,
+            child_pipeline=manager.child_pipeline
+        )
+
+    @property
+    def agent_name(self) -> str:
+        """Get agent name from metadata."""
+        return self.metadata.agent_name
+
+    @property
+    def execution_order(self) -> list:
+        """Get execution order from metadata."""
+        return self.metadata.execution_order
+
+    @property
+    def agent_indices(self) -> dict:
+        """Get agent indices from metadata."""
+        return self.metadata.agent_indices
+
+    @property
+    def agent_configs(self) -> dict:
+        """Get agent configs from metadata."""
+        return self.metadata.agent_configs
+
+    @property
+    def child_pipeline(self) -> Optional[str]:
+        """Get child pipeline from metadata."""
+        return self.metadata.child_pipeline
 
     def _discover_udfs(self):
         """Discover user-defined functions from configured paths."""
-        if self.user_code_path:
-            self._discover_udfs_from_path(self.user_code_path, is_primary=True)
-        elif self.config_manager.tool_path:
+        if self.config.paths.user_code_path:
+            self._discover_udfs_from_path(self.config.paths.user_code_path, is_primary=True)
+        elif self.config.manager.tool_path:
             total_udfs = 0
-            for path in self.config_manager.tool_path:
+            for path in self.config.manager.tool_path:
                 count = self._discover_udfs_from_path(path, is_primary=False)
                 total_udfs += count
             if total_udfs > 0:
@@ -183,8 +260,6 @@ class AgentWorkflow:
 
     def _discover_udfs_from_path(self, path: str, is_primary: bool) -> int:
         """Discover UDFs from a specific path."""
-        from agent_actions.input_loading.udf_loader import discover_udfs
-
         abs_path = str(Path(path).resolve())
         if abs_path not in sys.path:
             sys.path.insert(0, abs_path)
@@ -207,109 +282,152 @@ class AgentWorkflow:
     def _generate_workflow_session_id(self) -> str:
         """Generate a deterministic yet unique workflow session ID."""
         timestamp = int(time.time())
-        config_content = f'{self.constructor_path}:{self.agent_name}'
+        config_content = f'{self.config.constructor_path}:{self.agent_name}'
         config_hash = hashlib.md5(config_content.encode()).hexdigest()[:8]
         return f'workflow_{timestamp}_{config_hash}'
 
     def _inject_workflow_session_id(self):
         """Inject workflow session ID into all agent configurations."""
-        for agent_name, agent_config in self.agent_configs.items():
+        for agent_config in self.agent_configs.values():
             agent_config['workflow_session_id'] = self.workflow_session_id
 
     def _resolve_upstream_workflows(self):
         """Recursively resolve and execute upstream dependencies."""
-        if not self.run_upstream:
+        if not self.config.run_upstream:
             return True  # Continue execution
-        
-        logger.info(f"Checking upstream dependencies for {self.agent_name}...", extra={'operation': 'resolve_upstream'})
+
+        logger.info(
+            "Checking upstream dependencies for %s...",
+            self.agent_name,
+            extra={'operation': 'resolve_upstream'}
+        )
         processed_upstreams = set()
-        
-        for agent_name, config in self.agent_configs.items():
+
+        for config in self.agent_configs.values():
             for dep in config.get('dependencies', []):
                 if isinstance(dep, dict) and 'workflow' in dep:
                     upstream_name = dep['workflow']
                     if upstream_name in processed_upstreams:
                         continue
-                    
+
                     result = self._execute_upstream_workflow(upstream_name)
                     if result is None:
                         # Upstream has pending batch jobs, exit gracefully
                         return False  # Signal to stop execution
                     processed_upstreams.add(upstream_name)
-        
+
         return True  # All upstreams resolved successfully
 
     def _execute_upstream_workflow(self, upstream_name: str):
         """Execute a single upstream workflow and link artifacts."""
-        self.console.print(f"[bold cyan]>> Recursive: Checking upstream workflow '{upstream_name}'...[/bold cyan]")
-        
-        # 1. Locate Upstream Config (Heuristic: Same parent directory structure)
+        self.console.print(
+            f"[bold cyan]>> Recursive: Checking upstream workflow "
+            f"'{upstream_name}'...[/bold cyan]"
+        )
+
+        # 1. Locate Upstream Config (Heuristic: Same parent structure)
         # Assumes: .../workflows/CURRENT/agent_config/current.yml
         # Target:  .../workflows/UPSTREAM/agent_config/upstream.yml
         try:
-            current_config_path = Path(self.constructor_path)
-            workflows_root = current_config_path.parents[2] # .../samples/agent_workflow
-            upstream_config_path = workflows_root / upstream_name / 'agent_config' / f'{upstream_name}.yml'
-            
+            current_config_path = Path(self.config.constructor_path)
+            # .../samples/agent_workflow
+            workflows_root = current_config_path.parents[2]
+            upstream_config_path = (
+                workflows_root / upstream_name / 'agent_config' /
+                f'{upstream_name}.yml'
+            )
+
             if not upstream_config_path.exists():
-                raise FileNotFoundError(f"Could not locate upstream config at {upstream_config_path}")
+                raise FileNotFoundError(
+                    f"Could not locate upstream config at "
+                    f"{upstream_config_path}"
+                )
 
             # 2. Check if upstream workflow is already complete
-            # Optimization: Read status file directly instead of initializing full workflow
-            upstream_agent_folder = workflows_root / upstream_name / 'agent_io'
-            upstream_status_file = upstream_agent_folder / '.agent_status.json'
-            
+            # Optimization: Read status file directly
+            upstream_agent_folder = (
+                workflows_root / upstream_name / 'agent_io'
+            )
+            upstream_status_file = (
+                upstream_agent_folder / '.agent_status.json'
+            )
+
             all_completed = False
             if upstream_status_file.exists():
                 try:
-                    import json
-                    with open(upstream_status_file, 'r') as f:
+                    with open(upstream_status_file, 'r', encoding='utf-8') as f:
                         status_data = json.load(f)
                     # Check if all agents are completed
                     all_completed = all(
                         details.get('status') == 'completed'
                         for details in status_data.values()
                     )
-                except Exception:
+                except (OSError, IOError, json.JSONDecodeError, KeyError):
                     # If we can't read status, assume not complete
                     all_completed = False
-            
+
             if all_completed:
-                self.console.print(f"[bold green]>> Upstream workflow '{upstream_name}' already completed, using existing data[/bold green]")
+                self.console.print(
+                    f"[bold green]>> Upstream workflow "
+                    f"'{upstream_name}' already completed, "
+                    "using existing data[/bold green]"
+                )
             else:
                 # 3. Run Upstream Workflow
                 # Only initialize workflow if we need to run it
-                self.console.print(f"[bold cyan]>> Recursive: Executing upstream workflow '{upstream_name}'...[/bold cyan]")
-                upstream_wf = self.__class__(
-                    constructor_path=str(upstream_config_path),
-                    user_code_path=self.user_code_path,
-                    default_path=self.default_path,
-                    use_tools=self.use_tools,
-                    run_upstream=False  # Don't trigger recursive check
+                self.console.print(
+                    f"[bold cyan]>> Recursive: Executing upstream "
+                    f"workflow '{upstream_name}'...[/bold cyan]"
                 )
-                result = upstream_wf.run() # Execute synchronously
+                upstream_wf = self.__class__(
+                    WorkflowConfig(
+                        paths=WorkflowPaths(
+                            constructor_path=str(upstream_config_path),
+                            user_code_path=self.config.paths.user_code_path,
+                            default_path=self.config.paths.default_path
+                        ),
+                        use_tools=self.config.use_tools,
+                        run_upstream=False  # Don't trigger recursive check
+                    )
+                )
+                result = upstream_wf.run()  # Execute synchronously
 
                 # Handle batch job submission
-                # Returns: ('success', {}) when complete, None when batch jobs pending
+                # Returns: ('success', {}) when complete,
+                # None when batch jobs pending
                 if result is None:
-                    self.console.print(f"[blue]⏳ Upstream workflow '{upstream_name}' has pending batch jobs.[/blue]")
-                    self.console.print(f"[blue]Please wait for batch completion and run this command again:[/blue]")
-                    self.console.print(f"[blue]  agac run -a {self.agent_name} --upstream[/blue]")
+                    self.console.print(
+                        f"[blue]⏳ Upstream workflow '{upstream_name}' "
+                        "has pending batch jobs.[/blue]"
+                    )
+                    self.console.print(
+                        "[blue]Please wait for batch completion "
+                        "and run this command again:[/blue]"
+                    )
+                    self.console.print(
+                        f"[blue]  agac run -a {self.agent_name} "
+                        "--upstream[/blue]"
+                    )
                     return None  # Signal to caller that we should exit gracefully
 
-                # Upstream completed successfully - continue to link artifacts
-                status, summary = result
+                # Upstream completed successfully - continue to link
 
             # 4. Symlink Artifacts (The "Symlink Strategy")
             self._link_upstream_artifacts(upstream_name)
 
-            self.console.print(f"[bold green]>> Recursive: Ready to use upstream data from '{upstream_name}'[/bold green]")
+            self.console.print(
+                f"[bold green]>> Recursive: Ready to use upstream "
+                f"data from '{upstream_name}'[/bold green]"
+            )
 
             # Return success to signal upstream is ready
             return True
 
         except Exception as e:
-            logger.error(f"Failed to execute upstream workflow {upstream_name}: {e}")
+            logger.error(
+                "Failed to execute upstream workflow %s: %s",
+                upstream_name, e
+            )
             raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
 
     def _link_workflow_artifacts(self, source_workflow: str, target_workflow: str) -> None:
@@ -329,11 +447,16 @@ class AgentWorkflow:
             latest_node = self._find_latest_node_dir(source_target)
             if latest_node:
                 self._safe_symlink_contents(latest_node, target_staging)
-                logger.info(f"Linked {latest_node} -> {target_staging}")
+                logger.info("Linked %s -> %s", latest_node, target_staging)
             else:
-                logger.warning(f"No output nodes found in {source_target}")
+                logger.warning(
+                    "No output nodes found in %s", source_target
+                )
         else:
-            logger.warning(f"Source target directory does not exist: {source_target}")
+            logger.warning(
+                "Source target directory does not exist: %s",
+                source_target
+            )
 
     def _link_upstream_artifacts(self, upstream_name: str) -> None:
         """Link upstream workflow's output to current workflow's staging."""
@@ -352,19 +475,22 @@ class AgentWorkflow:
         """Symlink a folder, falling back to copy."""
         if not src.exists():
             return
-        
+
         # Clear destination if it exists
         if dst.exists():
             if dst.is_symlink() or dst.is_file():
                 dst.unlink()
             else:
                 shutil.rmtree(dst)
-        
+
         try:
             os.symlink(src, dst)
-            logger.debug(f"Symlinked {src} -> {dst}")
+            logger.debug("Symlinked %s -> %s", src, dst)
         except OSError:
-            logger.warning(f"Symlink failed, falling back to copy: {src} -> {dst}")
+            logger.warning(
+                "Symlink failed, falling back to copy: %s -> %s",
+                src, dst
+            )
             shutil.copytree(src, dst)
 
     def _validate_safe_path(self, path: Path, base_dir: Path) -> bool:
@@ -377,15 +503,21 @@ class AgentWorkflow:
             return False
 
     def _safe_symlink_contents(self, src_dir: Path, dst_dir: Path):
-        """Symlink all files from src_dir into dst_dir with path traversal protection."""
+        """Symlink files with path traversal protection."""
         workflows_root = self._get_workflows_root()
 
         # Validate both directories are within workflows root
         if not self._validate_safe_path(src_dir, workflows_root):
-            logger.warning(f"Rejecting symlink: source {src_dir} outside workspace")
+            logger.warning(
+                "Rejecting symlink: source %s outside workspace",
+                src_dir
+            )
             return
         if not self._validate_safe_path(dst_dir, workflows_root):
-            logger.warning(f"Rejecting symlink: destination {dst_dir} outside workspace")
+            logger.warning(
+                "Rejecting symlink: destination %s outside workspace",
+                dst_dir
+            )
             return
 
         if not dst_dir.exists():
@@ -414,7 +546,7 @@ class AgentWorkflow:
 
     def _get_workflows_root(self) -> Path:
         """Get the root directory containing all workflows."""
-        current_config_path = Path(self.constructor_path)
+        current_config_path = Path(self.config.constructor_path)
         # Assumes: .../workflows/CURRENT/agent_config/current.yml
         return current_config_path.parents[2]
 
@@ -426,31 +558,38 @@ class AgentWorkflow:
             True if all downstream workflows completed successfully,
             False if any downstream has pending batch jobs.
         """
-        if not self.run_downstream:
+        if not self.config.run_downstream:
             return True
 
         logger.info(
-            f"Checking downstream workflows for {self.agent_name}...",
+            "Checking downstream workflows for %s...",
+            self.agent_name,
             extra={'operation': 'resolve_downstream'}
         )
 
         # Lazy-initialize workspace index
         if self._workspace_index is None:
-            from agent_actions.orchestration.workspace_index import WorkspaceIndex
-            self._workspace_index = WorkspaceIndex(self._get_workflows_root())
+            self._workspace_index = WorkspaceIndex(
+                self._get_workflows_root()
+            )
             self._workspace_index.scan_workspace()
 
         # Get sorted downstream workflows
         try:
-            downstream_order = self._workspace_index.topological_sort_downstream(
-                self.agent_name
+            downstream_order = (
+                self._workspace_index.topological_sort_downstream(
+                    self.agent_name
+                )
             )
         except Exception as e:
-            logger.error(f"Failed to compute downstream order: {e}")
+            logger.error("Failed to compute downstream order: %s", e)
             raise
 
         if not downstream_order:
-            self.console.print(f"[dim]No downstream workflows found for {self.agent_name}[/dim]")
+            self.console.print(
+                f"[dim]No downstream workflows found for "
+                f"{self.agent_name}[/dim]"
+            )
             return True
 
         self.console.print(
@@ -482,11 +621,15 @@ class AgentWorkflow:
         )
 
         # Locate downstream config
-        downstream_config_path = self._get_workflows_root() / downstream_name / 'agent_config' / f'{downstream_name}.yml'
+        downstream_config_path = (
+            self._get_workflows_root() / downstream_name /
+            'agent_config' / f'{downstream_name}.yml'
+        )
 
         if not downstream_config_path.exists():
             raise FileNotFoundError(
-                f"Downstream workflow config not found at {downstream_config_path}"
+                f"Downstream workflow config not found at "
+                f"{downstream_config_path}"
             )
 
         # Link current workflow's output to downstream's staging
@@ -494,25 +637,32 @@ class AgentWorkflow:
 
         # Create new workflow instance (without recursive downstream)
         downstream_wf = self.__class__(
-            constructor_path=str(downstream_config_path),
-            user_code_path=self.user_code_path,
-            default_path=self.default_path,
-            use_tools=self.use_tools,
-            run_upstream=False,   # Don't re-run upstream
-            run_downstream=False  # Don't recurse downstream
+            WorkflowConfig(
+                paths=WorkflowPaths(
+                    constructor_path=str(downstream_config_path),
+                    user_code_path=self.config.paths.user_code_path,
+                    default_path=self.config.paths.default_path
+                ),
+                use_tools=self.config.use_tools,
+                run_upstream=False,   # Don't re-run upstream
+                run_downstream=False  # Don't recurse downstream
+            )
         )
 
         result = downstream_wf.run()
 
         if result is None:
             self.console.print(
-                f"[blue]⏳ Downstream workflow '{downstream_name}' has pending batch jobs.[/blue]"
+                f"[blue]⏳ Downstream workflow '{downstream_name}' "
+                "has pending batch jobs.[/blue]"
             )
             self.console.print(
-                f"[blue]Please wait for batch completion and run this command again:[/blue]"
+                "[blue]Please wait for batch completion "
+                "and run this command again:[/blue]"
             )
             self.console.print(
-                f"[blue]  agac run -a {self.agent_name} --downstream[/blue]"
+                f"[blue]  agac run -a {self.agent_name} "
+                "--downstream[/blue]"
             )
             return None
 
@@ -525,14 +675,33 @@ class AgentWorkflow:
         """Link current workflow's output to downstream workflow's staging."""
         self._link_workflow_artifacts(self.agent_name, downstream_name)
 
-    async def async_run(self, concurrency_limit: int = 5):
-        """
-        Execute workflow level-by-level with parallelism within each level.
+    def _log_workflow_start(self, workflow_start: datetime, is_async: bool = False):
+        """Log workflow start with session separator."""
+        correlation_id = CorrelationContext.get_correlation_id()
+        time_str = workflow_start.strftime('%H:%M:%S.%f')[:-3]
+        corr_id = correlation_id[:8] if correlation_id else 'unknown'
+        separator = f"====== {time_str} | {corr_id} ======"
+        logger.info(separator)
 
-        Args:
-            concurrency_limit: Maximum concurrent agents within a level (default 5)
+        mode = "async" if is_async else "sync"
+        logger.info(
+            "Workflow started (%s)",
+            mode,
+            extra={
+                'operation': f'workflow_start_{mode}',
+                'workflow_name': self.agent_name,
+                'agent_count': len(self.execution_order)
+            }
+        )
+
+    def _resolve_upstream_and_initialize(self) -> Optional[bool]:
         """
-        # Initialize correlation context
+        Initialize correlation context and resolve upstream dependencies.
+
+        Returns:
+            True if should continue, False if upstream has pending batches,
+            None if exception occurred (caller should re-raise)
+        """
         previous_context = CorrelationContext.get_context()
         try:
             CorrelationContext.start_workflow(self.agent_name)
@@ -543,33 +712,36 @@ class AgentWorkflow:
                     CorrelationContext.set_context(previous_context)
                 else:
                     CorrelationContext.clear_context()
-                return None
-        except Exception as e:
+                return False
+            return True
+        except Exception:
             if previous_context:
                 CorrelationContext.set_context(previous_context)
             else:
                 CorrelationContext.clear_context()
-            raise e
+            raise
+
+    async def async_run(self, concurrency_limit: int = 5):
+        """
+        Execute workflow level-by-level with parallelism within each level.
+
+        Args:
+            concurrency_limit: Maximum concurrent agents within a level (default 5)
+        """
+        # Initialize correlation context and resolve upstream
+        should_continue = self._resolve_upstream_and_initialize()
+        if should_continue is False:
+            return None
+
+        previous_context = CorrelationContext.get_context()
         workflow_start = datetime.now()
-
-        # Log session separator for file-based logging
-        correlation_id = CorrelationContext.get_correlation_id()
-        separator = f"====== {workflow_start.strftime('%H:%M:%S.%f')[:-3]} | {correlation_id[:8] if correlation_id else 'unknown'} ======"
-        logger.info(separator)
-
-        logger.info(
-            "Workflow started (async)",
-            extra={
-                'operation': 'workflow_start_async',
-                'workflow_name': self.agent_name,
-                'agent_count': len(self.execution_order),
-                'concurrency_limit': concurrency_limit
-            }
-        )
+        self._log_workflow_start(workflow_start, is_async=True)
 
         try:
-            levels = self.action_level_orchestrator.compute_execution_levels()
-            self.action_level_orchestrator.log_execution_levels(levels, self.agent_indices)
+            levels = self.services.core.action_level_orchestrator.compute_execution_levels()
+            self.services.core.action_level_orchestrator.log_execution_levels(
+                levels, self.agent_indices
+            )
 
             # Execute each level
             for level_idx, level_agents in enumerate(levels):
@@ -578,13 +750,16 @@ class AgentWorkflow:
                     if agent_name in self.agent_indices:
                         CorrelationContext.set_agent(agent_name, self.agent_indices[agent_name])
 
-                level_complete = await self.action_level_orchestrator.execute_level_async(
-                    level_idx,
-                    level_agents,
-                    self.agent_indices,
-                    self.state_manager,
-                    self.agent_executor,
-                    concurrency_limit
+                orchestrator = self.services.core.action_level_orchestrator
+                level_complete = await orchestrator.execute_level_async(
+                    LevelExecutionParams(
+                        level_idx=level_idx,
+                        level_agents=level_agents,
+                        agent_indices=self.agent_indices,
+                        state_manager=self.services.core.state_manager,
+                        agent_executor=self.services.core.agent_executor,
+                        concurrency_limit=concurrency_limit
+                    )
                 )
 
                 # If batch jobs pending, stop workflow
@@ -640,40 +815,14 @@ class AgentWorkflow:
 
     def run(self):
         """Execute workflow sequentially."""
-        # Initialize correlation context
+        # Initialize correlation context and resolve upstream
+        should_continue = self._resolve_upstream_and_initialize()
+        if should_continue is False:
+            return None
+
         previous_context = CorrelationContext.get_context()
-        try:
-            CorrelationContext.start_workflow(self.agent_name)
-            should_continue = self._resolve_upstream_workflows()
-            if not should_continue:
-                # Upstream has pending batch jobs, exit gracefully
-                if previous_context:
-                    CorrelationContext.set_context(previous_context)
-                else:
-                    CorrelationContext.clear_context()
-                return None  # Return None to indicate incomplete workflow
-        except Exception as e:
-            if previous_context:
-                CorrelationContext.set_context(previous_context)
-            else:
-                CorrelationContext.clear_context()
-            raise e
-
         workflow_start = datetime.now()
-
-        # Log session separator for file-based logging
-        correlation_id = CorrelationContext.get_correlation_id()
-        separator = f"====== {workflow_start.strftime('%H:%M:%S.%f')[:-3]} | {correlation_id[:8] if correlation_id else 'unknown'} ======"
-        logger.info(separator)
-
-        logger.info(
-            "Workflow started",
-            extra={
-                'operation': 'workflow_start',
-                'workflow_name': self.agent_name,
-                'agent_count': len(self.execution_order)
-            }
-        )
+        self._log_workflow_start(workflow_start, is_async=False)
 
         try:
             total_agents = len(self.execution_order)
@@ -689,7 +838,7 @@ class AgentWorkflow:
                     break
 
             # Check if workflow is complete
-            if self.state_manager.is_workflow_complete():
+            if self.services.core.state_manager.is_workflow_complete():
                 self._finalize_workflow()
 
                 # Log successful completion
@@ -713,6 +862,9 @@ class AgentWorkflow:
 
                 # Return success tuple to distinguish from batch pending (None)
                 return ('success', {})
+
+            # Workflow incomplete (batch jobs pending or stopped early)
+            return None
 
         except Exception as e:
             duration = (datetime.now() - workflow_start).total_seconds()
@@ -753,23 +905,32 @@ class AgentWorkflow:
         )
 
         # Check if already completed
-        if self.state_manager.is_completed(agent_name):
+        if self.services.core.state_manager.is_completed(agent_name):
             self._log_agent_skip(idx, agent_name, total_agents, start_time)
             return False
 
         # Execute agent
         is_last = idx == len(self.execution_order) - 1
-        result = self.agent_executor.execute_agent_sync(
+        result = self.services.core.agent_executor.execute_agent_sync(
             agent_name,
-            idx,
-            agent_config,
-            is_last
+            agent_idx=idx,
+            agent_config=agent_config,
+            is_last_agent=is_last
         )
 
         # Log result
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        self._log_agent_result(idx, agent_name, total_agents, result, end_time, duration)
+        self._log_agent_result(
+            AgentLogParams(
+                idx=idx,
+                agent_name=agent_name,
+                total_agents=total_agents,
+                result=result,
+                end_time=end_time,
+                duration=duration
+            )
+        )
 
         # Handle result
         if result.success:
@@ -778,13 +939,13 @@ class AgentWorkflow:
                 return True  # Signal to stop workflow
 
             if result.output_folder and result.status == 'completed':
-                self.ephemeral_directories.append({
+                self.state.ephemeral_directories.append({
                     'output_folder': result.output_folder,
                     'ephemeral': agent_config.get('ephemeral', False)
                 })
             return False  # Continue to next agent
-        else:
-            raise result.error
+
+        raise result.error
 
     def _log_agent_skip(self, idx: int, agent_name: str, total_agents: int, start_time: datetime):
         """Log skipped agent."""
@@ -795,27 +956,22 @@ class AgentWorkflow:
             f"[yellow]SKIP[/yellow] [bold]{agent_name}[/bold] in {duration:.2f}s"
         )
 
-    def _log_agent_result(
-        self,
-        idx: int,
-        agent_name: str,
-        total_agents: int,
-        result,
-        end_time: datetime,
-        duration: float
-    ):
-        """Log agent execution result."""
+    def _get_status_display(self, status: str) -> tuple:
+        """Get status display color and suffix."""
         status_map = {
             'completed': ('[green]OK[/green]', ''),
             'batch_submitted': ('[yellow]SUBMITTED[/yellow]', ' (batch)'),
             'failed': ('[red]FAIL[/red]', '')
         }
+        return status_map.get(status, ('[yellow]UNKNOWN[/yellow]', ''))
 
-        status_color, suffix = status_map.get(result.status, ('[yellow]UNKNOWN[/yellow]', ''))
+    def _log_agent_result(self, params: AgentLogParams):
+        """Log agent execution result."""
+        status_color, suffix = self._get_status_display(params.result.status)
 
         self.console.print(
-            f"{end_time.strftime('%H:%M:%S')} | {idx + 1}/{total_agents} "
-            f"{status_color} [bold]{agent_name}[/bold]{suffix} in {duration:.2f}s"
+            f"{params.end_time.strftime('%H:%M:%S')} | {params.idx + 1}/{params.total_agents} "
+            f"{status_color} [bold]{params.agent_name}[/bold]{suffix} in {params.duration:.2f}s"
         )
 
     def _finalize_workflow(self):
@@ -823,12 +979,13 @@ class AgentWorkflow:
         self.console.print('\n[bold]Workflow Summary:[/bold]')
 
         for agent_name in self.execution_order:
-            status = self.state_manager.get_status(agent_name)
+            status = self.services.core.state_manager.get_status(agent_name)
             color = 'green' if status == 'completed' else 'red' if status == 'failed' else 'yellow'
             self.console.print(f'- {agent_name}: [{color}]{status}[/{color}]')
 
         # Process final output
-        self.output_processor.process_final_output(self.ephemeral_directories)
+        output_proc = self.services.support.output_processor
+        output_proc.process_final_output(self.state.ephemeral_directories)
 
         self.console.print('\n🎉 [bold green]Workflow Complete[/bold green]')
         self.console.print('Done.')
@@ -836,11 +993,7 @@ class AgentWorkflow:
     def _handle_workflow_error(self, error: Exception):
         """Handle workflow execution error."""
         self.console.print(f'\n❌ [bold red]Workflow failed with error:[/bold red] {error}')
-        self.failed = True
+        self.state.failed = True
 
         # Mark running agent as failed
-        failed_agent = self.state_manager.mark_running_as_failed()
-
-
-
-
+        self.services.core.state_manager.mark_running_as_failed()

@@ -1,6 +1,8 @@
 """Module for generating data using agents."""
 import logging
 from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import dataclass
+
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.utilities.processor.processor_helpers import (
     run_dynamic_agent,
@@ -8,8 +10,29 @@ from agent_actions.utilities.processor.processor_helpers import (
 )
 from agent_actions.configuration.interfaces import IGenerator, ProcessingMode
 from agent_actions.orchestration.dependency_injection import registry
+from agent_actions.utilities.field_resolution.evaluation_context_provider import (
+    EvaluationContextProvider,
+    ContextBuildConfig
+)
+from agent_actions.prompt_generation.prompt_preparation_service import (
+    PromptPreparationService
+)
+from agent_actions.utilities.tools_resolver import resolve_tools_path
+from agent_actions.errors import GenerationError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class GuardEvaluationContext:
+    """Context for early guard evaluation."""
+
+    contents: Any
+    current_item: Optional[Dict] = None
+    file_path: Optional[str] = None
+    source_content: Optional[Any] = None
+    loop_context: Optional[Dict] = None
+    workflow_metadata: Optional[Dict] = None
 
 
 @registry.register_generator('data_generator')
@@ -48,12 +71,7 @@ class DataGenerator(IGenerator):
 
     def _evaluate_guard_early(
         self,
-        contents: Any,
-        current_item: Optional[Dict] = None,
-        file_path: Optional[str] = None,
-        source_content: Optional[Any] = None,
-        loop_context: Optional[Dict] = None,
-        workflow_metadata: Optional[Dict] = None
+        context: GuardEvaluationContext
     ) -> Tuple[bool, Optional[str]]:
         """
         Evaluate guard conditions BEFORE prompt rendering.
@@ -66,12 +84,7 @@ class DataGenerator(IGenerator):
         templates that would fail.
 
         Args:
-            contents: Current content to process
-            current_item: Current item dict with lineage and source_guid
-            file_path: File path for historical node loading
-            source_content: Source content for references
-            loop_context: Loop context for {loop.*} references
-            workflow_metadata: Workflow metadata for {workflow.*} references
+            context: GuardEvaluationContext with all required data
 
         Returns:
             Tuple of (should_execute, skip_behavior):
@@ -79,35 +92,40 @@ class DataGenerator(IGenerator):
             - (False, 'skip') = guard failed, skip with passthrough
             - (False, 'filter') = guard failed, filter out entirely
         """
-        # Import here to avoid circular dependency
-        # pylint: disable=import-outside-toplevel
-        from agent_actions.utilities.field_resolution.evaluation_context_provider import (
-            EvaluationContextProvider
-        )
-
         # Build rich context for guard evaluation using EvaluationContextProvider
         # This loads ALL upstream action data via historical node loader
         provider = EvaluationContextProvider()
 
         # Construct current_item if not provided
-        if current_item is None:
+        if context.current_item is None:
             current_item = {
-                'content': contents if isinstance(contents, dict) else {},
-                'source_guid': contents.get('source_guid') if isinstance(contents, dict) else None,
-                'lineage': contents.get('lineage', []) if isinstance(contents, dict) else []
+                'content': context.contents if isinstance(context.contents, dict) else {},
+                'source_guid': (
+                    context.contents.get('source_guid')
+                    if isinstance(context.contents, dict) else None
+                ),
+                'lineage': (
+                    context.contents.get('lineage', [])
+                    if isinstance(context.contents, dict) else []
+                )
             }
+        else:
+            current_item = context.current_item
 
         try:
-            eval_context = provider.build_context(
-                current_item=current_item,
+            config = ContextBuildConfig(
                 agent_config=self.agent_config,
                 agent_name=self.agent_name,
                 agent_indices=self.agent_indices,
                 dependency_configs=self.dependency_configs,
-                file_path=file_path,
-                source_content=source_content,
-                loop_context=loop_context,
-                workflow_metadata=workflow_metadata
+                file_path=context.file_path,
+                source_content=context.source_content,
+                loop_context=context.loop_context,
+                workflow_metadata=context.workflow_metadata
+            )
+            eval_context = provider.build_context(
+                current_item=current_item,
+                config=config
             )
 
             # Convert to flat dict for guard evaluation
@@ -135,7 +153,7 @@ class DataGenerator(IGenerator):
 
             return (should_execute, behavior)
 
-        except Exception as e:
+        except (ValueError, KeyError, TypeError) as e:
             # On error, proceed with execution (don't skip)
             # The guard will be re-evaluated in run_dynamic_agent if needed
             logger.warning(
@@ -189,7 +207,7 @@ class DataGenerator(IGenerator):
             # This prevents template errors when referencing fields from skipped actions.
             # If guard says skip/filter, return early without attempting prompt rendering.
             if self._has_guard_condition():
-                should_execute, behavior = self._evaluate_guard_early(
+                guard_context = GuardEvaluationContext(
                     contents=contents,
                     current_item=current_item,
                     file_path=file_path,
@@ -197,6 +215,7 @@ class DataGenerator(IGenerator):
                     loop_context=loop_context,
                     workflow_metadata=workflow_metadata
                 )
+                should_execute, behavior = self._evaluate_guard_early(guard_context)
 
                 if not should_execute:
                     # Guard failed - return early without prompt rendering
@@ -215,12 +234,6 @@ class DataGenerator(IGenerator):
                     return (contents, False, {})
 
             # Guard passed (or no guard) - proceed with prompt preparation
-            # pylint: disable=import-outside-toplevel
-            from agent_actions.prompt_generation.prompt_preparation_service import (
-                PromptPreparationService
-            )
-            from agent_actions.utilities.tools_resolver import resolve_tools_path
-
             # Resolve tools_path for dispatch_task() injection
             tools_path = resolve_tools_path(self.agent_config)
 
@@ -263,9 +276,7 @@ class DataGenerator(IGenerator):
             )
 
             return (response, executed, prep_result.passthrough_fields)
-        except Exception as e:
-            # pylint: disable=import-outside-toplevel
-            from agent_actions.errors import GenerationError  # New modular pattern!
+        except (ValueError, KeyError, TypeError, RuntimeError) as e:
             raise GenerationError(
                 f'Failed to create agent with data: {str(e)}', cause=e
             ) from e

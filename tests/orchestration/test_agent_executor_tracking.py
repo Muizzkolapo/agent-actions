@@ -33,14 +33,17 @@ class TestAgentExecutorIntegration:
 
     def test_agent_execution_result_accepts_new_fields(self):
         """Breaking: AgentExecutionResult must accept new fields."""
+        from agent_actions.orchestration.agent_executor import ExecutionMetrics
         result = AgentExecutionResult(
             success=True,
             status='completed',
-            duration=5.2,
-            tokens={'input_tokens': 100, 'output_tokens': 50, 'total_tokens': 150},
-            model_vendor='openai',
-            model_name='gpt-4o-mini',
-            files_processed=3
+            metrics=ExecutionMetrics(
+                duration=5.2,
+                tokens={'input_tokens': 100, 'output_tokens': 50, 'total_tokens': 150},
+                model_vendor='openai',
+                model_name='gpt-4o-mini',
+                files_processed=3
+            )
         )
 
         assert result.success is True

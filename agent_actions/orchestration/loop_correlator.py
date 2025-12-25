@@ -6,11 +6,25 @@ without breaking existing sequential execution.
 """
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from collections import defaultdict
 
+from agent_actions.errors import DataValidationError
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class JsonLoadParams:
+    """Parameters for loading JSON from file."""
+    json_file: Path
+    outputs: List
+    corrupted_files: List
+    output_dir: Path
+    operation: str
+    add_source_file: bool = False
 
 class LoopOutputCorrelator:
     """Correlates outputs from parallel loop executions for downstream consumption."""
@@ -19,7 +33,9 @@ class LoopOutputCorrelator:
         self.agent_folder = agent_folder
         self.correlations_cache = {}
 
-    def detect_explicit_loop_consumption(self, execution_order: List[str], agent_configs: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    def detect_explicit_loop_consumption(
+        self, execution_order: List[str], agent_configs: Dict[str, Any]
+    ) -> Dict[str, Dict[str, Any]]:
         """
         Detect agents with explicit loop consumption configurations.
 
@@ -49,12 +65,70 @@ class LoopOutputCorrelator:
                 pattern = loop_consumption_config.get('pattern', 'merge')
                 loop_agents = loop_groups.get(source_base_name, [])
                 if loop_agents:
-                    loop_consumption_map[agent_name] = {'source_base_name': source_base_name, 'pattern': pattern, 'loop_agents': loop_agents}
+                    loop_consumption_map[agent_name] = {
+                        'source_base_name': source_base_name,
+                        'pattern': pattern,
+                        'loop_agents': loop_agents
+                    }
                 else:
-                    print(f"Warning: Agent '{agent_name}' consumes loop '{source_base_name}' but no loop agents found")
+                    logger.warning(
+                        "Agent '%s' consumes loop '%s' but no loop agents found",
+                        agent_name,
+                        source_base_name
+                    )
         return loop_consumption_map
 
-    def prepare_correlated_input(self, agent_name: str, loop_sources: List[str], current_idx: int) -> Optional[str]:
+    def _load_loop_outputs(
+        self, loop_sources: List[str]
+    ) -> tuple[Dict[str, List[Dict[str, Any]]], set]:
+        """Load outputs from all loop sources."""
+        loop_outputs = {}
+        loop_filenames = set()
+        for loop_agent in loop_sources:
+            loop_idx = self._find_agent_index(loop_agent)
+            if loop_idx is None:
+                continue
+            loop_output_dir = (
+                self.agent_folder / 'target' /
+                f'node_{loop_idx}_{loop_agent}'
+            )
+            if loop_output_dir.exists():
+                outputs, filenames = (
+                    self._load_agent_outputs_with_filenames(
+                        loop_output_dir
+                    )
+                )
+                loop_outputs[loop_agent] = outputs
+                loop_filenames.update(filenames)
+        return loop_outputs, loop_filenames
+
+    def _process_loop_files(
+        self,
+        loop_outputs: Dict[str, List[Dict[str, Any]]],
+        loop_filenames: set,
+        correlation_dir: Path
+    ):
+        """Process and correlate outputs by file."""
+        for filename in loop_filenames:
+            file_loop_outputs = {}
+            for loop_agent, outputs in loop_outputs.items():
+                file_outputs = [
+                    o for o in outputs
+                    if o.get('_source_file') == filename
+                ]
+                if file_outputs:
+                    file_loop_outputs[loop_agent] = file_outputs
+            if file_loop_outputs:
+                correlated_data = self._correlate_by_source_record(
+                    file_loop_outputs
+                )
+                self._write_correlated_data(
+                    correlation_dir, correlated_data, filename
+                )
+
+    def prepare_correlated_input(
+        self, agent_name: str, loop_sources: List[str], current_idx: int
+    ) -> Optional[str]:
         """
         Prepare correlated input directory for an agent that depends on loop outputs.
 
@@ -68,33 +142,24 @@ class LoopOutputCorrelator:
             Path to correlated input directory, or None if correlation failed
         """
         try:
-            correlation_dir = self.agent_folder / 'target' / f'node_{current_idx}_{agent_name}'
+            correlation_dir = (
+                self.agent_folder / 'target' /
+                f'node_{current_idx}_{agent_name}'
+            )
             correlation_dir.mkdir(parents=True, exist_ok=True)
-            loop_outputs = {}
-            loop_filenames = set()
-            for loop_agent in loop_sources:
-                loop_idx = self._find_agent_index(loop_agent)
-                if loop_idx is None:
-                    continue
-                loop_output_dir = self.agent_folder / 'target' / f'node_{loop_idx}_{loop_agent}'
-                if loop_output_dir.exists():
-                    outputs, filenames = self._load_agent_outputs_with_filenames(loop_output_dir)
-                    loop_outputs[loop_agent] = outputs
-                    loop_filenames.update(filenames)
+
+            loop_outputs, loop_filenames = self._load_loop_outputs(loop_sources)
             if not loop_outputs:
                 return None
-            for filename in loop_filenames:
-                file_loop_outputs = {}
-                for loop_agent, outputs in loop_outputs.items():
-                    file_outputs = [o for o in outputs if o.get('_source_file') == filename]
-                    if file_outputs:
-                        file_loop_outputs[loop_agent] = file_outputs
-                if file_loop_outputs:
-                    correlated_data = self._correlate_by_source_record(file_loop_outputs)
-                    self._write_correlated_data(correlation_dir, correlated_data, filename)
+
+            self._process_loop_files(loop_outputs, loop_filenames, correlation_dir)
             return str(correlation_dir)
-        except Exception as e:
-            print(f'Error preparing correlated input for {agent_name}: {e}')
+        except (OSError, IOError, ValueError, KeyError) as e:
+            logger.exception(
+                'Error preparing correlated input for %s: %s',
+                agent_name,
+                e
+            )
             return None
 
     def _find_agent_index(self, agent_name: str) -> Optional[int]:
@@ -109,61 +174,82 @@ class LoopOutputCorrelator:
                     return int(parts[1])
         return None
 
-    def _load_agent_outputs(self, output_dir: Path) -> List[Dict[str, Any]]:
+    def _load_json_from_file(self, params: JsonLoadParams):
+        """Load JSON from a file and handle errors."""
+        try:
+            with open(params.json_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if params.add_source_file:
+                    if isinstance(data, list):
+                        for record in data:
+                            record['_source_file'] = params.json_file.name
+                        params.outputs.extend(data)
+                    else:
+                        data['_source_file'] = params.json_file.name
+                        params.outputs.append(data)
+                elif isinstance(data, list):
+                    params.outputs.extend(data)
+                else:
+                    params.outputs.append(data)
+        except json.JSONDecodeError as e:
+            logger.warning(
+                "Skipping corrupted JSON file in loop output",
+                extra={
+                    'operation': params.operation,
+                    'file': str(params.json_file),
+                    'output_dir': str(params.output_dir),
+                    'error': str(e),
+                    'line': e.lineno if hasattr(e, 'lineno') else None
+                }
+            )
+            params.corrupted_files.append(str(params.json_file.name))
+        except (OSError, IOError) as e:
+            logger.error(
+                "Failed to read loop output file",
+                extra={
+                    'operation': params.operation,
+                    'file': str(params.json_file),
+                    'output_dir': str(params.output_dir),
+                    'error': str(e)
+                }
+            )
+            params.corrupted_files.append(str(params.json_file.name))
+        except (ValueError, TypeError, UnicodeDecodeError) as e:
+            logger.exception(
+                "Unexpected error loading loop output file",
+                extra={
+                    'operation': params.operation,
+                    'file': str(params.json_file),
+                    'output_dir': str(params.output_dir),
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                }
+            )
+            params.corrupted_files.append(str(params.json_file.name))
+
+    def _load_agent_outputs(
+        self, output_dir: Path
+    ) -> List[Dict[str, Any]]:
         """Load all JSON outputs from an agent's output directory."""
         outputs = []
         corrupted_files = []
 
         for json_file in output_dir.glob('*.json'):
-            try:
-                with open(json_file, 'r') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        outputs.extend(data)
-                    else:
-                        outputs.append(data)
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    "Skipping corrupted JSON file in loop output",
-                    extra={
-                        'operation': 'load_loop_outputs',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e),
-                        'line': e.lineno if hasattr(e, 'lineno') else None
-                    }
+            self._load_json_from_file(
+                JsonLoadParams(
+                    json_file=json_file,
+                    outputs=outputs,
+                    corrupted_files=corrupted_files,
+                    output_dir=output_dir,
+                    operation='load_loop_outputs',
+                    add_source_file=False
                 )
-                corrupted_files.append(str(json_file.name))
-                continue
-            except (OSError, IOError) as e:
-                logger.error(
-                    "Failed to read loop output file",
-                    extra={
-                        'operation': 'load_loop_outputs',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e)
-                    }
-                )
-                corrupted_files.append(str(json_file.name))
-                continue
-            except Exception as e:
-                logger.exception(
-                    "Unexpected error loading loop output file",
-                    extra={
-                        'operation': 'load_loop_outputs',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e),
-                        'error_type': type(e).__name__
-                    }
-                )
-                corrupted_files.append(str(json_file.name))
-                continue
+            )
 
         if corrupted_files:
             logger.warning(
-                f"Skipped {len(corrupted_files)} corrupted files in loop output",
+                "Skipped %d corrupted files in loop output",
+                len(corrupted_files),
                 extra={
                     'operation': 'load_loop_outputs',
                     'output_dir': str(output_dir),
@@ -175,66 +261,34 @@ class LoopOutputCorrelator:
 
         return outputs
 
-    def _load_agent_outputs_with_filenames(self, output_dir: Path) -> Tuple[List[Dict[str, Any]], set]:
-        """Load all JSON outputs from an agent's output directory with their filenames."""
+    def _load_agent_outputs_with_filenames(
+        self, output_dir: Path
+    ) -> Tuple[List[Dict[str, Any]], set]:
+        """Load all JSON outputs with filenames."""
         outputs = []
         filenames = set()
         corrupted_files = []
 
         for json_file in output_dir.glob('*.json'):
-            try:
-                with open(json_file, 'r') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        for record in data:
-                            record['_source_file'] = json_file.name
-                        outputs.extend(data)
-                    else:
-                        data['_source_file'] = json_file.name
-                        outputs.append(data)
-                    filenames.add(json_file.name)
-            except json.JSONDecodeError as e:
-                logger.warning(
-                    "Skipping corrupted JSON file in loop output",
-                    extra={
-                        'operation': 'load_loop_outputs_with_filenames',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e),
-                        'line': e.lineno if hasattr(e, 'lineno') else None
-                    }
+            before_count = len(outputs)
+            self._load_json_from_file(
+                JsonLoadParams(
+                    json_file=json_file,
+                    outputs=outputs,
+                    corrupted_files=corrupted_files,
+                    output_dir=output_dir,
+                    operation='load_loop_outputs_with_filenames',
+                    add_source_file=True
                 )
-                corrupted_files.append(str(json_file.name))
-                continue
-            except (OSError, IOError) as e:
-                logger.error(
-                    "Failed to read loop output file",
-                    extra={
-                        'operation': 'load_loop_outputs_with_filenames',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e)
-                    }
-                )
-                corrupted_files.append(str(json_file.name))
-                continue
-            except Exception as e:
-                logger.exception(
-                    "Unexpected error loading loop output file",
-                    extra={
-                        'operation': 'load_loop_outputs_with_filenames',
-                        'file': str(json_file),
-                        'output_dir': str(output_dir),
-                        'error': str(e),
-                        'error_type': type(e).__name__
-                    }
-                )
-                corrupted_files.append(str(json_file.name))
-                continue
+            )
+            # If file was successfully loaded, add to filenames
+            if len(outputs) > before_count:
+                filenames.add(json_file.name)
 
         if corrupted_files:
             logger.warning(
-                f"Skipped {len(corrupted_files)} corrupted files in loop output",
+                "Skipped %d corrupted files in loop output",
+                len(corrupted_files),
                 extra={
                     'operation': 'load_loop_outputs_with_filenames',
                     'output_dir': str(output_dir),
@@ -246,7 +300,56 @@ class LoopOutputCorrelator:
 
         return (outputs, filenames)
 
-    def _correlate_by_source_record(self, loop_outputs: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    def _build_correlation_groups(
+        self, loop_outputs: Dict[str, List[Dict[str, Any]]]
+    ) -> defaultdict:
+        """Build correlation groups from loop outputs."""
+        correlation_groups = defaultdict(dict)
+        for loop_agent, outputs in loop_outputs.items():
+            for record in outputs:
+                record_copy = record.copy()
+                record_copy.pop('_source_file', None)
+                correlation_key = record_copy.get('loop_correlation_id')
+                if not correlation_key:
+                    source_guid = record_copy.get('source_guid', 'unknown')
+                    raise DataValidationError(
+                        'Missing required field: loop_correlation_id',
+                        {
+                            'source_guid': source_guid,
+                            'loop_agent': loop_agent,
+                            'operation': 'correlate_loop_outputs'
+                        }
+                    )
+                correlation_groups[correlation_key][loop_agent] = record_copy
+        return correlation_groups
+
+    def _create_merged_record(
+        self,
+        agent_records: Dict[str, Dict[str, Any]],
+        loop_outputs: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, Any]:
+        """Create a merged record from agent records."""
+        base_record = next(iter(agent_records.values()))
+        merged_record = {
+            'source_guid': base_record['source_guid'],
+            'target_id': base_record.get('target_id'),
+            'node_id': base_record.get('node_id'),
+            'lineage': base_record.get('lineage'),
+            'loop_correlation_id': base_record.get('loop_correlation_id'),
+            'content': self._merge_with_pattern(agent_records),
+            '_correlation_sources': list(agent_records.keys())
+        }
+        # Check for missing iterations
+        all_expected_loops = set(loop_outputs.keys())
+        present_loops = set(agent_records.keys())
+        missing_loops = all_expected_loops - present_loops
+        if missing_loops:
+            merged_record['_missing_iterations'] = list(missing_loops)
+        return merged_record
+
+    def _correlate_by_source_record(
+        self, loop_outputs: Dict[str, List[Dict[str, Any]]]
+    ) -> List[Dict[str, Any]]:
         """
         Correlate loop outputs by source record ID using merge pattern.
 
@@ -256,32 +359,19 @@ class LoopOutputCorrelator:
         Args:
             loop_outputs: Dict mapping loop agent names to their outputs
         """
-        correlation_groups = defaultdict(dict)
-        for loop_agent, outputs in loop_outputs.items():
-            for record in outputs:
-                record_copy = record.copy()
-                record_copy.pop('_source_file', None)
-                correlation_key = record_copy.get('loop_correlation_id')
-                if not correlation_key:
-                    from agent_actions.errors import DataValidationError  # New modular pattern!
-                    source_guid = record_copy.get('source_guid', 'unknown')
-                    raise DataValidationError('loop_correlation_id', 'required', 'missing', context={'source_guid': source_guid, 'loop_agent': loop_agent, 'operation': 'correlate_loop_outputs'})
-                correlation_groups[correlation_key][loop_agent] = record_copy
+        correlation_groups = self._build_correlation_groups(loop_outputs)
         correlated_records = []
-        for correlation_key, agent_records in correlation_groups.items():
+        for agent_records in correlation_groups.values():
             if agent_records:
-                base_record = next(iter(agent_records.values()))
-                merged_record = {'source_guid': base_record['source_guid'], 'target_id': base_record.get('target_id'), 'node_id': base_record.get('node_id'), 'lineage': base_record.get('lineage'), 'loop_correlation_id': base_record.get('loop_correlation_id'), 'content': {}, '_correlation_sources': list(agent_records.keys())}
-                merged_record['content'] = self._merge_with_pattern(agent_records)
-                all_expected_loops = set(loop_outputs.keys())
-                present_loops = set(agent_records.keys())
-                missing_loops = all_expected_loops - present_loops
-                if missing_loops:
-                    merged_record['_missing_iterations'] = list(missing_loops)
+                merged_record = self._create_merged_record(
+                    agent_records, loop_outputs
+                )
                 correlated_records.append(merged_record)
         return correlated_records
 
-    def _merge_with_pattern(self, agent_records: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    def _merge_with_pattern(
+        self, agent_records: Dict[str, Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Merge content from multiple loop agent records using merge pattern.
 
@@ -297,7 +387,9 @@ class LoopOutputCorrelator:
             merged_content.update(content)
         return merged_content
 
-    def _extract_correlation_key(self, record: Dict[str, Any]) -> Optional[str]:
+    def _extract_correlation_key(
+        self, record: Dict[str, Any]
+    ) -> Optional[str]:
         """
         Extract a correlation key from a record to match it across loop iterations.
 
@@ -312,13 +404,21 @@ class LoopOutputCorrelator:
         if available_fields:
             key_parts = [str(record[field]) for field in available_fields[:2]]
             return '|'.join(key_parts)
-        stable_fields = {k: v for k, v in record.items() if not any((k.endswith(f'_{i}') for i in range(1, 10)))}
+        stable_fields = {
+            k: v for k, v in record.items()
+            if not any((k.endswith(f'_{i}') for i in range(1, 10)))
+        }
         if stable_fields:
             content_str = json.dumps(stable_fields, sort_keys=True)
             return str(hash(content_str))
         return None
 
-    def _write_correlated_data(self, output_dir: Path, correlated_data: List[Dict[str, Any]], filename: str='correlated_data.json'):
+    def _write_correlated_data(
+        self,
+        output_dir: Path,
+        correlated_data: List[Dict[str, Any]],
+        filename: str = 'correlated_data.json'
+    ):
         """Write correlated data to the output directory and create corresponding source data."""
         if not correlated_data:
             return
@@ -329,11 +429,13 @@ class LoopOutputCorrelator:
             clean_record.pop('_missing_iterations', None)
             cleaned_data.append(clean_record)
         output_file = output_dir / filename
-        with open(output_file, 'w') as f:
+        with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(cleaned_data, f, indent=2)
         self._create_correlation_source_data(output_file, cleaned_data)
 
-    def _create_correlation_source_data(self, target_file: Path, correlated_data: List[Dict[str, Any]]):
+    def _create_correlation_source_data(
+        self, target_file: Path, correlated_data: List[Dict[str, Any]]
+    ):
         """Create source data file that corresponds to the correlation target file."""
         try:
             parts = target_file.parts
@@ -351,10 +453,17 @@ class LoopOutputCorrelator:
             source_path.parent.mkdir(parents=True, exist_ok=True)
             source_records = []
             for record in correlated_data:
-                source_record = {'source_guid': record.get('source_guid'), 'id': record.get('target_id', record.get('source_guid'))}
+                source_record = {
+                    'source_guid': record.get('source_guid'),
+                    'id': record.get('target_id', record.get('source_guid'))
+                }
                 source_records.append(source_record)
-            with open(source_path, 'w') as f:
+            with open(source_path, 'w', encoding='utf-8') as f:
                 json.dump(source_records, f, indent=2)
-        except Exception as e:
-            print(f'Warning: Could not create correlation source data: {e}')
+        except (OSError, IOError, ValueError) as e:
+            logger.warning(
+                'Could not create correlation source data: %s', e
+            )
+
+
 __all__ = ['LoopOutputCorrelator']

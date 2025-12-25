@@ -46,18 +46,20 @@ class OperatorRegistry:
                         # Instantiate and register the operator
                         operator_instance = obj()
                         self.register_operator(operator_instance)
-                    except Exception as e:
+                    except ValueError as e:
                         logger.debug(
                             "Skipping operator %s that can't be instantiated: %s",
                             name, e,
                             extra={
                                 'operator_class': name,
-                                'module_name': module.__name__ if hasattr(module, '__name__') else 'unknown',
+                                'module_name': (
+                                    module.__name__
+                                    if hasattr(module, '__name__')
+                                    else 'unknown'
+                                ),
                                 'operation': 'operator_discovery'
                             }
                         )
-                        # Skip operators that can't be instantiated
-                        pass
 
     def register_operator(self, operator: BaseOperator):
         """
@@ -117,7 +119,10 @@ class OperatorRegistry:
         operator = self.get_operator(name_or_symbol)
         return operator.get_info() if operator else None
 
-    def list_operators(self, operator_type: Optional[OperatorType] = None) -> List[OperatorInfo]:
+    def list_operators(
+        self,
+        operator_type: Optional[OperatorType] = None
+    ) -> List[OperatorInfo]:
         """
         List all registered operators.
 
@@ -133,7 +138,10 @@ class OperatorRegistry:
             if operator_type is None or info.operator_type == operator_type:
                 operators.append(info)
 
-        return sorted(operators, key=lambda x: (x.operator_type.value, x.precedence, x.name))
+        return sorted(
+            operators,
+            key=lambda x: (x.operator_type.value, x.precedence, x.name)
+        )
 
 
 # Global registry instance

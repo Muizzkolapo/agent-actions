@@ -21,6 +21,10 @@ class MetadataContext:
 class MetadataStrategy(ABC):
     """Abstract base class for chunk metadata creation."""
 
+    def __repr__(self):
+        """Return string representation of MetadataStrategy."""
+        return f"{self.__class__.__name__}()"
+
     @abstractmethod
     def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
         """
@@ -32,11 +36,14 @@ class MetadataStrategy(ABC):
         Returns:
             Dictionary of metadata fields
         """
-        pass
 
 
 class BasicMetadataStrategy(MetadataStrategy):
     """Basic metadata strategy that creates minimal chunk information."""
+
+    def __repr__(self):
+        """Return string representation of BasicMetadataStrategy."""
+        return "BasicMetadataStrategy()"
 
     def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
         """
@@ -68,6 +75,10 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         """
         self.config = config
         self.tokenizer_model = tokenizer_model
+
+    def __repr__(self):
+        """Return string representation of EnhancedMetadataStrategy."""
+        return f"EnhancedMetadataStrategy(tokenizer_model={self.tokenizer_model!r})"
 
     def create_metadata(self, context: MetadataContext) -> Dict[str, Any]:
         """

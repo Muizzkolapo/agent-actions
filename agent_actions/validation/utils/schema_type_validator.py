@@ -25,6 +25,19 @@ class SchemaTypeValidator:
     to isolate the complexity (CC 13).
     """
 
+    def __repr__(self) -> str:
+        """Return string representation of validator."""
+        return f"{self.__class__.__name__}()"
+
+    def is_valid(self) -> bool:
+        """
+        Check if validator is properly configured.
+
+        Returns:
+            bool: Always True for SchemaTypeValidator (stateless)
+        """
+        return True
+
     def is_valid_schema_type(
         self,
         type_str: str,

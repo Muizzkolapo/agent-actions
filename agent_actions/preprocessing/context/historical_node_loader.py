@@ -1,11 +1,23 @@
 """Module for loading historical node data from target files using lineage tracking."""
 import json
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HistoricalDataRequest:
+    """Request parameters for loading historical node data."""
+    action_name: str
+    lineage: List[str]
+    source_guid: str
+    file_path: str
+    agent_indices: Dict[str, int]
+    caller_lineage: Optional[List[str]] = None
 
 
 class HistoricalNodeDataLoader:
@@ -16,35 +28,29 @@ class HistoricalNodeDataLoader:
     syntax by finding and loading the appropriate target file based on lineage.
     """
 
+    def __repr__(self):
+        """Return string representation of HistoricalNodeDataLoader."""
+        return f"{self.__class__.__name__}()"
+
     @staticmethod
-    def load_historical_node_data(
-        action_name: str,
-        lineage: List[str],
-        source_guid: str,
-        file_path: str,
-        agent_indices: Dict[str, int],
-        caller_lineage: Optional[List[str]] = None
-    ) -> Optional[Dict[str, Any]]:
+    def load_historical_node_data(request: HistoricalDataRequest) -> Optional[Dict[str, Any]]:
         """
         Load historical node data for a specific action from target files.
 
         Args:
-            action_name: Name of the agent/action to load data from (e.g., 'fact_extractor')
-            lineage: List of node_ids tracking the record's lineage
-            source_guid: Source GUID to match the record
-            file_path: Current file path being processed
-            agent_indices: Mapping of agent names to their node indices
-            caller_lineage: Optional lineage from the calling record for precise matching.
-                          Used to distinguish split records that share the same source_guid
-                          and node_id. If None, uses legacy matching behavior.
+            request: HistoricalDataRequest containing all parameters
 
         Returns:
             Content dict from the historical node, or None if not found
 
         Example:
-            lineage = ["node_0_abc123", "node_1_def456"]
-            action_name = "fact_extractor"
-            agent_indices = {"fact_extractor": 0, "flatten_facts": 1}
+            request = HistoricalDataRequest(
+                action_name="fact_extractor",
+                lineage=["node_0_abc123", "node_1_def456"],
+                source_guid="guid-123",
+                file_path="/path/to/file.json",
+                agent_indices={"fact_extractor": 0, "flatten_facts": 1}
+            )
 
             Returns content from target/node_0_fact_extractor/file.json
             where record matches source_guid and node_id="node_0_abc123"
@@ -52,83 +58,96 @@ class HistoricalNodeDataLoader:
         try:
             ServiceLogger.log_operation_start(
                 logger, "load historical node data",
-                action_name=action_name,
-                source_guid=source_guid
+                action_name=request.action_name,
+                source_guid=request.source_guid
             )
 
             # Find the node_id in lineage for this action (used for diagnostics and logging)
             # NOTE: This is no longer used for matching in _find_record_by_identifiers,
             # but we keep it for logging and debugging purposes
-            logger.debug(f"[DEBUG] Finding node_id for action='{action_name}' in lineage={lineage}")
+            logger.debug(
+                "[DEBUG] Finding node_id for action='%s' in lineage=%s",
+                request.action_name,
+                request.lineage
+            )
             node_id = HistoricalNodeDataLoader._find_node_in_lineage(
-                action_name, lineage, agent_indices
+                request.action_name, request.lineage, request.agent_indices
             )
 
             if not node_id:
                 logger.warning(
-                    f"[DEBUG] No node_id found in lineage for action '{action_name}'. "
-                    f"Lineage: {lineage}"
+                    "[DEBUG] No node_id found in lineage for action '%s'. Lineage: %s",
+                    request.action_name,
+                    request.lineage
                 )
                 return None
 
-            logger.debug(f"[DEBUG] Found node_id={node_id} for action='{action_name}'")
+            logger.debug("[DEBUG] Found node_id=%s for action='%s'", node_id, request.action_name)
 
             # Get the node index for constructing the path
-            node_idx = agent_indices.get(action_name)
+            node_idx = request.agent_indices.get(request.action_name)
             if node_idx is None:
-                logger.warning(f"No index found for action '{action_name}' in agent_indices")
+                logger.warning(
+                    "No index found for action '%s' in agent_indices", request.action_name
+                )
                 return None
 
             # Construct path to the target file
             target_path = HistoricalNodeDataLoader._construct_target_path(
-                action_name, node_idx, file_path
+                request.action_name, node_idx, request.file_path
             )
 
             if not target_path.exists():
-                logger.warning(f"Target file does not exist: {target_path}")
+                logger.warning("Target file does not exist: %s", target_path)
                 return None
 
             # Load and find the record
-            logger.debug(f"[DEBUG] Loading file: {target_path}")
-            with open(target_path, 'r') as f:
+            logger.debug("[DEBUG] Loading file: %s", target_path)
+            with open(target_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
-            logger.debug(f"[DEBUG] File loaded, {len(data)} records found")
+            logger.debug("[DEBUG] File loaded, %s records found", len(data))
 
             # DEBUG: Log what we're searching for
+            lineage_status = 'provided' if request.caller_lineage else 'None'
             logger.debug(
-                f"[DEBUG] Searching for record: source_guid={source_guid}, node_id={node_id}, "
-                f"caller_lineage={'provided' if caller_lineage else 'None'}"
+                "[DEBUG] Searching for record: source_guid=%s, node_id=%s, "
+                "caller_lineage=%s",
+                request.source_guid,
+                node_id,
+                lineage_status
             )
 
             record = HistoricalNodeDataLoader._find_record_by_identifiers(
-                data, source_guid, node_id, caller_lineage
+                data, request.source_guid, node_id, request.caller_lineage
             )
 
             # DEBUG: Log result
             if record:
-                logger.debug(f"[DEBUG] Found record with node_id={record.get('node_id')}")
-            else:
-                logger.debug(
-                    f"[DEBUG] No match found. File contains source_guids: "
-                    f"{set(r.get('source_guid') for r in data if isinstance(r, dict))}"
-                )
-
-            if record:
+                logger.debug("[DEBUG] Found record with node_id=%s", record.get('node_id'))
                 ServiceLogger.log_operation_success(
                     logger, "load historical node data",
-                    action_name=action_name,
+                    action_name=request.action_name,
                     node_id=node_id
                 )
                 return record.get('content')
-            else:
-                logger.warning(
-                    f"No record found for source_guid={source_guid}, "
-                    f"node_id={node_id} in {target_path}"
-                )
-                return None
 
-        except Exception as e:
+            source_guids = set(
+                r.get('source_guid') for r in data if isinstance(r, dict)
+            )
+            logger.debug(
+                "[DEBUG] No match found. File contains source_guids: %s",
+                source_guids
+            )
+            logger.warning(
+                "No record found for source_guid=%s, node_id=%s in %s",
+                request.source_guid,
+                node_id,
+                target_path
+            )
+            return None
+
+        except (ValueError, TypeError, KeyError) as e:
             ServiceLogger.log_operation_error(logger, "load historical node data", e)
             # Don't raise - return None to allow processing to continue
             return None
@@ -264,7 +283,7 @@ class HistoricalNodeDataLoader:
     def _find_record_by_identifiers(
         data: List[Dict],
         source_guid: str,
-        node_id: str,
+        _node_id: str,
         caller_lineage: Optional[List[str]] = None
     ) -> Optional[Dict]:
         """
@@ -279,7 +298,10 @@ class HistoricalNodeDataLoader:
 
         **Scenarios Handled**:
         - Granularity changes (1 doc → N facts): Matches by source_guid
-        - Split records (same source_guid, different branches): Uses lineage to select correct branch
+        - Split records (
+            same source_guid,
+            different branches): Uses lineage to select correct branch
+
         - Legacy workflows (no lineage): Returns first match by source_guid
 
         Args:
@@ -304,14 +326,14 @@ class HistoricalNodeDataLoader:
             # Returns only the record whose lineage is a prefix of caller_lineage
         """
         if not isinstance(data, list):
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.debug(f"[DEBUG _find_record] Data is not a list, type={type(data)}")
+            logger.debug("[DEBUG _find_record] Data is not a list, type=%s", type(data))
             return None
 
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.debug(f"[DEBUG _find_record] Searching {len(data)} records for source_guid={source_guid}")
+        logger.debug(
+            "[DEBUG _find_record] Searching %s records for source_guid=%s",
+            len(data),
+            source_guid
+        )
 
         matches_found = 0
         first_source_guid_match = None  # Track first match as fallback
@@ -325,9 +347,14 @@ class HistoricalNodeDataLoader:
             # granularity changed (e.g., 1 document → 5 facts, each with different node_id)
             if record.get('source_guid') == source_guid:
                 matches_found += 1
+                caller_status = 'provided' if caller_lineage else 'None'
                 logger.debug(
-                    f"[DEBUG _find_record] Match #{matches_found}: node_id={record.get('node_id')}, "
-                    f"has_lineage={bool(record.get('lineage'))}, caller_lineage={'provided' if caller_lineage else 'None'}"
+                    "[DEBUG _find_record] Match #%s: node_id=%s, "
+                    "has_lineage=%s, caller_lineage=%s",
+                    matches_found,
+                    record.get('node_id'),
+                    bool(record.get('lineage')),
+                    caller_status
                 )
 
                 # Store first match as fallback for when lineage matching fails
@@ -346,16 +373,22 @@ class HistoricalNodeDataLoader:
 
                 # Legacy behavior: return first match when no lineage checking
                 # This maintains backward compatibility for workflows without lineage
-                logger.debug(f"[DEBUG _find_record] Returning match #{matches_found}")
+                logger.debug("[DEBUG _find_record] Returning match #%s", matches_found)
                 return record
 
-        # If we found source_guid matches but no lineage matches, return first match as fallback
-        # This handles cross-run scenarios where UUIDs in lineage differ but source_guid is stable
+        # If we found source_guid matches but no lineage matches,
+        # return first match as fallback
         if first_source_guid_match is not None:
             logger.debug(
-                f"[DEBUG _find_record] No lineage match found, returning first source_guid match as fallback"
+                "[DEBUG _find_record] No lineage match found, "
+                "returning first source_guid match as fallback"
             )
             return first_source_guid_match
 
-        logger.debug(f"[DEBUG _find_record] No matches found (searched {len(data)} records, found {matches_found} source_guid matches)")
+        logger.debug(
+            "[DEBUG _find_record] No matches found "
+            "(searched %s records, found %s source_guid matches)",
+            len(data),
+            matches_found
+        )
         return None

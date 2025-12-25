@@ -13,7 +13,13 @@ from .base import LogicalOperator, OperatorInfo, OperatorType
 class AndOperator(LogicalOperator):
     """Logical AND operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return bool(left) and bool(right)
 
     def get_info(self) -> OperatorInfo:
@@ -23,7 +29,13 @@ class AndOperator(LogicalOperator):
 class OrOperator(LogicalOperator):
     """Logical OR operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return bool(left) or bool(right)
 
     def get_info(self) -> OperatorInfo:
@@ -33,7 +45,13 @@ class OrOperator(LogicalOperator):
 class NotOperator(LogicalOperator):
     """Logical NOT operator."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         return not bool(left)
 
     def get_info(self) -> OperatorInfo:

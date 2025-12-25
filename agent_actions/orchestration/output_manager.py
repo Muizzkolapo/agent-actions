@@ -9,11 +9,23 @@ import json
 import logging
 import os
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 from rich.console import Console
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class OutputManagerConfig:
+    """Configuration for AgentOutputManager."""
+    agent_folder: Path
+    execution_order: List[str]
+    agent_configs: Dict[str, Dict[str, Any]]
+    agent_status: Dict[str, Dict[str, Any]]
+    loop_correlator: Any
+    console: Optional[Console] = None
 
 
 class AgentOutputManager:
@@ -27,32 +39,116 @@ class AgentOutputManager:
     - Manage input directory resolution
     """
 
-    def __init__(
-        self,
-        agent_folder: Path,
-        execution_order: List[str],
-        agent_configs: Dict[str, Dict[str, Any]],
-        agent_status: Dict[str, Dict[str, Any]],
-        loop_correlator,
-        console: Optional[Console] = None
-    ):
+    def __init__(self, config: OutputManagerConfig):
         """
         Initialize output manager.
 
         Args:
-            agent_folder: Path to agent I/O folder
-            execution_order: List of agent names in execution order
-            agent_configs: Dictionary of agent configurations
-            agent_status: Dictionary of agent statuses
-            loop_correlator: LoopOutputCorrelator instance
-            console: Rich console for output
+            config: OutputManagerConfig with all required parameters
         """
-        self.agent_folder = agent_folder
-        self.execution_order = execution_order
-        self.agent_configs = agent_configs
-        self.agent_status = agent_status
-        self.loop_correlator = loop_correlator
-        self.console = console or Console()
+        self.agent_folder = config.agent_folder
+        self.execution_order = config.execution_order
+        self.agent_configs = config.agent_configs
+        self.agent_status = config.agent_status
+        self.loop_correlator = config.loop_correlator
+        self.console = config.console or Console()
+
+    def _load_json_files(
+        self, json_files: List[Path], agent_output: Dict[str, Any]
+    ) -> List[Any]:
+        """Load data from JSON files."""
+        outputs = []
+        for json_file in json_files:
+            try:
+                with open(json_file, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        outputs.extend(data)
+                    else:
+                        outputs.append(data)
+            except (OSError, IOError, ValueError, TypeError) as file_error:
+                agent_output['errors'].append(
+                    f'Failed to read {json_file.name}: {file_error}'
+                )
+        return outputs
+
+    def _read_marker_file(
+        self, marker_path: Path, marker_type: str, agent_name: str
+    ) -> str:
+        """Read a marker file and return its content."""
+        try:
+            with open(marker_path, 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except (OSError, IOError, PermissionError) as e:
+            logger.warning(
+                "Could not read %s marker, using 'Unknown'",
+                marker_type,
+                extra={
+                    'operation': f'read_{marker_type}_marker',
+                    'file': str(marker_path),
+                    'agent': agent_name,
+                    'error': str(e)
+                }
+            )
+            return 'Unknown'
+        except (ValueError, TypeError, UnicodeDecodeError) as e:
+            logger.exception(
+                "Unexpected error reading %s marker",
+                marker_type,
+                extra={
+                    'operation': f'read_{marker_type}_marker',
+                    'file': str(marker_path),
+                    'agent': agent_name,
+                    'error': str(e),
+                    'error_type': type(e).__name__
+                }
+            )
+            return 'Unknown'
+
+    def _process_agent_output(
+        self, output_dir: Path, prev_agent_name: str
+    ) -> Dict[str, Any]:
+        """Process output directory for a single agent."""
+        agent_output = {
+            'data': [],
+            'status': self.agent_status.get(
+                prev_agent_name, {}
+            ).get('status', 'unknown'),
+            'output_count': 0,
+            'output_files': [],
+            'has_data': False,
+            'errors': []
+        }
+
+        if not output_dir.exists():
+            return agent_output
+
+        json_files = list(output_dir.glob('*.json'))
+        agent_output['output_files'] = [str(f.name) for f in json_files]
+
+        if json_files:
+            outputs = self._load_json_files(json_files, agent_output)
+            agent_output['data'] = outputs
+            agent_output['output_count'] = len(outputs)
+            agent_output['has_data'] = len(outputs) > 0
+
+        # Check for passthrough marker
+        passthrough_marker = output_dir / '.passthrough_processed'
+        if passthrough_marker.exists():
+            agent_output['passthrough'] = True
+            agent_output['passthrough_reason'] = self._read_marker_file(
+                passthrough_marker, 'passthrough', prev_agent_name
+            )
+
+        # Check for skip marker
+        skip_marker = output_dir / '.agent_skipped'
+        if skip_marker.exists():
+            agent_output['skipped'] = True
+            agent_output['skip_reason'] = self._read_marker_file(
+                skip_marker, 'skip', prev_agent_name
+            )
+
+        return agent_output
 
     def get_previous_outputs(self, current_idx: int) -> Dict[str, Any]:
         """
@@ -65,124 +161,42 @@ class AgentOutputManager:
             Dictionary of previous agent outputs with metadata.
             For each agent 'foo', returns:
             - previous_outputs['foo'] = [data items]
-            - previous_outputs['foo_meta'] = {status, output_count, has_data, etc.}
+            - previous_outputs['foo_meta'] = {status, output_count, etc.}
         """
         previous_outputs = {}
 
         for i in range(current_idx):
             prev_agent_name = self.execution_order[i]
-            output_dir = self.agent_folder / 'target' / f'node_{i}_{prev_agent_name}'
-
-            agent_output = {
-                'data': [],
-                'status': self.agent_status.get(prev_agent_name, {}).get('status', 'unknown'),
-                'output_count': 0,
-                'output_files': [],
-                'has_data': False,
-                'errors': []
-            }
+            output_dir = (
+                self.agent_folder / 'target' / f'node_{i}_{prev_agent_name}'
+            )
 
             try:
-                if output_dir.exists():
-                    json_files = list(output_dir.glob('*.json'))
-                    agent_output['output_files'] = [str(f.name) for f in json_files]
-
-                    if json_files:
-                        outputs = []
-                        for json_file in json_files:
-                            try:
-                                with open(json_file, 'r') as f:
-                                    data = json.load(f)
-                                    if isinstance(data, list):
-                                        outputs.extend(data)
-                                    else:
-                                        outputs.append(data)
-                            except Exception as file_error:
-                                agent_output['errors'].append(
-                                    f'Failed to read {json_file.name}: {file_error}'
-                                )
-
-                        agent_output['data'] = outputs
-                        agent_output['output_count'] = len(outputs)
-                        agent_output['has_data'] = len(outputs) > 0
-
-                    # Check for passthrough marker
-                    passthrough_marker = output_dir / '.passthrough_processed'
-                    if passthrough_marker.exists():
-                        agent_output['passthrough'] = True
-                        try:
-                            with open(passthrough_marker, 'r') as f:
-                                agent_output['passthrough_reason'] = f.read().strip()
-                        except (OSError, IOError, PermissionError) as e:
-                            logger.warning(
-                                "Could not read passthrough marker, using 'Unknown'",
-                                extra={
-                                    'operation': 'read_passthrough_marker',
-                                    'file': str(passthrough_marker),
-                                    'agent': prev_agent_name,
-                                    'error': str(e)
-                                }
-                            )
-                            agent_output['passthrough_reason'] = 'Unknown'
-                        except Exception as e:
-                            logger.exception(
-                                "Unexpected error reading passthrough marker",
-                                extra={
-                                    'operation': 'read_passthrough_marker',
-                                    'file': str(passthrough_marker),
-                                    'agent': prev_agent_name,
-                                    'error': str(e),
-                                    'error_type': type(e).__name__
-                                }
-                            )
-                            agent_output['passthrough_reason'] = 'Unknown'
-
-                    # Check for skip marker
-                    skip_marker = output_dir / '.agent_skipped'
-                    if skip_marker.exists():
-                        agent_output['skipped'] = True
-                        try:
-                            with open(skip_marker, 'r') as f:
-                                agent_output['skip_reason'] = f.read().strip()
-                        except (OSError, IOError, PermissionError) as e:
-                            logger.warning(
-                                "Could not read skip marker, using 'Unknown'",
-                                extra={
-                                    'operation': 'read_skip_marker',
-                                    'file': str(skip_marker),
-                                    'agent': prev_agent_name,
-                                    'error': str(e)
-                                }
-                            )
-                            agent_output['skip_reason'] = 'Unknown'
-                        except Exception as e:
-                            logger.exception(
-                                "Unexpected error reading skip marker",
-                                extra={
-                                    'operation': 'read_skip_marker',
-                                    'file': str(skip_marker),
-                                    'agent': prev_agent_name,
-                                    'error': str(e),
-                                    'error_type': type(e).__name__
-                                }
-                            )
-                            agent_output['skip_reason'] = 'Unknown'
-
+                agent_output = self._process_agent_output(
+                    output_dir, prev_agent_name
+                )
                 previous_outputs[prev_agent_name] = agent_output['data']
                 previous_outputs[f'{prev_agent_name}_meta'] = agent_output
 
-            except Exception as e:
+            except (OSError, IOError, ValueError, TypeError, KeyError) as e:
                 error_msg = f'Could not load outputs for {prev_agent_name}: {e}'
                 logger.warning(
                     "Could not load output data: %s",
                     error_msg,
                     extra={
                         'prev_agent_name': prev_agent_name,
-                        'output_file': str(output_file),
+                        'output_dir': str(output_dir),
                         'operation': 'load_previous_outputs'
                     }
                 )
-                agent_output['errors'].append(error_msg)
+                agent_output = {
+                    'data': [],
+                    'status': 'error',
+                    'output_count': 0,
+                    'output_files': [],
+                    'has_data': False,
+                    'errors': [error_msg]
+                }
                 previous_outputs[prev_agent_name] = []
                 previous_outputs[f'{prev_agent_name}_meta'] = agent_output
 
@@ -198,7 +212,8 @@ class AgentOutputManager:
             idx: Index of the agent
             agent_type: Type/name of the agent
         """
-        input_dir = self.get_input_directory(idx)
+        upstream_dirs = self.get_upstream_directories(idx)
+        input_dir = upstream_dirs[0] if upstream_dirs else None
         output_dir = self.agent_folder / 'target' / f'node_{idx}_{agent_type}'
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -209,7 +224,7 @@ class AgentOutputManager:
                 dst = output_dir / item
                 try:
                     shutil.copy2(src, dst)
-                except Exception as e:
+                except (OSError, IOError, shutil.Error) as e:
                     logger.warning(
                         "Could not copy %s to %s: %s",
                         item, dst, e,
@@ -252,20 +267,28 @@ class AgentOutputManager:
                 if dep_name in self.execution_order:
                     dep_idx = self.execution_order.index(dep_name)
                     # Construct output path for that dependency
-                    dep_output = self.agent_folder / 'target' / f'node_{dep_idx}_{dep_name}'
+                    dep_output = (
+                        self.agent_folder / 'target' /
+                        f'node_{dep_idx}_{dep_name}'
+                    )
                     upstream_dirs.append(str(dep_output))
                 else:
                     logger.warning(
-                        f"Dependency {dep_name} for agent {current_agent} not found in execution order.",
+                        "Dependency %s for agent %s not found in "
+                        "execution order.",
+                        dep_name,
+                        current_agent,
                         extra={'agent': current_agent, 'dependency': dep_name}
                     )
             if upstream_dirs:
                 return upstream_dirs
 
         # Check if agent consumes loop outputs
-        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
-            self.execution_order,
-            self.agent_configs
+        loop_consumption_map = (
+            self.loop_correlator.detect_explicit_loop_consumption(
+                self.execution_order,
+                self.agent_configs
+            )
         )
 
         if current_agent in loop_consumption_map:
@@ -285,20 +308,20 @@ class AgentOutputManager:
                     f'{len(loop_sources)} loop sources (pattern: {pattern})[/blue]'
                 )
                 return [correlated_dir]
-            else:
-                self.console.print(
-                    f'[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, '
-                    f'falling back to standard input[/yellow]'
-                )
+
+            self.console.print(
+                f'[yellow]⚠️ Failed to correlate loop outputs for '
+                f'{current_agent}, falling back to standard input[/yellow]'
+            )
 
         # Standard case: use previous agent's output (Linear Chain Default)
         prev_agent = self.execution_order[idx - 1]
-        return [str(self.agent_folder / 'target' / f'node_{idx - 1}_{prev_agent}')]
+        return [
+            str(self.agent_folder / 'target' / f'node_{idx - 1}_{prev_agent}')
+        ]
 
     def setup_correlation_wrapper(
-        self,
-        idx: int,
-        original_setup_directories: Callable
+        self, idx: int, original_setup_directories: Callable
     ) -> Optional[Callable]:
         """
         Create a correlation-aware setup_directories wrapper if needed.
@@ -312,9 +335,11 @@ class AgentOutputManager:
         """
         current_agent = self.execution_order[idx]
 
-        loop_consumption_map = self.loop_correlator.detect_explicit_loop_consumption(
-            self.execution_order,
-            self.agent_configs
+        loop_consumption_map = (
+            self.loop_correlator.detect_explicit_loop_consumption(
+                self.execution_order,
+                self.agent_configs
+            )
         )
 
         if current_agent not in loop_consumption_map:
@@ -324,7 +349,9 @@ class AgentOutputManager:
         loop_sources = consumption_config['loop_agents']
         pattern = consumption_config['pattern']
 
-        def correlation_setup_directories(agent_folder, agent_config, previous_agent_type, agent_idx):
+        def correlation_setup_directories(
+            agent_folder, agent_config, previous_agent_type, agent_idx
+        ):
             """Wrapper that uses correlated input for loop consumers."""
             correlated_dir = self.loop_correlator.prepare_correlated_input(
                 current_agent,
@@ -338,18 +365,27 @@ class AgentOutputManager:
                     f'{len(loop_sources)} loop sources (pattern: {pattern})[/blue]'
                 )
                 input_directory = correlated_dir
-            else:
-                self.console.print(
-                    f'[yellow]⚠️ Failed to correlate loop outputs for {current_agent}, '
-                    f'falling back to standard input[/yellow]'
+                # Setup output directory
+                indexed_agent_type = (
+                    f"node_{agent_idx}_{agent_config['agent_type']}"
                 )
-                input_dir, output_dir = original_setup_directories(
-                    agent_folder,
-                    agent_config,
-                    previous_agent_type,
-                    agent_idx
+                output_directory = (
+                    Path(agent_folder) / 'target' / indexed_agent_type
                 )
-                input_directory = input_dir
+                output_directory.mkdir(parents=True, exist_ok=True)
+                return (str(input_directory), str(output_directory))
+
+            self.console.print(
+                f'[yellow]⚠️ Failed to correlate loop outputs for '
+                f'{current_agent}, falling back to standard input[/yellow]'
+            )
+            input_dir, _ = original_setup_directories(
+                agent_folder,
+                agent_config,
+                previous_agent_type,
+                agent_idx
+            )
+            input_directory = input_dir
 
             # Setup output directory
             indexed_agent_type = f"node_{agent_idx}_{agent_config['agent_type']}"

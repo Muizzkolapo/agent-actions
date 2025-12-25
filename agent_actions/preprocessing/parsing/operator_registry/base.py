@@ -5,10 +5,10 @@ This module defines the foundational abstractions for all operators,
 including base operator classes, type enumerations, and metadata structures.
 """
 
-from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
 
 class OperatorType(Enum):
@@ -34,7 +34,13 @@ class BaseOperator(ABC):
     """Base class for all operators."""
 
     @abstractmethod
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> Any:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> Any:
+
         """
         Evaluate the operator with given operands.
 
@@ -46,18 +52,22 @@ class BaseOperator(ABC):
         Returns:
             Result of the operation
         """
-        pass
 
     @abstractmethod
     def get_info(self) -> OperatorInfo:
         """Get operator information."""
-        pass
 
 
 class ComparisonOperator(BaseOperator):
     """Base class for comparison operators."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         """
         Evaluate the comparison operator with given operands.
 
@@ -75,7 +85,13 @@ class ComparisonOperator(BaseOperator):
 class LogicalOperator(BaseOperator):
     """Base class for logical operators."""
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> bool:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> bool:
+
         """
         Evaluate the logical operator with given operands.
 
@@ -105,9 +121,14 @@ class FunctionOperator(BaseOperator):
         Returns:
             Result of the function
         """
-        pass
 
-    def evaluate(self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None) -> Any:
+    def evaluate(
+        self,
+        left: Any,
+        right: Any = None,
+        context: Optional[Dict[str,
+        Any]] = None) -> Any:
+
         """Wrapper for function evaluation."""
         args = [left] if right is None else [left, right]
         return self.evaluate_function(args, context)

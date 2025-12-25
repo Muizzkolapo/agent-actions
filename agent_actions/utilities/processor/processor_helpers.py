@@ -31,67 +31,100 @@ def evaluate_guard_condition(
         - (False, 'filter') = guard failed with filter behavior, filter out entirely
     """
     # Check legacy conditional clause (UDF-based)
-    conditional_clause = (agent_config.get('conditional_clause') or '').lower()
-    if conditional_clause:
-        try:
-            if not execute_user_defined_function(conditional_clause, context):
-                logger.debug(
-                    "Guard: conditional_clause '%s' evaluated to False, skipping",
-                    conditional_clause
-                )
-                return (False, 'skip')
-        except Exception as e:
-            logger.debug(
-                "Guard: conditional_clause evaluation failed: %s, proceeding",
-                e
-            )
-            # Don't skip on UDF errors - proceed with execution
+    conditional_result = _evaluate_conditional_clause(agent_config, context)
+    if conditional_result is not None:
+        return conditional_result
 
     # Check WHERE clause
+    return _evaluate_where_clause(agent_config, context)
+
+
+def _evaluate_conditional_clause(
+    agent_config: Dict,
+    context: Any
+) -> Optional[Tuple[bool, Optional[str]]]:
+    """Evaluate legacy conditional clause (UDF-based)."""
+    conditional_clause = (agent_config.get('conditional_clause') or '').lower()
+    if not conditional_clause:
+        return None
+
+    try:
+        if not execute_user_defined_function(conditional_clause, context):
+            logger.debug(
+                "Guard: conditional_clause '%s' evaluated to False, skipping",
+                conditional_clause
+            )
+            return (False, 'skip')
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        logger.debug(
+            "Guard: conditional_clause evaluation failed: %s, proceeding",
+            e
+        )
+        # Don't skip on UDF errors - proceed with execution
+
+    return None
+
+
+def _evaluate_where_clause(
+    agent_config: Dict,
+    context: Any
+) -> Tuple[bool, Optional[str]]:
+    """Evaluate WHERE clause guard condition."""
     where_clause_config = agent_config.get('where_clause')
-    if where_clause_config:
-        behavior = where_clause_config.get('behavior', 'filter')
-        clause = where_clause_config.get('clause')
-        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+    if not where_clause_config:
+        return (True, None)
 
-        if clause:
-            try:
-                filter_service = get_global_filter()
-                filter_result = filter_service.filter_item(context, clause)
+    behavior = where_clause_config.get('behavior', 'filter')
+    clause = where_clause_config.get('clause')
+    passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
 
-                # Handle FilterResult object or boolean
-                if hasattr(filter_result, 'success'):
-                    if not filter_result.success:
-                        # Evaluation failed
-                        if passthrough_on_error:
-                            logger.debug(
-                                "Guard: WHERE clause evaluation failed, proceeding "
-                                "(passthrough_on_error=True)"
-                            )
-                            return (True, None)
-                        logger.debug(
-                            "Guard: WHERE clause evaluation failed, skipping "
-                            "(passthrough_on_error=False)"
-                        )
-                        return (False, behavior)
-                    matched = filter_result.matched
-                else:
-                    matched = bool(filter_result)
+    if not clause:
+        return (True, None)
 
-                if not matched:
-                    logger.debug(
-                        "Guard: WHERE clause '%s' not matched, behavior='%s'",
-                        clause, behavior
-                    )
-                    return (False, behavior)
+    try:
+        filter_service = get_global_filter()
+        filter_result = filter_service.filter_item(context, clause)
+        return _process_filter_result(filter_result, behavior, passthrough_on_error, clause)
 
-            except Exception as e:
-                logger.debug(
-                    "Guard: WHERE clause evaluation exception: %s", e
-                )
-                if passthrough_on_error:
-                    return (True, None)
-                return (False, behavior)
+    except (ValueError, TypeError, KeyError, AttributeError) as e:
+        logger.debug("Guard: WHERE clause evaluation exception: %s", e)
+        return (True, None) if passthrough_on_error else (False, behavior)
+
+
+def _process_filter_result(
+    filter_result: Any,
+    behavior: str,
+    passthrough_on_error: bool,
+    clause: str
+) -> Tuple[bool, Optional[str]]:
+    """Process filter result and return guard decision."""
+    # Handle FilterResult object or boolean
+    if hasattr(filter_result, 'success') and not filter_result.success:
+        # Evaluation failed
+        if passthrough_on_error:
+            logger.debug(
+                "Guard: WHERE clause evaluation failed, proceeding "
+                "(passthrough_on_error=True)"
+            )
+            return (True, None)
+        logger.debug(
+            "Guard: WHERE clause evaluation failed, skipping "
+            "(passthrough_on_error=False)"
+        )
+        return (False, behavior)
+
+    matched = (
+        filter_result.matched
+        if hasattr(filter_result, 'matched')
+        else bool(filter_result)
+    )
+
+    if not matched:
+        logger.debug(
+            "Guard: WHERE clause '%s' not matched, behavior='%s'",
+            clause, behavior
+        )
+        return (False, behavior)
 
     # All guards passed
     return (True, None)

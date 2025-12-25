@@ -237,11 +237,7 @@ class DirectoryValidator(BaseValidator):
         Returns:
             bool: True if validation passes for the operation, False otherwise.
         """
-        self.clear_errors()
-        self.clear_warnings()
-
-        if not isinstance(data, dict):
-            self.add_error('Validation data must be a dictionary.')
+        if not self._prepare_validation(data):
             return False
 
         operation = data.get('operation')

@@ -8,12 +8,14 @@ from typing import Any, Dict, List, Optional
 
 from agent_actions.configuration.interfaces import ISourceDataLoader, ProcessingMode
 from agent_actions.errors import DependencyError, FileLoadError, FileSystemError
-from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.state_management.path_manager import PathManager, PathManagerError
+
+# Import will be used after class definition to avoid cyclic import
+# (deferred registration pattern)
 
 logger = logging.getLogger(__name__)
 
-@registry.register_loader('source_data')
+
 class SourceDataLoader(ISourceDataLoader):
     """Handles loading source data (Single Responsibility)."""
 

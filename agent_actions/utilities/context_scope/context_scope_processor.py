@@ -48,14 +48,14 @@ class ContextScopeProcessor:
     @staticmethod
     def extract_field_names_from_references(
         field_refs: List[str],
-        return_type: str = 'list'
+        _return_type: str = 'list'
     ) -> List[str]:
         """
         Extract field names from list of field references.
 
         Args:
             field_refs: List of references in 'action.field' format
-            return_type: Return type ('list' or other - currently only 'list' supported)
+            _return_type: Return type ('list' or other - currently only 'list' supported)
 
         Returns:
             List of field names extracted from references
@@ -302,7 +302,10 @@ class ContextScopeProcessor:
                         continue
 
                     # Load historical data for this action
-                    historical_data = HistoricalNodeDataLoader.load_historical_node_data(
+                    from agent_actions.preprocessing.context.historical_node_loader import (
+                        HistoricalDataRequest
+                    )
+                    request = HistoricalDataRequest(
                         action_name=action_name,
                         lineage=lineage,
                         source_guid=source_guid,
@@ -310,6 +313,7 @@ class ContextScopeProcessor:
                         agent_indices=agent_indices,
                         caller_lineage=lineage
                     )
+                    historical_data = HistoricalNodeDataLoader.load_historical_node_data(request)
 
                     if historical_data:
                         field_context[action_name] = historical_data

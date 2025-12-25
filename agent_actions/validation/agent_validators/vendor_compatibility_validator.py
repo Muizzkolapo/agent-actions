@@ -1,11 +1,11 @@
 """
 Validator for vendor compatibility across batch and online modes.
 
-Unified validator that handles vendor compatibility validation for both execution modes:
-- Batch mode: Requires specific vendor support (openai, gemini, anthropic, cohere, deepseek, mistral)
+Unified validator that handles vendor compatibility validation for both modes:
+- Batch mode: Requires specific vendor support (openai, gemini, etc.)
 - Online mode: Accepts all vendors (no restrictions)
 
-This replaces the previous batch_mode_compatibility_validator.py with a unified approach.
+This replaces the previous batch_mode_compatibility_validator.py.
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
@@ -67,18 +67,21 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
             if model_vendor:
                 if model_vendor == 'tool':
                     # Special error for tool vendor
+                    vendors_str = ', '.join(sorted(self.VALID_BATCH_VENDORS))
                     errors.append(
                         f"{desc} 'tool' vendor does not support batch processing. "
-                        f"Tool vendors require realtime/online mode for interactive execution. "
-                        f"Use one of: {', '.join(sorted(self.VALID_BATCH_VENDORS))} for batch mode, "
-                        f"or set run_mode='online' for tool vendor."
+                        f"Tool vendors require realtime/online mode for "
+                        f"interactive execution. Use one of: {vendors_str} for "
+                        f"batch mode, or set run_mode='online' for tool vendor."
                     )
                 elif model_vendor not in self.VALID_BATCH_VENDORS:
-                    # Generic unsupported vendor warning (may support batch in future)
+                    # Generic unsupported vendor warning (may support batch)
+                    vendors_str = ', '.join(sorted(self.VALID_BATCH_VENDORS))
                     warnings.append(
-                        f"{desc} model_vendor '{model_vendor}' may not support batch processing. "
-                        f"Verified batch-compatible vendors: {', '.join(sorted(self.VALID_BATCH_VENDORS))}. "
-                        f"If this vendor supports batch API, you can safely ignore this warning."
+                        f"{desc} model_vendor '{model_vendor}' may not support "
+                        f"batch processing. Verified batch-compatible vendors: "
+                        f"{vendors_str}. If this vendor supports batch API, "
+                        f"you can safely ignore this warning."
                     )
 
             # Check for deprecated batch_provider field

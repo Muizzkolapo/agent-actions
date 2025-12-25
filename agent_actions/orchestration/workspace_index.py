@@ -12,6 +12,8 @@ from typing import Dict, List, Set
 
 import yaml
 
+from agent_actions.errors import WorkflowError
+
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +40,9 @@ class WorkspaceIndex:
             return
 
         if not self.workflows_root.exists():
-            logger.warning(f"Workflows root does not exist: {self.workflows_root}")
+            logger.warning(
+                "Workflows root does not exist: %s", self.workflows_root
+            )
             return
 
         for workflow_dir in self.workflows_root.iterdir():
@@ -63,7 +67,7 @@ class WorkspaceIndex:
             self._load_workflow_deps(workflow_name, config_file)
 
         self._build_reverse_dag()
-        logger.info(f"Scanned {len(self.dependency_graph)} workflows")
+        logger.info("Scanned %d workflows", len(self.dependency_graph))
 
     def _load_workflow_deps(self, workflow_name: str, config_file: Path) -> None:
         """Load workflow dependencies from config file."""
@@ -89,7 +93,7 @@ class WorkspaceIndex:
             self.dependency_graph[workflow_name] = workflow_deps
 
         except (yaml.YAMLError, OSError) as e:
-            logger.warning(f"Failed to load {workflow_name}: {e}")
+            logger.warning("Failed to load %s: %s", workflow_name, e)
             self.dependency_graph[workflow_name] = []
 
     def _build_reverse_dag(self) -> None:
@@ -148,7 +152,6 @@ class WorkspaceIndex:
                         queue.append(dependent)
 
         if len(result) != len(reachable):
-            from agent_actions.errors import WorkflowError  # pylint: disable=import-outside-toplevel
             cycle_nodes = reachable - set(result)
             raise WorkflowError(
                 "Cyclic dependency detected in downstream workflows",

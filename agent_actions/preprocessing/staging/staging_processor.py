@@ -1,11 +1,16 @@
 """Module for orchestrating prompt processing workflow."""
-from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent, transform_with_passthrough
+from agent_actions.utilities.processor.processor_helpers import (
+    run_dynamic_agent, transform_with_passthrough
+)
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
-from agent_actions.errors import ProcessingError  # New modular pattern!
+from agent_actions.errors import ProcessingError
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.preprocessing.context.context_preprocessor import ContextPreprocessor
+from agent_actions.prompt_generation.prompt_preparation_service import (
+    PromptPreparationService
+)
 from ..utilities.source_path_manager import SourcePathManager
 
 class StagingProcessor(ProcessorErrorHandlerMixin):
@@ -16,7 +21,71 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         self.agent_config = agent_config
         self.agent_name = agent_name
 
-    def staging_dynamic_creator(self, context_data, source_path=None, formatted_prompt=None):
+    def _extract_and_load_content(self, context_data, source_path):
+        """Extract GUID and load source content."""
+        guid_result = ContextPreprocessor.extract_guid_and_content(context_data)
+        source_guid, enriched_data = guid_result
+
+        if source_path:
+            source_content = SourcePathManager.load_source_content(
+                source_path, context_data
+            )
+        else:
+            source_content = enriched_data
+
+        return source_guid, enriched_data, source_content
+
+    def _prepare_prompt(self, source_content, formatted_prompt):
+        """Prepare the formatted prompt if not provided."""
+        if formatted_prompt:
+            return formatted_prompt
+
+        prep_result = PromptPreparationService.prepare_prompt_with_context(
+            agent_config=self.agent_config,
+            agent_name=self.agent_name,
+            contents={},
+            mode='realtime',
+            source_content=source_content
+        )
+        return prep_result.formatted_prompt
+
+    def _execute_agent(self, enriched_data, formatted_prompt):
+        """Execute the dynamic agent and return response."""
+        tools_path = self.agent_config.get('tools', {}).get('path')
+        return run_dynamic_agent(
+            self.agent_config,
+            self.agent_name,
+            enriched_data,
+            formatted_prompt,
+            tools_path=tools_path
+        )
+
+    def _add_lineage_tracking(self, transformed_response, context_data):
+        """Add lineage tracking to transformed response."""
+        idx = self.agent_config.get('idx', 0)
+        for i, node in enumerate(transformed_response):
+            node_id = IDGenerator.generate_node_id(idx)
+            transformed_response[i] = LineageBuilder.add_context_lineage_tracking(
+                node, context_data, node_id
+            )
+        return transformed_response
+
+    def _transform_response(self, response, executed, enriched_data, source_guid):
+        """Transform agent response."""
+        if executed:
+            return transform_with_passthrough(
+                response, enriched_data, source_guid, self.agent_config
+            )
+
+        return [
+            FieldManager().create_processed_item(
+                source_guid=source_guid, content=response
+            )
+        ]
+
+    def staging_dynamic_creator(
+        self, context_data, source_path=None, formatted_prompt=None
+    ):
         """
         Create a dynamic agent for processing input documentation.
 
@@ -29,55 +98,65 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             tuple: Transformed response and source text.
         """
         try:
-            # Extract GUID and content first
-            source_guid, enriched_data = ContextPreprocessor.extract_guid_and_content(context_data)
+            # Extract GUID and load content
+            source_guid, enriched_data, source_content = self._extract_and_load_content(
+                context_data, source_path
+            )
 
-            # Load source content if path provided
-            # For first agent (staging), source_content should be the enriched_data itself
-            if source_path:
-                source_content = SourcePathManager.load_source_content(source_path, context_data)
-            else:
-                # For staging processor, enriched_data IS the source content
-                source_content = enriched_data
+            # Prepare prompt
+            formatted_prompt = self._prepare_prompt(source_content, formatted_prompt)
 
-            # Use PromptPreparationService for consistent prompt preparation (Issue #490)
-            # This ensures static data loading, context_scope, and field references work correctly
-            if not formatted_prompt:
-                from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
+            # Execute agent
+            response, executed = self._execute_agent(enriched_data, formatted_prompt)
 
-                prep_result = PromptPreparationService.prepare_prompt_with_context(
-                    agent_config=self.agent_config,
-                    agent_name=self.agent_name,
-                    contents={},  # Empty for first agent (no previous outputs)
-                    mode='realtime',
-                    source_content=source_content  # This becomes {source.*} references
-                )
-                formatted_prompt = prep_result.formatted_prompt
-
-            response, executed = run_dynamic_agent(self.agent_config, self.agent_name, enriched_data, formatted_prompt, tools_path=self.agent_config.get('tools', {}).get('path'))
+            # Ensure source_guid exists
             if not source_guid:
-                source_guid = IDGenerator.generate_deterministic_source_guid(enriched_data or context_data)
-            if executed:
-                transformed_response = transform_with_passthrough(response, enriched_data, source_guid, self.agent_config)
-            else:
-                transformed_response = [FieldManager().create_processed_item(source_guid=source_guid, content=response)]
-            idx = self.agent_config.get('idx', 0)
-            for i, node in enumerate(transformed_response):
-                node_id = IDGenerator.generate_node_id(idx)
-                transformed_response[i] = LineageBuilder.add_context_lineage_tracking(node, context_data, node_id)
-            if source_guid:
-                if isinstance(enriched_data, dict) and 'chunk_info' in enriched_data:
-                    original_data = {k: v for k, v in enriched_data.items() if k not in ['target_id', 'record_index', 'chunk_index']}
-                    original_data['source_guid'] = source_guid
-                    src_text = [original_data]
-                else:
-                    data_to_save = enriched_data or context_data
-                    if isinstance(data_to_save, dict):
-                        data_to_save = data_to_save.copy()
-                        data_to_save['source_guid'] = source_guid
-                    src_text = [data_to_save]
-            else:
-                src_text = []
+                source_guid = IDGenerator.generate_deterministic_source_guid(
+                    enriched_data or context_data
+                )
+
+            # Transform response
+            transformed_response = self._transform_response(
+                response, executed, enriched_data, source_guid
+            )
+
+            # Add lineage tracking
+            transformed_response = self._add_lineage_tracking(
+                transformed_response, context_data
+            )
+
+            # Prepare source text
+            src_text = self._prepare_source_text(
+                source_guid, enriched_data, context_data
+            )
             return (transformed_response, src_text)
-        except Exception as e:
-            self.handle_processing_error(e, 'Creating dynamic agent for prompt processing', ProcessingError, source_path=source_path, has_formatted_prompt=formatted_prompt is not None, context_type=type(context_data).__name__)
+
+        except (ValueError, TypeError, KeyError) as e:
+            self.handle_processing_error(
+                e,
+                'Creating dynamic agent for prompt processing',
+                ProcessingError,
+                source_path=source_path,
+                has_formatted_prompt=formatted_prompt is not None,
+                context_type=type(context_data).__name__
+            )
+            return None
+
+    def _prepare_source_text(self, source_guid, enriched_data, context_data):
+        """Prepare source text data for saving."""
+        if not source_guid:
+            return []
+
+        if isinstance(enriched_data, dict) and 'chunk_info' in enriched_data:
+            excluded_keys = ['target_id', 'record_index', 'chunk_index']
+            original_data = {
+                k: v for k, v in enriched_data.items() if k not in excluded_keys
+            }
+            original_data['source_guid'] = source_guid
+            return [original_data]
+
+        data_to_save = enriched_data or context_data
+        if isinstance(data_to_save, dict):
+            data_to_save = data_to_save.copy()
+            data_to_save['source_guid'] = source_guid
+        return [data_to_save]

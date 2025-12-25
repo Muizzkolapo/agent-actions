@@ -4,6 +4,10 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
+from agent_actions.errors import ConfigValidationError
+from agent_actions.response_processing.guard_parser import GuardParser
+from agent_actions.response_processing.consolidated_guard import parse_guard_config
+
 class ActionKind(str, Enum):
     """Types of actions in the workflow."""
     LLM = 'llm'
@@ -92,31 +96,17 @@ class ActionConfig(BaseModel):
         if v:
             try:
                 if isinstance(v, str):
-                    # pylint: disable=import-outside-toplevel
-                    from agent_actions.response_processing.guard_parser import (
-                        GuardParser,
-                    )
                     GuardParser.parse(v)
                 elif isinstance(v, dict):
-                    # pylint: disable=import-outside-toplevel
-                    from agent_actions.response_processing.consolidated_guard import (
-                        parse_guard_config,
-                    )
                     parse_guard_config(v)
                 else:
-                    # pylint: disable=import-outside-toplevel
-                    from agent_actions.errors import (
-                        ConfigValidationError as CVE,
-                    )
-                    raise CVE(
+                    raise ConfigValidationError(
                         'guard_type',
                         f'Guard must be string or dict, got {type(v)}',
                         context={'guard_type': str(type(v)), 'operation': 'validate_guard'}
                     )
             except ValueError as e:
-                # pylint: disable=import-outside-toplevel
-                from agent_actions.errors import ConfigValidationError as CVE
-                raise CVE(
+                raise ConfigValidationError(
                     'guard_expression',
                     f'Invalid guard: {e}',
                     context={'guard': v, 'operation': 'validate_guard'},

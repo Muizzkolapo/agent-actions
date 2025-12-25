@@ -12,8 +12,6 @@ Provides specific exception types for different error scenarios:
 class FieldResolutionError(Exception):
     """Base exception for all field resolution errors."""
 
-    pass
-
 
 class InvalidReferenceError(FieldResolutionError):
     """
@@ -25,8 +23,6 @@ class InvalidReferenceError(FieldResolutionError):
     - Empty components: "action." or ".field"
     """
 
-    pass
-
 
 class ReferenceNotFoundError(FieldResolutionError):
     """
@@ -36,8 +32,6 @@ class ReferenceNotFoundError(FieldResolutionError):
     - The action name doesn't exist in the field context
     - The field path doesn't exist within the action's data
     """
-
-    pass
 
 
 class DependencyValidationError(FieldResolutionError):
@@ -49,8 +43,6 @@ class DependencyValidationError(FieldResolutionError):
     - Referenced action is not upstream of the current action
     - Referenced action is not declared in dependencies (strict mode)
     """
-
-    pass
 
 
 class SchemaFieldValidationError(FieldResolutionError):
@@ -78,5 +70,3 @@ class SchemaFieldValidationError(FieldResolutionError):
         # Invalid reference - raises SchemaFieldValidationError
         guard: "my_function.invalid_field > 0"  # ERROR
     """
-
-    pass

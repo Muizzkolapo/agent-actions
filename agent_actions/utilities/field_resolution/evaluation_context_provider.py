@@ -24,15 +24,29 @@ Example:
     # WHERE clause: "extract.count > 5" will work!
     eval_data = context.to_flat_dict()
 """
-# pylint: disable=line-too-long,too-many-arguments,too-many-positional-arguments
-# Line-too-long: Complex context building requires longer lines for clarity
-# Too-many-arguments: Context building requires all parameters for completeness
 
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
+from agent_actions.utilities.context_scope.context_scope_processor import (
+    ContextScopeProcessor
+)
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ContextBuildConfig:  # pylint: disable=too-many-instance-attributes
+    """Configuration for building evaluation context."""
+
+    agent_config: Dict[str, Any]
+    agent_name: str
+    agent_indices: Optional[Dict[str, int]] = None
+    dependency_configs: Optional[Dict[str, Dict]] = None
+    file_path: Optional[str] = None
+    source_content: Optional[Any] = None
+    loop_context: Optional[Dict[str, Any]] = None
+    workflow_metadata: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -167,14 +181,7 @@ class EvaluationContextProvider:
     def build_context(
         self,
         current_item: Dict[str, Any],
-        agent_config: Dict[str, Any],
-        agent_name: str,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
-        file_path: Optional[str] = None,
-        source_content: Optional[Any] = None,
-        loop_context: Optional[Dict[str, Any]] = None,
-        workflow_metadata: Optional[Dict[str, Any]] = None
+        config: ContextBuildConfig
     ) -> EvaluationContext:
         """
         Build rich evaluation context for item-level operations.
@@ -184,23 +191,11 @@ class EvaluationContextProvider:
 
         Args:
             current_item: Current item being evaluated (expects 'content', 'source_guid', 'lineage')
-            agent_config: Current agent configuration
-            agent_name: Current agent name
-            agent_indices: Mapping of agent names to indices (for ordering)
-            dependency_configs: Configuration of dependency agents
-            file_path: File path for historical node loading
-            source_content: Source content (optional, loaded automatically if not provided)
-            loop_context: Loop context (if in a loop)
-            workflow_metadata: Workflow metadata
+            config: ContextBuildConfig with agent configuration and context parameters
 
         Returns:
             EvaluationContext with full upstream access
         """
-        # Import here to avoid circular dependency
-        from agent_actions.utilities.context_scope.context_scope_processor import (
-            ContextScopeProcessor
-        )
-
         # Extract current content
         current_content = current_item.get('content', {})
         if not isinstance(current_content, dict):
@@ -211,20 +206,20 @@ class EvaluationContextProvider:
         try:
             field_context = ContextScopeProcessor.build_field_context_with_history(
                 contents=current_content,
-                agent_name=agent_name,
-                agent_config=agent_config,
-                agent_indices=agent_indices,
-                dependency_configs=dependency_configs,
-                source_content=source_content,
-                loop_context=loop_context,
-                workflow_metadata=workflow_metadata,
+                agent_name=config.agent_name,
+                agent_config=config.agent_config,
+                agent_indices=config.agent_indices,
+                dependency_configs=config.dependency_configs,
+                source_content=config.source_content,
+                loop_context=config.loop_context,
+                workflow_metadata=config.workflow_metadata,
                 current_item=current_item,
-                file_path=file_path
+                file_path=config.file_path
             )
-        except Exception as e:
+        except (ValueError, TypeError, KeyError) as e:
             logger.warning(
                 "Error building field context for '%s': %s. Using empty context.",
-                agent_name, e
+                config.agent_name, e
             )
             field_context = {}
 
@@ -240,12 +235,8 @@ class EvaluationContextProvider:
     def build_context_for_batch(
         self,
         contents: Dict[str, Any],
-        agent_config: Dict[str, Any],
-        agent_name: str,
-        agent_indices: Optional[Dict[str, int]] = None,
-        dependency_configs: Optional[Dict[str, Dict]] = None,
-        current_item: Optional[Dict[str, Any]] = None,
-        file_path: Optional[str] = None
+        config: ContextBuildConfig,
+        current_item: Optional[Dict[str, Any]] = None
     ) -> EvaluationContext:
         """
         Build context for batch mode (simplified parameters).
@@ -254,12 +245,8 @@ class EvaluationContextProvider:
 
         Args:
             contents: Content dict of the current item
-            agent_config: Current agent configuration
-            agent_name: Current agent name
-            agent_indices: Mapping of agent names to indices
-            dependency_configs: Dependency configurations
+            config: ContextBuildConfig with agent configuration
             current_item: Full item (optional, built from contents if not provided)
-            file_path: File path for historical loading
 
         Returns:
             EvaluationContext with available upstream data
@@ -272,14 +259,7 @@ class EvaluationContextProvider:
                 'lineage': contents.get('lineage', []) if contents else []
             }
 
-        return self.build_context(
-            current_item=current_item,
-            agent_config=agent_config,
-            agent_name=agent_name,
-            agent_indices=agent_indices,
-            dependency_configs=dependency_configs,
-            file_path=file_path
-        )
+        return self.build_context(current_item=current_item, config=config)
 
     def build_minimal_context(
         self,
