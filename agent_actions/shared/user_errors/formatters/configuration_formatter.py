@@ -21,15 +21,17 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         # Check error message patterns
         message_lower = message.lower()
         config_patterns = [
-            'missing required field',
-            'required field',
+            'missing required configuration',  # More specific - config errors
+            'required configuration field',    # More specific - config errors
             'invalid config',
-            'configuration',
+            'configuration error',
             'schema validation',
             'yaml',
-            'json',
             'missing key'
         ]
+        # Avoid matching UDF data validation errors like "Missing required fields: options"
+        if 'missing required fields:' in message_lower:
+            return False
         return any(pattern in message_lower for pattern in config_patterns)
 
     def format(
