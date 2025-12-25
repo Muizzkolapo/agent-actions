@@ -324,7 +324,6 @@ class AgentExecutor:
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
             agent_name,
-            agent_idx,
             output_directory,
             agent_config
         )
