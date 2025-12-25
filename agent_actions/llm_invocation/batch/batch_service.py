@@ -444,7 +444,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                         "output_directory": output_directory,
                         "operation": "batch_result_processing",
                         "total_processed": len(processed_files),
-                        "registry_size": len(registry),
+                        "registry_size": len(all_jobs),
                     },
                 )
                 continue
