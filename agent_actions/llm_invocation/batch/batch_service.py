@@ -559,6 +559,10 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         except (json.JSONDecodeError, KeyError):
             return True
 
+    def get_batch_registry_status(self, output_directory: str) -> str:
+        """Get the overall status of all batch jobs in the registry (public API)."""
+        return self._get_batch_registry_status(output_directory)
+
     # pylint: disable=too-many-return-statements,too-many-branches
     def _get_batch_registry_status(self, output_directory: str) -> str:
         """Get the overall status of all batch jobs in the registry."""
