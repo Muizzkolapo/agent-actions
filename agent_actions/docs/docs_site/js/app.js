@@ -2102,8 +2102,8 @@ function renderWorkflowDetails(workflow) {
         let modelInfo = '<span style="color: var(--text-subtle);">-</span>';
         if (action.type === 'llm' && action.model) {
             modelInfo = `<code style="font-size: 0.8125rem;">${action.model}</code>`;
-        } else if (action.type === 'tool' && action.impl) {
-            modelInfo = `<code style="font-size: 0.8125rem;">${action.impl}</code>`;
+        } else if (action.type === 'tool' && action.implementation) {
+            modelInfo = `<code style="font-size: 0.8125rem;">${action.implementation}</code>`;
         }
 
         row.innerHTML = `
@@ -2174,8 +2174,8 @@ function renderWorkflowActions(workflow) {
         let modelInfo = '<span style="color: var(--text-subtle);">-</span>';
         if (action.type === 'llm' && action.model) {
             modelInfo = `<code style="font-size: 0.8125rem;">${action.model}</code>`;
-        } else if (action.type === 'tool' && action.impl) {
-            modelInfo = `<code style="font-size: 0.8125rem;">${action.impl}</code>`;
+        } else if (action.type === 'tool' && action.implementation) {
+            modelInfo = `<code style="font-size: 0.8125rem;">${action.implementation}</code>`;
         }
 
         row.innerHTML = `
@@ -2636,7 +2636,7 @@ function renderActionDetails(action, workflowsUsingAction) {
         }
     } else {
         configSection.innerHTML += `
-            <p><strong>Implementation:</strong> <code>${action.impl}</code></p>
+            <p><strong>Implementation:</strong> <code>${action.implementation}</code></p>
             ${action.granularity ? `<p><strong>Granularity:</strong> ${action.granularity}</p>` : ''}
             ${action.tool_function ? `<p><strong>File:</strong> <code>${action.tool_function.file_path}</code></p>` : ''}
         `;
