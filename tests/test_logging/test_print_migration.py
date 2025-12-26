@@ -30,8 +30,6 @@ class TestPrintStatementMigration:
         'agent_actions/orchestration/action_level_executor.py',  # Action execution status
 
         # Prompt generation with user notifications
-        'agent_actions/prompt_generation/reprompt_interceptor.py',  # Reprompt progress
-        'agent_actions/prompt_generation/reprompt_strategy.py',  # Strategy notifications
         'agent_actions/prompt_generation/directory_handler.py',  # Copy notifications
 
         # LLM invocation with debug output

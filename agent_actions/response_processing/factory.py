@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Type
 
 from agent_actions.errors import ConfigurationError
-from agent_actions.prompt_generation.reprompt_interceptor import RepromptInterceptor
+from agent_actions.reprompting.interceptor import RepromptInterceptor
 from agent_actions.validation.validation_interceptor import ValidationInterceptor
 
 from .base import InterceptorChain, ResponseInterceptor
@@ -13,7 +13,7 @@ class InterceptorFactory:
     """Factory for creating interceptors from configuration."""
     _interceptor_types: Dict[str, Type[ResponseInterceptor]] = {
         'validation': ValidationInterceptor,
-        'reprompt': RepromptInterceptor
+        'reprompt': RepromptInterceptor,
     }
 
     @classmethod

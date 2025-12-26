@@ -53,29 +53,31 @@ class InterceptorService:
         """
         # Lazy imports to avoid circular dependencies
         from agent_actions.response_processing.factory import InterceptorFactory
-        from agent_actions.prompt_generation.reprompt_interceptor import RepromptInterceptor
-
-        # Separate interceptors by type
-        non_reprompt_configs: List[Dict[str, Any]] = [
-            cfg for cfg in interceptor_configs if cfg.get("type") != "reprompt"
-        ]
-        reprompt_cfg = next(
-            (cfg for cfg in interceptor_configs if cfg.get("type") == "reprompt"), None
-        )
+        from agent_actions.reprompting.config import RepromptConfig
+        from agent_actions.reprompting.interceptor import RepromptInterceptor
 
         # Propagate prompt_debug to all interceptors
         prompt_debug = agent_config.get("prompt_debug", False)
-        non_reprompt_configs = [
-            {**cfg, "prompt_debug": prompt_debug} for cfg in non_reprompt_configs
+        interceptor_configs_with_debug = [
+            {**cfg, "prompt_debug": prompt_debug} for cfg in interceptor_configs
+            if cfg.get("type") != "reprompt"  # Filter out old reprompt config
         ]
-        if reprompt_cfg:
-            reprompt_cfg = {**reprompt_cfg, "prompt_debug": prompt_debug}
 
-        # Build interceptor chain
-        interceptors = InterceptorFactory.build_chain(non_reprompt_configs)
-        reprompt_interceptor: Optional[RepromptInterceptor] = (
-            InterceptorFactory.create_interceptor(reprompt_cfg) if reprompt_cfg else None
-        )
+        # Build interceptor chain (validation interceptors)
+        interceptors = InterceptorFactory.build_chain(interceptor_configs_with_debug)
+
+        # Create reprompt interceptor from agent_config if reprompt is enabled
+        reprompt_value = agent_config.get("reprompt", False)
+        reprompt_config = RepromptConfig.from_yaml(reprompt_value)
+        reprompt_interceptor = None
+
+        if reprompt_config.enabled:
+            reprompt_interceptor = RepromptInterceptor()
+            reprompt_interceptor.configure({
+                "reprompt": reprompt_value,
+                "constraints": agent_config.get("constraints", []),
+                "prompt_debug": prompt_debug,
+            })
 
         # Parse context_data_str for execution context
         parsed_context_data = {}
@@ -98,11 +100,7 @@ class InterceptorService:
         }
 
         # Get max_attempts from reprompt config
-        max_attempts = 3  # default
-        if reprompt_cfg:
-            max_attempts = reprompt_cfg.get("max_attempts") or reprompt_cfg.get("config", {}).get(
-                "max_attempts", 3
-            )
+        max_attempts = reprompt_config.max_attempts if reprompt_config.enabled else 1
 
         # Retry loop with safety counter
         safety_counter = 0
@@ -119,24 +117,28 @@ class InterceptorService:
                     f"{bool(execution_context.get('validation_error'))}"
                 )
 
-            # Handle reprompting if validation failed
+            # Handle reprompting if validation failed in previous iteration
             if reprompt_interceptor and execution_context.get("validation_error"):
-                reprompt_result = reprompt_interceptor.intercept(None, execution_context)
+                # Add json_mode to context for JSON repair
+                execution_context["json_mode"] = agent_config.get("json_mode", True)
+
+                reprompt_result = reprompt_interceptor.intercept(
+                    execution_context.get("failed_response"),
+                    execution_context
+                )
 
                 # Check if max attempts reached
-                if reprompt_result.metadata and reprompt_result.metadata.get(
-                    "max_attempts_reached"
-                ):
+                if reprompt_result.metadata and reprompt_result.metadata.get("max_attempts_reached"):
+                    if prompt_debug:
+                        print("   MAX ATTEMPTS REACHED - returning failed response")
                     return execution_context.get("failed_response", [])
 
                 # Update execution context with retry context
                 if reprompt_result.retry_context:
                     execution_context.update(reprompt_result.retry_context)
 
-                # Clear validation error flags
+                # Clear validation error flags for fresh retry
                 execution_context.pop("validation_error", None)
-                execution_context.pop("validator_name", None)
-                execution_context.pop("validator_args", None)
                 execution_context.pop("failed_response", None)
 
             # Get current prompt from execution context

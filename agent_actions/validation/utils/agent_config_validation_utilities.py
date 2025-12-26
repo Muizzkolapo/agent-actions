@@ -42,7 +42,8 @@ class AgentConfigValidationUtilities:
         'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY,
         SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot',
         'conditional_clause', 'is_operational', 'ephemeral',
-        'add_dispatch', 'output_field', 'context_scope'
+        'add_dispatch', 'output_field', 'context_scope',
+        'reprompt', 'constraints'
     }
 
     _AGENT_TYPE_SPECIFIC_KEYS: Dict[str, Set[str]] = {
