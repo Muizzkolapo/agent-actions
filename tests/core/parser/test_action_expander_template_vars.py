@@ -35,35 +35,6 @@ class TestTemplateVariableReplacement:
         assert agents[1]['prompt'] == 'Compare stage 2 with stage 1'
         assert agents[2]['prompt'] == 'Compare stage 3 with stage 2'
 
-    @pytest.mark.skip(reason="observe/drops functionality removed")
-    def test_template_vars_in_lists(self):
-        """Test template variables in list fields (observe/drops)."""
-        config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'aggregate', 'intent': 'Aggregate with observe/drops', 'api_key': 'OPENAI_API_KEY', 'observe': ['input_data', 'output_${stage-1}'], 'drops': ['temp_${stage}'], 'loop': {'param': 'stage', 'range': [1, 3]}}], 'plan': ['aggregate']}
-        result = ActionExpander.expand_actions_to_agents(config)
-        agents = result['test_workflow']
-        assert 'input_data' in agents[0]['observe']
-        assert 'output_' in agents[0]['observe']
-        assert 'temp_1' in agents[0]['drops']
-        assert 'input_data' in agents[1]['observe']
-        assert 'output_1' in agents[1]['observe']
-        assert 'temp_2' in agents[1]['drops']
-        assert 'input_data' in agents[2]['observe']
-        assert 'output_2' in agents[2]['observe']
-        assert 'temp_3' in agents[2]['drops']
-
-    @pytest.mark.skip(reason="observe/drops functionality removed")
-    def test_template_vars_in_observe_drops(self):
-        """Test template variables in observe and drops fields."""
-        config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'process', 'intent': 'Process with observe/drops', 'api_key': 'OPENAI_API_KEY', 'observe': ['iteration_${i}', 'previous_${i-1}'], 'drops': ['temp_${i}'], 'loop': {'param': 'i', 'range': [1, 2]}}], 'plan': ['process']}
-        result = ActionExpander.expand_actions_to_agents(config)
-        agents = result['test_workflow']
-        assert 'iteration_1' in agents[0]['observe']
-        assert 'previous_' in agents[0]['observe']
-        assert 'temp_1' in agents[0]['drops']
-        assert 'iteration_2' in agents[1]['observe']
-        assert 'previous_1' in agents[1]['observe']
-        assert 'temp_2' in agents[1]['drops']
-
     def test_template_vars_in_nested_dict(self):
         """Test template variables in nested dictionary structures."""
         config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'structured', 'intent': 'Structured with nested template vars', 'api_key': 'OPENAI_API_KEY', 'schema': {'current': 'stage_${n}', 'previous': 'stage_${n-1}', 'nested': {'value': 'iteration_${n}'}}, 'loop': {'param': 'n', 'range': [5, 6]}}], 'plan': ['structured']}
@@ -104,21 +75,5 @@ class TestTemplateVariableReplacement:
         assert agents[0]['prompt'] == 'Compare  with  again'
         assert agents[1]['prompt'] == 'Compare 1 with 1 again'
 
-    @pytest.mark.skip(reason="observe/drops functionality removed")
-    def test_template_vars_sequential_mode_integration(self):
-        """Test template variables work correctly with sequential mode."""
-        config = {'name': 'test_workflow', 'description': 'Test workflow', 'version': '1.0.0', 'defaults': {'model_vendor': 'openai', 'model_name': 'gpt-4o-mini'}, 'actions': [{'name': 'input', 'intent': 'Input data', 'api_key': 'OPENAI_API_KEY'}, {'name': 'refine', 'intent': 'Refine sequentially', 'api_key': 'OPENAI_API_KEY', 'prompt': 'Refine stage ${s} using output from stage ${s-1}', 'observe': ['refined_${s}'], 'loop': {'param': 's', 'range': [1, 3], 'mode': 'sequential'}}], 'plan': ['input', 'refine <- input']}
-        result = ActionExpander.expand_actions_to_agents(config)
-        agents = result['test_workflow']
-        refine_agents = [a for a in agents if a['agent_type'].startswith('refine_')]
-        assert refine_agents[0]['prompt'] == 'Refine stage 1 using output from stage '
-        assert 'refined_1' in refine_agents[0]['observe']
-        assert refine_agents[1]['prompt'] == 'Refine stage 2 using output from stage 1'
-        assert 'refined_2' in refine_agents[1]['observe']
-        assert refine_agents[2]['prompt'] == 'Refine stage 3 using output from stage 2'
-        assert 'refined_3' in refine_agents[2]['observe']
-        assert refine_agents[0]['dependencies'] == ['input']
-        assert refine_agents[1]['dependencies'] == ['refine_1']
-        assert refine_agents[2]['dependencies'] == ['refine_2']
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
