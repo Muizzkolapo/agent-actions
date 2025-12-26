@@ -32,7 +32,7 @@ class WorkspaceIndex:
         """
         self.workflows_root = Path(workflows_root)
         self.dependency_graph: Dict[str, List[str]] = {}
-        self.reverse_dependency_graph: Dict[str, List[str]] = defaultdict(list)
+        self.reverse_dependency_graph: Dict[str, Set[str]] = defaultdict(set)
 
     def scan_workspace(self) -> None:
         """Scan all agent_config/*.yml files to build dependency graphs."""
@@ -98,11 +98,10 @@ class WorkspaceIndex:
 
     def _build_reverse_dag(self) -> None:
         """Build reverse dependency graph by inverting edges."""
-        self.reverse_dependency_graph = defaultdict(list)
+        self.reverse_dependency_graph = defaultdict(set)
         for workflow, dependencies in self.dependency_graph.items():
             for dep in dependencies:
-                if workflow not in self.reverse_dependency_graph[dep]:
-                    self.reverse_dependency_graph[dep].append(workflow)
+                self.reverse_dependency_graph[dep].add(workflow)
 
     def topological_sort_downstream(self, start_workflow: str) -> List[str]:
         """

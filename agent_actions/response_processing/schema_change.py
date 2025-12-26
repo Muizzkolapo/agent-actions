@@ -309,9 +309,12 @@ def prepare_schema_unified(  # pylint: disable=too-many-branches
                     captured_results=captured_results,
                     preserve_type_on_exact_match=True
                 )
-            except Exception:  # pylint: disable=broad-exception-caught
+            except (ValueError, TypeError, KeyError) as e:
                 # Let downstream validation handle it if it fails or returns None
-                pass
+                logger.debug(
+                    "dispatch_task resolution failed, deferring to downstream: %s",
+                    e
+                )
 
         # Check if the resolved schema is already in unified format (has 'fields' list)
         if (isinstance(inline_schema, dict) and 'fields' in inline_schema and

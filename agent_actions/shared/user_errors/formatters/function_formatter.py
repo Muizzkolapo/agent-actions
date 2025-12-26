@@ -1,5 +1,6 @@
 """Function/UDF error formatter."""
 
+from difflib import SequenceMatcher
 from typing import Dict, Any, List
 from .error_formatter_base import ErrorFormatter
 from ..user_error import UserError
@@ -95,16 +96,7 @@ class FunctionNotFoundFormatter(ErrorFormatter):
         return [func for func, _ in matches]
 
     def _similarity_score(self, s1: str, s2: str) -> int:
-        """Calculate simple similarity score between two strings."""
-        # Longer common substring = higher score
-        max_len = 0
-        for i in range(len(s1)):
-            for j in range(len(s2)):
-                length = 0
-                while (i + length < len(s1) and
-                       j + length < len(s2) and
-                       s1[i + length] == s2[j + length]):
-                    length += 1
-                max_len = max(max_len, length)
-
-        return max_len
+        """Calculate similarity score using longest common substring (O(n²) via difflib)."""
+        # Use SequenceMatcher which is much more efficient than O(n³) brute force
+        match = SequenceMatcher(None, s1, s2).find_longest_match(0, len(s1), 0, len(s2))
+        return match.size

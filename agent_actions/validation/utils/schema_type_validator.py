@@ -114,8 +114,9 @@ class SchemaTypeValidator:
         # Try JSON parsing first
         try:
             return json.loads(properties_str)
-        except (ValueError, json.JSONDecodeError):
-            pass
+        except (ValueError, json.JSONDecodeError) as e:
+            # Fall through to try Python literal eval
+            _ = e  # Suppress unused variable warning
 
         # Fallback to Python literal eval
         try:

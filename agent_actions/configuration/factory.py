@@ -1,9 +1,9 @@
 # pylint: disable=duplicate-code
 """
-Bootstrap factory for initializing the application with dependency injection.
+Factory module for creating components with dependency injection.
 
-This module provides functions to set up the application container and integrate
-with existing workflows while maintaining backward compatibility.
+Provides factory functions to create AgentRunner and TargetContentProcessor
+instances with proper DI container lifecycle management.
 """
 
 import logging

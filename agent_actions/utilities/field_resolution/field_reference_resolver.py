@@ -370,6 +370,8 @@ class FieldReferenceResolver:
 
             if isinstance(current, dict):
                 current = current.get(key)
+                if current is None:
+                    return None
             elif isinstance(current, list) and key.isdigit():
                 idx = int(key)
                 if 0 <= idx < len(current):
@@ -380,6 +382,8 @@ class FieldReferenceResolver:
                 # Try attribute access as last resort
                 if hasattr(current, key):
                     current = getattr(current, key)
+                    if current is None:
+                        return None
                 else:
                     return None
 

@@ -117,10 +117,6 @@ class AnthropicBatchProvider(BatchProvider):
 
     def _extract_error_from_response(self, raw_response: Any) -> Optional[str]:
         """Extract error from Anthropic response."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         result = self._get_attribute_or_key(raw_response, "result")
         if result is None:
             return "Invalid response format from Anthropic"

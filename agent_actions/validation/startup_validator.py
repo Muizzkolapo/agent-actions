@@ -43,7 +43,9 @@ class StartupValidator:
             )
         except ValidationError as e:
             for error in e.errors():
-                field_name = error.get('loc', ('unknown',))[0]
+                # Safely access first element of location tuple
+                loc = error.get('loc', ('unknown',))
+                field_name = loc[0] if loc else 'unknown'
                 error_msg = error.get('msg', 'Unknown error')
                 self.errors.append(
                     f'Environment variable validation failed for '

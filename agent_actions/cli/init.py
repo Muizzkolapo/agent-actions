@@ -24,13 +24,78 @@ class InitCommand:  # pylint: disable=too-few-public-methods
     def __init__(self, args: InitCommandArgs):
         """
         Initialize the init command.
-        
+
         Args:
             args: Pydantic model containing the command arguments.
         """
         self.args = args
         self.output_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+
+        # Security: Validate output_dir doesn't escape via path traversal
+        self._validate_output_dir()
+
         self.project_dir = self.output_dir / self.args.project_name
+
+    def _validate_output_dir(self) -> None:
+        """
+        Validate output directory is safe for project creation.
+
+        Checks:
+        1. No path traversal patterns (..)
+        2. Resolved path is within current working directory or its children
+        3. Path doesn't escape to system directories
+
+        Raises:
+            ValidationError: If path validation fails.
+        """
+        cwd = Path.cwd().resolve()
+        resolved = self.output_dir.resolve()
+
+        # If output_dir was explicitly provided, validate it
+        if self.args.output_dir:
+            path_str = str(Path(self.args.output_dir))
+
+            # Check for explicit path traversal patterns
+            if '..' in path_str:
+                raise ValidationError(
+                    'Path traversal not allowed in output directory',
+                    context={
+                        'output_dir': path_str,
+                        'resolved': str(resolved),
+                        'operation': '_validate_output_dir'
+                    }
+                )
+
+            # Ensure resolved path is within cwd or is an absolute path the user explicitly chose
+            # For relative paths, they must resolve within cwd
+            if not Path(self.args.output_dir).is_absolute():
+                try:
+                    resolved.relative_to(cwd)
+                except ValueError as exc:
+                    raise ValidationError(
+                        'Output directory must be within current working directory',
+                        context={
+                            'output_dir': path_str,
+                            'resolved': str(resolved),
+                            'cwd': str(cwd),
+                            'operation': '_validate_output_dir'
+                        }
+                    ) from exc
+
+        # Additional safety: prevent writing to sensitive system directories
+        sensitive_prefixes = ('/etc', '/usr', '/bin', '/sbin', '/var', '/root')
+        resolved_str = str(resolved)
+        for prefix in sensitive_prefixes:
+            if resolved_str.startswith(prefix):
+                raise ValidationError(
+                    'Cannot create project in system directory',
+                    context={
+                        'output_dir': str(self.output_dir),
+                        'resolved': resolved_str,
+                        'blocked_prefix': prefix,
+                        'operation': '_validate_output_dir'
+                    }
+                )
 
     def _get_available_templates(self) -> List[str]:
         """

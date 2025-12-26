@@ -10,10 +10,6 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from rich.console import Console
 
-from agent_actions.response_processing.where_parser import (
-    evaluate_safe_skip_condition,
-    evaluate_safe_expression
-)
 from agent_actions.preprocessing.filtering.where_filter import (
     get_global_filter,
     FilterItemRequest
@@ -55,7 +51,7 @@ class SkipConditionStrategy(SkipStrategy):
     def should_skip(
         self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
     ) -> bool:
-        """Evaluate skip_condition using safe evaluation."""
+        """Evaluate skip_condition using modern WHERE filter."""
         skip_condition = agent_config.get('skip_condition')
         if not skip_condition:
             return False
@@ -68,7 +64,31 @@ class SkipConditionStrategy(SkipStrategy):
                 'agent_config': agent_config
             }
 
-            should_skip = evaluate_safe_skip_condition(skip_condition, context)
+            # Extract WHERE clause from skip_condition config
+            where_clause = None
+            if isinstance(skip_condition, dict) and 'where' in skip_condition:
+                where_clause = skip_condition['where']
+            elif isinstance(skip_condition, str):
+                where_clause = skip_condition
+
+            if not where_clause:
+                return False
+
+            # Use modern WHERE filter - skip if condition NOT matched
+            filter_service = get_global_filter()
+            request = FilterItemRequest(data=context, where_clause=where_clause)
+            filter_result = filter_service.filter_item(request)
+
+            # If evaluation failed, don't skip (fail-open)
+            if not filter_result.success:
+                logger.debug(
+                    "Skip condition evaluation failed for %s: %s",
+                    agent_name, filter_result.error
+                )
+                return False
+
+            # Skip if condition NOT matched (inverse logic)
+            should_skip = not filter_result.matched
 
             if should_skip:
                 self.console.print(
@@ -225,7 +245,7 @@ class LegacySkipIfStrategy(SkipStrategy):
     def should_skip(
         self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
     ) -> bool:
-        """Evaluate legacy skip_if condition."""
+        """Evaluate legacy skip_if condition using modern WHERE filter."""
         skip_if = agent_config.get('skip_if')
         if not skip_if:
             return False
@@ -238,7 +258,21 @@ class LegacySkipIfStrategy(SkipStrategy):
                 'agent_config': agent_config
             }
 
-            should_skip = evaluate_safe_expression(skip_if, context)
+            # Use modern WHERE filter - skip_if expression evaluated as WHERE clause
+            filter_service = get_global_filter()
+            request = FilterItemRequest(data=context, where_clause=skip_if)
+            filter_result = filter_service.filter_item(request)
+
+            # If evaluation failed, don't skip (fail-open)
+            if not filter_result.success:
+                logger.debug(
+                    "Legacy skip_if evaluation failed for %s: %s",
+                    agent_name, filter_result.error
+                )
+                return False
+
+            # Skip if expression matched (direct logic - different from skip_condition)
+            should_skip = filter_result.matched
 
             if should_skip:
                 self.console.print(

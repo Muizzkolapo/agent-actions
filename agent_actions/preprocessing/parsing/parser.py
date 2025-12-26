@@ -581,9 +581,17 @@ class SafeExpressionEvaluator:
         Returns:
             True if the attribute access is safe
         """
-        # Allow basic attribute access like obj.attr
-        # but prevent access to dangerous attributes like __import__
-        if node.attr.startswith('_'):
+        # Blocklist of dangerous attributes that could allow sandbox escape
+        UNSAFE_ATTRS = frozenset({
+            '__class__', '__dict__', '__code__', '__globals__',
+            '__bases__', '__subclasses__', '__mro__', '__new__',
+            '__init__', '__del__', '__reduce__', '__reduce_ex__',
+            '__getattribute__', '__setattr__', '__delattr__',
+            'mro', 'gi_frame', 'gi_code', 'f_globals', 'f_locals',
+        })
+
+        # Block dangerous attributes and all underscore-prefixed attrs
+        if node.attr in UNSAFE_ATTRS or node.attr.startswith('_'):
             return False
 
         return True

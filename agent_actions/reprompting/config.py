@@ -13,7 +13,7 @@ Advanced usage:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Union
 
 
 # Preset definitions
@@ -68,10 +68,8 @@ class RepromptConfig:
 
     def __post_init__(self) -> None:
         """Apply preset defaults if not explicitly overridden."""
-        if self.preset in PRESETS:
-            preset_values = PRESETS[self.preset]
-            # Only apply preset values for fields that weren't explicitly set
-            # This is handled in from_yaml() where we track explicit overrides
+        # Preset values are applied in from_yaml() where we track explicit overrides
+        pass
 
     @classmethod
     def from_yaml(cls, value: Union[bool, str, Dict[str, Any], None]) -> "RepromptConfig":

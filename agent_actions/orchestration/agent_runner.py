@@ -11,6 +11,7 @@ from agent_actions.orchestration.agent_strategies import (
     AgentStrategy,
     StrategyExecutionParams
 )
+from agent_actions.orchestration.artifact_linker import ArtifactLinker
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,39 @@ class AgentRunner:
             )
         return agent_folder
 
+    def _resolve_upstream_from_manifest(self, agent_folder: Path) -> Optional[List[Path]]:
+        """
+        Resolve upstream directories from manifest file.
+
+        When a workflow depends on an upstream workflow, the artifact linker
+        writes a manifest file pointing to the upstream's output. This method
+        reads that manifest and returns the upstream path(s).
+
+        Args:
+            agent_folder: Path to the agent's folder (contains agent_io).
+
+        Returns:
+            List of upstream paths from manifest, or None if no manifest exists.
+        """
+        agent_io_dir = agent_folder / 'agent_io' if 'agent_io' not in str(agent_folder) else agent_folder
+        manifest = ArtifactLinker.read_manifest(agent_io_dir)
+        if manifest is None:
+            return None
+
+        upstream_path = Path(manifest['upstream_path'])
+        if not upstream_path.exists():
+            logger.warning(
+                "Manifest upstream path doesn't exist: %s",
+                upstream_path
+            )
+            return None
+
+        logger.debug(
+            "Resolved upstream from manifest: %s",
+            upstream_path
+        )
+        return [upstream_path]
+
     def setup_directories(
         self,
         agent_folder: str,
@@ -136,9 +170,16 @@ class AgentRunner:
         dependencies = agent_config.get('dependencies', [])
         upstream_data_dirs: List[Path] = []
 
-        # 1. Start Node: Always reads from Staging
+        # 1. Start Node: Check manifest first, fall back to staging
         if idx == 0:
-            upstream_data_dirs.append(Path(agent_folder) / 'staging')
+            # Try manifest-based resolution first (for inter-workflow dependencies)
+            manifest_dirs = self._resolve_upstream_from_manifest(Path(agent_folder))
+            if manifest_dirs:
+                upstream_data_dirs.extend(manifest_dirs)
+            else:
+                # Fall back to staging for direct file input
+                staging_dir = Path(agent_folder) / 'staging'
+                upstream_data_dirs.append(staging_dir)
 
         # 2. Explicit Dependencies (DAG/Diamond)
         elif dependencies and hasattr(self, 'agent_indices') and self.agent_indices:

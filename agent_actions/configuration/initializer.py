@@ -1,9 +1,9 @@
 # pylint: disable=duplicate-code
 """
-Bootstrap module for initializing the application with dependency injection.
+Application initializer with startup validation.
 
-This module provides functions to set up the application container and integrate
-with existing workflows while maintaining backward compatibility.
+Provides functions to set up the application container with full validation,
+including environment config and dependency injection setup.
 """
 import logging
 from contextlib import contextmanager

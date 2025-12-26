@@ -7,7 +7,7 @@ Each node can be evaluated against data using the visitor pattern.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -190,7 +190,7 @@ class EvaluationContext:
     def __init__(
         self,
         data: Dict[str, Any],
-        functions: Optional[Dict[str, Any]] = None,
+        functions: Optional[Dict[str, Callable[..., Any]]] = None,
         debug: bool = False
     ):
         """
@@ -253,7 +253,7 @@ class WhereClauseAST:
     def evaluate(
         self,
         data: Dict[str, Any],
-        functions: Optional[Dict[str, Any]] = None
+        functions: Optional[Dict[str, Callable[..., Any]]] = None
     ) -> bool:
         """
         Evaluate the WHERE clause against the given data.

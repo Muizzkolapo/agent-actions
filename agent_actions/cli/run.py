@@ -67,16 +67,15 @@ class RunCommand:  # pylint: disable=too-few-public-methods
 
     def _determine_execution_mode(self, workflow: AgentWorkflow) -> bool:
         """Determine if parallel execution should be used."""
-        if hasattr(self.args, 'parallel') and self.args.parallel:
-            click.echo(
-                '🔀 Using parallel execution (forced via --parallel flag)...'
-            )
+        mode = getattr(self.args, 'execution_mode', 'auto')
+
+        if mode == 'parallel':
+            click.echo('🔀 Using parallel execution (--execution-mode parallel)...')
             return True
-        if hasattr(self.args, 'no_parallel') and self.args.no_parallel:
-            click.echo(
-                'Using sequential execution (forced via --no-parallel flag)...'
-            )
+        if mode == 'sequential':
+            click.echo('Using sequential execution (--execution-mode sequential)...')
             return False
+        # mode == 'auto': let the workflow decide
         if workflow.services.core.action_level_orchestrator.should_use_parallel_execution():
             click.echo('🔀 Using parallel execution (auto-detected)...')
             return True
@@ -196,12 +195,10 @@ class RunCommand:  # pylint: disable=too-few-public-methods
     help='Force execution even if validation warnings occur'
 )
 @click.option(
-    '--parallel', is_flag=True,
-    help='Force parallel execution (overrides auto-detection)'
-)
-@click.option(
-    '--no-parallel', is_flag=True,
-    help='Force sequential execution (overrides auto-detection)'
+    '--execution-mode', '-e',
+    type=click.Choice(['auto', 'parallel', 'sequential'], case_sensitive=False),
+    default='auto',
+    help="Execution mode: 'auto' (detect based on workflow), 'parallel', or 'sequential'"
 )
 @click.option(
     '--concurrency-limit', type=int, default=5,
@@ -224,8 +221,7 @@ def run(
     user_code: Optional[str],
     use_tools: bool,
     force: bool=False,
-    parallel: bool=False,
-    no_parallel: bool=False,
+    execution_mode: str='auto',
     concurrency_limit: int=5,
     upstream: bool=False,
     downstream: bool=False
@@ -250,8 +246,7 @@ def run(
         user_code=user_code,
         use_tools=use_tools,
         force=force,
-        parallel=parallel,
-        no_parallel=no_parallel,
+        execution_mode=execution_mode,
         concurrency_limit=concurrency_limit,
         upstream=upstream,
         downstream=downstream

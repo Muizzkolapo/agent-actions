@@ -2,7 +2,7 @@
 from typing import Optional
 from enum import Enum
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from agent_actions.errors import ConfigValidationError
@@ -33,19 +33,19 @@ class EnvironmentConfig(BaseSettings):
         case_sensitive=False,
         extra='forbid'
     )
-    openai_api_key: Optional[str] = Field(
+    openai_api_key: Optional[SecretStr] = Field(
         default=None, description='OpenAI API Key for GPT models'
     )
-    claude_api_key: Optional[str] = Field(
+    claude_api_key: Optional[SecretStr] = Field(
         default=None,
         alias='ANTHROPIC_API_KEY',
         description='Anthropic Claude API Key'
     )
-    anthropic_api_key: Optional[str] = Field(
+    anthropic_api_key: Optional[SecretStr] = Field(
         default=None,
         description='Alternative Anthropic API Key (alias for claude_api_key)'
     )
-    google_api_key: Optional[str] = Field(
+    google_api_key: Optional[SecretStr] = Field(
         default=None, description='Google API Key for Gemini models'
     )
     agent_actions_env: Environment = Field(
@@ -82,17 +82,18 @@ class EnvironmentConfig(BaseSettings):
         default=None, description='Database connection URL'
     )
 
-    @field_validator('openai_api_key', 'claude_api_key', 'anthropic_api_key', 'google_api_key')
+    @field_validator('openai_api_key', 'claude_api_key', 'anthropic_api_key', 'google_api_key', mode='before')
     @classmethod
     def validate_api_keys(cls, v):
         """Validate API key format if provided."""
         if v is not None:
-            if len(v.strip()) < 10:
+            key_str = v.get_secret_value() if isinstance(v, SecretStr) else v
+            if len(key_str.strip()) < 10:
                 raise ConfigValidationError(
                     'api_key_length',
                     'API key must be at least 10 characters long',
                     context={
-                        'key_length': len(v.strip()),
+                        'key_length': len(key_str.strip()),
                         'operation': 'validate_api_key'
                     }
                 )
@@ -118,7 +119,8 @@ class EnvironmentConfig(BaseSettings):
 
     def get_effective_claude_key(self) -> Optional[str]:
         """Get the effective Claude API key, preferring claude_api_key over anthropic_api_key."""
-        return self.claude_api_key or self.anthropic_api_key
+        key = self.claude_api_key or self.anthropic_api_key
+        return key.get_secret_value() if key else None
 
     def is_development(self) -> bool:
         """Check if running in development environment."""
@@ -138,18 +140,20 @@ class EnvironmentConfig(BaseSettings):
 
 class APIConfig(BaseModel):
     """API-specific configuration extracted from environment config."""
-    openai_api_key: Optional[str] = None
-    claude_api_key: Optional[str] = None
-    google_api_key: Optional[str] = None
+    openai_api_key: Optional[SecretStr] = None
+    claude_api_key: Optional[SecretStr] = None
+    google_api_key: Optional[SecretStr] = None
     default_timeout: int = 120
     max_retries: int = 3
 
     @classmethod
     def from_environment(cls, env_config: EnvironmentConfig) -> 'APIConfig':
         """Create API config from environment configuration."""
+        # Get claude key as string, then wrap in SecretStr if present
+        claude_key_str = env_config.get_effective_claude_key()
         return cls(
             openai_api_key=env_config.openai_api_key,
-            claude_api_key=env_config.get_effective_claude_key(),
+            claude_api_key=SecretStr(claude_key_str) if claude_key_str else None,
             google_api_key=env_config.google_api_key,
             default_timeout=env_config.default_api_timeout,
             max_retries=env_config.default_max_retries
