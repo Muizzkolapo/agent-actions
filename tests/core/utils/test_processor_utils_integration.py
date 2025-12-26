@@ -10,6 +10,7 @@ from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopCorrelator
+from agent_actions.utilities.correlation.loop_id_generator import LoopIdGenerator
 
 class TestProcessorUtilsIntegration:
     """Integration tests for ProcessorUtils in realistic parallel processing scenarios."""

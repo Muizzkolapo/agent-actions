@@ -128,9 +128,17 @@ class TestAnthropicBatchProvider(BaseBatchProviderTests):
         assert isinstance(result.content, str), 'Text should return string'
         assert result.content == 'Hello world', 'Should extract text content'
 
-    def test_submit_and_retrieve_workflow(self, tmp_path, sample_data, sample_agent_config_no_json_mode):
-        """Override to skip - Anthropic has different batch API that needs special mocking."""
-        pytest.skip('Anthropic batch API uses different endpoints - needs custom implementation')
+    def test_submit_and_retrieve_workflow(self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode):
+        """Test submit and retrieve workflow with Anthropic provider."""
+        # Prepare tasks
+        tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
+        assert len(tasks) == 3
+
+        # Submit batch - returns (batch_id, status) tuple
+        result = provider.submit_batch(tasks, str(tmp_path))
+        batch_id = result[0] if isinstance(result, tuple) else result
+        assert batch_id is not None
+        assert 'msgbatch' in batch_id
 
     def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
         """Override to test error handling with proper mock."""

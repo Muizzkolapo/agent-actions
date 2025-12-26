@@ -140,14 +140,27 @@ class TestGeminiBatchProvider(BaseBatchProviderTests):
         assert len(tasks) == 3
         assert all(('key' in task for task in tasks))
 
-    def test_submit_and_retrieve_workflow(self, tmp_path, sample_data, sample_agent_config_no_json_mode):
-        """Override to skip - Gemini has different batch API."""
-        pytest.skip('Gemini batch API uses different format - needs custom implementation')
+    def test_submit_and_retrieve_workflow(self, provider, tmp_path, sample_data, sample_agent_config_no_json_mode):
+        """Test submit and retrieve workflow with Gemini provider."""
+        # Prepare tasks
+        tasks = provider.prepare_tasks(sample_data, sample_agent_config_no_json_mode)
+        assert len(tasks) == 3
 
-    def test_retrieve_invalid_batch_id_raises_error(self, tmp_path):
-        """Override to skip - Gemini batch API is different."""
-        pytest.skip('Gemini batch API uses different format - needs custom implementation')
+        # Submit batch
+        batch_id = provider.submit_batch(tasks, str(tmp_path))
+        assert batch_id is not None
+
+    def test_retrieve_invalid_batch_id_raises_error(self, provider, tmp_path):
+        """Test error handling for invalid batch ID."""
+        from agent_actions.errors import VendorAPIError
+        provider.client.batches.get.side_effect = VendorAPIError(
+            vendor='gemini', endpoint='batches.get', context={'message': 'Batch not found'}
+        )
+        with pytest.raises(VendorAPIError):
+            provider.retrieve_results('nonexistent-batch-id', str(tmp_path))
 
     def test_check_status_returns_valid_state(self, provider):
-        """Override to skip - Gemini uses different status values."""
-        pytest.skip('Gemini uses STATE_* format, not the standard states')
+        """Test that check_status returns a valid state string."""
+        status = provider.check_status('batch123')
+        # Gemini uses JOB_STATE_* format which maps to standard states
+        assert status in ['pending', 'processing', 'completed', 'failed', 'cancelled']
