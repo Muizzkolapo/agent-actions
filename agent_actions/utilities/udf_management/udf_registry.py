@@ -109,12 +109,18 @@ def udf_tool(
             # Check for duplicates (atomic check-and-register)
             if func_name_lower in UDF_REGISTRY:
                 existing = UDF_REGISTRY[func_name_lower]
+                new_file = inspect.getfile(f)
+                # Allow if it's the same file being imported via different module paths
+                # This happens when tools_path subdirectories are added to sys.path
+                if existing['file'] == new_file:
+                    # Same file, different import path - return existing function
+                    return existing['function']
                 raise DuplicateFunctionError(
                     function_name=f.__name__,
                     existing_location=f"{existing['module']}.{existing['name']}",
                     existing_file=existing['file'],
                     new_location=f'{f.__module__}.{f.__name__}',
-                    new_file=inspect.getfile(f)
+                    new_file=new_file
                 )
 
             # Convert input schema to JSON Schema for validation (cache it)
