@@ -47,6 +47,10 @@ SIMPLE_CONFIG_FIELDS = {
 
     # Tool configuration
     'side_output': False,           # Default: False (tool-specific conditional output)
+
+    # Reprompt configuration
+    'reprompt': False,              # Default: False (reprompting disabled)
+    'constraints': [],              # Default: empty list (no constraints)
 }
 
 

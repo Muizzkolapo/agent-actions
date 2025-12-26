@@ -88,6 +88,14 @@ class ActionConfig(BaseModel):
     dependencies: List[str] = Field(
         default_factory=list, description='List of upstream dependencies'
     )
+    reprompt: Optional[Union[bool, str, Dict[str, Any]]] = Field(
+        default=None,
+        description='Reprompt configuration: true, "smart", "thorough", or detailed config'
+    )
+    constraints: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description='List of constraint configurations for response validation'
+    )
 
     @field_validator('guard')
     @classmethod
@@ -135,6 +143,14 @@ class DefaultsConfig(BaseModel):
         default=None,
         description='Default fields to pass-through from input to output '
                    '(visible to LLM but not regenerated)'
+    )
+    reprompt: Optional[Union[bool, str, Dict[str, Any]]] = Field(
+        default=None,
+        description='Default reprompt configuration for all actions'
+    )
+    constraints: Optional[List[Dict[str, Any]]] = Field(
+        default=None,
+        description='Default constraints applied to all actions'
     )
 
 class DependencyEdge(BaseModel):
