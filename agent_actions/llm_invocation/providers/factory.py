@@ -16,6 +16,20 @@ try:
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
+try:
+    from .groq.provider import GroqBatchProvider
+
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+
+try:
+    from .mistral.provider import MistralBatchProvider
+
+    MISTRAL_AVAILABLE = True
+except ImportError:
+    MISTRAL_AVAILABLE = False
+
 
 class BatchProviderFactory:
     """
@@ -52,7 +66,9 @@ class BatchProviderFactory:
             try:
                 return GeminiBatchProvider(api_key=api_key)
             except ImportError as e:
-                from agent_actions.errors import DependencyError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import (
+                    DependencyError,
+                )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
                     "GeminiBatchProvider requires google-genai package",
@@ -88,7 +104,9 @@ class BatchProviderFactory:
                     enable_prompt_caching=enable_prompt_caching,
                 )
             except ImportError as e:
-                from agent_actions.errors import DependencyError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import (
+                    DependencyError,
+                )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
                     "AnthropicBatchProvider requires anthropic package",
@@ -100,17 +118,52 @@ class BatchProviderFactory:
                     cause=e,
                 ) from e
 
-        from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+        if provider_type == "groq":
+            if not GROQ_AVAILABLE:
+                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+
+                raise DependencyError(
+                    "GroqBatchProvider requires groq package",
+                    context={
+                        "provider_type": provider_type,
+                        "package": "groq",
+                        "install_command": "pip install groq",
+                    },
+                )
+            api_key = config.get("api_key") or os.getenv("GROQ_API_KEY")
+            return GroqBatchProvider(api_key=api_key)
+
+        if provider_type == "mistral":
+            if not MISTRAL_AVAILABLE:
+                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+
+                raise DependencyError(
+                    "MistralBatchProvider requires mistralai package",
+                    context={
+                        "provider_type": provider_type,
+                        "package": "mistralai",
+                        "install_command": "pip install mistralai",
+                    },
+                )
+            api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
+            return MistralBatchProvider(api_key=api_key)
+
+        from agent_actions.errors import (
+            ConfigurationError,
+        )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
         supported = BatchProviderFactory.get_supported_providers()
         raise ConfigurationError(
-                "Unknown provider type",
-                context={
-                    "provider_type": provider_type,
-                    "supported_providers": supported,
-                    "suggestion": f"Set model_vendor to one of: {', '.join(supported)}. Check your agent configuration.",
-                },
-            )
+            "Unknown provider type",
+            context={
+                "provider_type": provider_type,
+                "supported_providers": supported,
+                "suggestion": (
+                    f"Set model_vendor to one of: {', '.join(supported)}. "
+                    "Check your agent configuration."
+                ),
+            },
+        )
 
     @staticmethod
     def get_supported_providers() -> list[str]:
@@ -118,4 +171,8 @@ class BatchProviderFactory:
         providers = ["openai", "gemini", "ollama"]
         if ANTHROPIC_AVAILABLE:
             providers.append("anthropic")
+        if GROQ_AVAILABLE:
+            providers.append("groq")
+        if MISTRAL_AVAILABLE:
+            providers.append("mistral")
         return providers

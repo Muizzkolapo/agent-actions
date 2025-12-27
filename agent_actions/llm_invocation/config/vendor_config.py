@@ -22,7 +22,6 @@ class VendorType(str, Enum):
     GROQ = "groq"
     COHERE = "cohere"
     MISTRAL = "mistral"
-    DEEPSEEK = "deepseek"
     OLLAMA = "ollama"
     TOOL = "tool"
 
@@ -107,13 +106,6 @@ class MistralConfig(BaseVendorConfig):
     api_key_env_name: str = "MISTRAL_API_KEY"
 
 
-class DeepSeekConfig(BaseVendorConfig):
-    """Configuration specific to DeepSeek."""
-
-    vendor_type: Literal[VendorType.DEEPSEEK] = VendorType.DEEPSEEK
-    api_key_env_name: str = "DEEPSEEK_API_KEY"
-
-
 class OllamaConfig(BaseVendorConfig):
     """Configuration specific to Ollama (local models)."""
 
@@ -137,7 +129,6 @@ VendorConfig = Union[
     GroqConfig,
     CohereConfig,
     MistralConfig,
-    DeepSeekConfig,
     OllamaConfig,
     ToolVendorConfig,
 ]
@@ -190,7 +181,6 @@ __all__ = [
     "GroqConfig",
     "CohereConfig",
     "MistralConfig",
-    "DeepSeekConfig",
     "OllamaConfig",
     "ToolVendorConfig",
     "VendorConfig",

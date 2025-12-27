@@ -10,7 +10,7 @@ This replaces the previous batch_mode_compatibility_validator.py.
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 
 
@@ -22,8 +22,7 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
     - openai
     - gemini
     - anthropic
-    - cohere
-    - deepseek
+    - groq
     - mistral
 
     Online/realtime mode accepts all vendors including custom integrations.
@@ -33,7 +32,7 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
     Complexity: CC ~5
     """
 
-    VALID_BATCH_VENDORS = {'openai', 'gemini', 'anthropic', 'cohere', 'deepseek', 'mistral'}
+    VALID_BATCH_VENDORS = {"openai", "gemini", "anthropic", "groq", "mistral"}
 
     def validate(self, context) -> AgentEntryValidationResult:
         """
@@ -57,17 +56,17 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
         warnings = []
 
         # Get run_mode (default to 'online')
-        run_mode = str(normalized_entry.get('run_mode', 'online')).lower()
+        run_mode = str(normalized_entry.get("run_mode", "online")).lower()
 
         # Only validate vendor compatibility for batch mode
-        if run_mode == 'batch':
-            model_vendor = str(normalized_entry.get('model_vendor', '')).lower()
+        if run_mode == "batch":
+            model_vendor = str(normalized_entry.get("model_vendor", "")).lower()
 
             # Check if vendor supports batch processing
             if model_vendor:
-                if model_vendor == 'tool':
+                if model_vendor == "tool":
                     # Special error for tool vendor
-                    vendors_str = ', '.join(sorted(self.VALID_BATCH_VENDORS))
+                    vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
                     errors.append(
                         f"{desc} 'tool' vendor does not support batch processing. "
                         f"Tool vendors require realtime/online mode for "
@@ -76,7 +75,7 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
                     )
                 elif model_vendor not in self.VALID_BATCH_VENDORS:
                     # Generic unsupported vendor warning (may support batch)
-                    vendors_str = ', '.join(sorted(self.VALID_BATCH_VENDORS))
+                    vendors_str = ", ".join(sorted(self.VALID_BATCH_VENDORS))
                     warnings.append(
                         f"{desc} model_vendor '{model_vendor}' may not support "
                         f"batch processing. Verified batch-compatible vendors: "
@@ -85,7 +84,7 @@ class VendorCompatibilityValidator(BaseAgentEntryValidator):
                     )
 
             # Check for deprecated batch_provider field
-            batch_provider = normalized_entry.get('batch_provider')
+            batch_provider = normalized_entry.get("batch_provider")
             if batch_provider and not model_vendor:
                 warnings.append(
                     f"{desc} 'batch_provider' is deprecated. Use 'model_vendor' instead. "

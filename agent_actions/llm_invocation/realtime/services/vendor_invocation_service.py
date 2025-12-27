@@ -8,7 +8,6 @@ from agent_actions.llm_invocation.providers.cohere.vendor import CohereHandler
 from agent_actions.llm_invocation.providers.mistral.vendor import MistralHandler
 from agent_actions.llm_invocation.providers.anthropic.vendor import ClaudeHandler
 from agent_actions.llm_invocation.providers.groq.vendor import GroqLlama3Handler
-from agent_actions.llm_invocation.providers.deepseek.vendor import DeepSeekHandler
 from agent_actions.llm_invocation.providers.tools.vendor import ToolHandler
 
 
@@ -21,12 +20,11 @@ VENDOR_HANDLERS: Dict[str, Any] = {
     "mistral": MistralHandler,
     "anthropic": ClaudeHandler,
     "groq": GroqLlama3Handler,
-    "deepseek": DeepSeekHandler,
     "tool": ToolHandler,
 }
 
 # Vendors that return single response (need wrapping in list)
-SINGLE_RESPONSE_VENDORS: set = {"cohere", "mistral", "anthropic", "groq", "deepseek"}
+SINGLE_RESPONSE_VENDORS: set = {"cohere", "mistral", "anthropic", "groq"}
 
 
 class VendorInvocationService:
