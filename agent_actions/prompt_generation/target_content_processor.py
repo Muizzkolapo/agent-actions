@@ -13,8 +13,8 @@ from agent_actions.configuration.interfaces import (
 from agent_actions.errors import DependencyError, ProcessingError
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import registry
-from agent_actions.preprocessing.filtering.where_clause_handler import (
-    get_where_clause_handler,
+from agent_actions.preprocessing.filtering.guard_handler import (
+    get_guard_handler,
 )
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.utilities.correlation import LoopIdGenerator
@@ -540,11 +540,11 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         if not where_clause_config:
             return data
 
-        # Use unified WhereClauseHandler for online mode filtering
-        where_clause_handler = get_where_clause_handler()
+        # Use unified GuardHandler for online mode filtering
+        guard_handler = get_guard_handler()
 
-        # Convert where_clause_config to dict if it's a model object
-        where_config_dict = (
+        # Convert guard_config to dict if it's a model object
+        guard_config_dict = (
             where_clause_config
             if isinstance(where_clause_config, dict)
             else (
@@ -555,13 +555,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         )
 
         filtered_data, filtering_context = (
-            where_clause_handler.filter_items_online_mode(data, where_config_dict)
+            guard_handler.filter_items_online_mode(data, guard_config_dict)
         )
 
         # Log filtering summary
         summary = filtering_context.get_summary()
         logger.info(
-            "WHERE clause filtering complete: %s included, %s filtered "
+            "Guard filtering complete: %s included, %s filtered "
             "(success rate: %.2f%%)",
             summary['included_items'],
             summary['filtered_items'],

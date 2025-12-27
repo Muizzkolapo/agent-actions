@@ -1,37 +1,37 @@
 """
-Unified WHERE clause handling across batch and online modes.
+Unified guard condition handling across batch and online modes.
 
-This module provides a consolidated interface for WHERE clause filtering that eliminates
+This module provides a consolidated interface for guard filtering that eliminates
 duplication between batch and online workflows. It coordinates with FilterService for
 expression evaluation while adding mode-specific behaviors and context tracking.
 
 ## Overview
 
-WhereClauseHandler bridges FilterService (evaluation) with mode-specific orchestration
+GuardHandler bridges FilterService (evaluation) with mode-specific orchestration
 (batch task preparation vs online dataset filtering).
 
 ## Architecture
 
 ```
-WhereClauseHandler (this module) - Unified orchestration interface
+GuardHandler (this module) - Unified orchestration interface
     │
     └──> FilterService - Expression evaluation engine
-             └──> WhereClauseParser - SQL-like WHERE clause parsing
+             └──> WhereClauseParser - Guard condition parsing
 ```
 
 ## Usage
 
 **Batch Mode** (per-item with full context tracking):
 ```python
-from agent_actions.preprocessing.filtering.where_clause_handler import WhereClauseHandler
+from agent_actions.preprocessing.filtering.guard_handler import GuardHandler
 from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
-handler = WhereClauseHandler(get_filter_service())
+handler = GuardHandler(get_filter_service())
 
 # Process items individually with context tracking
 for item in items:
     should_include, status = handler.filter_single_item(
-        item, where_config, conditional_clause
+        item, guard_config, conditional_clause
     )
 
     if should_include:
@@ -43,11 +43,11 @@ for item in items:
 
 **Online Mode** (bulk pre-filtering):
 ```python
-handler = WhereClauseHandler(get_filter_service())
+handler = GuardHandler(get_filter_service())
 
 # Bulk filter dataset
 filtered_items, context = handler.filter_items_online_mode(
-    items, where_config
+    items, guard_config
 )
 
 # Process filtered items
@@ -91,16 +91,16 @@ class FilterBehavior(Enum):
 
 
 @dataclass
-class WhereClauseConfig:
-    """Validated WHERE clause configuration."""
+class GuardConfig:
+    """Validated guard configuration."""
     clause: str
     scope: str = 'item'
     behavior: FilterBehavior = FilterBehavior.FILTER
     passthrough_on_error: bool = True
 
     @staticmethod
-    def from_dict(config: Optional[Dict[str, Any]]) -> Optional['WhereClauseConfig']:
-        """Create WhereClauseConfig from dict, returns None if invalid."""
+    def from_dict(config: Optional[Dict[str, Any]]) -> Optional['GuardConfig']:
+        """Create GuardConfig from dict, returns None if invalid."""
         if not config or not config.get('clause'):
             return None
 
@@ -112,14 +112,14 @@ class WhereClauseConfig:
                 else behavior_str
             )
 
-            return WhereClauseConfig(
+            return GuardConfig(
                 clause=config.get('clause'),
                 scope=config.get('scope', 'item'),
                 behavior=behavior,
                 passthrough_on_error=config.get('passthrough_on_error', True)
             )
         except (ValueError, TypeError) as e:
-            logger.warning("Invalid WHERE clause config: %s", e)
+            logger.warning("Invalid guard config: %s", e)
             return None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -137,7 +137,7 @@ class WhereClauseConfig:
 
 
 @dataclass
-class WhereClauseFilteringContext:
+class GuardFilteringContext:
     """
     Unified filtering context tracking for both modes.
 
@@ -184,11 +184,11 @@ class WhereClauseFilteringContext:
         }
 
 
-class WhereClauseHandler:
+class GuardHandler:
     """
-    Unified WHERE clause filtering coordinator for batch and online modes.
+    Unified guard filtering coordinator for batch and online modes.
 
-    This class provides a consistent interface for WHERE clause filtering across
+    This class provides a consistent interface for guard filtering across
     both execution modes while respecting mode-specific timing and behavior differences.
 
     Mode Differences:
@@ -198,42 +198,42 @@ class WhereClauseHandler:
 
     def __init__(self, filter_service: 'FilterService'):
         """
-        Initialize WHERE clause handler.
+        Initialize guard handler.
 
         Args:
             filter_service: FilterService instance for expression evaluation
         """
         self.filter_service = filter_service
 
-    def validate_config(self, where_config: Optional[Dict]) -> Optional[WhereClauseConfig]:
+    def validate_config(self, guard_config: Optional[Dict]) -> Optional[GuardConfig]:
         """
-        Validate and normalize WHERE clause config.
+        Validate and normalize guard config.
 
         Args:
-            where_config: Raw WHERE clause configuration dict
+            guard_config: Raw guard configuration dict
 
         Returns:
-            Validated WhereClauseConfig or None if invalid/missing
+            Validated GuardConfig or None if invalid/missing
 
         Raises:
             ValueError: If config is present but invalid
         """
-        if not where_config:
+        if not guard_config:
             return None
 
-        config = WhereClauseConfig.from_dict(where_config)
-        if config is None and where_config.get('clause'):
+        config = GuardConfig.from_dict(guard_config)
+        if config is None and guard_config.get('clause'):
             # Config present but invalid
-            raise ValueError(f"Invalid WHERE clause configuration: {where_config}")
+            raise ValueError(f"Invalid guard configuration: {guard_config}")
 
         return config
 
-    def should_evaluate_at_item_level(self, config: Optional[WhereClauseConfig]) -> bool:
+    def should_evaluate_at_item_level(self, config: Optional[GuardConfig]) -> bool:
         """
-        Check if WHERE clause applies at item level.
+        Check if guard applies at item level.
 
         Args:
-            config: Validated WHERE clause configuration
+            config: Validated guard configuration
 
         Returns:
             True if filtering should be applied per-item, False otherwise
@@ -243,7 +243,7 @@ class WhereClauseHandler:
     def filter_single_item(
         self,
         item: Dict,
-        where_config: Optional[Dict],
+        guard_config: Optional[Dict],
         conditional_clause: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
@@ -251,7 +251,7 @@ class WhereClauseHandler:
 
         Args:
             item: Data item to filter (expects 'content' key or uses full dict)
-            where_config: WHERE clause configuration dict
+            guard_config: Guard configuration dict
             conditional_clause: Optional conditional clause (legacy UDF support)
 
         Returns:
@@ -260,9 +260,9 @@ class WhereClauseHandler:
             - status: 'included', 'filtered', or 'skipped'
 
         Usage:
-            handler = WhereClauseHandler(get_filter_service())
+            handler = GuardHandler(get_filter_service())
             should_include, status = handler.filter_single_item(
-                row, where_config, conditional_clause
+                row, guard_config, conditional_clause
             )
 
             if should_include:
@@ -270,7 +270,7 @@ class WhereClauseHandler:
 
             context_map[target_id]['_batch_filter_status'] = status
         """
-        config = self.validate_config(where_config)
+        config = self.validate_config(guard_config)
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config) and not conditional_clause:
@@ -291,20 +291,20 @@ class WhereClauseHandler:
     def filter_single_item_with_context(
         self,
         item: Dict,
-        where_config: Optional[Dict],
+        guard_config: Optional[Dict],
         field_context: Optional[Dict] = None,
         conditional_clause: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Filter single item WITH full upstream context access.
 
-        This enhanced method allows WHERE clauses to reference upstream action
+        This enhanced method allows guard conditions to reference upstream action
         fields directly (e.g., "extract_facts.count > 5") without requiring
         those fields to be declared in context_scope.
 
         Args:
             item: Data item to filter (expects 'content' key or uses full dict)
-            where_config: WHERE clause configuration dict
+            guard_config: Guard configuration dict
             field_context: Upstream action data {action_name: {field: value}}
             conditional_clause: Optional conditional clause (legacy UDF support)
 
@@ -321,12 +321,12 @@ class WhereClauseHandler:
             # Now guards can access upstream fields!
             should_include, status = handler.filter_single_item_with_context(
                 item={'content': {'status': 'active'}},
-                where_config={'clause': 'extract_facts.count > 5', 'scope': 'item'},
+                guard_config={'clause': 'extract_facts.count > 5', 'scope': 'item'},
                 field_context=field_context
             )
-            # WHERE clause "extract_facts.count > 5" evaluates to True
+            # Guard condition "extract_facts.count > 5" evaluates to True
         """
-        config = self.validate_config(where_config)
+        config = self.validate_config(guard_config)
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config) and not conditional_clause:
@@ -347,13 +347,13 @@ class WhereClauseHandler:
                 eval_data.update(item_content)
 
             # Add upstream action data under action names
-            # This enables "action_name.field" access in WHERE clauses
+            # This enables "action_name.field" access in guard conditions
             for action_name, action_data in field_context.items():
                 if action_name not in eval_data:  # Don't overwrite current content
                     eval_data[action_name] = action_data
 
             logger.debug(
-                "Evaluating WHERE clause with upstream context. "
+                "Evaluating guard condition with upstream context. "
                 "Actions available: %s",
                 list(field_context.keys())
             )
@@ -373,9 +373,9 @@ class WhereClauseHandler:
     def filter_items_batch_mode(
         self,
         items: List[Dict],
-        where_config: Optional[Dict],
+        guard_config: Optional[Dict],
         conditional_clause: Optional[str] = None
-    ) -> Tuple[List[Dict], WhereClauseFilteringContext]:
+    ) -> Tuple[List[Dict], GuardFilteringContext]:
         """
         Filter items for batch mode with full context tracking.
 
@@ -384,18 +384,18 @@ class WhereClauseHandler:
 
         Args:
             items: Data items to filter
-            where_config: WHERE clause configuration dict
+            guard_config: Guard configuration dict
             conditional_clause: Optional conditional clause
 
         Returns:
             Tuple of (filtered_items, context):
             - filtered_items: Items that should be included
-            - context: WhereClauseFilteringContext with statistics
+            - context: GuardFilteringContext with statistics
 
         Usage:
-            handler = WhereClauseHandler(get_filter_service())
+            handler = GuardHandler(get_filter_service())
             filtered, context = handler.filter_items_batch_mode(
-                data, where_config
+                data, guard_config
             )
 
             logger.info(f"Filtered {context.filtered_items} items")
@@ -403,8 +403,8 @@ class WhereClauseHandler:
             for item in filtered:
                 prepare_batch_task(item)
         """
-        context = WhereClauseFilteringContext(total_items=len(items))
-        config = self.validate_config(where_config)
+        context = GuardFilteringContext(total_items=len(items))
+        config = self.validate_config(guard_config)
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config) and not conditional_clause:
@@ -416,7 +416,7 @@ class WhereClauseHandler:
         for item in items:
             target_id = item.get('target_id', 'unknown')
             should_include, status = self.filter_single_item(
-                item, where_config, conditional_clause
+                item, guard_config, conditional_clause
             )
 
             # Track decision
@@ -438,9 +438,9 @@ class WhereClauseHandler:
     def filter_items_online_mode(
         self,
         items: List[Dict],
-        where_config: Optional[Dict],
+        guard_config: Optional[Dict],
         conditional_clause: Optional[str] = None
-    ) -> Tuple[List[Dict], WhereClauseFilteringContext]:
+    ) -> Tuple[List[Dict], GuardFilteringContext]:
         """
         Filter items for online mode (bulk pre-filtering).
 
@@ -449,25 +449,25 @@ class WhereClauseHandler:
 
         Args:
             items: Data items to filter
-            where_config: WHERE clause configuration dict
+            guard_config: Guard configuration dict
             conditional_clause: Optional conditional clause
 
         Returns:
             Tuple of (filtered_items, context):
             - filtered_items: Items to process (includes skip-behavior items)
-            - context: WhereClauseFilteringContext with statistics
+            - context: GuardFilteringContext with statistics
 
         Usage:
-            handler = WhereClauseHandler(get_filter_service())
+            handler = GuardHandler(get_filter_service())
             filtered, context = handler.filter_items_online_mode(
-                data, where_config
+                data, guard_config
             )
 
             for item in filtered:
                 process_item(item)  # Generator handles skip downstream
         """
-        context = WhereClauseFilteringContext(total_items=len(items))
-        config = self.validate_config(where_config)
+        context = GuardFilteringContext(total_items=len(items))
+        config = self.validate_config(guard_config)
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config):
@@ -481,7 +481,7 @@ class WhereClauseHandler:
             return items, context
 
         # Delegate to FilterService for bulk filtering
-        filtered_items, status_map = self.filter_service.apply_where_clause_filtering(
+        filtered_items, status_map = self.filter_service.apply_guard_filtering(
             items,
             config.to_dict(),
             conditional_clause
@@ -531,9 +531,9 @@ class WhereClauseHandler:
             processed_item['metadata'] = {}
 
         processed_item['metadata'].update({
-            'skipped_by_where_clause': True,
+            'skipped_by_guard': True,
             'agent_type': 'passthrough',
-            'reason': 'where_clause_not_matched',
+            'reason': 'guard_not_matched',
             'filter_status': filter_status
         })
 
@@ -541,17 +541,17 @@ class WhereClauseHandler:
 
 
 # Convenience function for getting singleton instance
-_GLOBAL_WHERE_CLAUSE_HANDLER = None
+_GLOBAL_GUARD_HANDLER = None
 
 
-def get_where_clause_handler() -> WhereClauseHandler:
+def get_guard_handler() -> GuardHandler:
     """
-    Get global WhereClauseHandler instance (convenience function).
+    Get global GuardHandler instance (convenience function).
 
     Returns:
-        Singleton WhereClauseHandler instance
+        Singleton GuardHandler instance
     """
-    global _GLOBAL_WHERE_CLAUSE_HANDLER  # pylint: disable=global-statement
-    if _GLOBAL_WHERE_CLAUSE_HANDLER is None:
-        _GLOBAL_WHERE_CLAUSE_HANDLER = WhereClauseHandler(get_filter_service())
-    return _GLOBAL_WHERE_CLAUSE_HANDLER
+    global _GLOBAL_GUARD_HANDLER  # pylint: disable=global-statement
+    if _GLOBAL_GUARD_HANDLER is None:
+        _GLOBAL_GUARD_HANDLER = GuardHandler(get_filter_service())
+    return _GLOBAL_GUARD_HANDLER

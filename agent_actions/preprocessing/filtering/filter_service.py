@@ -1,12 +1,12 @@
 """
-Centralized filtering logic for WHERE clause and conditional clause evaluation.
+Centralized filtering logic for guard condition and conditional clause evaluation.
 
 This service consolidates filtering logic shared between batch and realtime modes,
 eliminating ~100 lines of code duplication (Phase 1 of issue #492).
 
 ## Overview
 
-FilterService provides a unified interface for evaluating WHERE clauses and conditional
+FilterService provides a unified interface for evaluating guard conditions and conditional
 clauses across both batch and realtime processing modes. It handles two filtering behaviors:
 - **'filter' behavior**: Excludes items that don't match (removes from output)
 - **'skip' behavior**: Marks non-matching items for passthrough (includes in output with metadata)
@@ -23,7 +23,7 @@ filter_service = get_filter_service()
 for row in data:
     filter_status = filter_service.filter_single_item(
         item_content=row_content,
-        where_clause_config=where_clause_config,
+        guard_config=guard_config,
         conditional_clause=conditional_clause
     )
 
@@ -41,9 +41,9 @@ from agent_actions.preprocessing.filtering.filter_service import get_filter_serv
 filter_service = get_filter_service()
 
 # Filter entire dataset at once
-filtered_data, status_map = filter_service.apply_where_clause_filtering(
+filtered_data, status_map = filter_service.apply_guard_filtering(
     data=data,
-    where_clause_config=where_clause_config,
+    guard_config=guard_config,
     conditional_clause=conditional_clause
 )
 
@@ -52,10 +52,10 @@ filtered_data, status_map = filter_service.apply_where_clause_filtering(
 
 ## Configuration
 
-WHERE clause config structure:
+Guard config structure:
 ```python
-where_clause_config = {
-    'clause': 'status == "active"',  # WHERE clause expression
+guard_config = {
+    'clause': 'status == "active"',  # Guard condition expression
     'scope': 'item',                  # Scope of evaluation
     'behavior': 'filter',             # 'filter' or 'skip'
     'passthrough_on_error': True      # Include items on error (default: True)
@@ -92,8 +92,8 @@ By default, `passthrough_on_error=True`:
 
 ## Related Components
 
-- **ContextScopeProcessor**: Builds field context for WHERE clause evaluation
-- **WhereClauseParser**: Parses and evaluates WHERE clause expressions
+- **ContextScopeProcessor**: Builds field context for guard evaluation
+- **WhereClauseParser**: Parses and evaluates guard condition expressions
 - **DataTransformer**: Handles passthrough field merging
 
 ## See Also
@@ -107,8 +107,8 @@ import logging
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 
-from agent_actions.preprocessing.filtering.where_filter import (
-    get_global_filter,
+from agent_actions.preprocessing.filtering.guard_filter import (
+    get_global_guard_filter,
     FilterItemRequest,
 )
 from agent_actions.utilities.udf_management.tooling import (
@@ -137,7 +137,7 @@ class FilterService:
 
     def __init__(self):
         """Initialize the filter service."""
-        self.where_filter = get_global_filter()
+        self.guard_filter = get_global_guard_filter()
 
     def _handle_filter_result_object(
         self,
@@ -182,36 +182,36 @@ class FilterService:
         # Error + passthrough_on_error=True: include item
         return FilterStatus(should_include=True, status='included', error=error)
 
-    def _evaluate_where_clause(
+    def _evaluate_guard(
         self,
         item_content: Dict[str, Any],
-        where_clause_config: Dict[str, Any]
+        guard_config: Dict[str, Any]
     ) -> FilterStatus:
-        """Evaluate WHERE clause for item."""
-        scope = where_clause_config.get('scope', 'item')
+        """Evaluate guard condition for item."""
+        scope = guard_config.get('scope', 'item')
         if scope != 'item':
             return FilterStatus(should_include=True, status='included')
 
-        behavior = where_clause_config.get('behavior', 'filter')
-        clause = where_clause_config.get('clause')
-        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+        behavior = guard_config.get('behavior', 'filter')
+        clause = guard_config.get('clause')
+        passthrough_on_error = guard_config.get('passthrough_on_error', True)
 
         try:
             logger.info(
-                "WHERE clause evaluation: '%s' (behavior: %s)",
+                "Guard condition evaluation: '%s' (behavior: %s)",
                 clause,
                 behavior
             )
-            request = FilterItemRequest(data=item_content, where_clause=clause)
-            filter_result = self.where_filter.filter_item(request)
+            request = FilterItemRequest(data=item_content, condition=clause)
+            filter_result = self.guard_filter.filter_item(request)
 
-            # Modern WhereClauseFilter always returns FilterResult object
+            # Modern GuardFilter always returns FilterResult object
             return self._handle_filter_result_object(
                 filter_result, behavior, passthrough_on_error
             )
 
         except ValueError as e:
-            logger.warning('Error in WHERE clause evaluation: %s', e)
+            logger.warning('Error in guard condition evaluation: %s', e)
             return self._handle_evaluation_error(
                 str(e), behavior, passthrough_on_error
             )
@@ -238,16 +238,16 @@ class FilterService:
     def filter_single_item(
         self,
         item_content: Dict[str, Any],
-        where_clause_config: Optional[Dict[str, Any]] = None,
+        guard_config: Optional[Dict[str, Any]] = None,
         conditional_clause: Optional[str] = None
     ) -> FilterStatus:
         """
-        Filter a single item using WHERE clause or conditional clause.
+        Filter a single item using guard condition or conditional clause.
 
         Args:
             item_content: The content to evaluate (typically row['content'] or row)
-            where_clause_config: WHERE clause configuration dict with keys:
-                - 'clause': str - The WHERE clause expression
+            guard_config: Guard configuration dict with keys:
+                - 'clause': str - The guard condition expression
                 - 'behavior': str - Either 'filter' or 'skip'
                 - 'passthrough_on_error': bool - Whether to include items on error
             conditional_clause: Optional conditional clause (UDF name)
@@ -255,13 +255,13 @@ class FilterService:
         Returns:
             FilterStatus indicating whether to include item and the status:
             - should_include=True, status='included': Process item normally
-            - should_include=False, status='filtered': Exclude from output (WHERE filter)
-            - should_include=False, status='skipped': Include as passthrough (WHERE skip)
+            - should_include=False, status='filtered': Exclude from output (guard filter)
+            - should_include=False, status='skipped': Include as passthrough (guard skip)
 
         Usage:
             # Batch mode
             filter_status = filter_service.filter_single_item(
-                row_content, where_clause_config
+                row_content, guard_config
             )
             if filter_status.should_include:
                 prepared_data.append(item)
@@ -269,14 +269,14 @@ class FilterService:
 
             # Realtime mode
             filter_status = filter_service.filter_single_item(
-                item['content'], where_clause_config
+                item['content'], guard_config
             )
             if filter_status.should_include:
                 filtered_data.append(item)
         """
-        # Handle WHERE clause filtering
-        if where_clause_config:
-            return self._evaluate_where_clause(item_content, where_clause_config)
+        # Handle guard condition filtering
+        if guard_config:
+            return self._evaluate_guard(item_content, guard_config)
 
         # Handle conditional clause (legacy feature)
         if conditional_clause:
@@ -285,19 +285,19 @@ class FilterService:
         # No filtering configured
         return FilterStatus(should_include=True, status='included')
 
-    def apply_where_clause_filtering(
+    def apply_guard_filtering(
         self,
         data: List[Dict[str, Any]],
-        where_clause_config: Optional[Dict[str, Any]] = None,
+        guard_config: Optional[Dict[str, Any]] = None,
         conditional_clause: Optional[str] = None,
         content_key: str = 'content'
     ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         """
-        Apply WHERE clause filtering to a list of data items (realtime mode).
+        Apply guard filtering to a list of data items (realtime mode).
 
         Args:
             data: List of data items to filter (each with 'content' and 'target_id')
-            where_clause_config: WHERE clause configuration
+            guard_config: Guard configuration
             conditional_clause: Optional conditional clause
             content_key: Key to extract content for evaluation (default: 'content')
 
@@ -307,8 +307,8 @@ class FilterService:
             - status_map: Dict mapping target_id to filter status
 
         Usage (realtime mode):
-            filtered_data, status_map = filter_service.apply_where_clause_filtering(
-                data, where_clause_config
+            filtered_data, status_map = filter_service.apply_guard_filtering(
+                data, guard_config
             )
             # Process filtered_data...
         """
@@ -321,7 +321,7 @@ class FilterService:
 
             filter_status = self.filter_single_item(
                 item_content,
-                where_clause_config,
+                guard_config,
                 conditional_clause
             )
 

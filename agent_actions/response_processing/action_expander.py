@@ -192,7 +192,7 @@ class ActionExpander:
             if guard_expr.type.value == 'udf':
                 agent['conditional_clause'] = guard_expr.expression
             else:
-                agent['where_clause'] = {'clause': guard_expr.expression, 'scope': 'item'}
+                agent['guard'] = {'clause': guard_expr.expression, 'scope': 'item'}
         else:
             guard_config = parse_guard_config(guard_data)
             if guard_config.is_udf_condition():
@@ -209,7 +209,7 @@ class ActionExpander:
                     )
                 agent['conditional_clause'] = guard_config.get_condition_expression()
             else:
-                agent['where_clause'] = {
+                agent['guard'] = {
                     'clause': guard_config.get_condition_expression(),
                     'scope': 'item',
                     'behavior': guard_config.on_false.value
@@ -354,8 +354,8 @@ class ActionExpander:
         agent['enable_prompt_caching'] = None
         if 'conditional_clause' not in agent:
             agent['conditional_clause'] = None
-        if 'where_clause' not in agent:
-            agent['where_clause'] = None
+        if 'guard' not in agent:
+            agent['guard'] = None
 
     @staticmethod
     def _create_template_replacer(param_name: str, current_val, idx: int, values):
@@ -633,10 +633,10 @@ class ActionExpander:
         errors = []
         agent_name = agent.get('agent_type') or agent.get('name', 'unknown')
 
-        # Check WHERE clause guards
-        where_clause = agent.get('where_clause')
-        if where_clause and isinstance(where_clause, dict):
-            clause = where_clause.get('clause', '')
+        # Check guard conditions
+        guard = agent.get('guard')
+        if guard and isinstance(guard, dict):
+            clause = guard.get('clause', '')
             if clause:
                 parser = ReferenceParser()
                 references = parser.parse_batch(clause)

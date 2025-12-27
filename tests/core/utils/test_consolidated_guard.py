@@ -96,34 +96,34 @@ class TestFormatConverterIntegration:
         template_replacer = lambda x: x
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
         assert result.get('conditional_clause') == 'validators.should_process'
-        assert result.get('where_clause') is None
+        assert result.get('guard') is None
 
-    def test_convert_filter_behavior_to_where_clause(self):
-        """Test that filter behavior routes to where_clause."""
+    def test_convert_filter_behavior_to_guard(self):
+        """Test that filter behavior routes to guard config."""
         from agent_actions.response_processing.action_expander import ActionExpander
         action = {'name': 'test_action', 'intent': 'Test action with filter guard', 'guard': {'condition': 'questionable != "Low Value"', 'on_false': 'filter'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'TEST_API_KEY'}
         defaults = {}
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
-        assert result.get('where_clause') is not None
-        assert result['where_clause']['clause'] == 'questionable != "Low Value"'
-        assert result['where_clause']['scope'] == 'item'
-        assert result['where_clause']['behavior'] == 'filter'
+        assert result.get('guard') is not None
+        assert result['guard']['clause'] == 'questionable != "Low Value"'
+        assert result['guard']['scope'] == 'item'
+        assert result['guard']['behavior'] == 'filter'
         assert result.get('conditional_clause') is None
 
-    def test_convert_skip_behavior_to_where_clause(self):
-        """Test that SQL conditions with skip behavior route to where_clause with skip behavior."""
+    def test_convert_skip_behavior_to_guard(self):
+        """Test that SQL conditions with skip behavior route to guard config with skip behavior."""
         from agent_actions.response_processing.action_expander import ActionExpander
         action = {'name': 'test_action', 'intent': 'Test action with SQL skip guard', 'guard': {'condition': 'questionable != "Low Value"', 'on_false': 'skip'}, 'model_vendor': 'openai', 'model_name': 'gpt-4o-mini', 'api_key': 'TEST_API_KEY'}
         defaults = {}
         agent = {'agent_type': 'test_action'}
         template_replacer = lambda x: x
         result = ActionExpander._create_agent_from_action(action, defaults, agent, template_replacer)
-        assert result.get('where_clause') is not None
-        assert result['where_clause']['clause'] == 'questionable != "Low Value"'
-        assert result['where_clause']['scope'] == 'item'
-        assert result['where_clause']['behavior'] == 'skip'
+        assert result.get('guard') is not None
+        assert result['guard']['clause'] == 'questionable != "Low Value"'
+        assert result['guard']['scope'] == 'item'
+        assert result['guard']['behavior'] == 'skip'
         assert result.get('conditional_clause') is None
 
 class TestSchemaValidation:

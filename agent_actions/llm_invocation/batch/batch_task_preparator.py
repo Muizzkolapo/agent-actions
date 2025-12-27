@@ -11,7 +11,7 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
-from agent_actions.preprocessing.filtering.where_clause_handler import WhereClauseHandler
+from agent_actions.preprocessing.filtering.guard_handler import GuardHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
@@ -49,20 +49,20 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         filter_service=None,
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
-        where_clause_handler: Optional[WhereClauseHandler] = None,
+        guard_handler: Optional[GuardHandler] = None,
     ):
         """
         Initialize task preparator.
 
         Args:
             filter_service: Optional filter service (defaults to global) - DEPRECATED,
-                use where_clause_handler
+                use guard_handler
             agent_indices: Dict mapping agent names to node indices
             dependency_configs: Dict mapping dependency names to configs
-            where_clause_handler: Optional WHERE clause handler (defaults to global)
+            guard_handler: Optional guard handler (defaults to global)
         """
         self.filter_service = filter_service
-        self.where_clause_handler = where_clause_handler
+        self.guard_handler = guard_handler
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
@@ -114,12 +114,12 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         tools_path = resolve_tools_path(agent_config)
         self._add_tools_to_path(tools_path)
 
-        # 3. Get WHERE clause handler
-        where_clause_handler = self._get_where_clause_handler()
+        # 3. Get guard handler
+        guard_handler = self._get_guard_handler()
 
         # 4. Extract filter configuration
         conditional_clause = agent_config.get("conditional_clause", "")
-        where_clause_config = agent_config.get("where_clause")
+        guard_config = agent_config.get("guard")
 
         # 5. Prepare schema
         schema = self._prepare_schema(agent_config, provider)
@@ -135,9 +135,9 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
                 result = self._process_single_item(
                     row=row,
                     agent_config=agent_config,
-                    where_clause_handler=where_clause_handler,
+                    guard_handler=guard_handler,
                     conditional_clause=conditional_clause,
-                    where_clause_config=where_clause_config,
+                    guard_config=guard_config,
                     output_directory=output_directory,
                     batch_name=batch_name,
                     tools_path=tools_path,
@@ -169,9 +169,9 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         self,
         row: Dict[str, Any],
         agent_config: Dict[str, Any],
-        where_clause_handler: WhereClauseHandler,
+        guard_handler: GuardHandler,
         conditional_clause: str,
-        where_clause_config: Optional[Dict[str, Any]],
+        guard_config: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         batch_name: Optional[str],
         tools_path: Optional[str],
@@ -201,10 +201,10 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         else:
             row_content = row
 
-        # 4. Apply filtering using unified WhereClauseHandler
-        should_include, status = where_clause_handler.filter_single_item(
+        # 4. Apply filtering using unified GuardHandler
+        should_include, status = guard_handler.filter_single_item(
             {"content": row_content} if "content" in row else row,
-            where_clause_config,
+            guard_config,
             conditional_clause if conditional_clause else None,
         )
 
@@ -283,23 +283,23 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             "prompt": prep_result.formatted_prompt,
         }
 
-    def _get_where_clause_handler(self) -> WhereClauseHandler:
+    def _get_guard_handler(self) -> GuardHandler:
         """
-        Get WHERE clause handler instance.
+        Get guard handler instance.
 
         Returns:
-            WhereClauseHandler instance for filtering coordination
+            GuardHandler instance for filtering coordination
         """
-        if self.where_clause_handler is not None:
-            return self.where_clause_handler
+        if self.guard_handler is not None:
+            return self.guard_handler
 
         # Create handler with filter service
         # pylint: disable=import-outside-toplevel
-        from agent_actions.preprocessing.filtering.where_clause_handler import (
-            get_where_clause_handler,
+        from agent_actions.preprocessing.filtering.guard_handler import (
+            get_guard_handler,
         )
 
-        return get_where_clause_handler()
+        return get_guard_handler()
 
     def _validate_config(self, agent_config: Dict[str, Any], provider) -> None:
         """Validate agent configuration."""

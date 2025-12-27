@@ -4,8 +4,8 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
-from agent_actions.preprocessing.filtering.where_filter import (
-    get_global_filter,
+from agent_actions.preprocessing.filtering.guard_filter import (
+    get_global_guard_filter,
     FilterItemRequest,
 )
 from agent_actions.utilities.transformation import PassthroughTransformer
@@ -38,8 +38,8 @@ def evaluate_guard_condition(
     if conditional_result is not None:
         return conditional_result
 
-    # Check WHERE clause
-    return _evaluate_where_clause(agent_config, context)
+    # Check guard condition
+    return _evaluate_guard(agent_config, context)
 
 
 def _evaluate_conditional_clause(
@@ -68,30 +68,30 @@ def _evaluate_conditional_clause(
     return None
 
 
-def _evaluate_where_clause(
+def _evaluate_guard(
     agent_config: Dict,
     context: Any
 ) -> Tuple[bool, Optional[str]]:
-    """Evaluate WHERE clause guard condition."""
-    where_clause_config = agent_config.get('where_clause')
-    if not where_clause_config:
+    """Evaluate guard condition."""
+    guard_config = agent_config.get('guard')
+    if not guard_config:
         return (True, None)
 
-    behavior = where_clause_config.get('behavior', 'filter')
-    clause = where_clause_config.get('clause')
-    passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+    behavior = guard_config.get('behavior', 'filter')
+    clause = guard_config.get('clause')
+    passthrough_on_error = guard_config.get('passthrough_on_error', True)
 
     if not clause:
         return (True, None)
 
     try:
-        filter_service = get_global_filter()
-        request = FilterItemRequest(data=context, where_clause=clause)
+        filter_service = get_global_guard_filter()
+        request = FilterItemRequest(data=context, condition=clause)
         filter_result = filter_service.filter_item(request)
         return _process_filter_result(filter_result, behavior, passthrough_on_error, clause)
 
     except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.debug("Guard: WHERE clause evaluation exception: %s", e)
+        logger.debug("Guard: guard condition evaluation exception: %s", e)
         return (True, None) if passthrough_on_error else (False, behavior)
 
 
@@ -107,12 +107,12 @@ def _process_filter_result(
         # Evaluation failed
         if passthrough_on_error:
             logger.debug(
-                "Guard: WHERE clause evaluation failed, proceeding "
+                "Guard: condition evaluation failed, proceeding "
                 "(passthrough_on_error=True)"
             )
             return (True, None)
         logger.debug(
-            "Guard: WHERE clause evaluation failed, skipping "
+            "Guard: condition evaluation failed, skipping "
             "(passthrough_on_error=False)"
         )
         return (False, behavior)
@@ -125,7 +125,7 @@ def _process_filter_result(
 
     if not matched:
         logger.debug(
-            "Guard: WHERE clause '%s' not matched, behavior='%s'",
+            "Guard: condition '%s' not matched, behavior='%s'",
             clause, behavior
         )
         return (False, behavior)
@@ -147,7 +147,7 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
 ) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
-    Handles both legacy conditional clauses (UDF-based) and modern WHERE clauses
+    Handles both legacy conditional clauses (UDF-based) and modern guard conditions
     with skip behavior. When skip conditions are met, returns the original context
     unchanged without executing the agent.
 
@@ -188,9 +188,9 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
     if not skip_guard_eval:
         if _should_skip_legacy_conditional(agent_config, context):
             return (context, False)
-        if _should_skip_where_clause(agent_config, context):
+        if _should_skip_guard(agent_config, context):
             return (context, False)
-        if _should_filter_where_clause(agent_config, context):
+        if _should_filter_guard(agent_config, context):
             return (None, False)
 
     # Extract content from nested structure if needed (for tools/guards)
@@ -231,51 +231,51 @@ def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
         return True
     return False
 
-def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
-    """Check if agent should be skipped based on WHERE clause with skip behavior."""
-    where_clause_config = agent_config.get('where_clause')
-    if not (where_clause_config and where_clause_config.get('behavior') == 'skip'):
+def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
+    """Check if agent should be skipped based on guard with skip behavior."""
+    guard_config = agent_config.get('guard')
+    if not (guard_config and guard_config.get('behavior') == 'skip'):
         return False
     try:
-        filter_service = get_global_filter()
-        request = FilterItemRequest(data=context, where_clause=where_clause_config['clause'])
+        filter_service = get_global_guard_filter()
+        request = FilterItemRequest(data=context, condition=guard_config['clause'])
         filter_result = filter_service.filter_item(request)
         return not filter_result.matched if filter_result.success else False
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
-            "Where clause skip check failed, using passthrough_on_error setting: %s",
+            "Guard skip check failed, using passthrough_on_error setting: %s",
             e,
             extra={
-                'where_clause': where_clause_config.get('clause'),
-                'operation': 'where_clause_skip_check'
+                'guard': guard_config.get('clause'),
+                'operation': 'guard_skip_check'
             }
         )
-        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+        passthrough_on_error = guard_config.get('passthrough_on_error', True)
         return passthrough_on_error
 
-def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
-    """Check if item should be filtered out based on WHERE clause with filter behavior."""
-    where_clause_config = agent_config.get('where_clause')
-    if not (where_clause_config and where_clause_config.get('behavior') == 'filter'):
+def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
+    """Check if item should be filtered out based on guard with filter behavior."""
+    guard_config = agent_config.get('guard')
+    if not (guard_config and guard_config.get('behavior') == 'filter'):
         return False
     try:
-        filter_service = get_global_filter()
-        request = FilterItemRequest(data=context, where_clause=where_clause_config['clause'])
+        filter_service = get_global_guard_filter()
+        request = FilterItemRequest(data=context, condition=guard_config['clause'])
         filter_result = filter_service.filter_item(request)
         if not filter_result.success:
-            passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+            passthrough_on_error = guard_config.get('passthrough_on_error', True)
             return not passthrough_on_error
         return not filter_result.matched
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
-            "Where clause filter check failed, using passthrough_on_error setting: %s",
+            "Guard filter check failed, using passthrough_on_error setting: %s",
             e,
             extra={
-                'where_clause': where_clause_config.get('clause'),
-                'operation': 'where_clause_filter_check'
+                'guard': guard_config.get('clause'),
+                'operation': 'guard_filter_check'
             }
         )
-        passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+        passthrough_on_error = guard_config.get('passthrough_on_error', True)
         return not passthrough_on_error
 
 def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
