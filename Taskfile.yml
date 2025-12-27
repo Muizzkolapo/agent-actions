@@ -227,6 +227,17 @@ tasks:
     cmds:
       - uv run ruff format --check {{.PACKAGE}} tests
 
+  # Code analysis tasks
+  analyze:dead-code:
+    desc: Run dead code analysis (multi-tool with confidence scoring)
+    cmds:
+      - uv run python .claude/helpers/dead_code_analyzer.py {{.PACKAGE}}
+
+  analyze:dead-code:brief:
+    desc: Run dead code analysis (summary only)
+    cmds:
+      - uv run python .claude/helpers/dead_code_analyzer.py {{.PACKAGE}} --brief
+
   # Utility tasks
   deps:tree:
     desc: Show dependency tree

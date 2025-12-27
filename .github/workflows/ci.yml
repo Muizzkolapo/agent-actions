@@ -32,6 +32,23 @@ jobs:
       - name: Run pylint
         run: task lint
 
+  # Dead code analysis (warning only)
+  dead-code:
+    name: Dead Code Analysis
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    continue-on-error: true
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Run dead code analysis
+        run: uv run python .claude/helpers/dead_code_analyzer.py agent_actions --brief
+
   # Unit tests
   test:
     name: Unit Tests
