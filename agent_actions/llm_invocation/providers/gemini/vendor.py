@@ -12,10 +12,11 @@ from agent_actions.preprocessing.transformation.string_transformer import String
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
-    GenericErrorHandlerMixin
+    GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,15 @@ class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n            <|begin_of_output_schema|> : list of this [{schema}] : <|end_of_output_schema|>\n\n            RULES: DO NOT ADD ANY KEY NOT IN PROVIDED SCHEMA LIST\n        "
             prompt_dedent = dedent(prompt)
             response_temp = llm.generate_content(prompt_dedent)
+            # Extract token usage (Gemini uses usage_metadata)
+            if hasattr(response_temp, "usage_metadata") and response_temp.usage_metadata:
+                set_last_usage(
+                    {
+                        "input_tokens": response_temp.usage_metadata.prompt_token_count,
+                        "output_tokens": response_temp.usage_metadata.candidates_token_count,
+                        "total_tokens": response_temp.usage_metadata.total_token_count,
+                    }
+                )
 
             return GeminiHandler.parse_json_response(
                 response_content=response_temp.text,
@@ -63,6 +73,15 @@ class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
             prompt_dedent = dedent(prompt)
             response_temp = llm.generate_content(prompt_dedent)
+            # Extract token usage (Gemini uses usage_metadata)
+            if hasattr(response_temp, "usage_metadata") and response_temp.usage_metadata:
+                set_last_usage(
+                    {
+                        "input_tokens": response_temp.usage_metadata.prompt_token_count,
+                        "output_tokens": response_temp.usage_metadata.candidates_token_count,
+                        "total_tokens": response_temp.usage_metadata.total_token_count,
+                    }
+                )
             response_list = response_temp.text
 
             logger.debug(

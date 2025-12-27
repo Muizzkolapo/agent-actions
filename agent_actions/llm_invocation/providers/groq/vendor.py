@@ -4,6 +4,7 @@ Groq LLM vendor handler for agent-actions.
 Provides implementation of call_json() and call_non_json() methods
 for Groq API integration, supporting models like Llama3.
 """
+
 import json
 from textwrap import dedent
 
@@ -11,6 +12,7 @@ from groq import Groq  # pylint: disable=import-error
 
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utilities.constants import MODEL_NAME_KEY
@@ -32,6 +34,15 @@ class GroqLlama3Handler(BaseVendorHandler):
                 model=model_name,
                 response_format={"type": "json_object"},
             )
+            # Extract token usage (OpenAI-compatible format)
+            if llm.usage:
+                set_last_usage(
+                    {
+                        "input_tokens": llm.usage.prompt_tokens,
+                        "output_tokens": llm.usage.completion_tokens,
+                        "total_tokens": llm.usage.total_tokens,
+                    }
+                )
             response_temp = llm.choices[0].message.content
             response = json.loads(response_temp)
             response_list = DataTransformer.ensure_list(response)
@@ -61,6 +72,15 @@ class GroqLlama3Handler(BaseVendorHandler):
             "max_tokens": 1000,
         }
         response = groq.chat.completions.create(**completion_kwargs)
+        # Extract token usage (OpenAI-compatible format)
+        if response.usage:
+            set_last_usage(
+                {
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+            )
         try:
             response_content = response.choices[0].message.content
             return [response_content]

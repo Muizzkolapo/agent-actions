@@ -12,10 +12,11 @@ from agent_actions.preprocessing.transformation.string_transformer import String
 from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
-    GenericErrorHandlerMixin
+    GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,16 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             response = co.chat(
                 model=model_name, message=prompt_dedent, response_format={"type": "json_object"}
             )
+            # Extract token usage (Cohere v1 uses meta.tokens)
+            if hasattr(response, "meta") and response.meta and hasattr(response.meta, "tokens"):
+                tokens = response.meta.tokens
+                set_last_usage(
+                    {
+                        "input_tokens": tokens.input_tokens,
+                        "output_tokens": tokens.output_tokens,
+                        "total_tokens": tokens.input_tokens + tokens.output_tokens,
+                    }
+                )
             intermediate_json = response.text
 
             return CohereHandler.parse_json_response(
@@ -56,6 +67,16 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
             messages = [{"role": "user", "content": dedent(prompt)}]
             response = co.chat(model=model_name, messages=messages)
+            # Extract token usage (Cohere v2 uses usage.tokens)
+            if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
+                tokens = response.usage.tokens
+                set_last_usage(
+                    {
+                        "input_tokens": tokens.input_tokens,
+                        "output_tokens": tokens.output_tokens,
+                        "total_tokens": tokens.input_tokens + tokens.output_tokens,
+                    }
+                )
             response_message = response.message.content[0].text
 
             logger.debug(
