@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Callable
 from rich.console import Console
 
+from agent_actions.orchestration.artifact_linker import ArtifactLinker
+
 logger = logging.getLogger(__name__)
 
 
@@ -241,6 +243,28 @@ class AgentOutputManager:
         with open(skip_marker, 'w', encoding='utf-8') as f:
             f.write(f'Agent {agent_type} skipped due to WHERE clause condition')
 
+    def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
+        """
+        Resolve upstream directories from manifest file.
+
+        Returns:
+            List of upstream path strings from manifest, or None if no manifest.
+        """
+        agent_io_dir = self.agent_folder
+        manifest = ArtifactLinker.read_manifest(agent_io_dir)
+        if manifest is None:
+            return None
+
+        upstream_path = Path(manifest['upstream_path'])
+        if not upstream_path.exists():
+            logger.warning(
+                "Manifest upstream path doesn't exist: %s",
+                upstream_path
+            )
+            return None
+
+        return [str(upstream_path)]
+
     def get_upstream_directories(self, idx: int) -> List[str]:
         """
         Get upstream data directories for an agent, resolving dependencies.
@@ -251,8 +275,11 @@ class AgentOutputManager:
         Returns:
             List of paths to upstream directories
         """
-        # First agent uses staging directory
+        # First agent: check manifest first, fall back to staging
         if idx == 0:
+            manifest_dirs = self._resolve_upstream_from_manifest()
+            if manifest_dirs:
+                return manifest_dirs
             return [str(self.agent_folder / 'staging')]
 
         current_agent = self.execution_order[idx]

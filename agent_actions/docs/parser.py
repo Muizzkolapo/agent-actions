@@ -103,7 +103,7 @@ class WorkflowParser:
         try:
             with open(schema_file, 'r', encoding='utf-8') as f:
                 schema_data = yaml.safe_load(f)
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (yaml.YAMLError, OSError, TypeError, KeyError):
             return None
 
         # Extract field information from schema

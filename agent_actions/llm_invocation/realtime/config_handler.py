@@ -105,7 +105,7 @@ class ConfigManager:
             project_root = path_manager.get_project_root()
             project_config = load_project_config(project_root)
             project_tool_path = project_config.get("tool_path")
-        except Exception:
+        except (OSError, yaml.YAMLError, KeyError, TypeError, AttributeError):
             # Silently ignore if project config can't be loaded
             pass
 

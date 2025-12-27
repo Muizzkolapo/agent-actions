@@ -9,7 +9,6 @@ from agent_actions.logging.context import CorrelationContext
 from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
 from agent_actions.io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
-from agent_actions.response_processing.where_parser import WhereClauseParser
 from agent_actions.orchestration.dependency_injection import registry
 from agent_actions.llm_invocation.providers.base import BatchProvider, BatchResult
 from agent_actions.errors import (
@@ -48,13 +47,18 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         result_processor: Optional[BatchResultProcessor] = None,
         context_manager: Optional[BatchContextManager] = None,
         provider_resolver: Optional[BatchProviderResolver] = None,
+        job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
+        source_handler: Optional[Any] = None,  # BatchSourceHandler
     ):
         """Initialize batch service (pure orchestrator with dependency injection)."""
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.llm_invocation.batch.batch_job_manager import BatchJobManager
+        from agent_actions.llm_invocation.batch.batch_source_handler import BatchSourceHandler
+
         self.data_loader = BatchDataLoader()
         self.provider = provider
         self.force_batch = force_batch
         self._provider_cache = {}
-        self.where_parser = WhereClauseParser()
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
         self._registry_manager = None
@@ -66,6 +70,10 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         self._provider_resolver = provider_resolver or BatchProviderResolver(
             provider_cache=self._provider_cache, default_provider=self.provider
         )
+        self._job_manager = job_manager or BatchJobManager(
+            provider_resolver=self._provider_resolver
+        )
+        self._source_handler = source_handler or BatchSourceHandler()
 
     def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager:
         """Get or create registry manager for output directory."""
@@ -73,6 +81,8 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             self._registry_manager = BatchRegistryManager(
                 Path(output_directory) / "batch" / ".batch_registry.json"
             )
+            # Share registry manager with job manager
+            self._job_manager.set_registry_manager(self._registry_manager)
         return self._registry_manager
 
     def prepare_batch_tasks(self, agent_config, data, output_directory=None, batch_name=None):
@@ -461,164 +471,18 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         src_text: Union[Dict[str, Any], List[Dict[str, Any]]],
         file_path,
         base_directory,
-        _output_directory,
+        output_directory,
     ):
-        """
-        Save task source data using unified source saver.
-
-        This method now delegates to UnifiedSourceDataSaver for file locking,
-        deduplication, and source saving.
-
-        Args:
-            src_text: Single item (Dict) or list of items (List[Dict]) in flat format
-                     with 'source_guid' field. Accepts both for convenience.
-            file_path: Path to the file being processed
-            base_directory: Base directory for input files
-            output_directory: Output directory for processed files
-        """
-        # pylint: disable=reimported,redefined-outer-name,import-outside-toplevel
-        from pathlib import Path
-        from agent_actions.io.unified_source_data_saver import UnifiedSourceDataSaver
-
-        # Calculate paths for source saving
-        # Find workflow root by looking for 'agent_io' in the path and going up one level
-        # base_directory could be:
-        #   - .../qanalabs_quiz_gen/agent_io/staging (2 levels to root)
-        #   - .../qanalabs_quiz_gen/agent_io/target/node_X (3 levels to root)
-        relative_path = Path(file_path).relative_to(base_directory)
-
-        # Find workflow root by traversing up until we find the parent of 'agent_io'
-        base_path = Path(base_directory)
-        workflow_root = base_path
-        for parent in base_path.parents:
-            if (parent / "agent_io").exists() or parent.name != "agent_io":
-                if (parent / "agent_io") == base_path or (parent / "agent_io") in base_path.parents:
-                    workflow_root = parent
-                    break
-
-        # Simpler approach: find 'agent_io' in path parts and get its parent
-        parts = base_path.parts
-        if "agent_io" in parts:
-            agent_io_idx = parts.index("agent_io")
-            workflow_root = Path(*parts[:agent_io_idx])
-        else:
-            # Fallback to going up 3 levels
-            workflow_root = base_path.parent.parent.parent
-
-        # Use unified saver with batch mode settings (locking + deduplication)
-        saver = UnifiedSourceDataSaver(
-            base_directory=str(workflow_root), enable_deduplication=True, enable_locking=True
-        )
-
-        # Save source items (relative_path without extension for consistency)
-        # UnifiedSourceDataSaver will create: workflow_root/agent_io/source/{relative_path}.json
-        saver.save_source_items(items=src_text, relative_path=str(relative_path.with_suffix("")))
-
-    # pylint: disable=too-many-return-statements
-    def _are_all_batch_jobs_completed(self, output_directory: str) -> bool:
-        """Check if all batch jobs in the registry are completed."""
-        if not output_directory:
-            return True
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
-            return True
-        try:
-            with open(registry_file, 'r', encoding='utf-8') as f:
-                # pylint: disable=redefined-outer-name
-                registry = json.load(f)
-            if not registry:
-                return True
-            for file_name, entry in registry.items():
-                batch_id = entry.get("batch_id")
-                if not batch_id:
-                    continue
-                try:
-                    actual_status = self.check_status(batch_id, str(output_directory))
-                    if actual_status != entry.get("status"):
-                        entry["status"] = actual_status
-                    if actual_status not in ["completed", "failed", "cancelled"]:
-                        return False
-                # pylint: disable=broad-exception-caught
-                except Exception as e:
-                    logger.warning(
-                        "Failed to check status for batch %s in registry: %s",
-                        batch_id,
-                        e,
-                        exc_info=True,
-                        extra={
-                            "batch_id": batch_id,
-                            "file_name": file_name,
-                            "output_directory": output_directory,
-                            "operation": "registry_status_check",
-                        },
-                    )
-                    return False
-            with open(registry_file, 'w', encoding='utf-8') as f:
-                json.dump(registry, f, indent=2)
-            return True
-        except (json.JSONDecodeError, KeyError):
-            return True
+        """Save task source data (delegates to BatchSourceHandler)."""
+        self._source_handler.save_task_source(src_text, file_path, base_directory, output_directory)
 
     def are_all_batch_jobs_completed(self, output_directory: str) -> bool:
-        """Check if all batch jobs in the registry are completed (public API)."""
-        return self._are_all_batch_jobs_completed(output_directory)
+        """Check if all batch jobs in the registry are completed (delegates to BatchJobManager)."""
+        return self._job_manager.are_all_jobs_completed(output_directory)
 
     def get_batch_registry_status(self, output_directory: str) -> str:
-        """Get the overall status of all batch jobs in the registry (public API)."""
-        return self._get_batch_registry_status(output_directory)
-
-    # pylint: disable=too-many-return-statements,too-many-branches
-    def _get_batch_registry_status(self, output_directory: str) -> str:
-        """Get the overall status of all batch jobs in the registry."""
-        if not output_directory:
-            return "no_batches"
-        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
-        if not registry_file.exists():
-            return "no_batches"
-        try:
-            with open(registry_file, 'r', encoding='utf-8') as f:
-                # pylint: disable=redefined-outer-name
-                registry = json.load(f)
-            if not registry:
-                return "no_batches"
-            completed_count = 0
-            failed_count = 0
-            in_progress_count = 0
-            for file_name, entry in registry.items():
-                batch_id = entry.get("batch_id")
-                if not batch_id:
-                    continue
-                try:
-                    actual_status = self.check_status(batch_id, str(output_directory))
-                    if actual_status == "completed":
-                        completed_count += 1
-                    elif actual_status in ["failed", "cancelled"]:
-                        failed_count += 1
-                    else:
-                        in_progress_count += 1
-                # pylint: disable=broad-exception-caught
-                except Exception as e:
-                    logger.debug(
-                        "Could not check status for batch %s, treating as in_progress: %s",
-                        batch_id,
-                        e,
-                        extra={
-                            "batch_id": batch_id,
-                            "file_name": file_name,
-                            "operation": "status_aggregation",
-                        },
-                    )
-                    in_progress_count += 1
-            total_jobs = len(registry)
-            if completed_count == total_jobs:
-                return "completed"
-            if failed_count > 0:
-                return "partial_failed"
-            if in_progress_count > 0:
-                return "in_progress"
-            return "unknown"
-        except (json.JSONDecodeError, KeyError):
-            return "error"
+        """Get the overall status of all batch jobs in the registry (delegates to BatchJobManager)."""
+        return self._job_manager.get_registry_status(output_directory)
 
     def _retrieve_results(
         self,

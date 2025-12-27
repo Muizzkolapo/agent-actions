@@ -6,12 +6,11 @@ The RepromptEngine is the central component that:
 3. Generates improved prompts when validation fails
 """
 
-import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from agent_actions.reprompting.config import RepromptConfig
-from agent_actions.reprompting.constraints import ConstraintResult, ConstraintValidator
+from agent_actions.reprompting.constraints import ConstraintValidator
 from agent_actions.reprompting.json_repair import JSONRepairStrategy, RepairResult
 
 

@@ -5,6 +5,8 @@ Handles resolution and caching of batch providers based on configuration or batc
 Extracted from BatchService for better separation of concerns.
 """
 
+import json
+from pathlib import Path
 from typing import Dict, Optional, Any
 
 from agent_actions.llm_invocation.providers.base import BatchProvider
@@ -132,8 +134,8 @@ class BatchProviderResolver:
         Args:
             batch_id: The batch job ID
             registry_manager: BatchRegistryManager instance to lookup batch info
-            output_directory: Output directory (for compatibility, can be None if
-                registry_manager provided)
+            output_directory: Output directory (used as fallback when
+                registry_manager is None)
 
         Returns:
             BatchProvider instance
@@ -141,18 +143,14 @@ class BatchProviderResolver:
         Raises:
             ConfigurationError: If provider cannot be determined
         """
-        if registry_manager:
-            entry = registry_manager.get_batch_job_by_id(batch_id)
+        provider_type = self._resolve_provider_type(batch_id, registry_manager, output_directory)
 
-            if entry:
-                provider_type = entry.provider
-
-                # Check cache
-                if provider_type in self._provider_cache:
-                    return self._provider_cache[provider_type]
-
-                # Create new provider (will not be cached)
-                return BatchProviderFactory.create_provider(provider_type)
+        if provider_type:
+            # Check cache
+            if provider_type in self._provider_cache:
+                return self._provider_cache[provider_type]
+            # Create new provider
+            return BatchProviderFactory.create_provider(provider_type)
 
         # Fallback to default provider if available
         if self._default_provider:
@@ -162,3 +160,59 @@ class BatchProviderResolver:
             f"Cannot determine provider for batch_id {batch_id}",
             context={"batch_id": batch_id, "output_directory": output_directory},
         )
+
+    def _resolve_provider_type(
+        self, batch_id: str, registry_manager, output_directory: Optional[str]
+    ) -> Optional[str]:
+        """Resolve provider type from registry manager or registry file.
+
+        Args:
+            batch_id: The batch job ID to look up
+            registry_manager: Optional registry manager instance
+            output_directory: Optional output directory containing registry file
+
+        Returns:
+            Provider type string or None if not found
+        """
+        # Try registry manager first
+        if registry_manager:
+            entry = registry_manager.get_batch_job_by_id(batch_id)
+            if entry:
+                return entry.provider
+
+        # Fallback: read directly from registry file
+        if output_directory:
+            provider_type = self._lookup_provider_from_file(batch_id, output_directory)
+            if provider_type:
+                return provider_type
+
+        return None
+
+    def _lookup_provider_from_file(
+        self, batch_id: str, output_directory: str
+    ) -> Optional[str]:
+        """Look up provider type directly from registry file.
+
+        Args:
+            batch_id: The batch job ID to look up
+            output_directory: Directory containing the batch registry
+
+        Returns:
+            Provider type string or None if not found
+        """
+        registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+        if not registry_file.exists():
+            return None
+
+        try:
+            with open(registry_file, 'r', encoding='utf-8') as f:
+                registry = json.load(f)
+
+            # Search for batch_id in registry entries
+            for entry in registry.values():
+                if entry.get("batch_id") == batch_id:
+                    return entry.get("provider")
+        except (json.JSONDecodeError, OSError, KeyError):
+            pass
+
+        return None

@@ -60,7 +60,7 @@ class OllamaHandler(BaseVendorHandler):
         api_key = None
         try:
             api_key = cls.get_api_key(agent_config)
-        except Exception:
+        except (KeyError, AttributeError, TypeError):
             pass
         return cls.call_non_json(api_key, agent_config, prompt_config, context_data)
 

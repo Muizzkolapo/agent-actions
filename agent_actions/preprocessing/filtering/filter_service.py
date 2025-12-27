@@ -107,7 +107,10 @@ import logging
 from typing import Dict, List, Tuple, Optional, Any
 from dataclasses import dataclass
 
-from agent_actions.response_processing.where_parser import get_global_filter
+from agent_actions.preprocessing.filtering.where_filter import (
+    get_global_filter,
+    FilterItemRequest,
+)
 from agent_actions.utilities.udf_management.tooling import (
     execute_user_defined_function
 )
@@ -199,22 +202,13 @@ class FilterService:
                 clause,
                 behavior
             )
-            filter_result = self.where_filter.filter_item(item_content, clause)
+            request = FilterItemRequest(data=item_content, where_clause=clause)
+            filter_result = self.where_filter.filter_item(request)
 
-            # Handle FilterResult object (from preprocessing/where_filter.py)
-            if hasattr(filter_result, 'success'):
-                return self._handle_filter_result_object(
-                    filter_result, behavior, passthrough_on_error
-                )
-
-            # Handle boolean result (legacy SimpleWhereFilter)
-            matched = bool(filter_result)
-            logger.info('Filter result (boolean): %s', matched)
-
-            if not matched:
-                status = 'filtered' if behavior == 'filter' else 'skipped'
-                return FilterStatus(should_include=False, status=status)
-            return FilterStatus(should_include=True, status='included')
+            # Modern WhereClauseFilter always returns FilterResult object
+            return self._handle_filter_result_object(
+                filter_result, behavior, passthrough_on_error
+            )
 
         except ValueError as e:
             logger.warning('Error in WHERE clause evaluation: %s', e)

@@ -384,5 +384,5 @@ class ProjectScanner:
 
             return result
 
-        except Exception:  # pylint: disable=broad-exception-caught
+        except (SyntaxError, AttributeError, TypeError, IndexError, ValueError):
             return None

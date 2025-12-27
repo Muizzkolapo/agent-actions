@@ -1,8 +1,16 @@
 """Run command validation module."""
 
-from typing import Optional
+from enum import Enum
+from typing import Literal, Optional
 
-from pydantic import BaseModel, DirectoryPath, Field, model_validator
+from pydantic import BaseModel, DirectoryPath, Field
+
+
+class ExecutionMode(str, Enum):
+    """Execution mode for agent workflows."""
+    AUTO = 'auto'
+    PARALLEL = 'parallel'
+    SEQUENTIAL = 'sequential'
 
 
 class RunCommandArgs(BaseModel):
@@ -20,13 +28,9 @@ class RunCommandArgs(BaseModel):
         False,
         description="Force execution even if validation warnings occur"
     )
-    parallel: bool = Field(
-        False,
-        description="Force parallel execution (overrides auto-detection)"
-    )
-    no_parallel: bool = Field(
-        False,
-        description="Force sequential execution (overrides auto-detection)"
+    execution_mode: Literal['auto', 'parallel', 'sequential'] = Field(
+        'auto',
+        description="Execution mode: 'auto' (detect), 'parallel', or 'sequential'"
     )
     concurrency_limit: int = Field(
         5,
@@ -44,10 +48,3 @@ class RunCommandArgs(BaseModel):
         description="Execute all downstream workflows that depend on "
                     "this workflow"
     )
-
-    @model_validator(mode='after')
-    def check_parallel_flags(self):
-        """Ensure --parallel and --no-parallel are not used together."""
-        if self.parallel and self.no_parallel:
-            raise ValueError("Cannot specify both --parallel and --no-parallel flags")
-        return self

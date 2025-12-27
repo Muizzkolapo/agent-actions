@@ -16,7 +16,7 @@ from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.utilities.safe_format import safe_format_error
-from agent_actions.configuration.bootstrap_factory import create_target_content_processor
+from agent_actions.configuration.factory import create_target_content_processor
 
 TOOL_VENDOR = 'tool'
 SOURCE_FOLDER = 'source'

@@ -23,42 +23,25 @@ from agent_actions.validation.base_validator import BaseValidator
 from agent_actions.validation.orchestration.agent_entry_validation_orchestrator import (
     AgentEntryValidationOrchestrator,
 )
+from agent_actions.validation.utils.agent_config_validation_utilities import (
+    AgentConfigValidationUtilities as ACVUtils,
+)
 
 logger = logging.getLogger(__name__)
+
+# Aliases for cleaner code
+_ci_dict = ACVUtils.normalize_entry_keys_to_lowercase
+_ci_get = ACVUtils.get_case_insensitive_value
+
 
 class ConfigValidator(BaseValidator):
     """Validate agent configuration files with case-insensitive key handling.
 
     Business rules are unchanged; only comparisons are agnostic to key case
     or value case.
+
+    Note: Configuration constants are now centralized in AgentConfigValidationUtilities.
     """
-    _REQUIRED_AGENT_KEYS: Set[str] = {'agent_type', MODEL_NAME_KEY}
-    _OPTIONAL_AGENT_KEYS: Set[str] = {
-        'description', 'version', 'author', 'dependencies', 'imports',
-        'config', 'granularity', MODEL_VENDOR_KEY, JSON_MODE_KEY,
-        'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY, SCHEMA_KEY,
-        'tools', CHUNK_CONFIG_KEY, 'few_shot', 'conditional_clause',
-        'is_operational', 'ephemeral', 'add_dispatch', 'output_field',
-        'context_scope'
-    }
-    _AGENT_TYPE_REQUIRED_KEYS: Dict[str, Set[str]] = {
-        'llm': {MODEL_NAME_KEY},
-        'function': {'code_path'},
-        'tool': {MODEL_NAME_KEY}
-    }
-
-    @staticmethod
-    def _ci_dict(d: Dict[str, Any]) -> Dict[str, Any]:
-        """Return a **new** dict with **lower‑case keys** for CI look‑ups."""
-        return {str(k).lower(): v for k, v in d.items()}
-
-    @staticmethod
-    def _ci_get(d: Dict[str, Any], key: str, default: Any = None) -> Any:
-        """Case-insensitive dict get."""
-        for k, v in d.items():
-            if str(k).lower() == key.lower():
-                return v
-        return default
 
     def _check_agent_file_unique_logic(
         self,
@@ -255,7 +238,7 @@ class ConfigValidator(BaseValidator):
         entry: Dict[str, Any]
     ) -> Set[str]:
         """Extract dependencies from an agent entry."""
-        entry_ci = self._ci_dict(entry) if isinstance(entry, dict) else {}
+        entry_ci = _ci_dict(entry) if isinstance(entry, dict) else {}
         deps: Set[str] = set()
         if isinstance(entry_ci.get('dependencies'), list):
             deps.update(
@@ -292,11 +275,11 @@ class ConfigValidator(BaseValidator):
         active_agents = {
             name.lower() for name, cfg in agent_cfgs_map.items()
             if isinstance(cfg, dict)
-            and self._ci_dict(cfg).get('is_operational', True)
+            and _ci_dict(cfg).get('is_operational', True)
         }
         all_agents = {name.lower() for name in agent_cfgs_map}
         for agent_name, cfg in agent_cfgs_map.items():
-            cfg_ci = self._ci_dict(cfg) if isinstance(cfg, dict) else {}
+            cfg_ci = _ci_dict(cfg) if isinstance(cfg, dict) else {}
             if not cfg_ci.get('is_operational', True):
                 continue
             deps = cfg_ci.get('dependencies', [])
@@ -320,7 +303,7 @@ class ConfigValidator(BaseValidator):
                         f"non-existent agent '{dep}'."
                     )
                 elif dep_lc not in active_agents:
-                    dep_cfg_ci = self._ci_dict(agent_cfgs_map.get(dep, {}))
+                    dep_cfg_ci = _ci_dict(agent_cfgs_map.get(dep, {}))
                     if not dep_cfg_ci.get('is_operational', True):
                         self.add_error(
                             f"Active agent '{agent_name}' depends on an "

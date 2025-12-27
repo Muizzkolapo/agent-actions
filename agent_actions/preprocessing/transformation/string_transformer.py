@@ -17,6 +17,9 @@ try:
 except ImportError:
     HAS_SPACY = False
 
+# Pre-compiled regex patterns (avoid recompilation on each call)
+_BRACE_PATTERN = re.compile('({.*?})')
+
 class StringProcessor:
     """
     A class for processing strings, including placeholder replacement and function call processing.
@@ -37,8 +40,8 @@ class StringProcessor:
         """
         if not isinstance(input_text, str):
             return input_text
-        pattern = re.compile('({.*?})')
-        escaped_text = pattern.sub(
+        # Use pre-compiled pattern for better performance
+        escaped_text = _BRACE_PATTERN.sub(
             lambda x: x.group(0).replace('{', '{{').replace('}', '}}'),
             input_text
         )

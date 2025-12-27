@@ -3,7 +3,6 @@
 import json
 import sys
 from typing import Dict, Any, Optional, List, Union
-from agent_actions.prompt_generation.prompt_utils import PromptUtils
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from .prompt_service import PromptService
 from .context_service import ContextService

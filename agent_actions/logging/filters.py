@@ -171,7 +171,7 @@ class RedactingFilter(logging.Filter):
         }
 
         # Iterate through record attributes (extra fields are added as attributes)
-        for attr in list(record.__dict__.keys()):
+        for attr in record.__dict__.keys():
             if attr in standard_attrs:
                 continue
 

@@ -93,10 +93,8 @@ class FileReader(ProcessorErrorHandlerMixin):
     def _read_pdf(self):
         with open(self.file_path, 'rb') as file:
             reader = PyPDF2.PdfReader(file)
-            text = ''
-            for page in reader.pages:
-                text += page.extract_text()
-            return text
+            # Use join() instead of += for O(n) instead of O(n²)
+            return ''.join(page.extract_text() or '' for page in reader.pages)
 
     def _read_xml(self):
         tree = ET.parse(self.file_path)

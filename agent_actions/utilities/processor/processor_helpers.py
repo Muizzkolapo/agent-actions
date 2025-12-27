@@ -1,10 +1,13 @@
 """Utility helpers shared across processors."""
 from __future__ import annotations
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 from agent_actions.llm_invocation.realtime import agent_builder
-from agent_actions.response_processing.where_parser import get_global_filter
+from agent_actions.preprocessing.filtering.where_filter import (
+    get_global_filter,
+    FilterItemRequest,
+)
 from agent_actions.utilities.transformation import PassthroughTransformer
 
 logger = logging.getLogger(__name__)
@@ -83,7 +86,8 @@ def _evaluate_where_clause(
 
     try:
         filter_service = get_global_filter()
-        filter_result = filter_service.filter_item(context, clause)
+        request = FilterItemRequest(data=context, where_clause=clause)
+        filter_result = filter_service.filter_item(request)
         return _process_filter_result(filter_result, behavior, passthrough_on_error, clause)
 
     except (ValueError, TypeError, KeyError, AttributeError) as e:
@@ -234,8 +238,9 @@ def _should_skip_where_clause(agent_config: Dict, context: Any) -> bool:
         return False
     try:
         filter_service = get_global_filter()
-        filter_matched = filter_service.filter_item(context, where_clause_config['clause'])
-        return not filter_matched
+        request = FilterItemRequest(data=context, where_clause=where_clause_config['clause'])
+        filter_result = filter_service.filter_item(request)
+        return not filter_result.matched if filter_result.success else False
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Where clause skip check failed, using passthrough_on_error setting: %s",
@@ -255,13 +260,12 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
         return False
     try:
         filter_service = get_global_filter()
-        filter_result = filter_service.filter_item(context, where_clause_config['clause'])
-        if hasattr(filter_result, 'success'):
-            if not filter_result.success:
-                passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
-                return not passthrough_on_error
-            return not filter_result.matched
-        return not filter_result
+        request = FilterItemRequest(data=context, where_clause=where_clause_config['clause'])
+        filter_result = filter_service.filter_item(request)
+        if not filter_result.success:
+            passthrough_on_error = where_clause_config.get('passthrough_on_error', True)
+            return not passthrough_on_error
+        return not filter_result.matched
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Where clause filter check failed, using passthrough_on_error setting: %s",
@@ -275,13 +279,13 @@ def _should_filter_where_clause(agent_config: Dict, context: Any) -> bool:
         return not passthrough_on_error
 
 def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    data: list,
-    context_data: dict,
+    data: List[Any],
+    context_data: Dict[str, Any],
     source_guid: str,
-    agent_config: Dict,
-    idx: int=0,
-    passthrough_fields: Optional[Dict]=None
-) -> list:
+    agent_config: Dict[str, Any],
+    idx: int = 0,
+    passthrough_fields: Optional[Dict[str, Any]] = None
+) -> List[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data consistently."""
     transformer = PassthroughTransformer()
     return transformer.transform_with_passthrough(

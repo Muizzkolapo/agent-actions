@@ -154,11 +154,12 @@ class OpenAICompatibleResponseMixin:
         """Extract metadata from OpenAI-compatible response."""
         response_data = raw_response.get("response", {})
         response_body = response_data.get("body", {})
+        # Safely extract finish_reason from choices array
+        choices = response_body.get("choices", [{}])
+        finish_reason = choices[0].get("finish_reason") if choices else None
         return {
             "model": response_body.get("model"),
-            "finish_reason": (
-                response_body.get("choices", [{}])[0].get("finish_reason")
-            ),
+            "finish_reason": finish_reason,
             "status_code": response_data.get("status_code"),
         }
 

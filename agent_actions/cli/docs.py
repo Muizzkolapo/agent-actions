@@ -8,6 +8,7 @@ from pathlib import Path
 
 import click
 
+from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.docs.generator import generate_docs
 from agent_actions.docs.server import serve_docs
 
@@ -20,6 +21,7 @@ def docs():
 @docs.command()
 @click.option('--output', '-o', default='artefact',
               help='Output directory for generated files (default: artefact)')
+@handles_user_errors('docs generate')
 def generate(output: str):
     """
     Generate documentation data files.
@@ -54,6 +56,7 @@ def generate(output: str):
               help='Port to run server on (default: 8000)')
 @click.option('--artefact', '-a', default=None,
               help='Path to artefact directory (default: ./artefact)')
+@handles_user_errors('docs serve')
 def serve(port: int, artefact: str):
     """
     Start HTTP server to view documentation.
@@ -78,6 +81,7 @@ def serve(port: int, artefact: str):
               help='Which test suite to run (default: all)')
 @click.option('--port', '-p', default=8890,
               help='Port where docs server is running (default: 8890)')
+@handles_user_errors('docs test')
 def run_tests(test_suite: str, port: int):
     """
     Run Playwright tests to verify documentation site.
@@ -145,6 +149,7 @@ def run_tests(test_suite: str, port: int):
 
 
 @docs.command()
+@handles_user_errors('docs dev')
 def dev():
     """
     Start development environment.

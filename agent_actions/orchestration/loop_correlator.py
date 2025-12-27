@@ -307,8 +307,8 @@ class LoopOutputCorrelator:
         correlation_groups = defaultdict(dict)
         for loop_agent, outputs in loop_outputs.items():
             for record in outputs:
-                record_copy = record.copy()
-                record_copy.pop('_source_file', None)
+                # Use dict comprehension instead of copy()+pop() for efficiency
+                record_copy = {k: v for k, v in record.items() if k != '_source_file'}
                 correlation_key = record_copy.get('loop_correlation_id')
                 if not correlation_key:
                     source_guid = record_copy.get('source_guid', 'unknown')
@@ -409,7 +409,8 @@ class LoopOutputCorrelator:
             if not any((k.endswith(f'_{i}') for i in range(1, 10)))
         }
         if stable_fields:
-            content_str = json.dumps(stable_fields, sort_keys=True)
+            # sort_keys=True for consistent hashing, compact separators for speed
+            content_str = json.dumps(stable_fields, sort_keys=True, separators=(',', ':'))
             return str(hash(content_str))
         return None
 
@@ -422,12 +423,12 @@ class LoopOutputCorrelator:
         """Write correlated data to the output directory and create corresponding source data."""
         if not correlated_data:
             return
-        cleaned_data = []
-        for record in correlated_data:
-            clean_record = record.copy()
-            clean_record.pop('_correlation_sources', None)
-            clean_record.pop('_missing_iterations', None)
-            cleaned_data.append(clean_record)
+        # Use dict comprehension instead of copy()+pop() for efficiency
+        keys_to_remove = {'_correlation_sources', '_missing_iterations'}
+        cleaned_data = [
+            {k: v for k, v in record.items() if k not in keys_to_remove}
+            for record in correlated_data
+        ]
         output_file = output_dir / filename
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(cleaned_data, f, indent=2)

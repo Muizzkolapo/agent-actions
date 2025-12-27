@@ -93,13 +93,13 @@ actions:
     def test_reverse_dependency_graph_built_correctly(self, workspace_index):
         """Test that reverse dependency graph is built correctly."""
         # workflow_a should have B and C as downstream
-        assert set(workspace_index.reverse_dependency_graph['workflow_a']) == {'workflow_b', 'workflow_c'}
+        assert workspace_index.reverse_dependency_graph['workflow_a'] == {'workflow_b', 'workflow_c'}
         # workflow_b should have D as downstream
-        assert workspace_index.reverse_dependency_graph['workflow_b'] == ['workflow_d']
+        assert workspace_index.reverse_dependency_graph['workflow_b'] == {'workflow_d'}
         # workflow_c should have D as downstream
-        assert workspace_index.reverse_dependency_graph['workflow_c'] == ['workflow_d']
+        assert workspace_index.reverse_dependency_graph['workflow_c'] == {'workflow_d'}
         # workflow_d has no downstream
-        assert workspace_index.reverse_dependency_graph.get('workflow_d', []) == []
+        assert workspace_index.reverse_dependency_graph.get('workflow_d', set()) == set()
 
     def test_topological_sort_downstream(self, workspace_index):
         """Test topological sorting of downstream workflows."""
