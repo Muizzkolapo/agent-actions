@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """
 Agent workflow orchestration.
 
@@ -54,7 +55,7 @@ from agent_actions.prompt_generation.output_processor import OutputProcessor
 logger = logging.getLogger(__name__)
 
 
-class AgentWorkflow:
+class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
     """
     Orchestrates multi-agent workflow execution.
 
@@ -124,7 +125,7 @@ class AgentWorkflow:
         )
         self.artifact_linker = ArtifactLinker(workflows_root)
 
-    def _create_child_workflow(
+    def _create_child_workflow(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         config_path: str,
         user_code_path: Optional[str],

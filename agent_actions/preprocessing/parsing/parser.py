@@ -582,7 +582,7 @@ class SafeExpressionEvaluator:
             True if the attribute access is safe
         """
         # Blocklist of dangerous attributes that could allow sandbox escape
-        UNSAFE_ATTRS = frozenset({
+        UNSAFE_ATTRS = frozenset({  # pylint: disable=invalid-name
             '__class__', '__dict__', '__code__', '__globals__',
             '__bases__', '__subclasses__', '__mro__', '__new__',
             '__init__', '__del__', '__reduce__', '__reduce_ex__',

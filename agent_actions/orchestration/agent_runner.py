@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """Module for managing and executing agents with different strategies in a workflow."""
 import logging
 from dataclasses import dataclass
@@ -128,7 +129,9 @@ class AgentRunner:
         Returns:
             List of upstream paths from manifest, or None if no manifest exists.
         """
-        agent_io_dir = agent_folder / 'agent_io' if 'agent_io' not in str(agent_folder) else agent_folder
+        agent_io_dir = (
+            agent_folder / 'agent_io' if 'agent_io' not in str(agent_folder) else agent_folder
+        )
         manifest = ArtifactLinker.read_manifest(agent_io_dir)
         if manifest is None:
             return None

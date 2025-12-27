@@ -82,7 +82,10 @@ class EnvironmentConfig(BaseSettings):
         default=None, description='Database connection URL'
     )
 
-    @field_validator('openai_api_key', 'claude_api_key', 'anthropic_api_key', 'google_api_key', mode='before')
+    @field_validator(
+        'openai_api_key', 'claude_api_key', 'anthropic_api_key', 'google_api_key',
+        mode='before'
+    )
     @classmethod
     def validate_api_keys(cls, v):
         """Validate API key format if provided."""

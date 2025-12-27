@@ -43,7 +43,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
 
 
 @dataclass
-class RepromptConfig:
+class RepromptConfig:  # pylint: disable=too-many-instance-attributes
     """Simple configuration for reprompting with preset support.
 
     Attributes:
@@ -67,9 +67,10 @@ class RepromptConfig:
     constraints: List[Dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
-        """Apply preset defaults if not explicitly overridden."""
-        # Preset values are applied in from_yaml() where we track explicit overrides
-        pass
+        """Apply preset defaults if not explicitly overridden.
+
+        Note: Preset values are applied in from_yaml() where we track explicit overrides.
+        """
 
     @classmethod
     def from_yaml(cls, value: Union[bool, str, Dict[str, Any], None]) -> "RepromptConfig":
