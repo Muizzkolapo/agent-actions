@@ -5,8 +5,8 @@ This module provides data preprocessing, transformation, filtering, chunking,
 and staging operations for agent-based workflows.
 
 Submodules:
-- parsing: WHERE clause AST parsing and operator registry
-- filtering: Dataset filtering logic with WHERE clause support
+- parsing: Guard condition AST parsing and operator registry
+- filtering: Dataset filtering logic with guard condition support
 - chunking: Field-level text splitting with strategies
 - transformation: Data structure transformations (dict, string, response)
 - context: Historical context preprocessing
@@ -36,9 +36,9 @@ from .parsing.parser import WhereClauseParser
 from .parsing.operator_registry import OperatorRegistry
 
 # Filtering submodule
-from .filtering.where_filter import WhereClauseFilter, FilterResult, FilterMetrics
+from .filtering.guard_filter import GuardFilter, FilterResult, FilterMetrics
 from .filtering.filter_service import FilterService, FilterStatus
-from .filtering.where_clause_handler import WhereClauseHandler, WhereClauseConfig, FilterBehavior
+from .filtering.guard_handler import GuardHandler, GuardConfig, FilterBehavior
 
 # Chunking submodule
 from .chunking.field_chunking import FieldChunker, FieldAnalyzer, FieldAnalysisResult
@@ -87,13 +87,13 @@ __all__ = [
     'WhereClauseParser',
     'OperatorRegistry',
     # Filtering
-    'WhereClauseFilter',
+    'GuardFilter',
     'FilterResult',
     'FilterMetrics',
     'FilterService',
     'FilterStatus',
-    'WhereClauseHandler',
-    'WhereClauseConfig',
+    'GuardHandler',
+    'GuardConfig',
     'FilterBehavior',
     # Chunking
     'FieldChunker',

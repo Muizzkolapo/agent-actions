@@ -1,9 +1,9 @@
 """
-Enhanced WHERE clause filter service.
+Guard filter service.
 
-This module provides a production-ready WHERE clause filtering service that replaces
-the old regex-based parser with proper grammar parsing, AST evaluation, and comprehensive
-security measures.
+This module provides a production-ready guard filtering service that uses
+proper grammar parsing, AST evaluation, and comprehensive security measures
+for evaluating guard conditions in agent workflows.
 """
 
 import logging
@@ -50,7 +50,7 @@ class FilterMetrics:
 class FilterItemRequest:
     """Request parameters for filtering a single item."""
     data: Dict[str, Any]
-    where_clause: str
+    condition: str
     timeout: Optional[int] = None
     functions: Optional[Dict[str, Any]] = None
 
@@ -59,15 +59,15 @@ class FilterItemRequest:
 class FilterBatchRequest:
     """Request parameters for filtering a batch of items."""
     data_items: List[Dict[str, Any]]
-    where_clause: str
+    condition: str
     timeout: Optional[int] = None
     functions: Optional[Dict[str, Any]] = None
     passthrough_on_error: bool = True
 
 
-class WhereClauseFilter:
+class GuardFilter:
     """
-    Enhanced WHERE clause filter with security, performance, and reliability improvements.
+    Guard filter with security, performance, and reliability improvements.
 
     Features:
     - AST-based evaluation instead of eval()
@@ -83,14 +83,14 @@ class WhereClauseFilter:
                  default_timeout: int = 5,
                  enable_metrics: bool = True):
         """
-        Initialize the WHERE clause filter.
+        Initialize the guard filter.
 
         Args:
             cache_size: Size of the LRU cache for parsed expressions
             default_timeout: Default timeout for evaluations in seconds
             enable_metrics: Whether to collect performance metrics
         """
-        self.parser = WhereClauseParser()
+        self.parser = WhereClauseParser()  # Parser name kept for now
         self.safe_evaluator = SafeExpressionEvaluator()
         self.cache_size = cache_size
         self.default_timeout = default_timeout
@@ -100,11 +100,11 @@ class WhereClauseFilter:
             self.metrics = FilterMetrics()
 
         # Thread pool for timeout protection
-        self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="where_filter")
+        self.executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="guard_filter")
 
     def filter_item(self, request: FilterItemRequest) -> FilterResult:
         """
-        Filter a single data item using a WHERE clause.
+        Filter a single data item using a guard condition.
 
         Args:
             request: FilterItemRequest containing all parameters
@@ -118,8 +118,8 @@ class WhereClauseFilter:
         try:
             # Submit evaluation to thread pool with timeout
             future = self.executor.submit(
-                self._evaluate_where_clause,
-                request.data, request.where_clause, request.functions
+                self._evaluate_guard_condition,
+                request.data, request.condition, request.functions
             )
 
             matched = future.result(timeout=timeout)
@@ -138,7 +138,7 @@ class WhereClauseFilter:
         except FutureTimeoutError:
             execution_time = time.time() - start_time
             error_msg = (
-                f"WHERE clause evaluation timed out after {timeout} seconds"
+                f"Guard condition evaluation timed out after {timeout} seconds"
             )
             logger.warning(error_msg)
 
@@ -153,7 +153,7 @@ class WhereClauseFilter:
 
         except ValueError as e:
             execution_time = time.time() - start_time
-            error_msg = f"Error evaluating WHERE clause: {str(e)}"
+            error_msg = f"Error evaluating guard condition: {str(e)}"
             logger.debug(error_msg, exc_info=True)
 
             if self.enable_metrics:
@@ -167,20 +167,20 @@ class WhereClauseFilter:
 
     def filter_batch(self, request: FilterBatchRequest) -> List[Dict[str, Any]]:
         """
-        Filter a batch of data items using a WHERE clause.
+        Filter a batch of data items using a guard condition.
 
         Args:
             request: FilterBatchRequest containing all parameters
 
         Returns:
-            List of items that match the WHERE clause
+            List of items that match the guard condition
         """
         filtered_items = []
 
         for item in request.data_items:
             item_request = FilterItemRequest(
                 data=item,
-                where_clause=request.where_clause,
+                condition=request.condition,
                 timeout=request.timeout,
                 functions=request.functions
             )
@@ -194,36 +194,36 @@ class WhereClauseFilter:
 
         return filtered_items
 
-    def _parse_where_clause_cached(self, where_clause: str) -> ParseResult:
-        """Parse WHERE clause with caching."""
-        return self._cached_parse(where_clause)
+    def _parse_condition_cached(self, condition: str) -> ParseResult:
+        """Parse guard condition with caching."""
+        return self._cached_parse(condition)
 
     @lru_cache(maxsize=1000)
-    def _cached_parse(self, where_clause: str) -> ParseResult:
+    def _cached_parse(self, condition: str) -> ParseResult:
         """Internal cached parse method."""
-        return self.parser.parse(where_clause)
+        return self.parser.parse(condition)
 
-    def _evaluate_where_clause(self,
-                              data: Dict[str, Any],
-                              where_clause: str,
-                              functions: Optional[Dict[str, Any]]) -> bool:
+    def _evaluate_guard_condition(self,
+                                  data: Dict[str, Any],
+                                  condition: str,
+                                  functions: Optional[Dict[str, Any]]) -> bool:
         """
-        Internal method to evaluate a WHERE clause against data.
+        Internal method to evaluate a guard condition against data.
 
         Args:
             data: The data to evaluate against
-            where_clause: The WHERE clause string
+            condition: The guard condition string
             functions: Optional custom functions
 
         Returns:
-            True if the data matches the WHERE clause, False otherwise
+            True if the data matches the guard condition, False otherwise
         """
-        # Parse the WHERE clause (with caching)
-        parse_result = self._parse_where_clause_cached(where_clause)
+        # Parse the guard condition (with caching)
+        parse_result = self._parse_condition_cached(condition)
 
         if not parse_result.success:
             error_msg = parse_result.error.message
-            logger.warning("Failed to parse WHERE clause: %s", error_msg)
+            logger.warning("Failed to parse guard condition: %s", error_msg)
             raise ValueError(f"Parse error: {error_msg}")
 
         # Evaluate the AST
@@ -393,16 +393,16 @@ class WhereClauseFilter:
         self.executor.shutdown(wait=True)
 
 
-# Global filter instance for convenience
-_GLOBAL_FILTER = None
+# Global guard filter instance for convenience
+_GLOBAL_GUARD_FILTER = None
 
 
-def get_global_filter() -> WhereClauseFilter:
-    """Get the global WHERE clause filter instance."""
-    global _GLOBAL_FILTER  # pylint: disable=global-statement
-    if _GLOBAL_FILTER is None:
-        _GLOBAL_FILTER = WhereClauseFilter()
-    return _GLOBAL_FILTER
+def get_global_guard_filter() -> GuardFilter:
+    """Get the global guard filter instance."""
+    global _GLOBAL_GUARD_FILTER  # pylint: disable=global-statement
+    if _GLOBAL_GUARD_FILTER is None:
+        _GLOBAL_GUARD_FILTER = GuardFilter()
+    return _GLOBAL_GUARD_FILTER
 
 
 def evaluate_safe_skip_condition(condition_config: Dict[str, Any],
@@ -417,5 +417,5 @@ def evaluate_safe_skip_condition(condition_config: Dict[str, Any],
     Returns:
         True if the condition indicates the agent should be skipped
     """
-    filter_service = get_global_filter()
-    return filter_service.evaluate_safe_skip_condition(condition_config, context)
+    guard_filter = get_global_guard_filter()
+    return guard_filter.evaluate_safe_skip_condition(condition_config, context)

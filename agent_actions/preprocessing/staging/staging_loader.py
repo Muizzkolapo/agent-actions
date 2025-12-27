@@ -59,7 +59,7 @@ class BatchProcessingContext:
     idx: int = 0
 
 
-def _save_source_items_helper(source_items, file_path, base_directory):
+def _save_source_items_helper(source_items, file_path, base_directory, output_directory=None):
     """
     Helper to save source items using UnifiedSourceDataSaver.
 
@@ -67,21 +67,37 @@ def _save_source_items_helper(source_items, file_path, base_directory):
         source_items: List of source items to save
         file_path: Path to the input file
         base_directory: Base directory for input files
+        output_directory: Optional output directory - used to determine target workflow root
+                         when processing inter-workflow dependencies (manifest-based input)
 
     Note:
         This is extracted to avoid calling protected methods from BatchService.
+        When output_directory is provided, we derive the workflow root from it
+        to ensure source data is saved to the TARGET workflow, not the source workflow.
     """
     relative_path = Path(file_path).relative_to(base_directory)
 
-    # Find workflow root by looking for 'agent_io' in path
-    base_path = Path(base_directory)
-    parts = base_path.parts
-    if "agent_io" in parts:
-        agent_io_idx = parts.index("agent_io")
-        workflow_root = Path(*parts[:agent_io_idx])
+    # Determine workflow root - prefer output_directory if provided (for inter-workflow deps)
+    # This ensures source is saved to the TARGET workflow when reading from upstream manifest
+    if output_directory:
+        output_path = Path(output_directory)
+        parts = output_path.parts
+        if "agent_io" in parts:
+            agent_io_idx = parts.index("agent_io")
+            workflow_root = Path(*parts[:agent_io_idx])
+        else:
+            # Fallback to going up from output directory
+            workflow_root = output_path.parent.parent.parent
     else:
-        # Fallback to going up 3 levels
-        workflow_root = base_path.parent.parent.parent
+        # Legacy behavior - derive from base_directory
+        base_path = Path(base_directory)
+        parts = base_path.parts
+        if "agent_io" in parts:
+            agent_io_idx = parts.index("agent_io")
+            workflow_root = Path(*parts[:agent_io_idx])
+        else:
+            # Fallback to going up 3 levels
+            workflow_root = base_path.parent.parent.parent
 
     # Use unified saver with batch mode settings
     saver = UnifiedSourceDataSaver(
@@ -161,7 +177,7 @@ def generate_staging(ctx: StagingContext):
     # ============================================================================
     # This is the KEY fix: save source BEFORE any processing
     # Prevents timing issues where processing tries to load source that doesn't exist yet
-    _save_source_data(src_text, data_chunk, ctx.file_path, ctx.base_directory)
+    _save_source_data(src_text, data_chunk, ctx.file_path, ctx.base_directory, ctx.output_directory)
 
     # ============================================================================
     # STEP 3: Process based on mode (source is now guaranteed to exist)
@@ -182,7 +198,7 @@ def generate_staging(ctx: StagingContext):
     )
 
 
-def _save_source_data(src_text, data_chunk, file_path, base_directory):
+def _save_source_data(src_text, data_chunk, file_path, base_directory, output_directory=None):
     """
     UNIFIED source saving logic for both batch and realtime modes.
 
@@ -195,11 +211,15 @@ def _save_source_data(src_text, data_chunk, file_path, base_directory):
         data_chunk: Data chunk with source_guid fields
         file_path: Path to the input file
         base_directory: Base directory for the relative file path
+        output_directory: Optional output directory - used to determine target workflow root
+                         for inter-workflow dependencies (manifest-based input)
 
     Implementation Note:
         - Batch mode: Extracts source from data_chunk (which has source_guid)
         - Realtime mode: Uses pre-prepared src_text
         - Both modes use UnifiedSourceDataSaver directly
+        - When output_directory differs from base_directory (inter-workflow case),
+          source is saved to the TARGET workflow to ensure downstream agents can load it
     """
 
     # Determine source items to save
@@ -216,7 +236,7 @@ def _save_source_data(src_text, data_chunk, file_path, base_directory):
 
     # Save to source folder (single source of truth)
     if source_items:
-        _save_source_items_helper(source_items, file_path, base_directory)
+        _save_source_items_helper(source_items, file_path, base_directory, output_directory)
 
 
 def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):

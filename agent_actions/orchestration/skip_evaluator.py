@@ -10,8 +10,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from rich.console import Console
 
-from agent_actions.preprocessing.filtering.where_filter import (
-    get_global_filter,
+from agent_actions.preprocessing.filtering.guard_filter import (
+    get_global_guard_filter,
     FilterItemRequest
 )
 
@@ -74,9 +74,9 @@ class SkipConditionStrategy(SkipStrategy):
             if not where_clause:
                 return False
 
-            # Use modern WHERE filter - skip if condition NOT matched
-            filter_service = get_global_filter()
-            request = FilterItemRequest(data=context, where_clause=where_clause)
+            # Use modern guard filter - skip if condition NOT matched
+            filter_service = get_global_guard_filter()
+            request = FilterItemRequest(data=context, condition=where_clause)
             filter_result = filter_service.filter_item(request)
 
             # If evaluation failed, don't skip (fail-open)
@@ -116,22 +116,22 @@ class SkipConditionStrategy(SkipStrategy):
             return False  # Don't skip on error
 
 
-class WhereClauseStrategy(SkipStrategy):
-    """Strategy for evaluating 'where_clause' with scope='agent'."""
+class GuardStrategy(SkipStrategy):
+    """Strategy for evaluating 'guard' with scope='agent'."""
 
     def get_strategy_name(self) -> str:
-        return "where_clause"
+        return "guard"
 
     def _handle_filter_error(
         self, agent_name: str, error_msg: str, passthrough_on_error: bool
     ) -> bool:
         """Handle filter evaluation errors."""
         logger.warning(
-            "WHERE clause evaluation error for %s: %s",
+            "Guard evaluation error for %s: %s",
             agent_name, error_msg,
             extra={
                 'agent_name': agent_name,
-                'operation': 'where_clause_evaluation'
+                'operation': 'guard_evaluation'
             }
         )
 
@@ -156,19 +156,19 @@ class WhereClauseStrategy(SkipStrategy):
     def should_skip(
         self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
     ) -> bool:
-        """Evaluate agent-level WHERE clause."""
-        where_config = agent_config.get('where_clause')
+        """Evaluate agent-level guard condition."""
+        guard_config = agent_config.get('guard')
 
-        # Only handle agent-scope where clauses
-        if not where_config or where_config.get('scope') != 'agent':
+        # Only handle agent-scope guards
+        if not guard_config or guard_config.get('scope') != 'agent':
             return False
 
         agent_name = agent_config.get('agent_type', 'unknown')
-        where_clause = where_config['clause']
-        passthrough_on_error = where_config.get('passthrough_on_error', True)
+        guard_clause = guard_config['clause']
+        passthrough_on_error = guard_config.get('passthrough_on_error', True)
 
         try:
-            filter_service = get_global_filter()
+            filter_service = get_global_guard_filter()
 
             context_data = {
                 'previous_outputs': previous_outputs or {},
@@ -176,24 +176,24 @@ class WhereClauseStrategy(SkipStrategy):
                 'dependencies': agent_config.get('dependencies', []),
                 'agent_config': {
                     k: v for k, v in agent_config.items()
-                    if k not in ['where_clause']
+                    if k not in ['guard']
                 }
             }
 
             logger.debug(
-                "Evaluating agent-level WHERE clause for %s",
+                "Evaluating agent-level guard for %s",
                 agent_name,
                 extra={
                     'agent_name': agent_name,
-                    'where_clause': where_clause,
-                    'operation': 'where_clause_evaluation'
+                    'guard': guard_clause,
+                    'operation': 'guard_evaluation'
                 }
             )
 
             filter_result = filter_service.filter_item(
                 FilterItemRequest(
                     data=context_data,
-                    where_clause=where_clause,
+                    condition=guard_clause,
                     timeout=agent_config.get('max_execution_time', 5)
                 )
             )
@@ -209,23 +209,23 @@ class WhereClauseStrategy(SkipStrategy):
             if not filter_result.matched:
                 self.console.print(
                     f'[yellow]🚫 Agent {agent_name} SKIPPED: '
-                    f'WHERE clause condition not met[/yellow]'
+                    f'guard condition not met[/yellow]'
                 )
                 logger.debug(
-                    "WHERE clause details: %s",
-                    where_clause,
+                    "Guard details: %s",
+                    guard_clause,
                     extra={
                         'agent_name': agent_name,
-                        'where_clause': where_clause,
+                        'guard': guard_clause,
                         'context_data': context_data,
-                        'operation': 'where_clause_evaluation'
+                        'operation': 'guard_evaluation'
                     }
                 )
                 return True
 
             exec_time = filter_result.execution_time
             self.console.print(
-                f'[green]✓ Agent {agent_name} passed WHERE clause check '
+                f'[green]✓ Agent {agent_name} passed guard check '
                 f'(execution time: {exec_time:.3f}s)[/green]'
             )
             return False
@@ -258,9 +258,9 @@ class LegacySkipIfStrategy(SkipStrategy):
                 'agent_config': agent_config
             }
 
-            # Use modern WHERE filter - skip_if expression evaluated as WHERE clause
-            filter_service = get_global_filter()
-            request = FilterItemRequest(data=context, where_clause=skip_if)
+            # Use modern guard filter - skip_if expression evaluated as guard condition
+            filter_service = get_global_guard_filter()
+            request = FilterItemRequest(data=context, condition=skip_if)
             filter_result = filter_service.filter_item(request)
 
             # If evaluation failed, don't skip (fail-open)
@@ -307,7 +307,7 @@ class SkipEvaluator:
 
     Evaluates skip conditions in order of precedence:
     1. skip_condition
-    2. where_clause (scope=agent)
+    2. guard (scope=agent)
     3. skip_if (legacy)
     """
 
@@ -321,7 +321,7 @@ class SkipEvaluator:
         self.console = console or Console()
         self.strategies = [
             SkipConditionStrategy(self.console),
-            WhereClauseStrategy(self.console),
+            GuardStrategy(self.console),
             LegacySkipIfStrategy(self.console),
         ]
 

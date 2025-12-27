@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """
 Workflow dependency orchestration for upstream/downstream execution.
 
@@ -336,7 +337,7 @@ class WorkflowDependencyOrchestrator:
             f"[blue]  agac run -a {self.current_workflow} {flag}[/blue]"
         )
 
-    def resolve_upstream_and_initialize(
+    def resolve_upstream_and_initialize(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         run_upstream: bool,
         agent_configs: dict,
