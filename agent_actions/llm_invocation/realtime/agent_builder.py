@@ -13,7 +13,7 @@ from .services import (
     PromptService,
     ContextService,
     SchemaService,
-    VendorInvocationService,
+    ClientInvocationService,
     InterceptorService,
 )
 
@@ -120,12 +120,9 @@ def create_dynamic_agent(
 
     # Prepare schema with dispatch support
     schema, schema_results = SchemaService.prepare_schema(
-        agent_config,
-        model_vendor,
-        tools_path=tools_path,
-        context_data=context_data
+        agent_config, model_vendor, tools_path=tools_path, context_data=context_data
     )
-    
+
     if schema_results:
         captured_results.update(schema_results)
 
@@ -138,14 +135,14 @@ def create_dynamic_agent(
             if isinstance(context_data, str)
             else json.dumps(context_data, ensure_ascii=False)
         ),
-        schema
+        schema,
     )
 
     # Get granularity
     granularity = (agent_config.get("granularity") or "record").lower()
 
-    # Invoke vendor
-    response_data = VendorInvocationService.invoke_vendor(
+    # Invoke client
+    response_data = ClientInvocationService.invoke_client(
         model_vendor,
         agent_config,
         prompt_config,

@@ -1,5 +1,5 @@
 """
-Mistral handler for agent-actions LLM invocation.
+Mistral client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Mistral API integration.
@@ -9,7 +9,7 @@ import logging
 from textwrap import dedent
 from mistralai import Mistral  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
     GenericErrorHandlerMixin,
@@ -21,8 +21,8 @@ from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 logger = logging.getLogger(__name__)
 
 
-class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
-    """Mistral AI API handler for JSON and non-JSON LLM invocations."""
+class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Mistral AI API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -47,7 +47,7 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
                 )
             response_content = chat_response.choices[0].message.content
 
-            return MistralHandler.parse_json_response(
+            return MistralClient.parse_json_response(
                 response_content=response_content,
                 vendor_name="Mistral",
                 operation="call_json",
@@ -56,7 +56,7 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
         except VendorAPIError:
             raise
         except Exception as e:
-            MistralHandler.handle_generic_error(e, "Mistral", "call_json", model_name)
+            MistralClient.handle_generic_error(e, "Mistral", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):

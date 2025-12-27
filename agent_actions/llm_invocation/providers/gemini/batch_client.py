@@ -1,7 +1,7 @@
 """
-Gemini Batch API provider implementation.
+Gemini Batch API client implementation.
 
-This module implements the BatchProvider interface for Google's Gemini Batch API,
+This module implements the BaseBatchClient interface for Google's Gemini Batch API,
 handling the transformation between our standardized format and Gemini's
 specific requirements.
 """
@@ -19,12 +19,12 @@ except ImportError:
     GEMINI_AVAILABLE = False
     genai = None
     types = None
-from ..base import BatchProvider, BatchTask
+from ..batch_client_base import BaseBatchClient, BatchTask
 
 
-class GeminiBatchProvider(BatchProvider):
+class GeminiBatchClient(BaseBatchClient):
     """
-    Gemini Batch API implementation of the BatchProvider interface.
+    Gemini Batch API implementation of the BaseBatchClient interface.
 
     Handles format transformations:
     - Input: BatchTask → Gemini task format
@@ -34,7 +34,9 @@ class GeminiBatchProvider(BatchProvider):
     def __init__(self, api_key: Optional[str] = None):
         """Initialize Gemini client."""
         if not GEMINI_AVAILABLE:
-            from agent_actions.errors import DependencyError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                DependencyError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise DependencyError(
                 "GeminiBatchProvider requires google-genai package",
@@ -146,7 +148,7 @@ class GeminiBatchProvider(BatchProvider):
         """Write tasks to JSONL file for Gemini."""
         file_name = f"{Path(batch_name).stem}_batch_input.json"
         file_path = batch_dir / file_name
-        with open(file_path, 'w', encoding='utf-8') as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             for task in tasks:
                 file.write(json.dumps(task) + "\n")
         print(f"Gemini batch file created at: {file_path}")
@@ -171,7 +173,9 @@ class GeminiBatchProvider(BatchProvider):
             )
             return (batch_job.name, status)
         except Exception as e:
-            from agent_actions.errors import VendorAPIError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                VendorAPIError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise VendorAPIError(
                 vendor="gemini",
@@ -204,7 +208,9 @@ class GeminiBatchProvider(BatchProvider):
         """Fetch raw results from Gemini API."""
         batch_job = self.client.batches.get(name=batch_id)
         if batch_job.state.name != "JOB_STATE_SUCCEEDED":
-            from agent_actions.errors import ValidationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                ValidationError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ValidationError(
                 "Batch job is not completed",
@@ -213,7 +219,9 @@ class GeminiBatchProvider(BatchProvider):
 
         result_file_name = batch_job.dest.file_name
         if not result_file_name:
-            from agent_actions.errors import ValidationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                ValidationError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ValidationError(
                 "Batch job has no output file", context={"batch_id": batch_id, "vendor": "gemini"}
@@ -224,7 +232,9 @@ class GeminiBatchProvider(BatchProvider):
         file_content_bytes = self.client.files.download(file=result_file_name)
 
         if not file_content_bytes or len(file_content_bytes) == 0:
-            from agent_actions.errors import VendorAPIError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                VendorAPIError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise VendorAPIError(
                 vendor="gemini",

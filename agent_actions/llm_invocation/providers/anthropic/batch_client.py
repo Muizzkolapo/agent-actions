@@ -1,7 +1,7 @@
 """
-Anthropic Batch API provider implementation.
+Anthropic Batch API client implementation.
 
-This module implements the BatchProvider interface for Anthropic's API,
+This module implements the BaseBatchClient interface for Anthropic's API,
 handling the transformation between our standardized format and Anthropic's
 specific requirements.
 """
@@ -9,12 +9,12 @@ specific requirements.
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
-from ..base import BatchProvider, BatchTask, BatchResult
+from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 
 
-class AnthropicBatchProvider(BatchProvider):
+class AnthropicBatchClient(BaseBatchClient):
     """
-    Anthropic Message Batches API implementation of the BatchProvider interface.
+    Anthropic Message Batches API implementation of the BaseBatchClient interface.
 
     This provider integrates with Anthropic's Message Batches API to enable
     batch processing of Claude model requests. It handles format transformations:
@@ -56,7 +56,9 @@ class AnthropicBatchProvider(BatchProvider):
             else:
                 self.client = anthropic.Anthropic()
         except ImportError as e:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                ConfigurationError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ConfigurationError(
                 "Required package not installed",
@@ -64,7 +66,9 @@ class AnthropicBatchProvider(BatchProvider):
                 cause=e,
             ) from e
         except Exception as e:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                ConfigurationError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ConfigurationError(
                 "Failed to initialize Anthropic client",
@@ -282,7 +286,7 @@ class AnthropicBatchProvider(BatchProvider):
         """Write tasks to JSON file for Anthropic."""
         file_name = f"{Path(batch_name).stem}_anthropic_batch_input.json"
         file_path = batch_dir / file_name
-        with open(file_path, 'w', encoding='utf-8') as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             json.dump({"requests": tasks}, file, indent=2)
         print(f"Anthropic batch input saved at: {file_path}")
         return file_path
@@ -291,7 +295,7 @@ class AnthropicBatchProvider(BatchProvider):
         """Submit batch to Anthropic API."""
         try:
             # Read tasks from file to submit
-            with open(input_file, 'r', encoding='utf-8') as f:
+            with open(input_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 tasks = data["requests"]
 
@@ -382,7 +386,7 @@ class AnthropicBatchProvider(BatchProvider):
             if output_directory and raw_entries:
                 batch_dir = self._get_batch_directory(output_directory)
                 raw_results_file = batch_dir / f"{batch_id}_anthropic_raw_results.jsonl"
-                with open(raw_results_file, 'w', encoding='utf-8') as f:
+                with open(raw_results_file, "w", encoding="utf-8") as f:
                     for entry in raw_entries:
                         f.write(json.dumps(entry) + "\n")
             return batch_results

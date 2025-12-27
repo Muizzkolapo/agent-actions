@@ -1,5 +1,5 @@
 """
-Groq LLM vendor handler for agent-actions.
+Groq LLM client for agent-actions.
 
 Provides implementation of call_json() and call_non_json() methods
 for Groq API integration, supporting models like Llama3.
@@ -11,15 +11,15 @@ from textwrap import dedent
 from groq import Groq  # pylint: disable=import-error
 
 from agent_actions.errors import VendorAPIError  # New modular pattern!
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 
-class GroqLlama3Handler(BaseVendorHandler):
-    """Groq API handler for JSON and non-JSON LLM invocations."""
+class GroqClient(BaseClient):
+    """Groq API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):

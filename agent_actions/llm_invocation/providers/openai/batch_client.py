@@ -1,7 +1,7 @@
 """
-OpenAI Batch API provider implementation.
+OpenAI Batch API client implementation.
 
-This module implements the BatchProvider interface for OpenAI's Batch API,
+This module implements the BaseBatchClient interface for OpenAI's Batch API,
 handling the transformation between our standardized format and OpenAI's
 specific requirements.
 """
@@ -9,13 +9,13 @@ specific requirements.
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from openai import OpenAI
-from ..base import BatchProvider, BatchTask
+from ..batch_client_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
 
-class OpenAIBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
+class OpenAIBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """
-    OpenAI Batch API implementation of the BatchProvider interface.
+    OpenAI Batch API implementation of the BaseBatchClient interface.
 
     Handles format transformations:
     - Input: BatchTask → OpenAI task format
@@ -133,7 +133,7 @@ class OpenAIBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
             from agent_actions.errors import VendorAPIError
 
             # Check if there's an error file instead
-            error_file_id = getattr(batch_job, 'error_file_id', None)
+            error_file_id = getattr(batch_job, "error_file_id", None)
             raise VendorAPIError(
                 vendor="openai",
                 endpoint="batches.retrieve",
@@ -142,9 +142,10 @@ class OpenAIBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
                     "batch_id": batch_id,
                     "status": batch_job.status,
                     "error_file_id": error_file_id,
-                    "request_counts": getattr(batch_job, 'request_counts', None),
+                    "request_counts": getattr(batch_job, "request_counts", None),
                     "suggestion": (
-                        f"Check error file: {error_file_id}" if error_file_id
+                        f"Check error file: {error_file_id}"
+                        if error_file_id
                         else "Clear batch registry and resubmit"
                     ),
                 },

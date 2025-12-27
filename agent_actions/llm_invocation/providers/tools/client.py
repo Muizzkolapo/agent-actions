@@ -1,9 +1,10 @@
 """
-Tool vendor handler for executing user-defined functions.
+Tool client for executing user-defined functions.
 
-This module provides the ToolHandler for invoking custom user-defined
+This module provides the ToolClient for invoking custom user-defined
 functions (UDFs) as part of the agent-actions LLM invocation pipeline.
 """
+
 import json
 from typing import Dict, Any, Optional, Union
 
@@ -11,8 +12,8 @@ from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 
 
-class ToolHandler:
-    """Handler for executing user-defined functions as LLM vendors."""
+class ToolClient:
+    """Client for executing user-defined functions as LLM clients."""
 
     @staticmethod
     def invoke(
@@ -26,7 +27,9 @@ class ToolHandler:
         """
         model_name = agent_config.get(MODEL_NAME_KEY)
         if not model_name:
-            from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                ConfigurationError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise ConfigurationError(
                 "Tool vendor requires 'model_name' (UDF path) in agent config",

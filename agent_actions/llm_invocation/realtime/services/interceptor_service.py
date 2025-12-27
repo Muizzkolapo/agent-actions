@@ -7,7 +7,7 @@ from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from .prompt_service import PromptService
 from .context_service import ContextService
 from .schema_service import SchemaService
-from .vendor_invocation_service import VendorInvocationService
+from .client_invocation_service import ClientInvocationService
 
 
 class InterceptorService:
@@ -58,7 +58,8 @@ class InterceptorService:
         # Propagate prompt_debug to all interceptors
         prompt_debug = agent_config.get("prompt_debug", False)
         interceptor_configs_with_debug = [
-            {**cfg, "prompt_debug": prompt_debug} for cfg in interceptor_configs
+            {**cfg, "prompt_debug": prompt_debug}
+            for cfg in interceptor_configs
             if cfg.get("type") != "reprompt"  # Filter out old reprompt config
         ]
 
@@ -72,11 +73,13 @@ class InterceptorService:
 
         if reprompt_config.enabled:
             reprompt_interceptor = RepromptInterceptor()
-            reprompt_interceptor.configure({
-                "reprompt": reprompt_value,
-                "constraints": agent_config.get("constraints", []),
-                "prompt_debug": prompt_debug,
-            })
+            reprompt_interceptor.configure(
+                {
+                    "reprompt": reprompt_value,
+                    "constraints": agent_config.get("constraints", []),
+                    "prompt_debug": prompt_debug,
+                }
+            )
 
         # Parse context_data_str for execution context
         parsed_context_data = {}
@@ -122,12 +125,13 @@ class InterceptorService:
                 execution_context["json_mode"] = agent_config.get("json_mode", True)
 
                 reprompt_result = reprompt_interceptor.intercept(
-                    execution_context.get("failed_response"),
-                    execution_context
+                    execution_context.get("failed_response"), execution_context
                 )
 
                 # Check if max attempts reached
-                if reprompt_result.metadata and reprompt_result.metadata.get("max_attempts_reached"):
+                if reprompt_result.metadata and reprompt_result.metadata.get(
+                    "max_attempts_reached"
+                ):
                     if prompt_debug:
                         print("   MAX ATTEMPTS REACHED - returning failed response")
                     return execution_context.get("failed_response", [])
@@ -203,8 +207,8 @@ class InterceptorService:
             # Get granularity
             granularity = (agent_config.get("granularity") or "record").lower()
 
-            # Invoke vendor
-            response_data = VendorInvocationService.invoke_vendor(
+            # Invoke client
+            response_data = ClientInvocationService.invoke_client(
                 model_vendor,
                 agent_config,
                 prompt_config,

@@ -1,7 +1,7 @@
 """
-Mistral Batch API provider implementation.
+Mistral Batch API client implementation.
 
-This module implements the BatchProvider interface for Mistral's Batch API,
+This module implements the BaseBatchClient interface for Mistral's Batch API,
 handling the transformation between our standardized format and Mistral's
 specific requirements.
 """
@@ -10,12 +10,12 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BatchProvider, BatchTask
+from ..batch_client_base import BaseBatchClient, BatchTask
 
 
-class MistralBatchProvider(BatchProvider):
+class MistralBatchClient(BaseBatchClient):
     """
-    Mistral Batch API implementation of the BatchProvider interface.
+    Mistral Batch API implementation of the BaseBatchClient interface.
 
     Handles format transformations:
     - Input: BatchTask -> Mistral task format

@@ -1,5 +1,5 @@
 """
-Cohere handler for agent-actions LLM invocation.
+Cohere client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Cohere API integration.
@@ -9,7 +9,7 @@ import logging
 from textwrap import dedent
 import cohere  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
     GenericErrorHandlerMixin,
@@ -21,8 +21,8 @@ from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 logger = logging.getLogger(__name__)
 
 
-class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
-    """Cohere API handler for JSON and non-JSON LLM invocations."""
+class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Cohere API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -47,7 +47,7 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
                 )
             intermediate_json = response.text
 
-            return CohereHandler.parse_json_response(
+            return CohereClient.parse_json_response(
                 response_content=intermediate_json,
                 vendor_name="Cohere",
                 operation="call_json",
@@ -56,7 +56,7 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
         except VendorAPIError:
             raise
         except Exception as e:
-            CohereHandler.handle_generic_error(e, "Cohere", "call_json", model_name)
+            CohereClient.handle_generic_error(e, "Cohere", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):

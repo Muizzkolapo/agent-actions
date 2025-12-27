@@ -1,7 +1,7 @@
 """
-Groq Batch API provider implementation.
+Groq Batch API client implementation.
 
-This module implements the BatchProvider interface for Groq's Batch API,
+This module implements the BaseBatchClient interface for Groq's Batch API,
 handling the transformation between our standardized format and Groq's
 specific requirements.
 """
@@ -10,13 +10,13 @@ import os
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
-from ..base import BatchProvider, BatchTask
+from ..batch_client_base import BaseBatchClient, BatchTask
 from ..mixins import OpenAICompatibleResponseMixin
 
 
-class GroqBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
+class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """
-    Groq Batch API implementation of the BatchProvider interface.
+    Groq Batch API implementation of the BaseBatchClient interface.
 
     Handles format transformations:
     - Input: BatchTask -> Groq task format (OpenAI-compatible JSONL)

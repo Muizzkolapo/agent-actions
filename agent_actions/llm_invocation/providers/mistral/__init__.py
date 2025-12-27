@@ -1,10 +1,10 @@
-"""Mistral provider module."""
+"""Mistral client module."""
 
-from .vendor import MistralHandler
+from .client import MistralClient
 
 try:
-    from .provider import MistralBatchProvider
+    from .batch_client import MistralBatchClient
 
-    __all__ = ["MistralHandler", "MistralBatchProvider"]
+    __all__ = ["MistralClient", "MistralBatchClient"]
 except ImportError:
-    __all__ = ["MistralHandler"]
+    __all__ = ["MistralClient"]

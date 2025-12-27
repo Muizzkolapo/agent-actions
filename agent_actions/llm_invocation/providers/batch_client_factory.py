@@ -1,95 +1,95 @@
 """
-Factory for creating batch providers based on configuration.
+Factory for creating batch clients based on configuration.
 """
 
 from typing import Optional, Dict, Any
 import os
-from .base import BatchProvider
-from .openai.provider import OpenAIBatchProvider
-from .gemini.provider import GeminiBatchProvider
-from .ollama.provider import OllamaLocalBatchProvider
+from .batch_client_base import BaseBatchClient
+from .openai.batch_client import OpenAIBatchClient
+from .gemini.batch_client import GeminiBatchClient
+from .ollama.batch_client import OllamaBatchClient
 
 try:
-    from .anthropic.provider import AnthropicBatchProvider
+    from .anthropic.batch_client import AnthropicBatchClient
 
     ANTHROPIC_AVAILABLE = True
 except ImportError:
     ANTHROPIC_AVAILABLE = False
 
 try:
-    from .groq.provider import GroqBatchProvider
+    from .groq.batch_client import GroqBatchClient
 
     GROQ_AVAILABLE = True
 except ImportError:
     GROQ_AVAILABLE = False
 
 try:
-    from .mistral.provider import MistralBatchProvider
+    from .mistral.batch_client import MistralBatchClient
 
     MISTRAL_AVAILABLE = True
 except ImportError:
     MISTRAL_AVAILABLE = False
 
 
-class BatchProviderFactory:
+class BatchClientFactory:
     """
-    Factory class for creating batch provider instances.
+    Factory class for creating batch client instances.
 
-    This factory supports creating providers based on a provider type string,
+    This factory supports creating clients based on a client type string,
     making it easy to switch between different batch processing backends.
     """
 
     @staticmethod
-    def create_provider(
-        provider_type: str = "openai", config: Optional[Dict[str, Any]] = None
-    ) -> BatchProvider:
+    def create_client(
+        client_type: str = "openai", config: Optional[Dict[str, Any]] = None
+    ) -> BaseBatchClient:
         """
-        Create a batch provider instance.
+        Create a batch client instance.
 
         Args:
-            provider_type: Type of provider to create ("openai", "gemini", etc.)
-            config: Optional configuration dict with provider-specific settings
+            client_type: Type of client to create ("openai", "gemini", etc.)
+            config: Optional configuration dict with client-specific settings
 
         Returns:
-            BatchProvider instance
+            BaseBatchClient instance
 
         Raises:
-            ValueError: If provider_type is not recognized
+            ValueError: If client_type is not recognized
         """
         config = config or {}
-        provider_type = provider_type.lower()
-        if provider_type == "openai":
+        client_type = client_type.lower()
+        if client_type == "openai":
             api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
-            return OpenAIBatchProvider(api_key=api_key)
-        if provider_type == "gemini":
+            return OpenAIBatchClient(api_key=api_key)
+        if client_type == "gemini":
             api_key = config.get("api_key") or os.getenv("GOOGLE_API_KEY")
             try:
-                return GeminiBatchProvider(api_key=api_key)
+                return GeminiBatchClient(api_key=api_key)
             except ImportError as e:
                 from agent_actions.errors import (
                     DependencyError,
-                )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+                )  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "GeminiBatchProvider requires google-genai package",
+                    "GeminiBatchClient requires google-genai package",
                     context={
-                        "provider_type": provider_type,
+                        "client_type": client_type,
                         "package": "google-genai",
                         "install_command": "pip install google-genai",
                     },
                     cause=e,
                 ) from e
-        if provider_type == "ollama":
+        if client_type == "ollama":
             base_url = config.get("base_url") or os.getenv("OLLAMA_HOST", "http://localhost:11434")
-            return OllamaLocalBatchProvider(base_url=base_url)
-        if provider_type == "anthropic":
+            return OllamaBatchClient(base_url=base_url)
+        if client_type == "anthropic":
             if not ANTHROPIC_AVAILABLE:
-                from agent_actions.errors import DependencyError  # New modular pattern!
+                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "AnthropicBatchProvider requires anthropic package",
+                    "AnthropicBatchClient requires anthropic package",
                     context={
-                        "provider_type": provider_type,
+                        "client_type": client_type,
                         "package": "anthropic",
                         "install_command": "pip install anthropic",
                     },
@@ -98,7 +98,7 @@ class BatchProviderFactory:
             anthropic_version = config.get("anthropic_version")
             enable_prompt_caching = config.get("enable_prompt_caching", False)
             try:
-                return AnthropicBatchProvider(
+                return AnthropicBatchClient(
                     api_key=api_key,
                     version=anthropic_version,
                     enable_prompt_caching=enable_prompt_caching,
@@ -106,58 +106,58 @@ class BatchProviderFactory:
             except ImportError as e:
                 from agent_actions.errors import (
                     DependencyError,
-                )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+                )  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "AnthropicBatchProvider requires anthropic package",
+                    "AnthropicBatchClient requires anthropic package",
                     context={
-                        "provider_type": provider_type,
+                        "client_type": client_type,
                         "package": "anthropic",
                         "install_command": "pip install anthropic",
                     },
                     cause=e,
                 ) from e
 
-        if provider_type == "groq":
+        if client_type == "groq":
             if not GROQ_AVAILABLE:
                 from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "GroqBatchProvider requires groq package",
+                    "GroqBatchClient requires groq package",
                     context={
-                        "provider_type": provider_type,
+                        "client_type": client_type,
                         "package": "groq",
                         "install_command": "pip install groq",
                     },
                 )
             api_key = config.get("api_key") or os.getenv("GROQ_API_KEY")
-            return GroqBatchProvider(api_key=api_key)
+            return GroqBatchClient(api_key=api_key)
 
-        if provider_type == "mistral":
+        if client_type == "mistral":
             if not MISTRAL_AVAILABLE:
                 from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
 
                 raise DependencyError(
-                    "MistralBatchProvider requires mistralai package",
+                    "MistralBatchClient requires mistralai package",
                     context={
-                        "provider_type": provider_type,
+                        "client_type": client_type,
                         "package": "mistralai",
                         "install_command": "pip install mistralai",
                     },
                 )
             api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
-            return MistralBatchProvider(api_key=api_key)
+            return MistralBatchClient(api_key=api_key)
 
         from agent_actions.errors import (
             ConfigurationError,
-        )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+        )  # pylint: disable=import-outside-toplevel
 
-        supported = BatchProviderFactory.get_supported_providers()
+        supported = BatchClientFactory.get_supported_clients()
         raise ConfigurationError(
-            "Unknown provider type",
+            "Unknown client type",
             context={
-                "provider_type": provider_type,
-                "supported_providers": supported,
+                "client_type": client_type,
+                "supported_clients": supported,
                 "suggestion": (
                     f"Set model_vendor to one of: {', '.join(supported)}. "
                     "Check your agent configuration."
@@ -166,13 +166,13 @@ class BatchProviderFactory:
         )
 
     @staticmethod
-    def get_supported_providers() -> list[str]:
-        """Get list of supported provider types."""
-        providers = ["openai", "gemini", "ollama"]
+    def get_supported_clients() -> list[str]:
+        """Get list of supported client types."""
+        clients = ["openai", "gemini", "ollama"]
         if ANTHROPIC_AVAILABLE:
-            providers.append("anthropic")
+            clients.append("anthropic")
         if GROQ_AVAILABLE:
-            providers.append("groq")
+            clients.append("groq")
         if MISTRAL_AVAILABLE:
-            providers.append("mistral")
-        return providers
+            clients.append("mistral")
+        return clients

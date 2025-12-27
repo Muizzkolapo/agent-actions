@@ -1,10 +1,10 @@
-"""Groq provider module."""
+"""Groq client module."""
 
-from .vendor import GroqLlama3Handler
+from .client import GroqClient
 
 try:
-    from .provider import GroqBatchProvider
+    from .batch_client import GroqBatchClient
 
-    __all__ = ["GroqLlama3Handler", "GroqBatchProvider"]
+    __all__ = ["GroqClient", "GroqBatchClient"]
 except ImportError:
-    __all__ = ["GroqLlama3Handler"]
+    __all__ = ["GroqClient"]

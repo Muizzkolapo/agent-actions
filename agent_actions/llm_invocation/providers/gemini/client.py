@@ -1,5 +1,5 @@
 """
-Gemini handler for agent-actions LLM invocation.
+Gemini client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Google Gemini API integration.
@@ -9,7 +9,7 @@ import logging
 from textwrap import dedent
 import google.generativeai as genai  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
     GenericErrorHandlerMixin,
@@ -21,8 +21,8 @@ from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 logger = logging.getLogger(__name__)
 
 
-class GeminiHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
-    """Google Gemini API handler for JSON and non-JSON LLM invocations."""
+class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Google Gemini API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):

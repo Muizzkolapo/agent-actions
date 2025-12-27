@@ -1,7 +1,7 @@
 """
-Base vendor handler for agent-actions LLM invocation.
+Base client for agent-actions LLM invocation.
 
-Provides common functionality for all vendor handlers including API key management,
+Provides common functionality for all LLM clients including API key management,
 data redaction, and invocation dispatch to JSON or non-JSON modes.
 """
 
@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional, Union
 from agent_actions.utilities.constants import API_KEY_KEY, JSON_MODE_KEY
 
 
-class BaseVendorHandler(ABC):
-    """Common functionality shared by vendor handlers."""
+class BaseClient(ABC):
+    """Common functionality shared by LLM clients."""
 
     @staticmethod
     def redact_sensitive_data(
@@ -35,12 +35,12 @@ class BaseVendorHandler(ABC):
                 k: (
                     "[REDACTED]"
                     if any(key in k.lower() for key in redact_keys)
-                    else BaseVendorHandler.redact_sensitive_data(v, redact_keys)
+                    else BaseClient.redact_sensitive_data(v, redact_keys)
                 )
                 for k, v in data.items()
             }
         if isinstance(data, list):
-            return [BaseVendorHandler.redact_sensitive_data(item, redact_keys) for item in data]
+            return [BaseClient.redact_sensitive_data(item, redact_keys) for item in data]
         if isinstance(data, str):
             # Redact API key patterns (sk-*, anthropic-*, etc.)
             patterns = [
@@ -72,7 +72,9 @@ class BaseVendorHandler(ABC):
         Raises:
             ConfigurationError: If api_key is not configured or environment variable doesn't exist
         """
-        from agent_actions.errors import ConfigurationError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import (
+            ConfigurationError,
+        )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
         key_name: Optional[str] = agent_config.get(API_KEY_KEY)
         if not key_name:
