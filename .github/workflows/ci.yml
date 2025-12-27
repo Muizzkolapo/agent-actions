@@ -1,0 +1,80 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # Linting and style checks
+  check:
+    name: Lint & Style Check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Install go-task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Run ruff linter
+        run: task lint:ruff
+
+      - name: Run ruff format check
+        run: uv run ruff format --check agent_actions tests
+
+      - name: Run pylint
+        run: task lint
+
+  # Unit tests
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    needs: check
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: ./.github/actions/setup-python
+
+      - name: Install go-task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Run unit tests
+        run: task test:unit
+
+  # Build verification - disabled for now
+  # build:
+  #   name: Build Package
+  #   runs-on: ubuntu-24.04
+  #   permissions:
+  #     contents: read
+  #   needs: test
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
+  #
+  #     - name: Setup Python
+  #       uses: ./.github/actions/setup-python
+  #
+  #     - name: Install go-task
+  #       run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+  #
+  #     - name: Build package
+  #       run: task build
+  #
+  #     - name: Upload build artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: dist
+  #         path: dist/
+  #         retention-days: 7

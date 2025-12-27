@@ -201,14 +201,31 @@ tasks:
     cmds:
       - uv run ruff check --fix {{.PACKAGE}}
 
-  lint:logging:
-    desc: Check logging format patterns with AST checker
-    cmds:
-      - uv run python scripts/check_logging_format.py {{.PACKAGE}}
+  # Note: lint:logging task removed - script not available
+  # lint:logging:
+  #   desc: Check logging format patterns with AST checker
+  #   cmds:
+  #     - uv run python scripts/check_logging_format.py {{.PACKAGE}}
 
   check:
-    desc: Run all checks (lint, ruff, logging, and type check)
-    deps: [lint, lint:ruff, lint:logging, mypy]
+    desc: Run all checks (lint, ruff, and type check)
+    deps: [lint, lint:ruff, mypy]
+
+  # CI-specific tasks
+  install:
+    desc: Install dependencies (for CI compatibility)
+    cmds:
+      - uv sync --dev
+
+  format:
+    desc: Format code with ruff
+    cmds:
+      - uv run ruff format {{.PACKAGE}} tests
+
+  format:check:
+    desc: Check code formatting without making changes
+    cmds:
+      - uv run ruff format --check {{.PACKAGE}} tests
 
   # Utility tasks
   deps:tree:
