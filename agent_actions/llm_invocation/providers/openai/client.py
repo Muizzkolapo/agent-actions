@@ -1,9 +1,10 @@
 """
-OpenAI vendor handler for agent-actions.
+OpenAI client for agent-actions.
 
 Provides implementation of call_json() and call_non_json() methods
 for OpenAI API integration, supporting GPT models.
 """
+
 import json
 import logging
 from datetime import datetime
@@ -12,15 +13,15 @@ from typing import Any, Dict, List, Optional, Union
 from openai import OpenAI
 from openai.types.chat import ChatCompletionUserMessageParam, ChatCompletionSystemMessageParam
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 logger = logging.getLogger(__name__)
 
 
-class OpenAIHandler(BaseVendorHandler):
-    """OpenAI API handler for JSON and non-JSON LLM invocations."""
+class OpenAIClient(BaseClient):
+    """OpenAI API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(

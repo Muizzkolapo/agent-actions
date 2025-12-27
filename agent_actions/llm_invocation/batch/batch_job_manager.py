@@ -1,11 +1,12 @@
 """Batch job lifecycle and registry status management."""
+
 import json
 import logging
 from pathlib import Path
 from typing import Optional
 
 from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_provider_resolver import BatchProviderResolver
+from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
 
 logger = logging.getLogger(__name__)
 
@@ -19,16 +20,16 @@ class BatchJobManager:
 
     def __init__(
         self,
-        provider_resolver: BatchProviderResolver,
+        client_resolver: BatchClientResolver,
         registry_manager: Optional[BatchRegistryManager] = None,
     ):
         """Initialize batch job manager.
 
         Args:
-            provider_resolver: Resolver for getting batch providers
+            client_resolver: Resolver for getting batch clients
             registry_manager: Optional registry manager (can be set later)
         """
-        self._provider_resolver = provider_resolver
+        self._client_resolver = client_resolver
         self._registry_manager = registry_manager
 
     def set_registry_manager(self, registry_manager: BatchRegistryManager) -> None:
@@ -36,12 +37,10 @@ class BatchJobManager:
         self._registry_manager = registry_manager
 
     def _check_status(self, batch_id: str, output_directory: str) -> str:
-        """Check status of a batch job via provider."""
+        """Check status of a batch job via client."""
         manager = self._registry_manager
-        provider = self._provider_resolver.get_for_batch_id(
-            batch_id, manager, output_directory
-        )
-        return provider.check_status(batch_id)
+        client = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+        return client.check_status(batch_id)
 
     # pylint: disable=too-many-return-statements
     def are_all_jobs_completed(self, output_directory: str) -> bool:
@@ -61,7 +60,7 @@ class BatchJobManager:
             return True
 
         try:
-            with open(registry_file, 'r', encoding='utf-8') as f:
+            with open(registry_file, "r", encoding="utf-8") as f:
                 registry = json.load(f)
 
             if not registry:
@@ -96,7 +95,7 @@ class BatchJobManager:
                     return False
 
             # Update registry file with new statuses
-            with open(registry_file, 'w', encoding='utf-8') as f:
+            with open(registry_file, "w", encoding="utf-8") as f:
                 json.dump(registry, f, indent=2)
 
             return True
@@ -123,7 +122,7 @@ class BatchJobManager:
             return "no_batches"
 
         try:
-            with open(registry_file, 'r', encoding='utf-8') as f:
+            with open(registry_file, "r", encoding="utf-8") as f:
                 registry = json.load(f)
 
             if not registry:

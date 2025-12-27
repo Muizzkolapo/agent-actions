@@ -1,22 +1,22 @@
 """
-Base provider interface for batch processing systems.
+Base batch client interface for batch processing systems.
 
-This module defines the abstract base class that all batch providers must implement,
+This module defines the abstract base class that all batch clients must implement,
 enabling support for multiple batch processing backends (OpenAI, custom, etc.).
 
 Key Design Principle:
 --------------------
-Different providers have different input/output formats, but we intercept and transform
+Different clients have different input/output formats, but we intercept and transform
 these to match our standardized format. This ensures the rest of the agent-actions
-system doesn't need to know about provider-specific details.
+system doesn't need to know about client-specific details.
 
 Flow:
-1. Agent-actions data → BatchTask → Provider-specific format (via format_task_for_provider)
-2. Submit to provider
-3. Provider-specific response → BatchResult (via parse_provider_response)
+1. Agent-actions data → BatchTask → Client-specific format (via format_task_for_client)
+2. Submit to client
+3. Client-specific response → BatchResult (via parse_client_response)
 4. BatchResult → Agent-actions workflow format
 
-This allows us to add new providers without changing the core workflow logic.
+This allows us to add new clients without changing the core workflow logic.
 """
 
 from abc import ABC, abstractmethod
@@ -50,11 +50,11 @@ class BatchResult:
     usage: Optional[Dict[str, Any]] = None
 
 
-class BatchProvider(ABC):
+class BaseBatchClient(ABC):
     """
-    Abstract base class for batch processing providers.
+    Abstract base class for batch processing clients.
 
-    This interface defines the contract that all batch providers must implement
+    This interface defines the contract that all batch clients must implement
     to integrate with the agent-actions batch processing system.
     """
 
@@ -297,14 +297,14 @@ class BatchProvider(ABC):
                 except json.JSONDecodeError as e:
                     logger.error(f"JSON parsing error on line {line_num}: {e}")
                     batch_results.append(
-                            BatchResult(
-                                custom_id=f"error_line_{line_num}",
-                                content=None,
-                                success=False,
-                                error=f"JSON parsing error: {e}",
-                                metadata={"line_number": line_num, "raw_line": line[:500]},
-                            )
+                        BatchResult(
+                            custom_id=f"error_line_{line_num}",
+                            content=None,
+                            success=False,
+                            error=f"JSON parsing error: {e}",
+                            metadata={"line_number": line_num, "raw_line": line[:500]},
                         )
+                    )
             return batch_results
 
     def parse_provider_response(self, raw_response: Any) -> BatchResult:
@@ -537,7 +537,7 @@ class BatchProvider(ABC):
         """
         file_name = f"{Path(batch_name).stem}_{provider_name}_batch_input.jsonl"
         file_path = batch_dir / file_name
-        with open(file_path, 'w', encoding='utf-8') as file:
+        with open(file_path, "w", encoding="utf-8") as file:
             for task in tasks:
                 file.write(json.dumps(task) + "\n")
         print(f"{provider_name.title()} batch input file: {file_path}")
@@ -556,7 +556,9 @@ class BatchProvider(ABC):
             List of BatchResult objects
         """
         if not file_path.exists():
-            from agent_actions.errors import VendorAPIError  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import (
+                VendorAPIError,
+            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
 
             raise VendorAPIError(
                 vendor=self.__class__.__name__,
@@ -564,7 +566,7 @@ class BatchProvider(ABC):
                 context={"message": "Batch output file not found", "expected_path": str(file_path)},
             )
         batch_results = []
-        with open(file_path, 'r', encoding='utf-8') as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 if line.strip():
                     try:

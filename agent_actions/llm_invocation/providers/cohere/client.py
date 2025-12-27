@@ -1,5 +1,5 @@
 """
-Cohere handler for agent-actions LLM invocation.
+Cohere client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Cohere API integration.
@@ -9,19 +9,20 @@ import logging
 from textwrap import dedent
 import cohere  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
-    GenericErrorHandlerMixin
+    GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
 
 
-class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
-    """Cohere API handler for JSON and non-JSON LLM invocations."""
+class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Cohere API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -34,9 +35,19 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             response = co.chat(
                 model=model_name, message=prompt_dedent, response_format={"type": "json_object"}
             )
+            # Extract token usage (Cohere v1 uses meta.tokens)
+            if hasattr(response, "meta") and response.meta and hasattr(response.meta, "tokens"):
+                tokens = response.meta.tokens
+                set_last_usage(
+                    {
+                        "input_tokens": tokens.input_tokens,
+                        "output_tokens": tokens.output_tokens,
+                        "total_tokens": tokens.input_tokens + tokens.output_tokens,
+                    }
+                )
             intermediate_json = response.text
 
-            return CohereHandler.parse_json_response(
+            return CohereClient.parse_json_response(
                 response_content=intermediate_json,
                 vendor_name="Cohere",
                 operation="call_json",
@@ -45,7 +56,7 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
         except VendorAPIError:
             raise
         except Exception as e:
-            CohereHandler.handle_generic_error(e, "Cohere", "call_json", model_name)
+            CohereClient.handle_generic_error(e, "Cohere", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -56,6 +67,16 @@ class CohereHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMix
             prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
             messages = [{"role": "user", "content": dedent(prompt)}]
             response = co.chat(model=model_name, messages=messages)
+            # Extract token usage (Cohere v2 uses usage.tokens)
+            if hasattr(response, "usage") and response.usage and hasattr(response.usage, "tokens"):
+                tokens = response.usage.tokens
+                set_last_usage(
+                    {
+                        "input_tokens": tokens.input_tokens,
+                        "output_tokens": tokens.output_tokens,
+                        "total_tokens": tokens.input_tokens + tokens.output_tokens,
+                    }
+                )
             response_message = response.message.content[0].text
 
             logger.debug(

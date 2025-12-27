@@ -7,7 +7,7 @@ import re
 from typing import List, Pattern
 
 from agent_actions.logging.context import CorrelationContext
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 
 
 class ContextInjectingFilter(logging.Filter):
@@ -27,7 +27,7 @@ class ContextInjectingFilter(logging.Filter):
 
     def __repr__(self) -> str:
         """Return string representation of filter."""
-        return f'{self.__class__.__name__}()'
+        return f"{self.__class__.__name__}()"
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Add context fields to log record.
@@ -42,22 +42,22 @@ class ContextInjectingFilter(logging.Filter):
 
         if ctx:
             record.correlation_id = ctx.correlation_id
-            record.workflow_name = ctx.workflow_name or ''
-            record.agent_name = ctx.agent_name or ''
+            record.workflow_name = ctx.workflow_name or ""
+            record.agent_name = ctx.agent_name or ""
             record.agent_index = ctx.agent_index if ctx.agent_index is not None else -1
-            record.batch_id = ctx.batch_id or ''
-            record.item_id = ctx.item_id or ''
+            record.batch_id = ctx.batch_id or ""
+            record.item_id = ctx.item_id or ""
             # Add any extra context
             for key, value in ctx.extra.items():
                 if not hasattr(record, key):
                     setattr(record, key, value)
         else:
-            record.correlation_id = ''
-            record.workflow_name = ''
-            record.agent_name = ''
+            record.correlation_id = ""
+            record.workflow_name = ""
+            record.agent_name = ""
             record.agent_index = -1
-            record.batch_id = ''
-            record.item_id = ''
+            record.batch_id = ""
+            record.item_id = ""
 
         return True
 
@@ -78,15 +78,15 @@ class RedactingFilter(logging.Filter):
         r'secret["\']?\s*[:=]\s*["\']?[\w-]+',
         r'token["\']?\s*[:=]\s*["\']?[\w-]+',
         r'password["\']?\s*[:=]\s*["\']?[\w-]+',
-        r'sk-[a-zA-Z0-9]{20,}',  # OpenAI keys
-        r'sk-ant-[a-zA-Z0-9-]{20,}',  # Anthropic keys
-        r'AIza[a-zA-Z0-9_-]{35}',  # Google API keys
+        r"sk-[a-zA-Z0-9]{20,}",  # OpenAI keys
+        r"sk-ant-[a-zA-Z0-9-]{20,}",  # Anthropic keys
+        r"AIza[a-zA-Z0-9_-]{35}",  # Google API keys
     ]
 
     def __init__(
         self,
         patterns: List[str] | None = None,
-        name: str = '',
+        name: str = "",
     ) -> None:
         """Initialize the redacting filter.
 
@@ -102,22 +102,22 @@ class RedactingFilter(logging.Filter):
             try:
                 compiled = re.compile(pattern, re.IGNORECASE)
                 # Determine replacement based on pattern type
-                if 'api' in pattern.lower():
-                    replacement = 'api_key=***'
-                elif 'secret' in pattern.lower():
-                    replacement = 'secret=***'
-                elif 'token' in pattern.lower():
-                    replacement = 'token=***'
-                elif 'password' in pattern.lower():
-                    replacement = 'password=***'
-                elif pattern.startswith(r'sk-'):
-                    replacement = 'sk-***'
-                elif pattern.startswith(r'sk-ant'):
-                    replacement = 'sk-ant-***'
-                elif pattern.startswith(r'AIza'):
-                    replacement = 'AIza***'
+                if "api" in pattern.lower():
+                    replacement = "api_key=***"
+                elif "secret" in pattern.lower():
+                    replacement = "secret=***"
+                elif "token" in pattern.lower():
+                    replacement = "token=***"
+                elif "password" in pattern.lower():
+                    replacement = "password=***"
+                elif pattern.startswith(r"sk-"):
+                    replacement = "sk-***"
+                elif pattern.startswith(r"sk-ant"):
+                    replacement = "sk-ant-***"
+                elif pattern.startswith(r"AIza"):
+                    replacement = "AIza***"
                 else:
-                    replacement = '***'
+                    replacement = "***"
                 self._compiled_patterns.append((compiled, replacement))
             except re.error:
                 # Skip invalid patterns
@@ -125,7 +125,7 @@ class RedactingFilter(logging.Filter):
 
     def __repr__(self) -> str:
         """Return string representation of filter."""
-        return f'{self.__class__.__name__}(patterns={len(self._compiled_patterns)})'
+        return f"{self.__class__.__name__}(patterns={len(self._compiled_patterns)})"
 
     def filter(self, record: logging.LogRecord) -> bool:
         """Redact sensitive patterns from message and extra fields.
@@ -159,15 +159,38 @@ class RedactingFilter(logging.Filter):
             record: The log record to modify.
         """
         # Sensitive key patterns to check in attribute names
-        sensitive_keys = ['api_key', 'key', 'token', 'password', 'secret', 'authorization']
+        sensitive_keys = ["api_key", "key", "token", "password", "secret", "authorization"]
 
         # Standard LogRecord attributes that should not be redacted
         standard_attrs = {
-            'name', 'msg', 'args', 'created', 'filename', 'funcName', 'levelname',
-            'levelno', 'lineno', 'module', 'msecs', 'message', 'pathname', 'process',
-            'processName', 'relativeCreated', 'thread', 'threadName', 'exc_info',
-            'exc_text', 'stack_info', 'getMessage', 'correlation_id', 'workflow_name',
-            'agent_name', 'agent_index', 'batch_id', 'item_id'
+            "name",
+            "msg",
+            "args",
+            "created",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "module",
+            "msecs",
+            "message",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+            "getMessage",
+            "correlation_id",
+            "workflow_name",
+            "agent_name",
+            "agent_index",
+            "batch_id",
+            "item_id",
         }
 
         # Iterate through record attributes (extra fields are added as attributes)
@@ -179,7 +202,7 @@ class RedactingFilter(logging.Filter):
 
             # Check if attribute name contains sensitive keywords
             if any(key in attr.lower() for key in sensitive_keys):
-                setattr(record, attr, '[REDACTED]')
+                setattr(record, attr, "[REDACTED]")
             # Recursively redact nested structures (dicts, lists)
             elif isinstance(value, (dict, list)):
                 setattr(record, attr, self._redact_nested(value))
@@ -194,7 +217,7 @@ class RedactingFilter(logging.Filter):
     def _redact_nested(self, data):
         """Redact sensitive data from nested structures.
 
-        Uses the redaction utility from BaseVendorHandler for consistent redaction.
+        Uses the redaction utility from BaseClient for consistent redaction.
 
         Args:
             data: Nested dict or list to redact.
@@ -202,4 +225,4 @@ class RedactingFilter(logging.Filter):
         Returns:
             Redacted copy of the data.
         """
-        return BaseVendorHandler.redact_sensitive_data(data)
+        return BaseClient.redact_sensitive_data(data)

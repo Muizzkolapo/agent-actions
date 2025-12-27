@@ -1,13 +1,13 @@
 """
-Ollama Local Batch Provider - Simple local batch simulation.
+Ollama Local Batch Client - Simple local batch simulation.
 
-This provider simulates batch processing by:
+This client simulates batch processing by:
 1. Writing input JSONL files
 2. Processing all requests immediately using Ollama
 3. Writing output JSONL files
 
 No external API server needed - everything runs in-process.
-Registry tracking is handled by BatchService, not this provider.
+Registry tracking is handled by BatchService, not this client.
 """
 
 import json
@@ -17,16 +17,16 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 
 from ollama import Client
-from ..base import BatchProvider, BatchTask, BatchResult
+from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
 
 
-class OllamaLocalBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
+class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
     """
-    Ollama local batch provider with in-process simulation.
+    Ollama local batch client with in-process simulation.
 
-    This provider processes batches synchronously but maintains
-    the same interface as true async providers (OpenAI, Anthropic).
+    This client processes batches synchronously but maintains
+    the same interface as true async clients (OpenAI, Anthropic).
     """
 
     def __init__(self, base_url: Optional[str] = None):
@@ -97,7 +97,7 @@ class OllamaLocalBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
 
         # Read tasks from input file
         tasks = []
-        with open(input_file, 'r', encoding='utf-8') as f:
+        with open(input_file, "r", encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     tasks.append(json.loads(line))
@@ -160,7 +160,7 @@ class OllamaLocalBatchProvider(OpenAICompatibleResponseMixin, BatchProvider):
         batch_dir = input_file.parent
         output_file_path = batch_dir / f"{batch_id}_results.jsonl"
 
-        with open(output_file_path, 'w', encoding='utf-8') as f:
+        with open(output_file_path, "w", encoding="utf-8") as f:
             for result in results:
                 f.write(json.dumps(result) + "\n")
 

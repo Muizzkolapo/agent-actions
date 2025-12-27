@@ -1,5 +1,5 @@
 """
-Mistral handler for agent-actions LLM invocation.
+Mistral client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Mistral API integration.
@@ -9,19 +9,20 @@ import logging
 from textwrap import dedent
 from mistralai import Mistral  # pylint: disable=import-error
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
     JSONResponseMixin,
-    GenericErrorHandlerMixin
+    GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
 
 
-class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMixin):
-    """Mistral AI API handler for JSON and non-JSON LLM invocations."""
+class MistralClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
+    """Mistral AI API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
     def call_json(api_key, agent_config, prompt_config, context_data, schema):
@@ -35,9 +36,18 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
             chat_response = client.chat.complete(
                 model=model_name, response_format={"type": "json_object"}, messages=messages
             )
+            # Extract token usage
+            if chat_response.usage:
+                set_last_usage(
+                    {
+                        "input_tokens": chat_response.usage.prompt_tokens,
+                        "output_tokens": chat_response.usage.completion_tokens,
+                        "total_tokens": chat_response.usage.total_tokens,
+                    }
+                )
             response_content = chat_response.choices[0].message.content
 
-            return MistralHandler.parse_json_response(
+            return MistralClient.parse_json_response(
                 response_content=response_content,
                 vendor_name="Mistral",
                 operation="call_json",
@@ -46,7 +56,7 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
         except VendorAPIError:
             raise
         except Exception as e:
-            MistralHandler.handle_generic_error(e, "Mistral", "call_json", model_name)
+            MistralClient.handle_generic_error(e, "Mistral", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -58,6 +68,15 @@ class MistralHandler(BaseVendorHandler, JSONResponseMixin, GenericErrorHandlerMi
             prompt_dedent = dedent(prompt)
             messages = [{"role": "user", "content": prompt_dedent}]
             chat_response = client.chat.complete(model=model_name, messages=messages)
+            # Extract token usage
+            if chat_response.usage:
+                set_last_usage(
+                    {
+                        "input_tokens": chat_response.usage.prompt_tokens,
+                        "output_tokens": chat_response.usage.completion_tokens,
+                        "total_tokens": chat_response.usage.total_tokens,
+                    }
+                )
             response_output = chat_response.choices[0].message.content
 
             logger.debug(

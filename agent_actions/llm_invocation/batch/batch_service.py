@@ -1,4 +1,5 @@
 """Batch processing service for managing batch job lifecycle and results."""
+
 import json
 import logging
 from pathlib import Path
@@ -10,7 +11,7 @@ from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDa
 from agent_actions.io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
 from agent_actions.orchestration.dependency_injection import registry
-from agent_actions.llm_invocation.providers.base import BatchProvider, BatchResult
+from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient, BatchResult
 from agent_actions.errors import (
     ConfigValidationError,
     ExternalServiceError,
@@ -23,7 +24,7 @@ from agent_actions.llm_invocation.batch.batch_result_processor import BatchResul
 from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPreparator
 from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
 from agent_actions.llm_invocation.batch.batch_side_output_handler import BatchSideOutputHandler
-from agent_actions.llm_invocation.batch.batch_provider_resolver import BatchProviderResolver
+from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +40,14 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
-        provider: Optional[BatchProvider] = None,
+        provider: Optional[BaseBatchClient] = None,
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         force_batch: bool = False,
         task_preparator: Optional[BatchTaskPreparator] = None,
         result_processor: Optional[BatchResultProcessor] = None,
         context_manager: Optional[BatchContextManager] = None,
-        provider_resolver: Optional[BatchProviderResolver] = None,
+        client_resolver: Optional[BatchClientResolver] = None,
         job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
         source_handler: Optional[Any] = None,  # BatchSourceHandler
     ):
@@ -67,12 +68,10 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         )
         self._result_processor = result_processor or BatchResultProcessor()
         self._context_manager = context_manager or BatchContextManager()
-        self._provider_resolver = provider_resolver or BatchProviderResolver(
-            provider_cache=self._provider_cache, default_provider=self.provider
+        self._client_resolver = client_resolver or BatchClientResolver(
+            client_cache=self._provider_cache, default_client=self.provider
         )
-        self._job_manager = job_manager or BatchJobManager(
-            provider_resolver=self._provider_resolver
-        )
+        self._job_manager = job_manager or BatchJobManager(client_resolver=self._client_resolver)
         self._source_handler = source_handler or BatchSourceHandler()
 
     def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager:
@@ -87,7 +86,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
 
     def prepare_batch_tasks(self, agent_config, data, output_directory=None, batch_name=None):
         """Prepare batch tasks from data (delegates to BatchTaskPreparator)."""
-        provider = self._provider_resolver.get_for_config(agent_config)
+        provider = self._client_resolver.get_for_config(agent_config)
         prepared = self._task_preparator.prepare_tasks(
             agent_config=agent_config,
             data=data,
@@ -139,7 +138,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
 
         self._context_manager.save_batch_context_map(context_map, output_directory, batch_name)
         try:
-            provider = self._provider_resolver.get_for_config(agent_config)
+            provider = self._client_resolver.get_for_config(agent_config)
             provider_type = agent_config.get("model_vendor")
             if not provider_type:
                 raise ConfigValidationError(
@@ -188,28 +187,20 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
     def check_status(self, batch_id: str, output_directory: str = None):
         """Check the status of a batch job."""
         try:
-            manager = (
-                self._get_registry_manager(output_directory) if output_directory else None
-            )
-            provider = self._provider_resolver.get_for_batch_id(
-                batch_id, manager, output_directory
-            )
+            manager = self._get_registry_manager(output_directory) if output_directory else None
+            provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             return provider.check_status(batch_id)
         except Exception as e:
             vendor = (
-                getattr(provider, 'vendor_type', 'unknown')
-                if 'provider' in locals()
-                else 'unknown'
+                getattr(provider, "vendor_type", "unknown") if "provider" in locals() else "unknown"
             )
-            raise ExternalServiceError(
-                vendor, f"Failed to check batch status: {e}", cause=e
-            ) from e
+            raise ExternalServiceError(vendor, f"Failed to check batch status: {e}", cause=e) from e
 
     def retrieve_results(self, batch_id: str, output_dir: str, file_path: str = None):
         """Retrieve and save results from a completed batch job."""
         try:
             manager = self._get_registry_manager(output_dir)
-            provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_dir)
+            provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_dir)
 
             # Get entry from registry
             entry = manager.get_batch_job_by_id(batch_id)
@@ -239,7 +230,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             )
             if not result_file.exists():
                 ensure_directory_exists(output_path)
-                with open(result_file, 'w', encoding='utf-8') as f:
+                with open(result_file, "w", encoding="utf-8") as f:
                     for result in batch_results:
                         raw_format = {
                             "custom_id": result.custom_id,
@@ -256,9 +247,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             return result_file
         except Exception as e:
             vendor = (
-                getattr(provider, 'vendor_type', 'unknown')
-                if 'provider' in locals()
-                else 'unknown'
+                getattr(provider, "vendor_type", "unknown") if "provider" in locals() else "unknown"
             )
             raise ExternalServiceError(
                 vendor, f"Failed to retrieve batch results: {e}", cause=e
@@ -275,7 +264,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         """Process batch results and integrate them into workflow output system."""
         try:
             manager = self._get_registry_manager(output_directory)
-            provider = self._provider_resolver.get_for_batch_id(batch_id, manager, output_directory)
+            provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
             if provider.check_status(batch_id) != "completed":
                 raise ProcessingError("Batch job is not completed", context={"batch_id": batch_id})
@@ -382,7 +371,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                 context_map = self._context_manager.load_batch_context_map(
                     output_directory, file_name or "default"
                 )
-                provider = self._provider_resolver.get_for_batch_id(
+                provider = self._client_resolver.get_for_batch_id(
                     batch_id, manager, output_directory
                 )
                 batch_results = self._retrieve_results(
@@ -486,7 +475,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
 
     def _retrieve_results(
         self,
-        provider: BatchProvider,
+        provider: BaseBatchClient,
         batch_id: str,
         output_directory: Optional[str],
         *,

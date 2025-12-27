@@ -1,24 +1,24 @@
 """
-agent_actions.vendors.ollama_vendor
------------------------------------
-A mirror of OpenAIHandler that supports:
+Ollama client for agent-actions LLM invocation.
+
+A mirror of OpenAIClient that supports:
 
 * Structured output via the `format=` parameter.
 * Optional host override with either:
-    • agent_config["base_url"]  (highest priority)
-    • the environment variable OLLAMA_HOST
-    • default http://localhost:11434
+    - agent_config["base_url"]  (highest priority)
+    - the environment variable OLLAMA_HOST
+    - default http://localhost:11434
 """
 
 import json
 import os
 from ollama import Client  # pylint: disable=import-error
-from agent_actions.llm_invocation.providers.vendor_base import BaseVendorHandler
+from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 
 
-class OllamaHandler(BaseVendorHandler):
-    """Ollama local LLM handler for JSON and non-JSON invocations."""
+class OllamaClient(BaseClient):
+    """Ollama local LLM client for JSON and non-JSON invocations."""
 
     @staticmethod
     def _prep_messages(prompt_config: str, context_data: str):
@@ -88,8 +88,8 @@ class OllamaHandler(BaseVendorHandler):
             if not isinstance(context_data, str)
             else context_data
         )
-        messages = OllamaHandler._prep_messages(prompt_config, ctx_str)
-        response = OllamaHandler._get_client(agent_config).chat(
+        messages = OllamaClient._prep_messages(prompt_config, ctx_str)
+        response = OllamaClient._get_client(agent_config).chat(
             model=model, messages=messages, stream=False
         )
         output_field = agent_config.get("output_field", "raw_response")
