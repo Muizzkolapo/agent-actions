@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 500">
+  <!-- Background -->
+  <rect width="900" height="500" fill="#0f172a"/>
+
+  <!-- Sidebar -->
+  <rect x="0" y="0" width="220" height="500" fill="#1e293b"/>
+
+  <!-- Logo area -->
+  <rect x="16" y="16" width="188" height="40" rx="6" fill="#334155"/>
+  <text x="70" y="42" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#f1f5f9">Agent-Actions</text>
+
+  <!-- Search bar -->
+  <rect x="16" y="68" width="188" height="32" rx="6" fill="#334155"/>
+  <text x="28" y="89" font-family="system-ui, sans-serif" font-size="12" fill="#64748b">Search workflows...</text>
+
+  <!-- Nav sections -->
+  <text x="16" y="130" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#64748b">OVERVIEW</text>
+  <rect x="16" y="140" width="188" height="28" rx="4" fill="#3b82f6" opacity="0.2"/>
+  <text x="28" y="159" font-family="system-ui, sans-serif" font-size="13" fill="#3b82f6">Project Home</text>
+
+  <text x="16" y="195" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#64748b">WORKFLOWS</text>
+  <text x="28" y="218" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">ecommerce-pipeline</text>
+  <text x="28" y="242" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">content-analysis</text>
+  <text x="28" y="266" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">data-extraction</text>
+
+  <text x="16" y="305" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#64748b">ACTIONS</text>
+  <text x="28" y="328" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">feature_extraction</text>
+  <text x="28" y="352" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">seo_description</text>
+  <text x="28" y="376" font-family="system-ui, sans-serif" font-size="13" fill="#94a3b8">sentiment_analysis</text>
+
+  <!-- Main content area -->
+  <rect x="220" y="0" width="680" height="500" fill="#0f172a"/>
+
+  <!-- Header -->
+  <text x="252" y="48" font-family="system-ui, sans-serif" font-size="24" font-weight="700" fill="#f1f5f9">Project Overview</text>
+  <text x="252" y="72" font-family="system-ui, sans-serif" font-size="14" fill="#64748b">Agent-Actions documentation and lineage</text>
+
+  <!-- Live indicator -->
+  <circle cx="830" cy="40" r="5" fill="#22c55e"/>
+  <text x="842" y="45" font-family="system-ui, sans-serif" font-size="12" fill="#22c55e">Live</text>
+
+  <!-- Stats cards -->
+  <rect x="252" y="100" width="145" height="90" rx="8" fill="#1e293b"/>
+  <text x="272" y="135" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="#3b82f6">3</text>
+  <text x="272" y="165" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8">Workflows</text>
+
+  <rect x="412" y="100" width="145" height="90" rx="8" fill="#1e293b"/>
+  <text x="432" y="135" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="#8b5cf6">12</text>
+  <text x="432" y="165" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8">Actions</text>
+
+  <rect x="572" y="100" width="145" height="90" rx="8" fill="#1e293b"/>
+  <text x="592" y="135" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="#f59e0b">8</text>
+  <text x="592" y="165" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8">Prompts</text>
+
+  <rect x="732" y="100" width="145" height="90" rx="8" fill="#1e293b"/>
+  <text x="752" y="135" font-family="system-ui, sans-serif" font-size="32" font-weight="700" fill="#22c55e">6</text>
+  <text x="752" y="165" font-family="system-ui, sans-serif" font-size="14" fill="#94a3b8">Schemas</text>
+
+  <!-- Workflow DAG visualization -->
+  <rect x="252" y="210" width="400" height="270" rx="8" fill="#1e293b"/>
+  <text x="272" y="240" font-family="system-ui, sans-serif" font-size="16" font-weight="600" fill="#f1f5f9">Workflow: ecommerce-pipeline</text>
+
+  <!-- DAG nodes -->
+  <rect x="292" y="280" width="120" height="50" rx="6" fill="#3b82f6"/>
+  <text x="312" y="310" font-family="system-ui, sans-serif" font-size="11" fill="white">feature_extraction</text>
+
+  <!-- Arrows -->
+  <path d="M412 305 L440 305 L440 285 L470 285" stroke="#64748b" stroke-width="2" fill="none"/>
+  <path d="M412 305 L440 305 L440 355 L470 355" stroke="#64748b" stroke-width="2" fill="none"/>
+
+  <rect x="470" y="260" width="120" height="50" rx="6" fill="#8b5cf6"/>
+  <text x="490" y="290" font-family="system-ui, sans-serif" font-size="11" fill="white">seo_description</text>
+
+  <rect x="470" y="330" width="120" height="50" rx="6" fill="#22c55e"/>
+  <text x="478" y="360" font-family="system-ui, sans-serif" font-size="11" fill="white">sentiment_analysis</text>
+
+  <!-- Recent runs table -->
+  <rect x="672" y="210" width="205" height="270" rx="8" fill="#1e293b"/>
+  <text x="692" y="240" font-family="system-ui, sans-serif" font-size="16" font-weight="600" fill="#f1f5f9">Recent Runs</text>
+
+  <rect x="692" y="260" width="165" height="36" rx="4" fill="#334155"/>
+  <circle cx="712" cy="278" r="6" fill="#22c55e"/>
+  <text x="728" y="282" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">2024-12-28 14:32</text>
+
+  <rect x="692" y="304" width="165" height="36" rx="4" fill="#334155"/>
+  <circle cx="712" cy="322" r="6" fill="#22c55e"/>
+  <text x="728" y="326" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">2024-12-28 12:15</text>
+
+  <rect x="692" y="348" width="165" height="36" rx="4" fill="#334155"/>
+  <circle cx="712" cy="366" r="6" fill="#f59e0b"/>
+  <text x="728" y="370" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">2024-12-27 09:45</text>
+
+  <rect x="692" y="392" width="165" height="36" rx="4" fill="#334155"/>
+  <circle cx="712" cy="410" r="6" fill="#22c55e"/>
+  <text x="728" y="414" font-family="system-ui, sans-serif" font-size="12" fill="#94a3b8">2024-12-26 16:20</text>
+</svg>

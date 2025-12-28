@@ -53,6 +53,22 @@ agac run
 
 ---
 
+## Observability Dashboard
+
+Generate interactive documentation for your workflows with `agac docs serve`:
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Muizzkolapo/agent-actions/main/docs/assets/dashboard-preview.svg" alt="Observability Dashboard" width="800">
+</p>
+
+**Features:**
+- Visual DAG representation of workflow dependencies
+- Browse all actions, prompts, and schemas
+- Track workflow run history
+- Search across your entire project
+
+---
+
 ## Features
 
 - **🔌 Multi-vendor LLM support** — Switch between providers with a single config change
