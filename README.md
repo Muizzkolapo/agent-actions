@@ -1,11 +1,25 @@
-# agent-actions
+<h1 align="center">agent-actions</h1>
 
-[![PyPI version](https://img.shields.io/pypi/v/agent-actions.svg)](https://pypi.org/project/agent-actions/)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![CI](https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg)](https://github.com/Muizzkolapo/agent-actions/actions)
-[![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](LICENSE)
+<p align="center">
+  <strong>Declarative YAML-based framework for orchestrating LLM workflows</strong>
+</p>
 
-> Declarative YAML-based framework for orchestrating LLM workflows with batch processing
+<p align="center">
+  <a href="https://pypi.org/project/agent-actions/"><img src="https://img.shields.io/pypi/v/agent-actions.svg" alt="PyPI version"></a>
+  <a href="https://pypi.org/project/agent-actions/"><img src="https://img.shields.io/pypi/dm/agent-actions" alt="Downloads"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.11+-blue.svg" alt="Python 3.11+"></a>
+  <a href="https://github.com/Muizzkolapo/agent-actions/actions"><img src="https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Elastic--2.0-blue.svg" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href="https://muizzkolapo.github.io/docs.agent-actions">Documentation</a> •
+  <a href="https://muizzkolapo.github.io/docs.agent-actions/getting-started">Getting Started</a> •
+  <a href="https://github.com/Muizzkolapo/agent-actions/issues">Issues</a> •
+  <a href="#community">Community</a>
+</p>
+
+---
 
 ## What is agent-actions?
 
@@ -35,13 +49,43 @@ actions:
 agac run
 ```
 
+> ⭐ If you find agent-actions useful, please consider giving it a star! It helps others discover the project.
+
+---
+
+## Features
+
+- **🔌 Multi-vendor LLM support** — Switch between providers with a single config change
+- **📝 Declarative YAML configuration** — Define complex workflows without writing code
+- **🔀 DAG-based execution** — Automatic dependency resolution with parallel execution
+- **📦 Batch processing** — Process thousands of records with automatic retries
+- **🔄 Reprompting & validation** — Built-in output validation with LLM retry
+- **🛠️ User-defined functions (UDFs)** — Extend with custom Python functions
+- **📚 Documentation generation** — Auto-generate interactive workflow docs
+
+---
+
+## Supported LLM Providers
+
+| Provider | Models | Batch API |
+|----------|--------|-----------|
+| <img src="https://img.shields.io/badge/OpenAI-412991?logo=openai&logoColor=white" alt="OpenAI"> | GPT-4o, GPT-4o-mini, GPT-4-turbo | ✅ |
+| <img src="https://img.shields.io/badge/Anthropic-191919?logo=anthropic&logoColor=white" alt="Anthropic"> | Claude 3.5 Sonnet, Claude 3 Haiku/Opus | ✅ |
+| <img src="https://img.shields.io/badge/Google-4285F4?logo=google&logoColor=white" alt="Google"> | Gemini 1.5 Pro, Gemini 1.5 Flash | ✅ |
+| <img src="https://img.shields.io/badge/Groq-000000?logo=groq&logoColor=white" alt="Groq"> | Llama 3.1, Mixtral | ✅ |
+| <img src="https://img.shields.io/badge/Mistral-000000?logoColor=white" alt="Mistral"> | Mistral Large, Mistral Small | ✅ |
+| <img src="https://img.shields.io/badge/Cohere-000000?logoColor=white" alt="Cohere"> | Command R, Command R+ | ❌ Realtime only |
+| <img src="https://img.shields.io/badge/Ollama-000000?logoColor=white" alt="Ollama"> | Llama, Mistral, Phi (local) | ❌ Realtime only |
+
+---
+
 ## Installation
 
 ```bash
 pip install agent-actions
 ```
 
-## Quick Start
+### Quick Start
 
 ```bash
 # Initialize a new project
@@ -52,15 +96,30 @@ cd my-project
 agac run
 ```
 
-## Features
+---
 
-- **Multi-vendor LLM support** — OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, Ollama
-- **Declarative YAML configuration** — Define workflows without code
-- **DAG-based execution** — Automatic dependency resolution with parallel execution
-- **Batch processing** — Process thousands of records with automatic retries
-- **Reprompting & validation** — Built-in output validation with LLM retry
-- **User-defined functions (UDFs)** — Extend with Python functions
-- **Documentation generation** — Auto-generate interactive workflow docs
+## How It Works
+
+```mermaid
+flowchart LR
+    A[YAML Config] --> B[Parse & Validate]
+    B --> C[Build DAG]
+    C --> D[Topological Sort]
+    D --> E[Parallel Execution]
+    E --> F[LLM Calls]
+    F --> G[Validate Output]
+    G --> H{Valid?}
+    H -->|Yes| I[Next Action]
+    H -->|No| J[Reprompt]
+    J --> F
+    I --> K[Results]
+```
+
+1. **Define** your workflow in YAML with actions, dependencies, and schemas
+2. **Execute** with `agac run` — dependencies are resolved automatically
+3. **Scale** with batch processing for thousands of records
+
+---
 
 ## CLI Commands
 
@@ -74,8 +133,8 @@ agac run
 | `agac docs serve` | Serve interactive documentation |
 | `agac list-udfs` | List available UDFs |
 | `agac validate-udfs` | Validate UDF implementations |
-| `agac render` | Render Jinja2 templates (debugging) |
-| `agac clean` | Remove temporary directories |
+
+---
 
 ## Example: E-commerce Product Analysis
 
@@ -98,7 +157,7 @@ actions:
       benefits: array
       target_audience: string
 
-  # Step 2: Generate SEO-optimized descriptions (depends on step 1)
+  # Step 2: Generate SEO descriptions (depends on step 1)
   - name: seo_description
     intent: Generate SEO-optimized product description
     dependencies: [feature_extraction]
@@ -121,36 +180,51 @@ actions:
       confidence: number
 ```
 
-## Batch Processing
-
-Process large datasets efficiently with the batch API:
-
-```bash
-# Check status of running batch jobs
-agac batch status
-
-# Retrieve completed results
-agac batch retrieve -o ./results
-```
+---
 
 ## Documentation
 
-- [Getting Started Guide](https://muizzkolapo.github.io/docs.agent-actions)
-- [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration-schema)
-- [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli)
-- [Reprompting Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/reprompting)
+| Resource | Description |
+|----------|-------------|
+| [Getting Started](https://muizzkolapo.github.io/docs.agent-actions) | Installation and first workflow |
+| [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration-schema) | Full YAML schema documentation |
+| [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli) | All CLI commands and options |
+| [Reprompting Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/reprompting) | Output validation and retry |
+| [UDF Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/udfs) | Custom Python functions |
+
+---
+
+## Community
+
+- **GitHub Issues** — [Report bugs or request features](https://github.com/Muizzkolapo/agent-actions/issues)
+- **Discussions** — [Ask questions and share ideas](https://github.com/Muizzkolapo/agent-actions/discussions)
+
+### Contributing
+
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for details.
+
+```bash
+# Clone the repo
+git clone https://github.com/Muizzkolapo/agent-actions.git
+cd agent-actions
+
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+```
+
+---
 
 ## License
 
 This project is licensed under the [Elastic License 2.0](LICENSE).
 
-**You CAN:**
-- Use for internal business purposes
-- Modify and create derivative works
-- Distribute copies
-
-**You CANNOT:**
-- Provide as a hosted/managed service to third parties
-- Circumvent license key functionality
+| You CAN | You CANNOT |
+|---------|------------|
+| ✅ Use for internal business purposes | ❌ Provide as a hosted/managed service |
+| ✅ Modify and create derivative works | ❌ Circumvent license key functionality |
+| ✅ Distribute copies | |
 
 See [LICENSE](LICENSE) for the full license text.
