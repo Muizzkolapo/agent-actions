@@ -1,164 +1,156 @@
-# Conditional Reprompting Examples
-  # workflow.yml - E-commerce product analysis pipeline
-This directory contains examples demonstrating how to use the conditional reprompting feature in agent-actions.
+# agent-actions
 
-## Overview
+[![PyPI version](https://img.shields.io/pypi/v/agent-actions.svg)](https://pypi.org/project/agent-actions/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/Muizzkolapo/agent-actions/actions/workflows/ci.yml/badge.svg)](https://github.com/Muizzkolapo/agent-actions/actions)
+[![License: Elastic-2.0](https://img.shields.io/badge/License-Elastic--2.0-blue.svg)](LICENSE)
 
-The conditional reprompting system allows you to:
-1. **Validate** LLM outputs against custom criteria
-2. **Automatically retry** with improved prompts when validation fails
-3. **Learn from failures** to generate better prompts using LLM or templates
+> Declarative YAML-based framework for orchestrating LLM workflows with batch processing
 
-## Examples
+## What is agent-actions?
 
-### 1. Basic Word Count (`basic_word_count.yaml`)
-- Simple validation for exact word count
-- LLM-based reprompt generation
-- Good starting point for understanding the system
-
-### 2. Advanced Product Description (`advanced_product_description.yaml`)
-- Multiple validation criteria (character count + keywords)
-- Template-based reprompting with specific error patterns
-- Shows how to chain multiple validators
-
-### 3. Custom Validators (`custom_validator_example.py`)
-- How to create and register custom validation functions
-- Examples for JSON, email, sentiment, and business rule validation
-- Integration patterns with the validator registry
-
-## Configuration Structure
+Define multi-step LLM workflows in YAML. Execute with one command. **agent-actions** handles dependency resolution, parallel execution, batch processing, and multi-vendor LLM support.
 
 ```yaml
-agents:
-  - agent_type: YourAgentType
-    model_vendor: "openai"
-    model_name: "gpt-4"
-    prompt: "Your base prompt"
-    
-    interceptors:
-      # Validation interceptors
-      - type: validation
-        config:
-          validator_function: "module.function_name"
-          validator_args:
-            param1: value1
-            param2: value2
-          on_failure: retry  # or "fail" or "continue"
-      
-      # Reprompt interceptor
-      - type: reprompt
-        config:
-          strategy: "llm"  # or "template"
-          max_attempts: 3
-          llm_config:  # For LLM strategy
-            model_vendor: "openai"
-            model_name: "gpt-4"
-          templates:  # For template strategy
-            "error_pattern": "Improved prompt template"
+# workflow.yml
+name: product-analysis
+version: "1.0"
+
+actions:
+  - name: extract_features
+    intent: Extract key product features from description
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    schema:
+      features: array
+      sentiment: string
+
+  - name: generate_summary
+    intent: Generate marketing summary from features
+    dependencies: [extract_features]
+    observe: [extract_features.features]
 ```
 
-## Built-in Validators
+```bash
+agac run
+```
 
-| Validator | Parameters | Description |
-|-----------|------------|-------------|
-| `word_count` | `expected: int` | Validates exact word count |
-| `char_count` | `min_chars: int, max_chars: int` | Validates character count range |
-| `contains_keywords` | `required_keywords: List[str]` | Validates presence of keywords |
+## Installation
 
-## Reprompt Strategies
+```bash
+pip install agent-actions
+```
 
-### LLM Strategy
-Uses an LLM to analyze the failure and generate an improved prompt:
-- Analyzes the original prompt, validation error, and failed response
-- Generates contextually appropriate improvements
-- Highly flexible but requires additional LLM calls
+## Quick Start
 
-### Template Strategy
-Uses predefined templates matched to error patterns:
-- Fast and deterministic
-- Good for known failure patterns
-- Templates can use variables from validation context
+```bash
+# Initialize a new project
+agac init my-project
+cd my-project
 
-## Best Practices
+# Run the workflow
+agac run
+```
 
-1. **Start Simple**: Begin with built-in validators before creating custom ones
-2. **Chain Wisely**: Order validators from most to least restrictive
-3. **Limit Attempts**: Set reasonable `max_attempts` to avoid infinite loops
-4. **Template Patterns**: Use specific error message patterns in templates
-5. **Test Thoroughly**: Validate your validation logic with edge cases
+## Features
 
-## Validator Functions
+- **Multi-vendor LLM support** — OpenAI, Anthropic, Gemini, Groq, Mistral, Cohere, Ollama
+- **Declarative YAML configuration** — Define workflows without code
+- **DAG-based execution** — Automatic dependency resolution with parallel execution
+- **Batch processing** — Process thousands of records with automatic retries
+- **Reprompting & validation** — Built-in output validation with LLM retry
+- **User-defined functions (UDFs)** — Extend with Python functions
+- **Documentation generation** — Auto-generate interactive workflow docs
 
-The system supports two types of validator functions:
+## CLI Commands
 
-### Built-in Validators
-Use the pre-built validators for common validation needs:
+| Command | Description |
+|---------|-------------|
+| `agac init <name>` | Initialize a new project |
+| `agac run` | Execute workflow |
+| `agac batch status` | Check batch job status |
+| `agac batch retrieve` | Retrieve batch results |
+| `agac status` | Show workflow execution status |
+| `agac docs serve` | Serve interactive documentation |
+| `agac list-udfs` | List available UDFs |
+| `agac validate-udfs` | Validate UDF implementations |
+| `agac render` | Render Jinja2 templates (debugging) |
+| `agac clean` | Remove temporary directories |
+
+## Example: E-commerce Product Analysis
 
 ```yaml
-# Word count validation
-validator_function: "agent_actions.validators.builtin_functions.word_count_validator"
-validator_args:
-  expected: 5
+name: ecommerce-pipeline
+version: "1.0"
 
-# Character count validation
-validator_function: "agent_actions.validators.builtin_functions.char_count_validator"
-validator_args:
-  min_chars: 100
-  max_chars: 300
+input:
+  source: products.csv
+  columns: [product_id, title, description]
 
-# Keywords validation
-validator_function: "agent_actions.validators.builtin_functions.keywords_validator"
-validator_args:
-  required_keywords: ["features", "benefits", "price"]
+actions:
+  # Step 1: Extract features from product descriptions
+  - name: feature_extraction
+    intent: Extract key features, benefits, and target audience
+    model_vendor: anthropic
+    model_name: claude-3-haiku
+    schema:
+      features: array
+      benefits: array
+      target_audience: string
+
+  # Step 2: Generate SEO-optimized descriptions (depends on step 1)
+  - name: seo_description
+    intent: Generate SEO-optimized product description
+    dependencies: [feature_extraction]
+    observe: [feature_extraction.features, feature_extraction.benefits]
+    model_vendor: openai
+    model_name: gpt-4o-mini
+    schema:
+      seo_title: string
+      meta_description: string
+      keywords: array
+
+  # Step 3: Sentiment analysis (runs in parallel with step 2)
+  - name: sentiment_analysis
+    intent: Analyze sentiment of original description
+    dependencies: [feature_extraction]
+    model_vendor: groq
+    model_name: llama-3.1-8b-instant
+    schema:
+      sentiment: string
+      confidence: number
 ```
 
-### Custom Validators
-Create your own validator functions:
+## Batch Processing
 
-```python
-from typing import Tuple
+Process large datasets efficiently with the batch API:
 
-def your_validator(content: str, **kwargs) -> Tuple[bool, str | None]:
-    \"\"\"
-    Your validator description.
-    
-    Args:
-        content: The LLM response content to validate
-        **kwargs: Additional validation parameters
-    
-    Returns:
-        Tuple of (success: bool, error_message: str | None)
-    \"\"\"
-    # Your validation logic here
-    if validation_passes:
-        return True, None
-    else:
-        return False, "Descriptive error message"
+```bash
+# Check status of running batch jobs
+agac batch status
+
+# Retrieve completed results
+agac batch retrieve -o ./results
 ```
 
-Then reference it in your YAML configuration:
-```yaml
-validator_function: "your_module.your_validator"
-validator_args:
-  your_param: your_value
-```
+## Documentation
 
-## Integration with Existing Workflows
+- [Getting Started Guide](https://muizzkolapo.github.io/docs.agent-actions)
+- [Configuration Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/configuration-schema)
+- [CLI Reference](https://muizzkolapo.github.io/docs.agent-actions/reference/cli)
+- [Reprompting Guide](https://muizzkolapo.github.io/docs.agent-actions/guides/reprompting)
 
-The interceptor system is backward compatible. Agents without interceptors work exactly as before. Add interceptors gradually to existing configurations.
+## License
 
-## Performance Considerations
+This project is licensed under the [Elastic License 2.0](LICENSE).
 
-- **Caching**: Successful prompts for similar validation criteria could be cached (future feature)
-- **Early Exit**: Set reasonable max attempts to avoid excessive retries
-- **Template Strategy**: Generally faster than LLM strategy for known patterns
-- **Validation Order**: Put cheaper validations before expensive ones# 🔍 TRACING REMINDER
+**You CAN:**
+- Use for internal business purposes
+- Modify and create derivative works
+- Distribute copies
 
-## For Future Optimization Work:
-When working on artifacts optimization, CHECK:
-1. Are spans instrumented? 
-2. Are artifacts captured in traces?
-3. Is trace correlation maintained?
+**You CANNOT:**
+- Provide as a hosted/managed service to third parties
+- Circumvent license key functionality
 
-See TRACING_REQUIREMENTS.md for details.
-
+See [LICENSE](LICENSE) for the full license text.
