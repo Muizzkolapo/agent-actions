@@ -1,4 +1,5 @@
 """Module for processing target content with specialized components."""
+
 import asyncio
 import logging
 from typing import Dict, List, Optional, Tuple
@@ -25,7 +26,8 @@ from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuil
 
 logger = logging.getLogger(__name__)
 
-@registry.register_processor('target_content')
+
+@registry.register_processor("target_content")
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
@@ -117,9 +119,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_data.extend(result)
             return processed_data
         except Exception as ex:
-            raise ProcessingError(
-                f"Failed to process content: {str(ex)}", cause=ex
-            ) from ex
+            raise ProcessingError(f"Failed to process content: {str(ex)}", cause=ex) from ex
 
     def process(
         self,
@@ -178,9 +178,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     ) from ex
             return processed_data
         except Exception as ex:
-            raise ProcessingError(
-                f"Failed to process content: {str(ex)}", cause=ex
-            ) from ex
+            raise ProcessingError(f"Failed to process content: {str(ex)}", cause=ex) from ex
 
     def process_for_side_output(
         self,
@@ -235,9 +233,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     ) from ex
             return self.data_processor.separate_side_output(all_processed_items)
         except Exception as ex:
-            raise ProcessingError(
-                f"Failed to process for side output: {str(ex)}", cause=ex
-            ) from ex
+            raise ProcessingError(f"Failed to process for side output: {str(ex)}", cause=ex) from ex
 
     def process_file_level(
         self,
@@ -273,16 +269,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return []
         try:
             source_guid = data[0]["source_guid"] if data else None
-            source_data = (
-                self.source_loader.load_source_data(file_path) if file_path else []
-            )
+            source_data = self.source_loader.load_source_data(file_path) if file_path else []
             source_content = (
                 DataTransformer.get_content_by_source_guid(source_data, source_guid)
                 if source_guid
                 else None
             )
-            generated_data, _, passthrough_fields = (
-                self.data_generator.create_agent_with_data(data, source_content)
+            generated_data, _, passthrough_fields = self.data_generator.create_agent_with_data(
+                data, source_content
             )
             model_vendor = (self._get_config_value("model_vendor") or "").lower()
             granularity = (self._get_config_value("granularity") or "record").lower()
@@ -297,15 +291,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 passthrough_fields=passthrough_fields,
             )
         except Exception as ex:
-            raise ProcessingError(
-                f"Failed to process at file level: {str(ex)}", cause=ex
-            ) from ex
+            raise ProcessingError(f"Failed to process at file level: {str(ex)}", cause=ex) from ex
 
     def _process_file_level_tool(
-        self,
-        generated_data,
-        data: List[Dict],
-        source_guid: Optional[str]
+        self, generated_data, data: List[Dict], source_guid: Optional[str]
     ) -> List[Dict]:
         """
         Process file-level tool output with lineage tracking.
@@ -318,13 +307,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         Returns:
             List of tracked data items
         """
-        data_list = (
-            generated_data if isinstance(generated_data, list)
-            else [generated_data]
-        )
+        data_list = generated_data if isinstance(generated_data, list) else [generated_data]
 
-        # Get the first item from input data for lineage inheritance
-        source_item = data[0] if data else {}
+        # Fallback source for records without preserved lineage
+        fallback_source = data[0] if data else {}
 
         # Add lineage tracking to each item with unique node_ids
         base_node_id = IDGenerator.generate_node_id(self.idx)
@@ -339,17 +325,20 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 item_copy = item.copy()
 
                 # Ensure required fields on the copy
-                item_copy = field_manager.ensure_required_fields(
-                    item_copy, source_guid, self.idx
-                )
+                item_copy = field_manager.ensure_required_fields(item_copy, source_guid, self.idx)
 
                 # Generate unique node_id per item
                 node_id = f"{base_node_id}_{i}"
 
+                # Determine source for lineage tracking:
+                # If UDF preserved lineage in output, use it; otherwise use fallback
+                if "lineage" in item and isinstance(item["lineage"], list):
+                    source_item = item  # UDF preserved lineage - use it
+                else:
+                    source_item = fallback_source  # Legacy fallback
+
                 # Add lineage tracking to the copy
-                item_copy = LineageBuilder.add_lineage_tracking(
-                    item_copy, source_item, node_id
-                )
+                item_copy = LineageBuilder.add_lineage_tracking(item_copy, source_item, node_id)
 
                 tracked_data.append(item_copy)
             else:
@@ -369,17 +358,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         if hasattr(self.source_loader, "load_source_data_async"):
             return await self.source_loader.load_source_data_async(file_path)
-        return await asyncio.to_thread(
-            self.source_loader.load_source_data, file_path
-        )
+        return await asyncio.to_thread(self.source_loader.load_source_data, file_path)
 
     # pylint: disable=too-many-locals
-    async def _process_single_item_async(
-        self,
-        item: Dict,
-        *args,
-        **kwargs
-    ) -> List[Dict]:
+    async def _process_single_item_async(self, item: Dict, *args, **kwargs) -> List[Dict]:
         """
         Process a single data item asynchronously using proper async patterns.
 
@@ -395,32 +377,30 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             ValueError: If item processing fails
         """
         source_data = args[0] if args else []
-        file_path = kwargs.get('file_path')
-        record_index = kwargs.get('record_index')
+        file_path = kwargs.get("file_path")
+        record_index = kwargs.get("record_index")
 
         try:
             contents, source_guid = (item["content"], item["source_guid"])
-            source_content = DataTransformer.get_content_by_source_guid(
-                source_data, source_guid
-            )
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
             if hasattr(self.data_generator, "create_agent_with_data_async"):
-                generated_data, executed, passthrough_fields = (
-                    await self.data_generator.create_agent_with_data_async(
-                        contents,
-                        source_content,
-                        current_item=item,
-                        file_path=file_path,
-                    )
+                (
+                    generated_data,
+                    executed,
+                    passthrough_fields,
+                ) = await self.data_generator.create_agent_with_data_async(
+                    contents,
+                    source_content,
+                    current_item=item,
+                    file_path=file_path,
                 )
             else:
-                generated_data, executed, passthrough_fields = (
-                    await asyncio.to_thread(
-                        self.data_generator.create_agent_with_data,
-                        contents,
-                        source_content,
-                        current_item=item,
-                        file_path=file_path,
-                    )
+                generated_data, executed, passthrough_fields = await asyncio.to_thread(
+                    self.data_generator.create_agent_with_data,
+                    contents,
+                    source_content,
+                    current_item=item,
+                    file_path=file_path,
                 )
             if executed:
                 if hasattr(self.data_processor, "process_item_async"):
@@ -440,14 +420,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     )
                 base_node_id = IDGenerator.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
-                    obj = FieldManager().ensure_required_fields(
-                        obj, source_guid, self.idx
-                    )
+                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records, append sub-index to node_id
-                    node_id = (
-                        f"{base_node_id}_{i}" if len(processed) > 1 else
-                        base_node_id
-                    )
+                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
                     obj = LoopIdGenerator.add_loop_correlation_id(
                         obj, self.agent_config, record_index=record_index
@@ -471,10 +446,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 # This ensures fields from context_scope.passthrough are
                 # carried forward
                 if passthrough_fields:
-                    if (
-                        "content" in processed_item
-                        and isinstance(processed_item["content"], dict)
-                    ):
+                    if "content" in processed_item and isinstance(processed_item["content"], dict):
                         processed_item["content"].update(passthrough_fields)
                     else:
                         processed_item.update(passthrough_fields)
@@ -554,18 +526,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             )
         )
 
-        filtered_data, filtering_context = (
-            guard_handler.filter_items_online_mode(data, guard_config_dict)
+        filtered_data, filtering_context = guard_handler.filter_items_online_mode(
+            data, guard_config_dict
         )
 
         # Log filtering summary
         summary = filtering_context.get_summary()
         logger.info(
-            "Guard filtering complete: %s included, %s filtered "
-            "(success rate: %.2f%%)",
-            summary['included_items'],
-            summary['filtered_items'],
-            summary['success_rate'] * 100
+            "Guard filtering complete: %s included, %s filtered (success rate: %.2f%%)",
+            summary["included_items"],
+            summary["filtered_items"],
+            summary["success_rate"] * 100,
         )
 
         return filtered_data
@@ -597,9 +568,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         """
         try:
             contents, source_guid = (item["content"], item["source_guid"])
-            source_content = DataTransformer.get_content_by_source_guid(
-                source_data, source_guid
-            )
+            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
             generated_data, executed, passthrough_fields = (
                 self.data_generator.create_agent_with_data(
                     contents,
@@ -617,14 +586,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 )
                 base_node_id = IDGenerator.generate_node_id(self.idx)
                 for i, obj in enumerate(processed):
-                    obj = FieldManager().ensure_required_fields(
-                        obj, source_guid, self.idx
-                    )
+                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records, append sub-index to node_id
-                    node_id = (
-                        f"{base_node_id}_{i}" if len(processed) > 1 else
-                        base_node_id
-                    )
+                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
                     obj = LoopIdGenerator.add_loop_correlation_id(
                         obj, self.agent_config, record_index=record_index
@@ -648,10 +612,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 # This ensures fields from context_scope.passthrough are
                 # carried forward
                 if passthrough_fields:
-                    if (
-                        "content" in processed_item
-                        and isinstance(processed_item["content"], dict)
-                    ):
+                    if "content" in processed_item and isinstance(processed_item["content"], dict):
                         processed_item["content"].update(passthrough_fields)
                     else:
                         processed_item.update(passthrough_fields)
