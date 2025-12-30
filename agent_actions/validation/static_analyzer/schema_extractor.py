@@ -2,14 +2,15 @@
 
 Handles schema extraction from:
 - LLM agents: from `schema` or `output_schema` field
-- Tool/UDF agents: from UDF_REGISTRY json_output_schema
+- Tool/UDF agents: from Python files via AST parsing (using impl field)
 - Non-JSON agents: fallback to content field
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from agent_actions.docs.parser import WorkflowParser
+from agent_actions.docs.scanner import ProjectScanner
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -19,11 +20,11 @@ class SchemaExtractor:
 
     Handles:
     - LLM agents: from `schema` or `output_schema` field
-    - Tool/UDF agents: from UDF_REGISTRY json_output_schema
+    - Tool/UDF agents: from Python files via AST parsing (using impl field)
     - Non-JSON agents: assume `content` field
 
     Example:
-        extractor = SchemaExtractor(udf_registry=UDF_REGISTRY)
+        extractor = SchemaExtractor(project_root=Path.cwd())
 
         schema = extractor.extract_schema(agent_config)
         print(schema.available_fields)  # {'summary', 'facts'}
@@ -33,15 +34,72 @@ class SchemaExtractor:
         self,
         udf_registry: Optional[Dict[str, Any]] = None,
         schema_dir: Optional[Path] = None,
+        project_root: Optional[Path] = None,
     ) -> None:
         """Initialize the schema extractor.
 
         Args:
-            udf_registry: UDF_REGISTRY from udf_management module for tool schemas
+            udf_registry: UDF_REGISTRY from udf_management module (legacy, optional)
             schema_dir: Path to schema directory (defaults to cwd/schema)
+            project_root: Project root for scanning tool functions
         """
         self.udf_registry = udf_registry or {}
         self.schema_dir = schema_dir or Path.cwd() / "schema"
+        self.project_root = project_root or Path.cwd()
+        self._tool_schemas: Optional[Dict[str, Any]] = None
+
+    def _get_tool_schemas(self) -> Dict[str, Any]:
+        """Lazy-load tool schemas from Python files using ProjectScanner."""
+        if self._tool_schemas is None:
+            scanner = ProjectScanner(str(self.project_root))
+            self._tool_schemas = scanner.scan_tool_functions()
+        return self._tool_schemas
+
+    def _convert_fields_to_json_schema(self, fields: List[Dict[str, str]]) -> Dict[str, Any]:
+        """Convert scanner field format to JSON schema format."""
+        properties = {}
+        required = []
+
+        for field in fields:
+            field_name = field["name"]
+            field_type = field.get("type", "string")
+
+            # Map Python types to JSON schema types
+            json_type = self._python_type_to_json_type(field_type)
+            properties[field_name] = {"type": json_type}
+
+            if field.get("required", True):
+                required.append(field_name)
+
+        return {"type": "object", "properties": properties, "required": required}
+
+    def _python_type_to_json_type(self, python_type: str) -> str:
+        """Map Python type annotation to JSON schema type."""
+        type_map = {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "list": "array",
+            "dict": "object",
+            "List": "array",
+            "Dict": "object",
+            "Any": "string",
+            "None": "null",
+        }
+
+        # Handle simple types
+        for py_type, json_type in type_map.items():
+            if python_type == py_type or python_type.startswith(f"{py_type}["):
+                return json_type
+
+        # Handle Optional types
+        if python_type.startswith("Optional["):
+            inner = python_type[9:-1]
+            return self._python_type_to_json_type(inner)
+
+        # Default to string for complex types
+        return "string"
 
     def extract_schema(
         self,
@@ -76,14 +134,16 @@ class SchemaExtractor:
     def extract_input_schema(
         self,
         agent_config: Dict[str, Any],
+        reference_extractor: Optional[Any] = None,
     ) -> InputSchema:
         """Extract input schema from agent config.
 
-        For tools: from UDF_REGISTRY json_schema (input schema)
-        For LLMs: inferred from template variables (marked as template_based)
+        For tools: from Python files via AST parsing (using impl field)
+        For LLMs: from template references and context_scope
 
         Args:
             agent_config: Agent configuration dictionary
+            reference_extractor: ReferenceExtractor for LLM template analysis
 
         Returns:
             InputSchema with extracted field information
@@ -97,10 +157,45 @@ class SchemaExtractor:
         if kind == "tool" or model_vendor == "tool":
             self._extract_tool_input_schema(agent_config, input_schema)
         else:
-            # LLM agents - inputs are inferred from templates
-            input_schema.is_template_based = True
-            # We could extract required template vars here, but that's
-            # already handled by ReferenceExtractor
+            # LLM agents - extract from template references and context_scope
+            self._extract_llm_input_schema(agent_config, input_schema, reference_extractor)
+
+        return input_schema
+
+    def _extract_llm_input_schema(
+        self,
+        config: Dict[str, Any],
+        input_schema: InputSchema,
+        reference_extractor: Optional[Any] = None,
+    ) -> None:
+        """Extract input schema from LLM agent config.
+
+        Resolves inputs from:
+        - Template references ({{ agent.field }})
+        - context_scope observe fields
+        - Dependencies
+        """
+        # Import here to avoid circular imports
+        if reference_extractor is None:
+            from .reference_extractor import (  # pylint: disable=import-outside-toplevel
+                ReferenceExtractor,
+            )
+
+            reference_extractor = ReferenceExtractor()
+
+        # Extract all field references from the agent config
+        requirements = reference_extractor.extract_from_agent(config)
+
+        # Add referenced fields as required inputs
+        for req in requirements:
+            # Format: "agent.field" or just "field"
+            if req.source_agent and req.field_path:
+                field_ref = f"{req.source_agent}.{req.field_path}"
+            else:
+                field_ref = req.field_path or ""
+
+            if field_ref:
+                input_schema.required_fields.add(field_ref)
 
         return input_schema
 
@@ -109,16 +204,29 @@ class SchemaExtractor:
         config: Dict[str, Any],
         input_schema: InputSchema,
     ) -> None:
-        """Extract input schema from tool/UDF agent."""
-        impl = config.get("impl", "")
+        """Extract input schema from tool/UDF agent using impl field."""
+        # impl may be stored as 'impl' or 'model_name' depending on config processing
+        impl = config.get("impl") or config.get("model_name") or ""
 
-        # Try to get input schema from UDF registry
-        if impl and impl in self.udf_registry:
-            udf_info = self.udf_registry[impl]
+        # Try to get schema from Python files via scanner (using impl as function name)
+        if impl:
+            tool_schemas = self._get_tool_schemas()
+            if impl in tool_schemas:
+                tool_info = tool_schemas[impl]
+                tool_input_schema = tool_info.get("input_schema")
+                if tool_input_schema and tool_input_schema.get("fields"):
+                    json_schema = self._convert_fields_to_json_schema(tool_input_schema["fields"])
+                    input_schema.json_schema = json_schema
+                    self._extract_input_fields_from_json_schema(json_schema, input_schema)
+                    return
+
+        # Fallback: try UDF registry (for backward compatibility)
+        impl_key = impl.lower() if impl else ""
+        if impl_key and impl_key in self.udf_registry:
+            udf_info = self.udf_registry[impl_key]
             json_schema = udf_info.get("json_schema")  # Input schema
             if json_schema:
                 input_schema.json_schema = json_schema
-                # Extract required and optional fields
                 self._extract_input_fields_from_json_schema(json_schema, input_schema)
                 return
 
@@ -231,12 +339,26 @@ class SchemaExtractor:
         config: Dict[str, Any],
         output: OutputSchema,
     ) -> None:
-        """Extract schema from tool/UDF agent."""
-        impl = config.get("impl", "")
+        """Extract schema from tool/UDF agent using impl field."""
+        # impl may be stored as 'impl' or 'model_name' depending on config processing
+        impl = config.get("impl") or config.get("model_name") or ""
 
-        # Try to get schema from UDF registry
-        if impl and impl in self.udf_registry:
-            udf_info = self.udf_registry[impl]
+        # Try to get schema from Python files via scanner (using impl as function name)
+        if impl:
+            tool_schemas = self._get_tool_schemas()
+            if impl in tool_schemas:
+                tool_info = tool_schemas[impl]
+                output_schema = tool_info.get("output_schema")
+                if output_schema and output_schema.get("fields"):
+                    json_schema = self._convert_fields_to_json_schema(output_schema["fields"])
+                    output.json_schema = json_schema
+                    output.schema_fields = self._extract_fields_from_json_schema(json_schema)
+                    return
+
+        # Fallback: try UDF registry (for backward compatibility)
+        impl_key = impl.lower() if impl else ""
+        if impl_key and impl_key in self.udf_registry:
+            udf_info = self.udf_registry[impl_key]
             json_schema = udf_info.get("json_output_schema")
             if json_schema:
                 output.json_schema = json_schema

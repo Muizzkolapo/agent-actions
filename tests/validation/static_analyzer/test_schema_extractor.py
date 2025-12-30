@@ -247,15 +247,17 @@ class TestInputSchemaExtraction:
         """Set up test fixtures."""
         self.extractor = SchemaExtractor()
 
-    def test_llm_agent_is_template_based(self):
-        """Test LLM agents have template-based input schemas."""
+    def test_llm_agent_extracts_template_refs(self):
+        """Test LLM agents extract input fields from template references."""
         config = {
             "name": "llm_agent",
             "prompt": "Process {{ action.upstream.data }}",
         }
         input_schema = self.extractor.extract_input_schema(config)
 
-        assert input_schema.is_template_based
+        # LLM input is resolved from template references
+        assert not input_schema.is_template_based
+        assert "upstream.data" in input_schema.required_fields
 
     def test_tool_agent_input_from_registry(self):
         """Test tool agent extracts input schema from UDF registry."""

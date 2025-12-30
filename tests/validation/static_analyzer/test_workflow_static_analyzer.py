@@ -376,7 +376,8 @@ class TestActionSchemas:
 
         assert "extractor" in schemas
         assert schemas["extractor"]["kind"] == "llm"
-        assert schemas["extractor"]["input"]["is_template_based"]
+        # LLM input is resolved from template refs (empty when no prompt)
+        assert not schemas["extractor"]["input"]["is_template_based"]
         assert "text" in schemas["extractor"]["output"]["fields"]
         assert "score" in schemas["extractor"]["output"]["fields"]
 

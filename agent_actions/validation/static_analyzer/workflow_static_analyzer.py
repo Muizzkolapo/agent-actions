@@ -53,18 +53,22 @@ class WorkflowStaticAnalyzer:
         schema_loader: Optional[Any] = None,
         source_schema: Optional[Dict[str, Any]] = None,
         schema_dir: Optional[Any] = None,
+        project_root: Optional[Any] = None,
     ) -> None:
         """Initialize the analyzer.
 
         Args:
             workflow_config: Parsed workflow configuration dictionary
-            udf_registry: UDF_REGISTRY for tool schema lookup
+            udf_registry: UDF_REGISTRY for tool schema lookup (legacy, optional)
             schema_loader: SchemaLoader for external schema loading
             source_schema: Schema for source/input data (optional)
             schema_dir: Path to schema directory (defaults to cwd/schema)
+            project_root: Project root for scanning tool functions
         """
         self.workflow_config = workflow_config
-        self.schema_extractor = SchemaExtractor(udf_registry, schema_dir=schema_dir)
+        self.schema_extractor = SchemaExtractor(
+            udf_registry, schema_dir=schema_dir, project_root=project_root
+        )
         self.reference_extractor = ReferenceExtractor()
         self.schema_loader = schema_loader
         self.source_schema = source_schema
@@ -144,8 +148,10 @@ class WorkflowStaticAnalyzer:
         # Extract output schema
         output_schema = self.schema_extractor.extract_schema(action_config, self.schema_loader)
 
-        # Extract input schema
-        input_schema = self.schema_extractor.extract_input_schema(action_config)
+        # Extract input schema (pass reference_extractor for LLM template analysis)
+        input_schema = self.schema_extractor.extract_input_schema(
+            action_config, self.reference_extractor
+        )
 
         # Extract input requirements (field references)
         input_requirements = self.reference_extractor.extract_from_agent(action_config)
