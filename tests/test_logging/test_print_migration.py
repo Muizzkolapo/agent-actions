@@ -32,7 +32,7 @@ class TestPrintStatementMigration:
         # LLM invocation with debug output
         "agent_actions/llm_invocation/realtime/services/prompt_service.py",  # Debug mode output
         "agent_actions/llm_invocation/realtime/services/interceptor_service.py",  # Interceptor status
-        "agent_actions/llm_invocation/providers/gemini/provider.py",  # Provider debug output
+        "agent_actions/llm_invocation/providers/gemini/batch_client.py",  # Batch client status output
         # Response processing
         "agent_actions/response_processing/schema_loader.py",  # Schema loading status
         # UDF-related user output

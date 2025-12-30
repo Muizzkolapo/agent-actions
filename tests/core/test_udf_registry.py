@@ -41,25 +41,21 @@ class TestUDFRegistration:
         assert UDF_REGISTRY["test_function"]["name"] == "test_function"
         assert UDF_REGISTRY["test_function"]["function"]() == "test"
 
-    def test_duplicate_udf_raises_error(self):
-        """Test that duplicate function names raise DuplicateFunctionError."""
+    def test_same_file_duplicate_returns_existing(self):
+        """Test that same-file duplicates return existing function (import deduplication)."""
 
         @udf_tool(input_type=SimpleInput)
         def duplicate_func():
-            pass
+            return "first"
 
-        with pytest.raises(DuplicateFunctionError) as exc_info:
+        # Same file duplicate should return the existing function, not raise error
+        @udf_tool(input_type=SimpleInput)
+        def duplicate_func():  # noqa: F811
+            return "second"
 
-            @udf_tool(input_type=SimpleInput)
-            def duplicate_func():  # noqa: F811
-                pass
-
-        error = exc_info.value
-        assert error.context["function_name"] == "duplicate_func"
-        assert "existing_location" in error.context
-        assert "new_location" in error.context
-        assert "existing_file" in error.context
-        assert "new_file" in error.context
+        # The decorator returns the first registered function
+        assert duplicate_func() == "first"
+        assert UDF_REGISTRY["duplicate_func"]["function"]() == "first"
 
     def test_registry_stores_metadata(self):
         """Test that all metadata is captured and stored."""
@@ -90,18 +86,21 @@ class TestUDFRegistration:
         assert preserved_func.__name__ == "preserved_func"
         assert preserved_func.__doc__ == "Original docstring."
 
-    def test_case_insensitive_duplicate_detection(self):
-        """Test that duplicate detection is case-insensitive."""
+    def test_case_insensitive_duplicate_returns_existing(self):
+        """Test that case-insensitive duplicates in same file return existing function."""
 
         @udf_tool(input_type=SimpleInput)
         def My_Function():
-            pass
+            return "original"
 
-        with pytest.raises(DuplicateFunctionError):
+        # Same file, different case - returns existing function
+        @udf_tool(input_type=SimpleInput)
+        def my_function():  # noqa: F811
+            return "duplicate"
 
-            @udf_tool(input_type=SimpleInput)
-            def my_function():  # noqa: F811
-                pass
+        # Both keys map to same lowercase key, first one wins
+        assert "my_function" in UDF_REGISTRY
+        assert UDF_REGISTRY["my_function"]["function"]() == "original"
 
 
 class TestUDFRetrieval:
