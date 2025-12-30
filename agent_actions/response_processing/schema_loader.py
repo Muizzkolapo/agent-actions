@@ -54,46 +54,33 @@ class SchemaLoader:
             return set()  # Return empty set on error
 
     @staticmethod
-    def load_schema(schema_name: str) -> dict:
+    def load_schema(schema_name: str, schema_dir: Path = None) -> dict:
         """
-        Retrieve and generate a JSON schema based on the schema name provided.
-
-        Searches for .yml/.yaml files anywhere within the project tree.
-        No specific directory structure required.
+        Load a schema using WorkflowParser.
 
         Parameters:
             schema_name (str): The name of the schema to load.
+            schema_dir (Path): Optional schema directory. Defaults to cwd/schema.
 
         Returns:
             dict: The loaded schema as a dictionary.
         """
-        try:
-            current_dir = Path.cwd()
+        # Import here to avoid circular imports
+        from agent_actions.docs.parser import (  # pylint: disable=import-outside-toplevel
+            WorkflowParser,
+        )
 
-            # Try .yml first, then .yaml
-            schema_path = None
-            for extension in ["yml", "yaml"]:
-                target_filename = f"{schema_name}.{extension}"
-                schema_path_str = FileHandler.find_file_in_directory(
-                    str(current_dir), target_filename
-                )
-                if schema_path_str:
-                    schema_path = Path(schema_path_str)
-                    break
+        if schema_dir is None:
+            schema_dir = Path.cwd() / "schema"
 
-            if not schema_path:
-                raise FileNotFoundError(
-                    f"Schema file '{schema_name}.yml' or '{schema_name}.yaml' not found. "
-                    f"Searched recursively from {current_dir}. "
-                    f"Ensure the schema file exists anywhere in your project tree."
-                )
+        result = WorkflowParser.load_schema(schema_name, schema_dir)
+        if result:
+            return result
 
-            with schema_path.open("r", encoding="utf-8") as file:
-                documents = yaml.safe_load(file)
-            return documents
-        except Exception as e:
-            print(f"Error loading schema '{schema_name}': {str(e)}")
-            raise
+        raise FileNotFoundError(
+            f"Schema file '{schema_name}.yml' not found in {schema_dir}. "
+            f"Ensure the schema file exists in the schema/ directory."
+        )
 
     @staticmethod
     def validate_schemas_exist(

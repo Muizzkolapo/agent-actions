@@ -9,7 +9,7 @@ Handles schema extraction from:
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
-import yaml
+from agent_actions.docs.parser import WorkflowParser
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -164,8 +164,8 @@ class SchemaExtractor:
 
         # If no inline schema but has schema_name, try to load external schema
         if not schema_def and schema_name:
-            # Try direct loading from schema directory first (most reliable)
-            loaded = self._load_schema_from_dir(schema_name)
+            # Use WorkflowParser for reliable schema loading from schema/ directory
+            loaded = WorkflowParser.load_schema(schema_name, self.schema_dir)
             if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self._extract_fields_from_json_schema(loaded)
@@ -198,8 +198,8 @@ class SchemaExtractor:
 
         # Handle different schema formats
         if isinstance(schema_def, str):
-            # Schema reference (external file) - try direct loading first
-            loaded = self._load_schema_from_dir(schema_def)
+            # Schema reference (external file) - use WorkflowParser
+            loaded = WorkflowParser.load_schema(schema_def, self.schema_dir)
             if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self._extract_fields_from_json_schema(loaded)
@@ -396,32 +396,6 @@ class SchemaExtractor:
                 fields.update(items["properties"].keys())
 
         return fields
-
-    def _load_schema_from_dir(self, schema_name: str) -> Optional[Dict[str, Any]]:
-        """Load a schema from the schema directory.
-
-        Uses the same approach as the docs parser for reliable schema loading.
-
-        Args:
-            schema_name: Name of the schema file (without extension)
-
-        Returns:
-            Loaded schema dict or None if not found
-        """
-        if not self.schema_dir or not self.schema_dir.exists():
-            return None
-
-        # Try .yml first, then .yaml
-        for ext in ["yml", "yaml"]:
-            schema_file = self.schema_dir / f"{schema_name}.{ext}"
-            if schema_file.exists():
-                try:
-                    with open(schema_file, "r", encoding="utf-8") as f:
-                        return yaml.safe_load(f)
-                except (yaml.YAMLError, OSError):
-                    return None
-
-        return None
 
     def _extract_field_name(self, reference: str) -> Optional[str]:
         """Extract field name from a reference.
