@@ -1,0 +1,49 @@
+{
+  "requests": [
+    {
+      "custom_id": "1",
+      "params": {
+        "model": "test-model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"question\": \"Question 1\"}"
+          }
+        ],
+        "system": "You are helpful",
+        "temperature": 0.7,
+        "max_tokens": 100
+      }
+    },
+    {
+      "custom_id": "2",
+      "params": {
+        "model": "test-model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"question\": \"Question 2\"}"
+          }
+        ],
+        "system": "You are helpful",
+        "temperature": 0.7,
+        "max_tokens": 100
+      }
+    },
+    {
+      "custom_id": "3",
+      "params": {
+        "model": "test-model",
+        "messages": [
+          {
+            "role": "user",
+            "content": "{\"question\": \"Question 3\"}"
+          }
+        ],
+        "system": "You are helpful",
+        "temperature": 0.7,
+        "max_tokens": 100
+      }
+    }
+  ]
+}
