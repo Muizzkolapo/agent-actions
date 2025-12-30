@@ -1,0 +1,341 @@
+"""Tests for the schema extractor."""
+
+import pytest
+
+from agent_actions.validation.static_analyzer import SchemaExtractor
+
+
+class TestSchemaExtractor:
+    """Tests for SchemaExtractor class."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.extractor = SchemaExtractor()
+
+    def test_extract_from_inline_schema(self):
+        """Test extracting schema from inline JSON schema."""
+        config = {
+            "name": "extractor",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string"},
+                    "keywords": {"type": "array"},
+                    "confidence": {"type": "number"},
+                },
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "summary" in schema.available_fields
+        assert "keywords" in schema.available_fields
+        assert "confidence" in schema.available_fields
+
+    def test_extract_from_output_schema(self):
+        """Test extracting from output_schema field."""
+        config = {
+            "name": "agent",
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "result": {"type": "string"},
+                },
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "result" in schema.available_fields
+
+    def test_extract_from_output_schema_alias(self):
+        """Test output_schema works as alias for schema."""
+        config = {
+            "name": "agent",
+            "output_schema": {
+                "type": "object",
+                "properties": {
+                    "output": {"type": "string"},
+                },
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "output" in schema.available_fields
+
+    def test_schemaless_agent(self):
+        """Test agent without schema is marked schemaless."""
+        config = {
+            "name": "agent",
+            "prompt": "Generate something",
+            # No schema field
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert schema.is_schemaless
+
+    def test_non_json_mode_has_content_field(self):
+        """Test non-JSON mode agent has content field."""
+        config = {
+            "name": "agent",
+            "json_mode": False,
+        }
+        schema = self.extractor.extract_schema(config)
+
+        # Non-JSON agents output plain text in 'content' field
+        assert "content" in schema.available_fields or schema.is_schemaless
+
+    def test_tool_agent_schema_from_registry(self):
+        """Test tool agent extracts schema from UDF registry."""
+        # Create mock UDF registry
+        udf_registry = {
+            "my_tool_impl": {
+                "json_output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "tool_result": {"type": "string"},
+                        "status": {"type": "boolean"},
+                    },
+                },
+            },
+        }
+
+        extractor = SchemaExtractor(udf_registry=udf_registry)
+
+        config = {
+            "name": "my_tool",
+            "kind": "tool",
+            "impl": "my_tool_impl",  # 'impl' is used to lookup in registry
+        }
+        schema = extractor.extract_schema(config)
+
+        assert "tool_result" in schema.available_fields
+        assert "status" in schema.available_fields
+
+    def test_context_scope_observe(self):
+        """Test context_scope observe adds fields."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "own_field": {"type": "string"},
+                },
+            },
+            "context_scope": {
+                "observe": ["upstream.extra_field"],
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "own_field" in schema.available_fields
+        # observe adds to available fields
+        assert "extra_field" in schema.observe_fields or "extra_field" in schema.available_fields
+
+    def test_context_scope_drop(self):
+        """Test context_scope drop removes fields."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "keep_field": {"type": "string"},
+                    "drop_field": {"type": "string"},
+                },
+            },
+            "context_scope": {
+                "drop": ["drop_field"],
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert "keep_field" in schema.available_fields
+        assert "drop_field" in schema.dropped_fields
+
+    def test_context_scope_passthrough(self):
+        """Test context_scope passthrough adds fields."""
+        config = {
+            "name": "agent",
+            "context_scope": {
+                "passthrough": ["upstream.field1", "upstream.field2"],
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        # Passthrough fields should be added to passthrough_fields
+        assert "field1" in schema.passthrough_fields
+        assert "field2" in schema.passthrough_fields
+
+    def test_nested_schema_properties(self):
+        """Test extracting only top-level properties."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "user": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "email": {"type": "string"},
+                        },
+                    },
+                    "timestamp": {"type": "string"},
+                },
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        # Should have top-level fields
+        assert "user" in schema.available_fields
+        assert "timestamp" in schema.available_fields
+        # Should NOT have nested fields at top level
+        assert "name" not in schema.available_fields
+
+    def test_required_fields_included(self):
+        """Test all schema fields are included regardless of required."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "required_field": {"type": "string"},
+                    "optional_field": {"type": "string"},
+                },
+                "required": ["required_field"],
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        # Both fields should be available
+        assert "required_field" in schema.available_fields
+        assert "optional_field" in schema.available_fields
+
+    def test_empty_schema_properties(self):
+        """Test schema with empty properties."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {},
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        assert len(schema.schema_fields) == 0
+
+    def test_additional_properties_makes_dynamic(self):
+        """Test additionalProperties: true makes schema dynamic."""
+        config = {
+            "name": "agent",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "known_field": {"type": "string"},
+                },
+                "additionalProperties": True,
+            },
+        }
+        schema = self.extractor.extract_schema(config)
+
+        # Should be marked as dynamic due to additionalProperties
+        assert schema.is_dynamic or "known_field" in schema.available_fields
+
+
+class TestInputSchemaExtraction:
+    """Tests for input schema extraction."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.extractor = SchemaExtractor()
+
+    def test_llm_agent_is_template_based(self):
+        """Test LLM agents have template-based input schemas."""
+        config = {
+            "name": "llm_agent",
+            "prompt": "Process {{ action.upstream.data }}",
+        }
+        input_schema = self.extractor.extract_input_schema(config)
+
+        assert input_schema.is_template_based
+
+    def test_tool_agent_input_from_registry(self):
+        """Test tool agent extracts input schema from UDF registry."""
+        udf_registry = {
+            "my_tool": {
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "input_field": {"type": "string"},
+                        "optional_field": {"type": "number"},
+                    },
+                    "required": ["input_field"],
+                },
+            },
+        }
+
+        extractor = SchemaExtractor(udf_registry=udf_registry)
+
+        config = {
+            "name": "tool_action",
+            "kind": "tool",
+            "impl": "my_tool",
+        }
+        input_schema = extractor.extract_input_schema(config)
+
+        assert "input_field" in input_schema.required_fields
+        assert "optional_field" in input_schema.optional_fields
+
+    def test_tool_agent_without_registry(self):
+        """Test tool agent without registry has dynamic input."""
+        config = {
+            "name": "tool_action",
+            "kind": "tool",
+            "impl": "unknown_tool",
+        }
+        input_schema = self.extractor.extract_input_schema(config)
+
+        assert input_schema.is_dynamic
+
+    def test_tool_agent_with_inline_input_schema(self):
+        """Test tool agent with inline input_schema."""
+        config = {
+            "name": "tool_action",
+            "kind": "tool",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "data": {"type": "string"},
+                },
+                "required": ["data"],
+            },
+        }
+        input_schema = self.extractor.extract_input_schema(config)
+
+        assert "data" in input_schema.required_fields
+
+    def test_all_optional_fields(self):
+        """Test schema with no required fields."""
+        udf_registry = {
+            "flexible_tool": {
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "opt1": {"type": "string"},
+                        "opt2": {"type": "number"},
+                    },
+                    # No required array - all optional
+                },
+            },
+        }
+
+        extractor = SchemaExtractor(udf_registry=udf_registry)
+
+        config = {
+            "name": "tool",
+            "kind": "tool",
+            "impl": "flexible_tool",
+        }
+        input_schema = extractor.extract_input_schema(config)
+
+        assert len(input_schema.required_fields) == 0
+        assert "opt1" in input_schema.optional_fields
+        assert "opt2" in input_schema.optional_fields

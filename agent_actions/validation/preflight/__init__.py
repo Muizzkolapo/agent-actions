@@ -3,6 +3,8 @@
 This package provides validators that run before any LLM calls to catch
 configuration and input errors early, with consistent error messaging
 across both batch and online execution modes.
+
+Includes static type checking for workflow data flow validation.
 """
 
 from agent_actions.validation.preflight.error_formatter import (
@@ -26,6 +28,15 @@ from agent_actions.validation.preflight.preflight_validator import (
     validate_preflight,
 )
 
+# Static type checking
+from agent_actions.validation.static_analyzer import (
+    WorkflowStaticAnalyzer,
+    analyze_workflow,
+    StaticValidationResult,
+    StaticTypeError,
+    StaticTypeWarning,
+)
+
 __all__ = [
     # Error formatting
     "PreFlightErrorFormatter",
@@ -40,4 +51,10 @@ __all__ = [
     "PreFlightValidator",
     "PreFlightValidationResult",
     "validate_preflight",
+    # Static type checking
+    "WorkflowStaticAnalyzer",
+    "analyze_workflow",
+    "StaticValidationResult",
+    "StaticTypeError",
+    "StaticTypeWarning",
 ]

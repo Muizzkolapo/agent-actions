@@ -99,8 +99,8 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         else:
             workflow.run()
 
-    # pylint: disable=too-many-branches
-    def execute_validation_only(self) -> None:
+    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
+    def execute_validation_only(self, static_typing: bool = True) -> None:
         """
         Execute pre-flight validation only, without running the workflow.
 
@@ -109,6 +109,10 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         - Agent configurations (vendor compatibility)
         - Dependencies (circular detection)
         - Template variables (if possible without data)
+        - Static type checking (field references)
+
+        Args:
+            static_typing: Whether to run static type checking (default: True)
 
         Exits with code 0 if valid, 1 if errors found.
         """
@@ -170,7 +174,29 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                 else:
                     warnings.append(f"[dependency] {issue.message}")
 
-        # 3. Report results
+        # 3. Static type checking (field references)
+        if static_typing:
+            click.echo("\nRunning static type checking...")
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
+
+            # Build workflow config dict from agent_configs
+            workflow_config = {
+                "actions": [
+                    {**config, "name": name} for name, config in workflow.agent_configs.items()
+                ]
+            }
+
+            analyzer = WorkflowStaticAnalyzer(workflow_config)
+            static_result = analyzer.analyze()
+
+            for error in static_result.errors:
+                errors.append(f"[static] {error.format_message()}")
+
+            for warning in static_result.warnings:
+                warnings.append(f"[static] {warning.format_message()}")
+
+        # 4. Report results
         click.echo("")
         if errors:
             click.echo(click.style("VALIDATION FAILED", fg="red", bold=True))
@@ -316,6 +342,11 @@ class RunCommand:  # pylint: disable=too-few-public-methods
     is_flag=True,
     help="Run pre-flight validation only, without executing the workflow",
 )
+@click.option(
+    "--static-typing/--no-static-typing",
+    default=True,
+    help="Enable/disable static type checking of field references (default: enabled)",
+)
 @handles_user_errors("run")
 @requires_project
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -330,6 +361,7 @@ def run(
     upstream: bool = False,
     downstream: bool = False,
     validate_only: bool = False,
+    static_typing: bool = True,
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -360,6 +392,6 @@ def run(
 
     # Handle validate-only mode
     if validate_only:
-        command.execute_validation_only()
+        command.execute_validation_only(static_typing=static_typing)
     else:
         command.execute()

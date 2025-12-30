@@ -17,6 +17,7 @@ from agent_actions.cli.docs import docs  # Documentation generation and serving
 from agent_actions.cli.init import init
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.cli.run import run
+from agent_actions.cli.schema import schema
 from agent_actions.cli.status import status
 from agent_actions.cli.test import clean_cli as clean
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
@@ -67,6 +68,7 @@ class CLI:  # pylint: disable=too-few-public-methods
         self.click_group.add_command(render)
         self.click_group.add_command(run)
         self.click_group.add_command(batch)
+        self.click_group.add_command(schema)
         self.click_group.add_command(status)
         self.click_group.add_command(list_udfs_cmd)
         self.click_group.add_command(validate_udfs_cmd)
