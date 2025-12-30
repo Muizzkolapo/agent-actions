@@ -4,9 +4,11 @@ Base validator class for all validation operations.
 Provides common validation infrastructure including error/warning collection
 and utility methods for path validation.
 """
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, List, Dict, Optional
+
 
 class BaseValidator(ABC):
     """
@@ -94,7 +96,7 @@ class BaseValidator(ABC):
         self.clear_errors()
         self.clear_warnings()
         if not isinstance(data, dict):
-            self.add_error('Validation data must be a dictionary.')
+            self.add_error("Validation data must be a dictionary.")
             return False
         return True
 

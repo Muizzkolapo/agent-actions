@@ -9,4 +9,4 @@ from agent_actions.validation.agent_validators.vendor_compatibility_validator im
     VendorCompatibilityValidator as BatchModeCompatibilityValidator,
 )
 
-__all__ = ['BatchModeCompatibilityValidator']
+__all__ = ["BatchModeCompatibilityValidator"]

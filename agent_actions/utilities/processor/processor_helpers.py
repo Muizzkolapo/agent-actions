@@ -1,4 +1,5 @@
 """Utility helpers shared across processors."""
+
 from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
@@ -13,10 +14,7 @@ from agent_actions.utilities.transformation import PassthroughTransformer
 logger = logging.getLogger(__name__)
 
 
-def evaluate_guard_condition(
-    agent_config: Dict,
-    context: Any
-) -> Tuple[bool, Optional[str]]:
+def evaluate_guard_condition(agent_config: Dict, context: Any) -> Tuple[bool, Optional[str]]:
     """
     Evaluate guard conditions (where_clause, conditional_clause).
 
@@ -43,43 +41,35 @@ def evaluate_guard_condition(
 
 
 def _evaluate_conditional_clause(
-    agent_config: Dict,
-    context: Any
+    agent_config: Dict, context: Any
 ) -> Optional[Tuple[bool, Optional[str]]]:
     """Evaluate legacy conditional clause (UDF-based)."""
-    conditional_clause = (agent_config.get('conditional_clause') or '').lower()
+    conditional_clause = (agent_config.get("conditional_clause") or "").lower()
     if not conditional_clause:
         return None
 
     try:
         if not execute_user_defined_function(conditional_clause, context):
             logger.debug(
-                "Guard: conditional_clause '%s' evaluated to False, skipping",
-                conditional_clause
+                "Guard: conditional_clause '%s' evaluated to False, skipping", conditional_clause
             )
-            return (False, 'skip')
+            return (False, "skip")
     except (ValueError, TypeError, KeyError, AttributeError) as e:
-        logger.debug(
-            "Guard: conditional_clause evaluation failed: %s, proceeding",
-            e
-        )
+        logger.debug("Guard: conditional_clause evaluation failed: %s, proceeding", e)
         # Don't skip on UDF errors - proceed with execution
 
     return None
 
 
-def _evaluate_guard(
-    agent_config: Dict,
-    context: Any
-) -> Tuple[bool, Optional[str]]:
+def _evaluate_guard(agent_config: Dict, context: Any) -> Tuple[bool, Optional[str]]:
     """Evaluate guard condition."""
-    guard_config = agent_config.get('guard')
+    guard_config = agent_config.get("guard")
     if not guard_config:
         return (True, None)
 
-    behavior = guard_config.get('behavior', 'filter')
-    clause = guard_config.get('clause')
-    passthrough_on_error = guard_config.get('passthrough_on_error', True)
+    behavior = guard_config.get("behavior", "filter")
+    clause = guard_config.get("clause")
+    passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
     if not clause:
         return (True, None)
@@ -96,42 +86,29 @@ def _evaluate_guard(
 
 
 def _process_filter_result(
-    filter_result: Any,
-    behavior: str,
-    passthrough_on_error: bool,
-    clause: str
+    filter_result: Any, behavior: str, passthrough_on_error: bool, clause: str
 ) -> Tuple[bool, Optional[str]]:
     """Process filter result and return guard decision."""
     # Handle FilterResult object or boolean
-    if hasattr(filter_result, 'success') and not filter_result.success:
+    if hasattr(filter_result, "success") and not filter_result.success:
         # Evaluation failed
         if passthrough_on_error:
             logger.debug(
-                "Guard: condition evaluation failed, proceeding "
-                "(passthrough_on_error=True)"
+                "Guard: condition evaluation failed, proceeding (passthrough_on_error=True)"
             )
             return (True, None)
-        logger.debug(
-            "Guard: condition evaluation failed, skipping "
-            "(passthrough_on_error=False)"
-        )
+        logger.debug("Guard: condition evaluation failed, skipping (passthrough_on_error=False)")
         return (False, behavior)
 
-    matched = (
-        filter_result.matched
-        if hasattr(filter_result, 'matched')
-        else bool(filter_result)
-    )
+    matched = filter_result.matched if hasattr(filter_result, "matched") else bool(filter_result)
 
     if not matched:
-        logger.debug(
-            "Guard: condition '%s' not matched, behavior='%s'",
-            clause, behavior
-        )
+        logger.debug("Guard: condition '%s' not matched, behavior='%s'", clause, behavior)
         return (False, behavior)
 
     # All guards passed
     return (True, None)
+
 
 def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     agent_config: Dict,
@@ -139,11 +116,11 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
     context: Any,
     formatted_prompt: str,
     *,
-    tools_path: Optional[str]=None,
-    tool_args: Optional[Dict[str, Any]]=None,
-    source_content: Optional[Any]=None,
-    llm_context: Optional[Any]=None,
-    skip_guard_eval: bool=False
+    tools_path: Optional[str] = None,
+    tool_args: Optional[Dict[str, Any]] = None,
+    source_content: Optional[Any] = None,
+    llm_context: Optional[Any] = None,
+    skip_guard_eval: bool = False,
 ) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
@@ -194,8 +171,8 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
             return (None, False)
 
     # Extract content from nested structure if needed (for tools/guards)
-    if isinstance(context, dict) and 'content' in context and isinstance(context['content'], dict):
-        processed_context = context['content']
+    if isinstance(context, dict) and "content" in context and isinstance(context["content"], dict):
+        processed_context = context["content"]
     else:
         processed_context = context
 
@@ -215,7 +192,7 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
         tool_args=tool_args,
         source_content=source_content,
         additional_context=None,
-        original_context=processed_context  # CRITICAL: Pass original context for tools
+        original_context=processed_context,  # CRITICAL: Pass original context for tools
     )
 
     # Note: passthrough fields are NOT merged here - they're merged later in
@@ -224,59 +201,57 @@ def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional
 
     return (response, True)
 
+
 def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
     """Check if agent should be skipped based on legacy conditional clause."""
-    conditional_clause = (agent_config.get('conditional_clause') or '').lower()
+    conditional_clause = (agent_config.get("conditional_clause") or "").lower()
     if conditional_clause and (not execute_user_defined_function(conditional_clause, context)):
         return True
     return False
 
+
 def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
     """Check if agent should be skipped based on guard with skip behavior."""
-    guard_config = agent_config.get('guard')
-    if not (guard_config and guard_config.get('behavior') == 'skip'):
+    guard_config = agent_config.get("guard")
+    if not (guard_config and guard_config.get("behavior") == "skip"):
         return False
     try:
         filter_service = get_global_guard_filter()
-        request = FilterItemRequest(data=context, condition=guard_config['clause'])
+        request = FilterItemRequest(data=context, condition=guard_config["clause"])
         filter_result = filter_service.filter_item(request)
         return not filter_result.matched if filter_result.success else False
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Guard skip check failed, using passthrough_on_error setting: %s",
             e,
-            extra={
-                'guard': guard_config.get('clause'),
-                'operation': 'guard_skip_check'
-            }
+            extra={"guard": guard_config.get("clause"), "operation": "guard_skip_check"},
         )
-        passthrough_on_error = guard_config.get('passthrough_on_error', True)
+        passthrough_on_error = guard_config.get("passthrough_on_error", True)
         return passthrough_on_error
+
 
 def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
     """Check if item should be filtered out based on guard with filter behavior."""
-    guard_config = agent_config.get('guard')
-    if not (guard_config and guard_config.get('behavior') == 'filter'):
+    guard_config = agent_config.get("guard")
+    if not (guard_config and guard_config.get("behavior") == "filter"):
         return False
     try:
         filter_service = get_global_guard_filter()
-        request = FilterItemRequest(data=context, condition=guard_config['clause'])
+        request = FilterItemRequest(data=context, condition=guard_config["clause"])
         filter_result = filter_service.filter_item(request)
         if not filter_result.success:
-            passthrough_on_error = guard_config.get('passthrough_on_error', True)
+            passthrough_on_error = guard_config.get("passthrough_on_error", True)
             return not passthrough_on_error
         return not filter_result.matched
     except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
         logger.debug(
             "Guard filter check failed, using passthrough_on_error setting: %s",
             e,
-            extra={
-                'guard': guard_config.get('clause'),
-                'operation': 'guard_filter_check'
-            }
+            extra={"guard": guard_config.get("clause"), "operation": "guard_filter_check"},
         )
-        passthrough_on_error = guard_config.get('passthrough_on_error', True)
+        passthrough_on_error = guard_config.get("passthrough_on_error", True)
         return not passthrough_on_error
+
 
 def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     data: List[Any],
@@ -284,11 +259,10 @@ def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-p
     source_guid: str,
     agent_config: Dict[str, Any],
     idx: int = 0,
-    passthrough_fields: Optional[Dict[str, Any]] = None
+    passthrough_fields: Optional[Dict[str, Any]] = None,
 ) -> List[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data consistently."""
     transformer = PassthroughTransformer()
     return transformer.transform_with_passthrough(
-        data, context_data, source_guid, agent_config, idx,
-        passthrough_fields=passthrough_fields
+        data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields
     )

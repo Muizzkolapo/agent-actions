@@ -19,6 +19,7 @@ from agent_actions.errors import WorkflowError
 @dataclass
 class ParallelExecutionParams:
     """Parameters for executing parallel agents."""
+
     pending_agents: List[str]
     agent_indices: Dict
     agent_executor: Any
@@ -29,6 +30,7 @@ class ParallelExecutionParams:
 @dataclass
 class LevelExecutionParams:
     """Parameters for executing a level."""
+
     level_idx: int
     level_agents: List[str]
     agent_indices: Dict[str, int]
@@ -52,7 +54,7 @@ class ActionLevelOrchestrator:
         self,
         execution_order: List[str],
         agent_configs: Dict[str, Dict[str, Any]],
-        console: Optional[Console] = None
+        console: Optional[Console] = None,
     ):
         """
         Initialize level orchestrator.
@@ -81,8 +83,7 @@ class ActionLevelOrchestrator:
         # Build dependency map
         deps_map = {
             agent: [
-                d for d in self.agent_configs[agent].get('dependencies', [])
-                if isinstance(d, str)
+                d for d in self.agent_configs[agent].get("dependencies", []) if isinstance(d, str)
             ]
             for agent in self.execution_order
         }
@@ -93,9 +94,9 @@ class ActionLevelOrchestrator:
         while len(assigned) < len(self.execution_order):
             # Find agents whose dependencies are all satisfied
             current_level = [
-                agent for agent in self.execution_order
-                if agent not in assigned
-                and all(dep in assigned for dep in deps_map[agent])
+                agent
+                for agent in self.execution_order
+                if agent not in assigned and all(dep in assigned for dep in deps_map[agent])
             ]
 
             if not current_level:
@@ -106,20 +107,22 @@ class ActionLevelOrchestrator:
                     for agent in remaining_agents
                 }
 
-                error_details = '\n'.join([
-                    f"  - {agent} waiting for: {', '.join(deps)}"
-                    for agent, deps in unsatisfied_deps.items()
-                ])
+                error_details = "\n".join(
+                    [
+                        f"  - {agent} waiting for: {', '.join(deps)}"
+                        for agent, deps in unsatisfied_deps.items()
+                    ]
+                )
 
                 raise WorkflowError(
-                    f'Circular dependency detected - cannot compute execution levels.\n\n'
-                    f'Agents blocked:\n{error_details}',
+                    f"Circular dependency detected - cannot compute execution levels.\n\n"
+                    f"Agents blocked:\n{error_details}",
                     {
-                        'error_type': 'circular_dependency',
-                        'assigned': list(assigned),
-                        'remaining': list(remaining_agents),
-                        'unsatisfied_dependencies': unsatisfied_deps
-                    }
+                        "error_type": "circular_dependency",
+                        "assigned": list(assigned),
+                        "remaining": list(remaining_agents),
+                        "unsatisfied_dependencies": unsatisfied_deps,
+                    },
                 )
 
             levels.append(current_level)
@@ -145,31 +148,26 @@ class ActionLevelOrchestrator:
             levels: List of execution levels
             agent_indices: Dictionary mapping agent names to indices
         """
-        self.console.print(f'[blue]📊 Execution: {len(levels)} action(s)[/blue]')
+        self.console.print(f"[blue]📊 Execution: {len(levels)} action(s)[/blue]")
 
         for i, level in enumerate(levels):
             if len(level) > 1:
                 sorted_agents = sorted(level, key=lambda a: agent_indices[a])
-                agent_list = ', '.join(sorted_agents)
+                agent_list = ", ".join(sorted_agents)
                 self.console.print(
                     f"[blue]  Action {i}: {len(level)} agents in parallel - {agent_list}[/blue]"
                 )
             else:
-                self.console.print(f'[dim]  Action {i}: {level[0]} (sequential)[/dim]')
+                self.console.print(f"[dim]  Action {i}: {level[0]} (sequential)[/dim]")
 
-    async def _execute_single_agent(
-        self, agent_name: str, agent_indices: Dict, agent_executor
-    ):
+    async def _execute_single_agent(self, agent_name: str, agent_indices: Dict, agent_executor):
         """Execute a single agent asynchronously."""
         original_idx = agent_indices[agent_name]
         agent_config = self.agent_configs[agent_name]
         is_last = original_idx == len(self.execution_order) - 1
 
         result = await agent_executor.execute_agent_async(
-            agent_name,
-            agent_idx=original_idx,
-            agent_config=agent_config,
-            is_last_agent=is_last
+            agent_name, agent_idx=original_idx, agent_config=agent_config, is_last_agent=is_last
         )
 
         if not result.success:
@@ -177,7 +175,7 @@ class ActionLevelOrchestrator:
 
     async def _execute_parallel_agents(self, params: ParallelExecutionParams):
         """Execute multiple agents in parallel."""
-        self.console.print(f'[blue]  → {len(params.pending_agents)} agents in parallel[/blue]')
+        self.console.print(f"[blue]  → {len(params.pending_agents)} agents in parallel[/blue]")
         semaphore = asyncio.Semaphore(params.concurrency_limit)
 
         async def run_with_limit(agent):
@@ -188,10 +186,7 @@ class ActionLevelOrchestrator:
                 is_last = original_idx == len(self.execution_order) - 1
 
                 return await params.agent_executor.execute_agent_async(
-                    agent,
-                    agent_idx=original_idx,
-                    agent_config=agent_config,
-                    is_last_agent=is_last
+                    agent, agent_idx=original_idx, agent_config=agent_config, is_last_agent=is_last
                 )
 
         # Execute all agents concurrently
@@ -207,19 +202,14 @@ class ActionLevelOrchestrator:
                 errors.append((agent, result.error))
 
         if errors:
-            error_details = '\n'.join([
-                f'  - {agent}: {str(exc)}'
-                for agent, exc in errors
-            ])
+            error_details = "\n".join([f"  - {agent}: {str(exc)}" for agent, exc in errors])
             error_msg = (
-                f'Multiple agents failed in parallel action '
-                f'{params.level_idx}:\n{error_details}'
+                f"Multiple agents failed in parallel action {params.level_idx}:\n{error_details}"
             )
-            raise WorkflowError('parallel_execution_failures', error_msg)
+            raise WorkflowError("parallel_execution_failures", error_msg)
 
     def _check_batch_status(
-        self, level_idx: int, level_agents: List[str],
-        state_manager, start_time: datetime
+        self, level_idx: int, level_agents: List[str], state_manager, start_time: datetime
     ) -> bool:
         """Check batch submission status and handle accordingly."""
         batch_pending = state_manager.get_batch_submitted_agents(level_agents)
@@ -233,15 +223,15 @@ class ActionLevelOrchestrator:
                     f"{', '.join(failed_agents)} failed while "
                     "batch jobs were submitted"
                 )
-                raise WorkflowError('batch_submission_partial_failure', error_msg)
+                raise WorkflowError("batch_submission_partial_failure", error_msg)
 
             # Batch jobs submitted, need to wait
             duration = (datetime.now() - start_time).total_seconds()
             self.console.print(
-                f'[yellow]Action {level_idx}: {len(batch_pending)} '
-                f'batch job(s) submitted ({duration:.2f}s)[/yellow]'
+                f"[yellow]Action {level_idx}: {len(batch_pending)} "
+                f"batch job(s) submitted ({duration:.2f}s)[/yellow]"
             )
-            self.console.print('[yellow]Run workflow again to check batch status[/yellow]')
+            self.console.print("[yellow]Run workflow again to check batch status[/yellow]")
             return False  # Level not complete
 
         return True  # No batch pending
@@ -266,14 +256,12 @@ class ActionLevelOrchestrator:
 
         if not pending_agents:
             self.console.print(
-                f'[yellow]Action {params.level_idx}: All agents complete '
-                '(skipped)[/yellow]'
+                f"[yellow]Action {params.level_idx}: All agents complete (skipped)[/yellow]"
             )
             return True
 
         self.console.print(
-            f'[cyan]Action {params.level_idx}: Starting '
-            f'{len(pending_agents)} agent(s)...[/cyan]'
+            f"[cyan]Action {params.level_idx}: Starting {len(pending_agents)} agent(s)...[/cyan]"
         )
 
         # Single agent - execute directly
@@ -289,7 +277,7 @@ class ActionLevelOrchestrator:
                     agent_indices=params.agent_indices,
                     agent_executor=params.agent_executor,
                     concurrency_limit=params.concurrency_limit,
-                    level_idx=params.level_idx
+                    level_idx=params.level_idx,
                 )
             )
 
@@ -301,5 +289,5 @@ class ActionLevelOrchestrator:
 
         # Level completed
         duration = (datetime.now() - start_time).total_seconds()
-        self.console.print(f'[green]Action {params.level_idx} complete ({duration:.2f}s)[/green]')
+        self.console.print(f"[green]Action {params.level_idx} complete ({duration:.2f}s)[/green]")
         return True

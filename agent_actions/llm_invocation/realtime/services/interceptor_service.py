@@ -235,7 +235,7 @@ class InterceptorService:
             result = interceptors.process(response_data, execution_context)
 
             if prompt_debug:
-                print(f"   Interceptor result: " f"retry_context={bool(result.retry_context)}")
+                print(f"   Interceptor result: retry_context={bool(result.retry_context)}")
 
             # If validation failed, update context and retry
             if result.retry_context:
@@ -244,8 +244,7 @@ class InterceptorService:
                 execution_context.update(result.retry_context)
                 if prompt_debug:
                     print(
-                        f"   Updated execution context attempt: "
-                        f"{execution_context.get('attempt')}"
+                        f"   Updated execution context attempt: {execution_context.get('attempt')}"
                     )
                 continue
 

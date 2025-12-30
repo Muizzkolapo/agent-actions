@@ -6,11 +6,13 @@ by both batch and realtime modes, as well as CLI, orchestration, and preprocessi
 
 Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 """
+
 import logging
 import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
 
 class FileHandler:
     """
@@ -86,21 +88,17 @@ class FileHandler:
         """
         current_dir = Path.cwd()
         agent_config_dir = FileHandler.find_specific_folder(
-            str(current_dir), agent_name, 'agent_config'
+            str(current_dir), agent_name, "agent_config"
         )
-        io_dir = FileHandler.find_specific_folder(
-            str(current_dir), agent_name, 'agent_io'
-        )
+        io_dir = FileHandler.find_specific_folder(str(current_dir), agent_name, "agent_io")
 
         few_shot_samples_path = None
         if io_dir:
-            potential_path = Path(io_dir) / 'few_shot_samples'
+            potential_path = Path(io_dir) / "few_shot_samples"
             if potential_path.exists():
                 few_shot_samples_path = str(potential_path)
             else:
-                logger.warning(
-                    "Few shot samples folder not found at %s", potential_path
-                )
+                logger.warning("Few shot samples folder not found at %s", potential_path)
 
         return agent_config_dir, io_dir, few_shot_samples_path
 
@@ -140,11 +138,11 @@ class FileHandler:
         """
         path_components = Path(path).parts
 
-        if 'agent_config' in path_components:
-            agent_config_index = path_components.index('agent_config')
+        if "agent_config" in path_components:
+            agent_config_index = path_components.index("agent_config")
 
             if agent_config_index + 1 == len(path_components) - 1 and Path(path).is_file():
-                return '(isfile)'
+                return "(isfile)"
 
             if agent_config_index + 1 < len(path_components):
                 return path_components[agent_config_index + 1]
@@ -162,7 +160,7 @@ class FileHandler:
         Returns:
             tuple: (folder_name, full_path) or (None, None) if not found.
         """
-        agent_config_dir = Path.cwd() / 'agent_config'
+        agent_config_dir = Path.cwd() / "agent_config"
         filename = f"{agent_name}.yml" if not agent_name.endswith(".yml") else agent_name
         full_path = FileHandler.find_config_file(str(agent_config_dir), filename)
         return FileHandler.get_folder_after_agent_config(full_path), full_path
@@ -202,7 +200,7 @@ class FileHandler:
 
         dir_path = file_path.parent
         agent_dir = dir_path.parent
-        source_path = agent_dir / 'source'
+        source_path = agent_dir / "source"
         source_file_path = source_path / file_path.name
 
         if source_path.exists():

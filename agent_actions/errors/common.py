@@ -13,4 +13,5 @@ class InvalidParameterError(AgentActionsError):
 
     This is a cross-cutting error used by multiple tool types.
     """
+
     pass

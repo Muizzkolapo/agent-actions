@@ -4,6 +4,7 @@ Precomputed Passthrough Strategies.
 These strategies handle transformation when passthrough_fields
 are pre-computed and provided directly (new behavior).
 """
+
 from typing import Dict, List, Optional
 
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
@@ -23,7 +24,7 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         data: List,
         passthrough_fields: Optional[Dict],
         agent_config: Dict,
-        already_structured: bool
+        already_structured: bool,
     ) -> bool:
         """Check if we have precomputed fields and structured data."""
         return (
@@ -39,16 +40,12 @@ class PrecomputedStructuredStrategy(IPassthroughTransformStrategy):
         context_data: Dict,
         source_guid: str,
         agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List:
         """Merge passthrough fields into each item's content."""
         for item in data:
-            if (
-                isinstance(item, dict)
-                and 'content' in item
-                and isinstance(item['content'], dict)
-            ):
-                item['content'].update(passthrough_fields)
+            if isinstance(item, dict) and "content" in item and isinstance(item["content"], dict):
+                item["content"].update(passthrough_fields)
         return data
 
 
@@ -65,7 +62,7 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
         data: List,
         passthrough_fields: Optional[Dict],
         agent_config: Dict,
-        already_structured: bool
+        already_structured: bool,
     ) -> bool:
         """Check if we have precomputed fields and unstructured data."""
         return (
@@ -81,7 +78,7 @@ class PrecomputedUnstructuredStrategy(IPassthroughTransformStrategy):
         context_data: Dict,
         source_guid: str,
         agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List:
         """Merge passthrough fields directly into items."""
         merged = []

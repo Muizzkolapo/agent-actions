@@ -1,4 +1,5 @@
 """Module for managing source paths and files."""
+
 import json
 import logging
 from pathlib import Path
@@ -6,6 +7,7 @@ from typing import Any, Dict, Optional, Union
 from agent_actions.cli.utils.service_logger import ServiceLogger
 
 logger = logging.getLogger(__name__)
+
 
 class SourcePathManager:
     """Manages source paths and file operations (Single Responsibility Principle)."""
@@ -29,8 +31,9 @@ class SourcePathManager:
             source_dir = agent_dir / "source"
             source_path = source_dir / file_path.name
 
-            ServiceLogger.log_operation_success(logger, "get source path",
-                                             source_path=str(source_path))
+            ServiceLogger.log_operation_success(
+                logger, "get source path", source_path=str(source_path)
+            )
             return source_path
 
         except (ValueError, TypeError, KeyError) as e:
@@ -46,8 +49,9 @@ class SourcePathManager:
             source_path: Path to the source file (can be string or Path object)
         """
         try:
-            ServiceLogger.log_operation_start(logger, "ensure source directory",
-                                           source_path=str(source_path))
+            ServiceLogger.log_operation_start(
+                logger, "ensure source directory", source_path=str(source_path)
+            )
 
             # Convert string to Path if necessary
             if isinstance(source_path, str):
@@ -63,8 +67,7 @@ class SourcePathManager:
 
     @staticmethod
     def load_source_content(
-        source_path: Union[str, Path],
-        context_data: Dict[str, Any]
+        source_path: Union[str, Path], context_data: Dict[str, Any]
     ) -> Optional[Any]:
         """
         Load source content based on the input documentation's source_guid.
@@ -91,11 +94,11 @@ class SourcePathManager:
             # Create empty source file if it doesn't exist
             if not source_path.exists():
                 empty_source = []
-                with open(source_path, 'w', encoding='utf-8') as file:
+                with open(source_path, "w", encoding="utf-8") as file:
                     json.dump(empty_source, file, indent=2)
                 return None
 
-            with open(source_path, 'r', encoding='utf-8') as file:
+            with open(source_path, "r", encoding="utf-8") as file:
                 source_data = json.load(file)
 
                 # Extract source_guid from context_data (handle nested structure)
@@ -133,15 +136,16 @@ class SourcePathManager:
             content: Content to save
         """
         try:
-            ServiceLogger.log_operation_start(logger, "save source content",
-                                           source_path=str(source_path), source_guid=source_guid)
+            ServiceLogger.log_operation_start(
+                logger, "save source content", source_path=str(source_path), source_guid=source_guid
+            )
 
             # Ensure source directory exists
             SourcePathManager.ensure_source_directory(source_path)
 
             # Load existing content or create new list
             if source_path.exists():
-                with open(source_path, 'r', encoding='utf-8') as file:
+                with open(source_path, "r", encoding="utf-8") as file:
                     source_data = json.load(file)
             else:
                 source_data = []
@@ -162,11 +166,12 @@ class SourcePathManager:
                 source_data.append(content_entry)
 
             # Save updated content
-            with open(source_path, 'w', encoding='utf-8') as file:
+            with open(source_path, "w", encoding="utf-8") as file:
                 json.dump(source_data, file, indent=2)
 
-            ServiceLogger.log_operation_success(logger, "save source content",
-                                             source_guid=source_guid)
+            ServiceLogger.log_operation_success(
+                logger, "save source content", source_guid=source_guid
+            )
 
         except (ValueError, TypeError, KeyError) as e:
             ServiceLogger.log_operation_error(logger, "save source content", e)

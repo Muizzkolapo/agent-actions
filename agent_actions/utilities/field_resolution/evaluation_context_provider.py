@@ -28,9 +28,7 @@ Example:
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
-from agent_actions.utilities.context_scope.context_scope_processor import (
-    ContextScopeProcessor
-)
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -85,12 +83,7 @@ class EvaluationContext:
         """Check if an action's output exists in context."""
         return action_name in self.field_context
 
-    def get_field_value(
-        self,
-        action_name: str,
-        field_name: str,
-        default: Any = None
-    ) -> Any:
+    def get_field_value(self, action_name: str, field_name: str, default: Any = None) -> Any:
         """
         Get a specific field from an action's output.
 
@@ -134,14 +127,14 @@ class EvaluationContext:
                 flat[action_name] = action_data
 
         # Add special contexts
-        if self.source_content and 'source' not in flat:
-            flat['source'] = self.source_content
+        if self.source_content and "source" not in flat:
+            flat["source"] = self.source_content
 
-        if self.loop_context and 'loop' not in flat:
-            flat['loop'] = self.loop_context
+        if self.loop_context and "loop" not in flat:
+            flat["loop"] = self.loop_context
 
-        if self.workflow_metadata and 'workflow' not in flat:
-            flat['workflow'] = self.workflow_metadata
+        if self.workflow_metadata and "workflow" not in flat:
+            flat["workflow"] = self.workflow_metadata
 
         return flat
 
@@ -179,9 +172,7 @@ class EvaluationContextProvider:
     """
 
     def build_context(
-        self,
-        current_item: Dict[str, Any],
-        config: ContextBuildConfig
+        self, current_item: Dict[str, Any], config: ContextBuildConfig
     ) -> EvaluationContext:
         """
         Build rich evaluation context for item-level operations.
@@ -197,7 +188,7 @@ class EvaluationContextProvider:
             EvaluationContext with full upstream access
         """
         # Extract current content
-        current_content = current_item.get('content', {})
+        current_content = current_item.get("content", {})
         if not isinstance(current_content, dict):
             current_content = {}
 
@@ -214,29 +205,30 @@ class EvaluationContextProvider:
                 loop_context=config.loop_context,
                 workflow_metadata=config.workflow_metadata,
                 current_item=current_item,
-                file_path=config.file_path
+                file_path=config.file_path,
             )
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(
                 "Error building field context for '%s': %s. Using empty context.",
-                config.agent_name, e
+                config.agent_name,
+                e,
             )
             field_context = {}
 
         return EvaluationContext(
             current_content=current_content,
             field_context=field_context,
-            source_content=field_context.get('source'),
-            loop_context=field_context.get('loop'),
-            workflow_metadata=field_context.get('workflow'),
-            current_item=current_item
+            source_content=field_context.get("source"),
+            loop_context=field_context.get("loop"),
+            workflow_metadata=field_context.get("workflow"),
+            current_item=current_item,
         )
 
     def build_context_for_batch(
         self,
         contents: Dict[str, Any],
         config: ContextBuildConfig,
-        current_item: Optional[Dict[str, Any]] = None
+        current_item: Optional[Dict[str, Any]] = None,
     ) -> EvaluationContext:
         """
         Build context for batch mode (simplified parameters).
@@ -254,9 +246,9 @@ class EvaluationContextProvider:
         # Build minimal current_item if not provided
         if current_item is None:
             current_item = {
-                'content': contents,
-                'source_guid': contents.get('source_guid') if contents else None,
-                'lineage': contents.get('lineage', []) if contents else []
+                "content": contents,
+                "source_guid": contents.get("source_guid") if contents else None,
+                "lineage": contents.get("lineage", []) if contents else [],
             }
 
         return self.build_context(current_item=current_item, config=config)
@@ -264,7 +256,7 @@ class EvaluationContextProvider:
     def build_minimal_context(
         self,
         current_content: Dict[str, Any],
-        upstream_data: Optional[Dict[str, Dict[str, Any]]] = None
+        upstream_data: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> EvaluationContext:
         """
         Build minimal context without historical loading.
@@ -281,5 +273,5 @@ class EvaluationContextProvider:
         return EvaluationContext(
             current_content=current_content,
             field_context=upstream_data or {},
-            current_item={'content': current_content}
+            current_item={"content": current_content},
         )

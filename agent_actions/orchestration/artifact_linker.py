@@ -5,6 +5,7 @@ This module handles manifest-based artifact linking between workflows,
 allowing downstream workflows to read directly from upstream outputs
 without file duplication or symlinks.
 """
+
 from __future__ import annotations
 
 import json
@@ -27,7 +28,7 @@ class ArtifactLinker:
     from the original location.
     """
 
-    MANIFEST_FILENAME = '.upstream_manifest.json'
+    MANIFEST_FILENAME = ".upstream_manifest.json"
 
     def __init__(self, workflows_root: Path):
         """
@@ -49,14 +50,11 @@ class ArtifactLinker:
             source_workflow: Name of the workflow providing output
             target_workflow: Name of the workflow receiving input
         """
-        source_target = self.workflows_root / source_workflow / 'agent_io' / 'target'
-        target_io = self.workflows_root / target_workflow / 'agent_io'
+        source_target = self.workflows_root / source_workflow / "agent_io" / "target"
+        target_io = self.workflows_root / target_workflow / "agent_io"
 
         if not source_target.exists():
-            logger.warning(
-                "Source target directory does not exist: %s",
-                source_target
-            )
+            logger.warning("Source target directory does not exist: %s", source_target)
             return
 
         latest_node = self.find_latest_node_dir(source_target)
@@ -66,23 +64,14 @@ class ArtifactLinker:
 
         # Validate paths are within workspace
         if not self.validate_safe_path(latest_node, self.workflows_root):
-            logger.warning(
-                "Rejecting link: source %s outside workspace",
-                latest_node
-            )
+            logger.warning("Rejecting link: source %s outside workspace", latest_node)
             return
         if not self.validate_safe_path(target_io, self.workflows_root):
-            logger.warning(
-                "Rejecting link: target %s outside workspace",
-                target_io
-            )
+            logger.warning("Rejecting link: target %s outside workspace", target_io)
             return
 
         self._write_upstream_manifest(target_io, source_workflow, latest_node)
-        logger.info(
-            "Wrote manifest linking %s -> %s",
-            source_workflow, target_workflow
-        )
+        logger.info("Wrote manifest linking %s -> %s", source_workflow, target_workflow)
 
     def link_upstream_artifacts(self, upstream_name: str, current_workflow: str) -> None:
         """Link upstream workflow's output to current workflow via manifest."""
@@ -93,10 +82,7 @@ class ArtifactLinker:
         self.link_workflow_artifacts(current_workflow, downstream_name)
 
     def _write_upstream_manifest(
-        self,
-        target_io: Path,
-        source_workflow: str,
-        source_node: Path
+        self, target_io: Path, source_workflow: str, source_node: Path
     ) -> None:
         """
         Write manifest file pointing to upstream workflow's output.
@@ -114,22 +100,19 @@ class ArtifactLinker:
         # Collect file list from source node
         files = []
         for item in source_node.iterdir():
-            if item.is_file() and not item.name.startswith('.'):
+            if item.is_file() and not item.name.startswith("."):
                 files.append(item.name)
 
         manifest: dict[str, Any] = {
-            'upstream_workflow': source_workflow,
-            'upstream_path': str(source_node),
-            'files': sorted(files)
+            "upstream_workflow": source_workflow,
+            "upstream_path": str(source_node),
+            "files": sorted(files),
         }
 
         # Atomic write using temp file + rename
-        fd, tmp_path = tempfile.mkstemp(
-            dir=str(target_io),
-            prefix='.manifest_tmp_'
-        )
+        fd, tmp_path = tempfile.mkstemp(dir=str(target_io), prefix=".manifest_tmp_")
         try:
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(manifest, f, indent=2)
             Path(tmp_path).replace(manifest_file)
         except Exception:
@@ -149,10 +132,7 @@ class ArtifactLinker:
         Returns:
             Path to the most recently modified node directory, or None if not found.
         """
-        nodes = [
-            p for p in target_dir.iterdir()
-            if p.is_dir() and p.name.startswith('node_')
-        ]
+        nodes = [p for p in target_dir.iterdir() if p.is_dir() and p.name.startswith("node_")]
         if not nodes:
             return None
         # Sort by modification time to get the latest run
@@ -195,11 +175,11 @@ class ArtifactLinker:
             return None
 
         try:
-            with open(manifest_file, 'r', encoding='utf-8') as f:
+            with open(manifest_file, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
 
             # Validate required fields
-            if not all(k in manifest for k in ('upstream_workflow', 'upstream_path')):
+            if not all(k in manifest for k in ("upstream_workflow", "upstream_path")):
                 logger.warning("Manifest missing required fields: %s", manifest_file)
                 return None
 
@@ -209,4 +189,4 @@ class ArtifactLinker:
             return None
 
 
-__all__ = ['ArtifactLinker']
+__all__ = ["ArtifactLinker"]

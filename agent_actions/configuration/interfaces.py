@@ -1,13 +1,14 @@
 """Common interfaces for processors."""
+
 import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 # Generic type variables for interfaces
-T = TypeVar('T')
-DataT = TypeVar('DataT', bound=Dict[str, Any])
-ContentT = TypeVar('ContentT')
+T = TypeVar("T")
+DataT = TypeVar("DataT", bound=Dict[str, Any])
+ContentT = TypeVar("ContentT")
 
 
 class ProcessingMode(Enum):
@@ -104,9 +105,7 @@ class ISourceDataLoader(ILoader):
         return await asyncio.to_thread(self.load_source_data, file_path)
 
     @abstractmethod
-    def save_source_data(
-        self, file_path: str, source_guid: str, content: Dict
-    ) -> None:
+    def save_source_data(self, file_path: str, source_guid: str, content: Dict) -> None:
         """
         Save source data to the source directory.
 
@@ -116,9 +115,7 @@ class ISourceDataLoader(ILoader):
             content: Content to save
         """
 
-    async def save_source_data_async(
-        self, file_path: str, source_guid: str, content: Dict
-    ) -> None:
+    async def save_source_data_async(self, file_path: str, source_guid: str, content: Dict) -> None:
         """
         Async version of save_source_data. Default implementation uses sync version.
 
@@ -127,14 +124,10 @@ class ISourceDataLoader(ILoader):
             source_guid: source_guid to associate with the content
             content: Content to save
         """
-        return await asyncio.to_thread(
-            self.save_source_data, file_path, source_guid, content
-        )
+        return await asyncio.to_thread(self.save_source_data, file_path, source_guid, content)
 
     @abstractmethod
-    def load_source_content(
-        self, file_path: str, context_data: Dict[str, Any]
-    ) -> Optional[Any]:
+    def load_source_content(self, file_path: str, context_data: Dict[str, Any]) -> Optional[Any]:
         """
         Load specific content from source file by source_guid.
 
@@ -159,9 +152,7 @@ class ISourceDataLoader(ILoader):
         Returns:
             Optional[Any]: Loaded content or None if not found
         """
-        return await asyncio.to_thread(
-            self.load_source_content, file_path, context_data
-        )
+        return await asyncio.to_thread(self.load_source_content, file_path, context_data)
 
 
 # Processor interfaces
@@ -173,18 +164,12 @@ class IContentProcessor(IProcessor, Generic[DataT]):
 
     @abstractmethod
     def process(
-        self,
-        data: List[DataT],
-        file_path: str,
-        output_directory: Optional[str] = None
+        self, data: List[DataT], file_path: str, output_directory: Optional[str] = None
     ) -> List[DataT]:
         """Process a list of data items."""
 
     async def process_async(
-        self,
-        data: List[DataT],
-        file_path: str,
-        output_directory: Optional[str] = None
+        self, data: List[DataT], file_path: str, output_directory: Optional[str] = None
     ) -> List[DataT]:
         """
         Async version of process. Default implementation uses sync version.
@@ -197,9 +182,7 @@ class IContentProcessor(IProcessor, Generic[DataT]):
         Returns:
             List of processed data items
         """
-        return await asyncio.to_thread(
-            self.process, data, file_path, output_directory
-        )
+        return await asyncio.to_thread(self.process, data, file_path, output_directory)
 
     @abstractmethod
     def process_for_side_output(
@@ -220,9 +203,7 @@ class IContentProcessor(IProcessor, Generic[DataT]):
         Returns:
             Tuple of (main_output, side_output) lists
         """
-        return await asyncio.to_thread(
-            self.process_for_side_output, data, file_path
-        )
+        return await asyncio.to_thread(self.process_for_side_output, data, file_path)
 
 
 class IDataProcessor(IProcessor):
@@ -234,7 +215,7 @@ class IDataProcessor(IProcessor):
         contents: Dict,
         generated_data: List[Dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List[Dict]:
         """Process a single data item."""
 
@@ -243,7 +224,7 @@ class IDataProcessor(IProcessor):
         contents: Dict,
         generated_data: List[Dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List[Dict]:
         """
         Async version of process_item. Default implementation uses sync version.

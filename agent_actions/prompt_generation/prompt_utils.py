@@ -1,8 +1,10 @@
 """Module for String Processing Functions"""
+
 import re
 import json
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.errors import AgentActionsException, ConfigurationError  # New modular pattern!
+
 
 class PromptUtils:
     """
@@ -19,7 +21,7 @@ class PromptUtils:
         context_data_str: str,
         agent_config: dict = None,
         captured_results: dict = None,
-        preserve_type_on_exact_match: bool = False
+        preserve_type_on_exact_match: bool = False,
     ):
         """
         Process dispatch_task() calls in a single string.
@@ -52,7 +54,7 @@ class PromptUtils:
                     transformed_text = StringProcessor.call_user_function(
                         function_name, tools_path, context_data_str
                     )
-                    if agent_config and agent_config.get('add_dispatch'):
+                    if agent_config and agent_config.get("add_dispatch"):
                         captured_results[function_name] = transformed_text
                     if transformed_text is None:
                         # Decide behavior for None.
@@ -68,8 +70,7 @@ class PromptUtils:
                     raise e
                 except Exception as e:
                     raise AgentActionsException(
-                        f"An unexpected error occurred in function "
-                        f"'{function_name}': {str(e)}"
+                        f"An unexpected error occurred in function '{function_name}': {str(e)}"
                     ) from e
 
         matches = re.finditer(pattern, text)
@@ -84,17 +85,16 @@ class PromptUtils:
                 transformed_text = StringProcessor.call_user_function(
                     function_name, tools_path, context_data_str
                 )
-                if agent_config and agent_config.get('add_dispatch'):
+                if agent_config and agent_config.get("add_dispatch"):
                     captured_results[function_name] = transformed_text
                 if transformed_text is None:
-                    transformed_text = 'Error: No valid return from function.'
+                    transformed_text = "Error: No valid return from function."
                 text = text[:start] + str(transformed_text) + text[end:]
             except (AgentActionsException, ConfigurationError) as e:
                 raise e
             except Exception as e:
                 raise AgentActionsException(
-                    f"An unexpected error occurred in function "
-                    f"'{function_name}': {str(e)}"
+                    f"An unexpected error occurred in function '{function_name}': {str(e)}"
                 ) from e
         return text
 
@@ -122,15 +122,13 @@ class PromptUtils:
         if isinstance(prompt_config, list):
             processed_prompt = [
                 PromptUtils.process_dispatch_in_text(
-                    str(item), tools_path, context_data_str,
-                    agent_config, captured_results
+                    str(item), tools_path, context_data_str, agent_config, captured_results
                 )
                 for item in prompt_config
             ]
         elif isinstance(prompt_config, str):
             processed_prompt = PromptUtils.process_dispatch_in_text(
-                prompt_config, tools_path, context_data_str,
-                agent_config, captured_results
+                prompt_config, tools_path, context_data_str, agent_config, captured_results
             )
         else:
             processed_prompt = prompt_config
@@ -153,16 +151,14 @@ class PromptUtils:
         Returns:
             List of dicts with 'reference', 'field_path', and 'full_match'
         """
-        pattern = '\\{([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z0-9_]+)+)\\}'
+        pattern = "\\{([a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z0-9_]+)+)\\}"
         references = []
         for match in re.finditer(pattern, prompt):
             full_ref = match.group(1)
-            parts = full_ref.split('.')
-            references.append({
-                'reference': parts[0],
-                'field_path': parts[1:],
-                'full_match': match.group(0)
-            })
+            parts = full_ref.split(".")
+            references.append(
+                {"reference": parts[0], "field_path": parts[1:], "full_match": match.group(0)}
+            )
         return references
 
     @staticmethod
@@ -182,7 +178,7 @@ class PromptUtils:
             ValueError: If reference or field not found
         """
         if reference not in context:
-            available = ', '.join(context.keys())
+            available = ", ".join(context.keys())
             raise ValueError(f"Reference '{reference}' not found. Available: [{available}]")
         data = context[reference]
         for field in field_path:
@@ -193,11 +189,9 @@ class PromptUtils:
                 if 0 <= idx < len(data):
                     data = data[idx]
                 else:
-                    raise ValueError(
-                        f"Index {idx} out of range for array in '{reference}'"
-                    )
+                    raise ValueError(f"Index {idx} out of range for array in '{reference}'")
             else:
-                field_str = '.'.join(field_path)
+                field_str = ".".join(field_path)
                 raise ValueError(f"Field '{field_str}' not found in '{reference}'")
         return data
 
@@ -220,15 +214,13 @@ class PromptUtils:
         for ref in references:
             try:
                 value = PromptUtils.resolve_field_reference(
-                    ref['reference'], ref['field_path'], context
+                    ref["reference"], ref["field_path"], context
                 )
                 if isinstance(value, (dict, list)):
                     value_str = json.dumps(value, indent=2)
                 else:
                     value_str = str(value)
-                prompt = prompt.replace(ref['full_match'], value_str)
+                prompt = prompt.replace(ref["full_match"], value_str)
             except ValueError as e:
-                raise ValueError(
-                    f"Error resolving {ref['full_match']}: {str(e)}"
-                ) from e
+                raise ValueError(f"Error resolving {ref['full_match']}: {str(e)}") from e
         return prompt

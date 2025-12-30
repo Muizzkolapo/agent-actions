@@ -4,6 +4,7 @@ Directory validation utilities.
 This module provides utilities for validating directory structures
 and ensuring they meet the required constraints.
 """
+
 import os
 import logging
 from pathlib import Path
@@ -23,40 +24,38 @@ class DirectoryValidator(BaseValidator):
         """
         Checks if required directories exist and are accessible. Adds errors if not.
         """
-        logger.debug(
-            'Checking required directories: %s', [str(d) for d in required_dirs]
-        )
+        logger.debug("Checking required directories: %s", [str(d) for d in required_dirs])
         missing_dirs = []
         permission_dirs = []
         not_dirs = []
         for directory in required_dirs:
             if not self._ensure_path_exists(directory):
                 missing_dirs.append(directory)
-                logger.error('Required directory not found: %s', directory)
+                logger.error("Required directory not found: %s", directory)
                 continue
             if not self._is_directory(directory):
                 not_dirs.append(directory)
-                logger.error('Path exists but is not a directory: %s', directory)
+                logger.error("Path exists but is not a directory: %s", directory)
                 continue
             if not os.access(directory, os.R_OK):
                 permission_dirs.append(directory)
-                logger.error('Directory exists but is not readable: %s', directory)
+                logger.error("Directory exists but is not readable: %s", directory)
                 continue
-            logger.debug('Successfully validated directory: %s', directory)
+            logger.debug("Successfully validated directory: %s", directory)
         if missing_dirs:
             self.add_error(
-                f'Missing required directories: {[str(d) for d in missing_dirs]}. '
-                f'Please create them.'
+                f"Missing required directories: {[str(d) for d in missing_dirs]}. "
+                f"Please create them."
             )
         if not_dirs:
             self.add_error(
-                f'Paths exist but are not directories: {[str(d) for d in not_dirs]}. '
-                f'Please ensure they are directories.'
+                f"Paths exist but are not directories: {[str(d) for d in not_dirs]}. "
+                f"Please ensure they are directories."
             )
         if permission_dirs:
             self.add_error(
-                f'Directories exist but are not readable: '
-                f'{[str(d) for d in permission_dirs]}. Please check permissions.'
+                f"Directories exist but are not readable: "
+                f"{[str(d) for d in permission_dirs]}. Please check permissions."
             )
 
     def _check_directory_structure_logic(
@@ -65,16 +64,12 @@ class DirectoryValidator(BaseValidator):
         """
         Checks if a directory has the required structure. Adds errors if not.
         """
-        logger.debug('Checking directory structure for: %s', base_dir)
+        logger.debug("Checking directory structure for: %s", base_dir)
         if not self._ensure_path_exists(base_dir):
-            self.add_error(
-                f'Base directory for structure check does not exist: {base_dir}'
-            )
+            self.add_error(f"Base directory for structure check does not exist: {base_dir}")
             return
         if not self._is_directory(base_dir):
-            self.add_error(
-                f'Base path for structure check is not a directory: {base_dir}'
-            )
+            self.add_error(f"Base path for structure check is not a directory: {base_dir}")
             return
         for subdir_name, required_files in required_structure.items():
             subdir = base_dir / subdir_name
@@ -84,9 +79,7 @@ class DirectoryValidator(BaseValidator):
                 )
                 continue
             if not self._is_directory(subdir):
-                self.add_error(
-                    f"Path '{subdir_name}' in {base_dir} exists but is not a directory."
-                )
+                self.add_error(f"Path '{subdir_name}' in {base_dir} exists but is not a directory.")
                 continue
             for req_file_name in required_files:
                 file_path = subdir / req_file_name
@@ -100,7 +93,7 @@ class DirectoryValidator(BaseValidator):
                         f"Path '{req_file_name}' in '{subdir_name}' ({base_dir}) "
                         f"exists but is not a file."
                     )
-        logger.debug('Directory structure check complete for: %s', base_dir)
+        logger.debug("Directory structure check complete for: %s", base_dir)
 
     def _ensure_directories_exist_logic(
         self, directories: List[Path], create_if_missing: bool = True
@@ -109,78 +102,70 @@ class DirectoryValidator(BaseValidator):
         Ensures directories exist, optionally creating them. Adds errors on failure.
         """
         logger.debug(
-            'Ensuring directories exist: %s (create_if_missing=%s)',
-            [str(d) for d in directories], create_if_missing
+            "Ensuring directories exist: %s (create_if_missing=%s)",
+            [str(d) for d in directories],
+            create_if_missing,
         )
         created_dirs_log: List[Path] = []
         for directory in directories:
             if not self._ensure_path_exists(directory):
                 if create_if_missing:
                     try:
-                        logger.debug('Creating directory: %s', directory)
+                        logger.debug("Creating directory: %s", directory)
                         directory.mkdir(parents=True, exist_ok=True)
                         created_dirs_log.append(directory)
                     except OSError as e:
-                        self.add_error(f'Could not create directory {directory}: {e}')
+                        self.add_error(f"Could not create directory {directory}: {e}")
                 else:
                     self.add_error(
-                        f'Directory does not exist and creation is not enabled: '
-                        f'{directory}'
+                        f"Directory does not exist and creation is not enabled: {directory}"
                     )
             elif not self._is_directory(directory):
-                self.add_error(f'Path exists but is not a directory: {directory}')
+                self.add_error(f"Path exists but is not a directory: {directory}")
         if created_dirs_log:
-            logger.debug(
-                'Successfully created directories: %s',
-                [str(d) for d in created_dirs_log]
-            )
+            logger.debug("Successfully created directories: %s", [str(d) for d in created_dirs_log])
 
     def _check_write_permissions_logic(self, directories: List[Path]) -> None:
         """
         Checks if directories are writable. Adds errors if not.
         """
-        logger.debug(
-            'Checking write permissions for: %s', [str(d) for d in directories]
-        )
+        logger.debug("Checking write permissions for: %s", [str(d) for d in directories])
         not_writable = []
         for directory in directories:
             if not self._ensure_path_exists(directory):
                 self.add_error(
-                    f'Cannot check write permissions; directory does not exist: '
-                    f'{directory}'
+                    f"Cannot check write permissions; directory does not exist: {directory}"
                 )
                 continue
             if not self._is_directory(directory):
                 self.add_error(
-                    f'Cannot check write permissions; path is not a directory: '
-                    f'{directory}'
+                    f"Cannot check write permissions; path is not a directory: {directory}"
                 )
                 continue
             if not os.access(directory, os.W_OK):
                 not_writable.append(directory)
         if not_writable:
             self.add_error(
-                f'Directories are not writable: {[str(d) for d in not_writable]}. '
-                f'Please check permissions.'
+                f"Directories are not writable: {[str(d) for d in not_writable]}. "
+                f"Please check permissions."
             )
 
     def _validate_check_required(self, data: Dict[str, Any]) -> None:
         """Handle check_required operation."""
-        paths_to_check = data.get('paths_to_check')
+        paths_to_check = data.get("paths_to_check")
         if not isinstance(paths_to_check, list) or not all(
             isinstance(p, Path) for p in paths_to_check
         ):
             self.add_error(
-                "'paths_to_check' (List[Path]) is required for 'check_required' "
-                "operation."
+                "'paths_to_check' (List[Path]) is required for 'check_required' operation."
             )
         else:
             self._check_required_directories_logic(paths_to_check)
 
     def _validate_check_structure(self, data: Dict[str, Any]) -> None:
         """Handle check_structure operation."""
-        base_dir = data.get('base_dir')
-        required_structure = data.get('required_structure')
+        base_dir = data.get("base_dir")
+        required_structure = data.get("required_structure")
         if not isinstance(base_dir, Path) or not isinstance(required_structure, dict):
             self.add_error(
                 "'base_dir' (Path) and 'required_structure' (Dict) are required "
@@ -191,8 +176,8 @@ class DirectoryValidator(BaseValidator):
 
     def _validate_ensure_exists(self, data: Dict[str, Any]) -> None:
         """Handle ensure_exists operation."""
-        paths_to_check = data.get('paths_to_check')
-        create_if_missing = data.get('create_if_missing', True)
+        paths_to_check = data.get("paths_to_check")
+        create_if_missing = data.get("create_if_missing", True)
         is_valid_paths = isinstance(paths_to_check, list) and all(
             isinstance(p, Path) for p in paths_to_check
         )
@@ -206,13 +191,12 @@ class DirectoryValidator(BaseValidator):
 
     def _validate_check_write_permissions(self, data: Dict[str, Any]) -> None:
         """Handle check_write_permissions operation."""
-        paths_to_check = data.get('paths_to_check')
+        paths_to_check = data.get("paths_to_check")
         if not isinstance(paths_to_check, list) or not all(
             isinstance(p, Path) for p in paths_to_check
         ):
             self.add_error(
-                "'paths_to_check' (List[Path]) is required for "
-                "'check_write_permissions'."
+                "'paths_to_check' (List[Path]) is required for 'check_write_permissions'."
             )
         else:
             self._check_write_permissions_logic(paths_to_check)
@@ -240,28 +224,25 @@ class DirectoryValidator(BaseValidator):
         if not self._prepare_validation(data):
             return False
 
-        operation = data.get('operation')
+        operation = data.get("operation")
         if not operation:
-            self.add_error('Operation not specified in validation data.')
+            self.add_error("Operation not specified in validation data.")
             return False
 
-        logger.debug(
-            'DirectoryValidator performing operation: %s with data: %s',
-            operation, data
-        )
+        logger.debug("DirectoryValidator performing operation: %s with data: %s", operation, data)
 
         # Dispatch to operation handlers
         operation_handlers = {
-            'check_required': self._validate_check_required,
-            'check_structure': self._validate_check_structure,
-            'ensure_exists': self._validate_ensure_exists,
-            'check_write_permissions': self._validate_check_write_permissions,
+            "check_required": self._validate_check_required,
+            "check_structure": self._validate_check_structure,
+            "ensure_exists": self._validate_ensure_exists,
+            "check_write_permissions": self._validate_check_write_permissions,
         }
 
         handler = operation_handlers.get(operation)
         if handler:
             handler(data)
         else:
-            self.add_error(f'Unknown operation: {operation}')
+            self.add_error(f"Unknown operation: {operation}")
 
         return not self.has_errors()

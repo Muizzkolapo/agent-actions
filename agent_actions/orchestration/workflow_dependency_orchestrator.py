@@ -6,6 +6,7 @@ This module handles recursive execution of dependent workflows,
 coordinating upstream dependencies before and downstream workflows after
 the main workflow completes.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,7 @@ class WorkflowDependencyOrchestrator:
         workflows_root: Path,
         current_workflow: str,
         console: Console,
-        workflow_factory: Callable[..., Any]
+        workflow_factory: Callable[..., Any],
     ):
         """
         Initialize the dependency orchestrator.
@@ -69,7 +70,7 @@ class WorkflowDependencyOrchestrator:
         agent_configs: dict,
         user_code_path: Optional[str],
         default_path: Optional[str],
-        use_tools: bool
+        use_tools: bool,
     ) -> bool:
         """
         Recursively resolve and execute upstream dependencies.
@@ -87,14 +88,14 @@ class WorkflowDependencyOrchestrator:
         logger.info(
             "Checking upstream dependencies for %s...",
             self.current_workflow,
-            extra={'operation': 'resolve_upstream'}
+            extra={"operation": "resolve_upstream"},
         )
         processed_upstreams = set()
 
         for config in agent_configs.values():
-            for dep in config.get('dependencies', []):
-                if isinstance(dep, dict) and 'workflow' in dep:
-                    upstream_name = dep['workflow']
+            for dep in config.get("dependencies", []):
+                if isinstance(dep, dict) and "workflow" in dep:
+                    upstream_name = dep["workflow"]
                     if upstream_name in processed_upstreams:
                         continue
 
@@ -113,7 +114,7 @@ class WorkflowDependencyOrchestrator:
         upstream_name: str,
         user_code_path: Optional[str],
         default_path: Optional[str],
-        use_tools: bool
+        use_tools: bool,
     ) -> Optional[bool]:
         """
         Execute a single upstream workflow and link artifacts.
@@ -131,14 +132,12 @@ class WorkflowDependencyOrchestrator:
             RuntimeError: If upstream execution fails.
         """
         self.console.print(
-            f"[bold cyan]>> Recursive: Checking upstream workflow "
-            f"'{upstream_name}'...[/bold cyan]"
+            f"[bold cyan]>> Recursive: Checking upstream workflow '{upstream_name}'...[/bold cyan]"
         )
 
         try:
             upstream_config_path = (
-                self.workflows_root / upstream_name / 'agent_config' /
-                f'{upstream_name}.yml'
+                self.workflows_root / upstream_name / "agent_config" / f"{upstream_name}.yml"
             )
 
             if not upstream_config_path.exists():
@@ -167,7 +166,7 @@ class WorkflowDependencyOrchestrator:
                     default_path=default_path,
                     use_tools=use_tools,
                     run_upstream=False,  # Don't trigger recursive check
-                    run_downstream=False
+                    run_downstream=False,
                 )
                 result = upstream_wf.run()
 
@@ -185,36 +184,27 @@ class WorkflowDependencyOrchestrator:
             return True
 
         except Exception as e:
-            logger.error(
-                "Failed to execute upstream workflow %s: %s",
-                upstream_name, e
-            )
+            logger.error("Failed to execute upstream workflow %s: %s", upstream_name, e)
             raise RuntimeError(f"Recursive execution failed for {upstream_name}") from e
 
     def _check_workflow_complete(self, workflow_name: str) -> bool:
         """Check if a workflow is already complete by reading its status file."""
         upstream_status_file = (
-            self.workflows_root / workflow_name / 'agent_io' / '.agent_status.json'
+            self.workflows_root / workflow_name / "agent_io" / ".agent_status.json"
         )
 
         if not upstream_status_file.exists():
             return False
 
         try:
-            with open(upstream_status_file, 'r', encoding='utf-8') as f:
+            with open(upstream_status_file, "r", encoding="utf-8") as f:
                 status_data = json.load(f)
-            return all(
-                details.get('status') == 'completed'
-                for details in status_data.values()
-            )
+            return all(details.get("status") == "completed" for details in status_data.values())
         except (OSError, IOError, json.JSONDecodeError, KeyError):
             return False
 
     def resolve_downstream_workflows(
-        self,
-        user_code_path: Optional[str],
-        default_path: Optional[str],
-        use_tools: bool
+        self, user_code_path: Optional[str], default_path: Optional[str], use_tools: bool
     ) -> bool:
         """
         Execute all downstream workflows after current workflow completes.
@@ -231,7 +221,7 @@ class WorkflowDependencyOrchestrator:
         logger.info(
             "Checking downstream workflows for %s...",
             self.current_workflow,
-            extra={'operation': 'resolve_downstream'}
+            extra={"operation": "resolve_downstream"},
         )
 
         # Get sorted downstream workflows
@@ -269,7 +259,7 @@ class WorkflowDependencyOrchestrator:
         downstream_name: str,
         user_code_path: Optional[str],
         default_path: Optional[str],
-        use_tools: bool
+        use_tools: bool,
     ) -> Optional[bool]:
         """
         Execute a single downstream workflow.
@@ -288,8 +278,7 @@ class WorkflowDependencyOrchestrator:
         )
 
         downstream_config_path = (
-            self.workflows_root / downstream_name /
-            'agent_config' / f'{downstream_name}.yml'
+            self.workflows_root / downstream_name / "agent_config" / f"{downstream_name}.yml"
         )
 
         if not downstream_config_path.exists():
@@ -307,7 +296,7 @@ class WorkflowDependencyOrchestrator:
             default_path=default_path,
             use_tools=use_tools,
             run_upstream=False,
-            run_downstream=False
+            run_downstream=False,
         )
 
         result = downstream_wf.run()
@@ -327,15 +316,12 @@ class WorkflowDependencyOrchestrator:
         flag = "--upstream" if is_upstream else "--downstream"
 
         self.console.print(
-            f"[blue]⏳ {direction} workflow '{workflow_name}' "
-            "has pending batch jobs.[/blue]"
+            f"[blue]⏳ {direction} workflow '{workflow_name}' has pending batch jobs.[/blue]"
         )
         self.console.print(
             "[blue]Please wait for batch completion and run this command again:[/blue]"
         )
-        self.console.print(
-            f"[blue]  agac run -a {self.current_workflow} {flag}[/blue]"
-        )
+        self.console.print(f"[blue]  agac run -a {self.current_workflow} {flag}[/blue]")
 
     def resolve_upstream_and_initialize(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
@@ -343,7 +329,7 @@ class WorkflowDependencyOrchestrator:
         agent_configs: dict,
         user_code_path: Optional[str],
         default_path: Optional[str],
-        use_tools: bool
+        use_tools: bool,
     ) -> Optional[bool]:
         """
         Initialize correlation context and resolve upstream dependencies.
@@ -382,4 +368,4 @@ class WorkflowDependencyOrchestrator:
             raise
 
 
-__all__ = ['WorkflowDependencyOrchestrator']
+__all__ = ["WorkflowDependencyOrchestrator"]

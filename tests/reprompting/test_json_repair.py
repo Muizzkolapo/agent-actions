@@ -21,7 +21,7 @@ class TestJSONRepairStrategy:
 
     def test_valid_json_array(self, repair):
         """Test valid JSON array is parsed."""
-        result = repair.attempt_repair('[1, 2, 3]')
+        result = repair.attempt_repair("[1, 2, 3]")
         assert result.success is True
         assert result.data == [1, 2, 3]
 
@@ -84,7 +84,7 @@ class TestExtractJsonBlock:
 
     def test_extracts_json_array(self, repair):
         """Test extracting JSON array from text."""
-        input_text = 'The array is: [1, 2, 3] here.'
+        input_text = "The array is: [1, 2, 3] here."
         result = repair.attempt_repair(input_text)
         assert result.success is True
         assert result.data == [1, 2, 3]
@@ -114,7 +114,7 @@ class TestFixTrailingCommas:
 
     def test_fixes_trailing_comma_in_array(self, repair):
         """Test fixing trailing comma before ]."""
-        input_text = '[1, 2, 3,]'
+        input_text = "[1, 2, 3,]"
         result = repair.attempt_repair(input_text)
         assert result.success is True
         assert result.data == [1, 2, 3]
@@ -160,7 +160,7 @@ class TestCloseBrackets:
 
     def test_closes_unclosed_array(self, repair):
         """Test closing unclosed array bracket."""
-        input_text = '[1, 2, 3'
+        input_text = "[1, 2, 3"
         result = repair.attempt_repair(input_text)
         assert result.success is True
         assert result.data == [1, 2, 3]
@@ -209,7 +209,7 @@ class TestComplexRepairScenarios:
 
     def test_llm_response_with_explanation(self, repair):
         """Test typical LLM response with explanation before JSON."""
-        input_text = '''Here is the quiz question:
+        input_text = """Here is the quiz question:
 
 ```json
 {
@@ -218,7 +218,7 @@ class TestComplexRepairScenarios:
 }
 ```
 
-I hope this helps!'''
+I hope this helps!"""
         result = repair.attempt_repair(input_text)
         assert result.success is True
         assert result.data["question"] == "What is 2+2?"
@@ -234,9 +234,9 @@ I hope this helps!'''
     def test_multiple_issues(self, repair):
         """Test repairing JSON with multiple issues."""
         # Markdown + trailing comma
-        input_text = '''```json
+        input_text = """```json
 {"name": "test",}
-```'''
+```"""
         result = repair.attempt_repair(input_text)
         assert result.success is True
         assert result.data == {"name": "test"}

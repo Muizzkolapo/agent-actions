@@ -4,6 +4,7 @@ Passthrough Transformation Service.
 This module provides the main orchestrator for passthrough transformations
 using a Strategy Pattern to handle different transformation scenarios.
 """
+
 from typing import Dict, List, Optional
 from agent_actions.utilities.field_management import FieldManager
 from .strategies import (
@@ -12,7 +13,7 @@ from .strategies import (
     ContextScopeStructuredStrategy,
     ContextScopeUnstructuredStrategy,
     NoOpStrategy,
-    DefaultStructureStrategy
+    DefaultStructureStrategy,
 )
 
 
@@ -47,7 +48,7 @@ class PassthroughTransformer:  # pylint: disable=too-few-public-methods
             ContextScopeStructuredStrategy(),
             ContextScopeUnstructuredStrategy(),
             NoOpStrategy(),
-            DefaultStructureStrategy()  # Catch-all
+            DefaultStructureStrategy(),  # Catch-all
         ]
 
     def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -57,7 +58,7 @@ class PassthroughTransformer:  # pylint: disable=too-few-public-methods
         source_guid: str,
         agent_config: Dict,
         idx: int = 0,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List:
         """
         Apply context_scope.passthrough logic to generated data.
@@ -93,26 +94,14 @@ class PassthroughTransformer:  # pylint: disable=too-few-public-methods
         # Step 3: Select and execute strategy
         output = None
         for strategy in self.strategies:
-            if strategy.can_handle(
-                data,
-                passthrough_fields,
-                agent_config,
-                already_structured
-            ):
+            if strategy.can_handle(data, passthrough_fields, agent_config, already_structured):
                 output = strategy.transform(
-                    data,
-                    context_data,
-                    source_guid,
-                    agent_config,
-                    passthrough_fields
+                    data, context_data, source_guid, agent_config, passthrough_fields
                 )
                 break
 
         # Step 4: Ensure all items have required fields
-        return [
-            self.field_manager.ensure_required_fields(obj, source_guid, idx)
-            for obj in output
-        ]
+        return [self.field_manager.ensure_required_fields(obj, source_guid, idx) for obj in output]
 
     @staticmethod
     def _is_already_structured(data: List) -> bool:
@@ -127,12 +116,6 @@ class PassthroughTransformer:  # pylint: disable=too-few-public-methods
         Returns:
             True if data is already in structured format
         """
-        return (
-            len(data) > 0
-            and all(
-                isinstance(item, dict)
-                and 'source_guid' in item
-                and 'content' in item
-                for item in data
-            )
+        return len(data) > 0 and all(
+            isinstance(item, dict) and "source_guid" in item and "content" in item for item in data
         )

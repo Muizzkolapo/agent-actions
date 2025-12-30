@@ -67,7 +67,7 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
 
         # Try __cause__ first (explicit chaining with 'from')
         try:
-            if hasattr(current, '__cause__') and current.__cause__ is not None:
+            if hasattr(current, "__cause__") and current.__cause__ is not None:
                 next_exc = current.__cause__
         except Exception:
             logger.debug("Error accessing __cause__")
@@ -75,7 +75,7 @@ def extract_root_cause(exc: Exception, max_depth: int = 10) -> Exception:
         # Try __context__ if no __cause__ (implicit chaining)
         if next_exc is None:
             try:
-                if hasattr(current, '__context__') and current.__context__ is not None:
+                if hasattr(current, "__context__") and current.__context__ is not None:
                     next_exc = current.__context__
             except Exception:
                 logger.debug("Error accessing __context__")
@@ -112,9 +112,9 @@ def get_error_chain(exc: Exception, max_depth: int = 10) -> list:
         # Get next exception in chain
         next_exc = None
         try:
-            if hasattr(current, '__cause__') and current.__cause__ is not None:
+            if hasattr(current, "__cause__") and current.__cause__ is not None:
                 next_exc = current.__cause__
-            elif hasattr(current, '__context__') and current.__context__ is not None:
+            elif hasattr(current, "__context__") and current.__context__ is not None:
                 next_exc = current.__context__
         except Exception:
             break
@@ -132,7 +132,7 @@ def safe_get_exception_message(exc: Exception) -> str:
 
     # Try to get the args[0] which is usually the message
     try:
-        if hasattr(exc, 'args') and exc.args:
+        if hasattr(exc, "args") and exc.args:
             first_arg = exc.args[0]
             if isinstance(first_arg, str) and first_arg.strip():
                 return first_arg.strip()
@@ -183,7 +183,7 @@ def format_exception_chain_for_debug(exc: Exception, max_depth: int = 10) -> str
             lines.append(f"[{idx}] {exc_type}: {exc_msg}")
 
             # Add context if available
-            if hasattr(current_exc, 'context') and current_exc.context:
+            if hasattr(current_exc, "context") and current_exc.context:
                 context_str = format_exception_context(current_exc.context)
                 if context_str:
                     lines.append(f"    Context: {context_str}")

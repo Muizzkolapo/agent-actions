@@ -29,27 +29,30 @@ def clear_cache():
 # Type Detection Tests
 # =============================================================================
 
+
 class TestTypeDetection:
     """Tests for type detection logic."""
 
     def test_typeddict_detected(self):
         """TypedDict should be detected and converted."""
+
         class MyTypedDict(TypedDict):
             name: str
 
         assert is_typeddict(MyTypedDict)
         schema = derive_schema_from_type(MyTypedDict)
-        assert schema['name'] == 'MyTypedDict'
+        assert schema["name"] == "MyTypedDict"
 
     def test_dataclass_detected(self):
         """Dataclass should be detected and converted."""
+
         @dataclasses.dataclass
         class MyDataclass:
             name: str
 
         assert not is_typeddict(MyDataclass)
         schema = derive_schema_from_type(MyDataclass)
-        assert schema['name'] == 'MyDataclass'
+        assert schema["name"] == "MyDataclass"
 
     @pytest.mark.skipif(not HAS_PYDANTIC, reason="Pydantic not installed")
     def test_pydantic_detected(self):
@@ -61,10 +64,11 @@ class TestTypeDetection:
 
         assert not is_typeddict(MyPydantic)
         schema = derive_schema_from_type(MyPydantic)
-        assert schema['name'] == 'MyPydantic'
+        assert schema["name"] == "MyPydantic"
 
     def test_unsupported_type_raises(self):
         """Plain class should raise ConfigurationError."""
+
         class PlainClass:
             name: str
 
@@ -84,92 +88,101 @@ class TestTypeDetection:
 # TypedDict Conversion Tests
 # =============================================================================
 
+
 class TestTypedDictConversion:
     """Tests for TypedDict to unified schema conversion."""
 
     def test_simple_typeddict(self):
         """Simple TypedDict with string and int fields."""
+
         class Input(TypedDict):
             name: str
             age: int
 
         schema = derive_schema_from_type(Input)
 
-        assert schema['name'] == 'Input'
-        assert len(schema['fields']) == 2
+        assert schema["name"] == "Input"
+        assert len(schema["fields"]) == 2
 
-        fields = {f['id']: f for f in schema['fields']}
-        assert fields['name']['type'] == 'string'
-        assert fields['name']['required'] is True
-        assert fields['age']['type'] == 'integer'  # int -> integer, not number
-        assert fields['age']['required'] is True
+        fields = {f["id"]: f for f in schema["fields"]}
+        assert fields["name"]["type"] == "string"
+        assert fields["name"]["required"] is True
+        assert fields["age"]["type"] == "integer"  # int -> integer, not number
+        assert fields["age"]["required"] is True
 
     def test_int_maps_to_integer(self):
         """int should map to 'integer', not 'number'."""
+
         class Input(TypedDict):
             count: int
             price: float
 
         schema = derive_schema_from_type(Input)
-        fields = {f['id']: f for f in schema['fields']}
+        fields = {f["id"]: f for f in schema["fields"]}
 
-        assert fields['count']['type'] == 'integer'
-        assert fields['price']['type'] == 'number'
+        assert fields["count"]["type"] == "integer"
+        assert fields["price"]["type"] == "number"
 
     def test_optional_field(self):
         """Optional[T] should mark field as not required."""
+
         class Input(TypedDict):
             required_field: str
             optional_field: Optional[str]
 
         schema = derive_schema_from_type(Input)
-        fields = {f['id']: f for f in schema['fields']}
+        fields = {f["id"]: f for f in schema["fields"]}
 
-        assert fields['required_field']['required'] is True
-        assert fields['optional_field']['required'] is False
+        assert fields["required_field"]["required"] is True
+        assert fields["optional_field"]["required"] is False
 
     def test_total_false(self):
         """TypedDict with total=False should have optional fields."""
+
         class Input(TypedDict, total=False):
             optional: str
 
         schema = derive_schema_from_type(Input)
-        assert schema['fields'][0]['required'] is False
+        assert schema["fields"][0]["required"] is False
 
     def test_list_field(self):
         """List[T] should produce array type with items."""
+
         class Input(TypedDict):
             items: List[str]
 
         schema = derive_schema_from_type(Input)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'array'
-        assert field['items']['type'] == 'string'
+        assert field["type"] == "array"
+        assert field["items"]["type"] == "string"
 
     def test_list_of_integers(self):
         """List[int] should have items type 'integer'."""
+
         class Input(TypedDict):
             numbers: List[int]
 
         schema = derive_schema_from_type(Input)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['items']['type'] == 'integer'
+        assert field["items"]["type"] == "integer"
 
     def test_dict_field(self):
         """Dict[str, V] should produce object with additionalProperties."""
+
         class Input(TypedDict):
             metadata: Dict[str, int]
 
         schema = derive_schema_from_type(Input)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'object'
-        assert field['additionalProperties']['type'] == 'integer'
+        assert field["type"] == "object"
+        assert field["additionalProperties"]["type"] == "integer"
 
     def test_nested_typeddict(self):
         """Nested TypedDict should produce nested object."""
+
         class Inner(TypedDict):
             value: int
 
@@ -177,14 +190,15 @@ class TestTypedDictConversion:
             inner: Inner
 
         schema = derive_schema_from_type(Outer)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'object'
-        assert 'properties' in field
-        assert 'value' in field['properties']
+        assert field["type"] == "object"
+        assert "properties" in field
+        assert "value" in field["properties"]
 
     def test_list_of_typeddict(self):
         """List[TypedDict] should produce array of objects."""
+
         class Item(TypedDict):
             id: int
             name: str
@@ -193,53 +207,58 @@ class TestTypedDictConversion:
             items: List[Item]
 
         schema = derive_schema_from_type(Container)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'array'
-        assert field['items']['type'] == 'object'
-        assert 'properties' in field['items']
+        assert field["type"] == "array"
+        assert field["items"]["type"] == "object"
+        assert "properties" in field["items"]
 
 
 # =============================================================================
 # Dataclass Conversion Tests
 # =============================================================================
 
+
 class TestDataclassConversion:
     """Tests for dataclass to unified schema conversion."""
 
     def test_simple_dataclass(self):
         """Simple dataclass with required and default fields."""
+
         @dataclasses.dataclass
         class Input:
             name: str
             count: int = 0
 
         schema = derive_schema_from_type(Input)
-        fields = {f['id']: f for f in schema['fields']}
+        fields = {f["id"]: f for f in schema["fields"]}
 
-        assert fields['name']['required'] is True
-        assert fields['count']['required'] is False
+        assert fields["name"]["required"] is True
+        assert fields["count"]["required"] is False
 
     def test_factory_default(self):
         """Field with default_factory should not be required."""
+
         @dataclasses.dataclass
         class Input:
             items: List[str] = dataclasses.field(default_factory=list)
 
         schema = derive_schema_from_type(Input)
-        assert schema['fields'][0]['required'] is False
+        assert schema["fields"][0]["required"] is False
 
     def test_optional_dataclass_field(self):
         """Optional field in dataclass should not be required."""
+
         @dataclasses.dataclass
         class Input:
             maybe: Optional[str] = None
 
         schema = derive_schema_from_type(Input)
-        assert schema['fields'][0]['required'] is False
+        assert schema["fields"][0]["required"] is False
 
     def test_nested_dataclass(self):
         """Nested dataclass should produce nested object."""
+
         @dataclasses.dataclass
         class Inner:
             value: int
@@ -249,15 +268,16 @@ class TestDataclassConversion:
             inner: Inner
 
         schema = derive_schema_from_type(Outer)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'object'
-        assert 'properties' in field
+        assert field["type"] == "object"
+        assert "properties" in field
 
 
 # =============================================================================
 # Pydantic Conversion Tests
 # =============================================================================
+
 
 @pytest.mark.skipif(not HAS_PYDANTIC, reason="Pydantic not installed")
 class TestPydanticConversion:
@@ -272,10 +292,10 @@ class TestPydanticConversion:
             count: int = 0
 
         schema = derive_schema_from_type(Input)
-        fields = {f['id']: f for f in schema['fields']}
+        fields = {f["id"]: f for f in schema["fields"]}
 
-        assert fields['name']['required'] is True
-        assert fields['count']['required'] is False
+        assert fields["name"]["required"] is True
+        assert fields["count"]["required"] is False
 
     def test_optional_pydantic_field(self):
         """Optional field in Pydantic should not be required."""
@@ -285,7 +305,7 @@ class TestPydanticConversion:
             maybe: Optional[str] = None
 
         schema = derive_schema_from_type(Input)
-        assert schema['fields'][0]['required'] is False
+        assert schema["fields"][0]["required"] is False
 
     def test_list_pydantic_field(self):
         """List field in Pydantic should produce array."""
@@ -295,21 +315,23 @@ class TestPydanticConversion:
             items: List[str]
 
         schema = derive_schema_from_type(Input)
-        field = schema['fields'][0]
+        field = schema["fields"][0]
 
-        assert field['type'] == 'array'
-        assert 'items' in field
+        assert field["type"] == "array"
+        assert "items" in field
 
 
 # =============================================================================
 # Schema Caching Tests
 # =============================================================================
 
+
 class TestSchemaCaching:
     """Tests for schema caching functionality."""
 
     def test_cache_returns_same_structure(self):
         """Cached result should match fresh derivation."""
+
         class Input(TypedDict):
             name: str
 
@@ -321,6 +343,7 @@ class TestSchemaCaching:
 
     def test_cache_returns_copy(self):
         """Cached result should be a copy, not same object."""
+
         class Input(TypedDict):
             name: str
 
@@ -329,10 +352,11 @@ class TestSchemaCaching:
 
         # Should not be the same object (mutation protection)
         assert schema1 is not schema2
-        assert schema1['fields'] is not schema2['fields']
+        assert schema1["fields"] is not schema2["fields"]
 
     def test_clear_cache(self):
         """clear_schema_cache should empty the cache."""
+
         class Input(TypedDict):
             name: str
 

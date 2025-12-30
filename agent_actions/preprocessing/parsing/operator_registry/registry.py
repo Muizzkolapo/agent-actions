@@ -39,10 +39,12 @@ class OperatorRegistry:
             # Get all classes from the module
             for name, obj in inspect.getmembers(module, inspect.isclass):
                 # Skip abstract base classes and check if it's a concrete operator
-                if (issubclass(obj, BaseOperator) and
-                    obj is not BaseOperator and
-                    not inspect.isabstract(obj) and
-                    not name.startswith('_')):
+                if (
+                    issubclass(obj, BaseOperator)
+                    and obj is not BaseOperator
+                    and not inspect.isabstract(obj)
+                    and not name.startswith("_")
+                ):
                     try:
                         # Instantiate and register the operator
                         operator_instance = obj()
@@ -50,16 +52,15 @@ class OperatorRegistry:
                     except ValueError as e:
                         logger.debug(
                             "Skipping operator %s that can't be instantiated: %s",
-                            name, e,
+                            name,
+                            e,
                             extra={
-                                'operator_class': name,
-                                'module_name': (
-                                    module.__name__
-                                    if hasattr(module, '__name__')
-                                    else 'unknown'
+                                "operator_class": name,
+                                "module_name": (
+                                    module.__name__ if hasattr(module, "__name__") else "unknown"
                                 ),
-                                'operation': 'operator_discovery'
-                            }
+                                "operation": "operator_discovery",
+                            },
                         )
 
     def register_operator(self, operator: BaseOperator):
@@ -120,10 +121,7 @@ class OperatorRegistry:
         operator = self.get_operator(name_or_symbol)
         return operator.get_info() if operator else None
 
-    def list_operators(
-        self,
-        operator_type: Optional[OperatorType] = None
-    ) -> List[OperatorInfo]:
+    def list_operators(self, operator_type: Optional[OperatorType] = None) -> List[OperatorInfo]:
         """
         List all registered operators.
 
@@ -139,10 +137,7 @@ class OperatorRegistry:
             if operator_type is None or info.operator_type == operator_type:
                 operators.append(info)
 
-        return sorted(
-            operators,
-            key=lambda x: (x.operator_type.value, x.precedence, x.name)
-        )
+        return sorted(operators, key=lambda x: (x.operator_type.value, x.precedence, x.name))
 
 
 # Global registry instance

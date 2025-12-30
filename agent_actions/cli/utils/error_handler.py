@@ -3,6 +3,7 @@ Error handling utilities.
 
 This module provides common utilities for handling errors in a consistent way.
 """
+
 import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Type, TypeVar, Union
@@ -19,13 +20,14 @@ from agent_actions.errors import (
 from agent_actions.shared.user_errors import format_user_error
 
 logger = logging.getLogger(__name__)
-T = TypeVar('T', bound=AgentActionsException)
+T = TypeVar("T", bound=AgentActionsException)
+
 
 class ErrorHandler:
     """Utility class for handling errors in a consistent way."""
 
     @staticmethod
-    def format_for_user(error: Exception, context: Optional[Dict[str, Any]]=None) -> str:
+    def format_for_user(error: Exception, context: Optional[Dict[str, Any]] = None) -> str:
         """
         Format error using user-friendly system.
 
@@ -43,7 +45,7 @@ class ErrorHandler:
         error: Exception,
         message: str,
         error_type: Optional[Type[T]] = None,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Handle an error by logging it and raising an appropriate exception.
@@ -57,21 +59,18 @@ class ErrorHandler:
         Raises:
             The specified error type or AgentActionsException if not specified.
         """
-        error_details = {'error': str(error), **(context or {})}
+        error_details = {"error": str(error), **(context or {})}
         # Only log at DEBUG level (to avoid duplicate error logs)
         # The top-level error handler (main.py) will log at ERROR level
         logger.debug("%s: %s", message, str(error), extra=error_details)
         if error_type:
-            raise error_type(f'{message}: {str(error)}', context=context, cause=error)
+            raise error_type(f"{message}: {str(error)}", context=context, cause=error)
 
-        raise AgentActionsException(f'{message}: {str(error)}', context=context, cause=error)
-
+        raise AgentActionsException(f"{message}: {str(error)}", context=context, cause=error)
 
     @staticmethod
     def handle_validation_error(
-        error: Exception,
-        target: str,
-        context: Optional[Dict[str, Any]] = None
+        error: Exception, target: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Handle a validation error.
@@ -84,16 +83,15 @@ class ErrorHandler:
         Raises:
             ValidationError: With appropriate message.
         """
-        message = f'Validation failed for {target}'
+        message = f"Validation failed for {target}"
         ErrorHandler.handle_error(error, message, ValidationError, context)
-
 
     @staticmethod
     def handle_file_error(
         error: Exception,
         operation: str,
         path: Union[str, Path],
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Handle a file operation error.
@@ -109,7 +107,7 @@ class ErrorHandler:
         """
 
         if isinstance(error, (FileNotFoundError, IOError, OSError)):
-            if not error.args or 'No such file' in str(error):
+            if not error.args or "No such file" in str(error):
                 error_type = FileLoadError
             else:
                 error_type = FileSystemError
@@ -118,13 +116,9 @@ class ErrorHandler:
         message = f"File operation '{operation}' failed for path: {path}"
         ErrorHandler.handle_error(error, message, error_type, context)
 
-
     @staticmethod
     def handle_config_error(
-        error: Exception,
-        operation: str,
-        config_name: str,
-        context: Optional[Dict[str, Any]] = None
+        error: Exception, operation: str, config_name: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Handle a configuration error.
@@ -142,13 +136,12 @@ class ErrorHandler:
         message = f"Configuration operation '{operation}' failed for {config_name}"
         ErrorHandler.handle_error(error, message, ConfigurationError, context)
 
-
     @staticmethod
     def handle_template_error(
         error: Exception,
         operation: str,
         template_name: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Handle a template rendering error.
@@ -166,13 +159,9 @@ class ErrorHandler:
         message = f"Template operation '{operation}' failed for {template_name}"
         ErrorHandler.handle_error(error, message, TemplateRenderingError, context)
 
-
     @staticmethod
     def handle_execution_error(
-        error: Exception,
-        operation: str,
-        target: str,
-        context: Optional[Dict[str, Any]] = None
+        error: Exception, operation: str, target: str, context: Optional[Dict[str, Any]] = None
     ) -> None:
         """
         Handle an execution error.

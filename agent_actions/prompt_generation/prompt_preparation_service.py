@@ -101,15 +101,11 @@ from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.prompt_generation.prompt_utils import PromptUtils
 from agent_actions.prompt_generation.sample_enricher import SampleEnricher
-from agent_actions.utilities.context_scope.context_scope_processor import (
-    ContextScopeProcessor
-)
-from agent_actions.utilities.context_scope.llm_context_builder import (
-    LLMContextBuilder
-)
+from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
 from agent_actions.utilities.context_scope.static_data_loader import (
     StaticDataLoader,
-    StaticDataLoadError
+    StaticDataLoadError,
 )
 
 logger = logging.getLogger(__name__)
@@ -138,10 +134,11 @@ class PromptPreparationRequest:  # pylint: disable=too-many-instance-attributes
         file_path: Optional file path for history
         tools_path: Optional path to tools directory
     """
+
     agent_config: Dict[str, Any]
     agent_name: str
     contents: Dict[str, Any]
-    mode: Literal['batch', 'realtime'] = 'realtime'
+    mode: Literal["batch", "realtime"] = "realtime"
     agent_indices: Optional[Dict[str, int]] = None
     dependency_configs: Optional[Dict[str, Dict]] = None
     source_content: Optional[Any] = None
@@ -172,6 +169,7 @@ class PromptPreparationResult:
                  - passthrough_fields: Fields marked for passthrough
                  - mode: Processing mode used (batch or realtime)
     """
+
     formatted_prompt: str
     llm_context: Dict[str, Any]
     passthrough_fields: Dict[str, Any]
@@ -200,7 +198,7 @@ class PromptPreparationService:
         Returns:
             True if mode is valid, False otherwise
         """
-        return mode in ('batch', 'realtime')
+        return mode in ("batch", "realtime")
 
     @staticmethod
     def prepare_prompt_with_context(  # pylint: disable=too-many-arguments
@@ -208,7 +206,7 @@ class PromptPreparationService:
         agent_name: str,
         contents: Dict[str, Any],
         *,
-        mode: Literal['batch', 'realtime'] = 'realtime',
+        mode: Literal["batch", "realtime"] = "realtime",
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         source_content: Optional[Any] = None,
@@ -216,7 +214,7 @@ class PromptPreparationService:
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
-        tools_path: Optional[str] = None
+        tools_path: Optional[str] = None,
     ) -> PromptPreparationResult:
         """
         Public wrapper that maintains backward compatibility.
@@ -237,14 +235,12 @@ class PromptPreparationService:
             workflow_metadata=workflow_metadata,
             current_item=current_item,
             file_path=file_path,
-            tools_path=tools_path
+            tools_path=tools_path,
         )
         return PromptPreparationService._prepare_prompt_internal(request)
 
     @staticmethod
-    def _prepare_prompt_internal(
-        request: PromptPreparationRequest
-    ) -> PromptPreparationResult:
+    def _prepare_prompt_internal(request: PromptPreparationRequest) -> PromptPreparationResult:
         """
         Prepare prompt with all transformations applied.
 
@@ -275,11 +271,7 @@ class PromptPreparationService:
                 "prepare_prompt_with_context()."
             )
 
-        logger.debug(
-            "Preparing prompt for agent '%s' in %s mode",
-            request.agent_name,
-            request.mode
-        )
+        logger.debug("Preparing prompt for agent '%s' in %s mode", request.agent_name, request.mode)
 
         # Initialize defaults
         agent_indices = request.agent_indices or {}
@@ -300,29 +292,30 @@ class PromptPreparationService:
             loop_context=request.loop_context,
             workflow_metadata=request.workflow_metadata,
             current_item=request.current_item,
-            file_path=request.file_path
+            file_path=request.file_path,
         )
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
         # Step 2.5: Load seed data files if configured
-        context_scope = request.agent_config.get('context_scope', {})
+        context_scope = request.agent_config.get("context_scope", {})
         static_data = PromptPreparationService._load_seed_data(
             request.agent_config, context_scope, request.agent_name
         )
 
         # Step 3: Apply context_scope transformations (observe/drop/passthrough)
         if context_scope:
-            prompt_context, llm_additional_context, passthrough_fields = \
+            prompt_context, llm_additional_context, passthrough_fields = (
                 ContextScopeProcessor.apply_context_scope(
                     field_context,
                     context_scope,
-                    static_data=static_data  # Pass static data to processor
+                    static_data=static_data,  # Pass static data to processor
                 )
+            )
             logger.debug(
                 "Applied context_scope: observe=%d, passthrough=%d, static_data=%d",
                 len(llm_additional_context),
                 len(passthrough_fields),
-                len(static_data)
+                len(static_data),
             )
         else:
             # No context_scope: use field_context as-is for backward compatibility
@@ -336,11 +329,9 @@ class PromptPreparationService:
             mode=request.mode,
             contents=request.contents,
             llm_additional_context=llm_additional_context,
-            context_scope=context_scope
+            context_scope=context_scope,
         )
-        logger.debug(
-            "Built LLM context for %s mode with %d keys", request.mode, len(llm_context)
-        )
+        logger.debug("Built LLM context for %s mode with %d keys", request.mode, len(llm_context))
 
         # Step 5: Render template with Jinja2 ({{ action.field }})
         formatted_prompt = PromptPreparationService._render_prompt_template(
@@ -354,48 +345,43 @@ class PromptPreparationService:
                 formatted_prompt,
                 request.tools_path,
                 json.dumps(llm_context, ensure_ascii=False),
-                agent_config=request.agent_config
+                agent_config=request.agent_config,
             )
             logger.debug("Injected function outputs for dispatch_task()")
 
         # Step 7: Append few-shot samples
         formatted_prompt = SampleEnricher.append_few_shot_samples(
-            formatted_prompt,
-            request.agent_config,
-            request.agent_name
+            formatted_prompt, request.agent_config, request.agent_name
         )
         logger.debug("Appended few-shot samples")
 
         # Build metadata for debugging
         metadata = {
-            'mode': request.mode,
-            'field_context_keys': list(field_context.keys()),
-            'observe_fields': list(llm_additional_context.keys()),
-            'passthrough_fields': list(passthrough_fields.keys()),
-            'drop_fields': context_scope.get('drop', []) if context_scope else [],
-            'prompt_length': len(formatted_prompt),
-            'llm_context_keys': list(llm_context.keys()) if isinstance(llm_context, dict) else []
+            "mode": request.mode,
+            "field_context_keys": list(field_context.keys()),
+            "observe_fields": list(llm_additional_context.keys()),
+            "passthrough_fields": list(passthrough_fields.keys()),
+            "drop_fields": context_scope.get("drop", []) if context_scope else [],
+            "prompt_length": len(formatted_prompt),
+            "llm_context_keys": list(llm_context.keys()) if isinstance(llm_context, dict) else [],
         }
 
         logger.debug(
             "Prompt preparation complete for '%s': prompt_length=%d, llm_context_keys=%d",
             request.agent_name,
-            metadata['prompt_length'],
-            len(metadata['llm_context_keys'])
+            metadata["prompt_length"],
+            len(metadata["llm_context_keys"]),
         )
 
         return PromptPreparationResult(
             formatted_prompt=formatted_prompt,
             llm_context=llm_context,
             passthrough_fields=passthrough_fields,
-            metadata=metadata
+            metadata=metadata,
         )
 
     @staticmethod
-    def _render_prompt_template(
-        raw_prompt: str,
-        prompt_context: Dict[str, Any]
-    ) -> str:
+    def _render_prompt_template(raw_prompt: str, prompt_context: Dict[str, Any]) -> str:
         """
         Render Jinja2 template with the given context.
 
@@ -419,7 +405,7 @@ class PromptPreparationService:
                 undefined=StrictUndefined,
                 trim_blocks=True,
                 lstrip_blocks=True,
-                keep_trailing_newline=True
+                keep_trailing_newline=True,
             )
 
             # Parse and render template
@@ -431,8 +417,7 @@ class PromptPreparationService:
         except TemplateSyntaxError as e:
             logger.error("Jinja2 template syntax error: %s", e)
             raise ValueError(
-                f"Invalid Jinja2 syntax in prompt template: {e}\n"
-                f"Line {e.lineno}: {e.message}"
+                f"Invalid Jinja2 syntax in prompt template: {e}\nLine {e.lineno}: {e.message}"
             ) from e
         except Exception as e:
             logger.error("Error rendering prompt template: %s", e)
@@ -444,9 +429,7 @@ class PromptPreparationService:
 
     @staticmethod
     def _load_seed_data(
-        agent_config: Dict[str, Any],
-        context_scope: Dict[str, Any],
-        agent_name: str
+        agent_config: Dict[str, Any], context_scope: Dict[str, Any], agent_name: str
     ) -> Dict[str, Any]:
         """
         Load seed data files if configured.
@@ -459,31 +442,27 @@ class PromptPreparationService:
         Returns:
             Dictionary of loaded static data, or empty dict if not configured
         """
-        if not context_scope or not context_scope.get('seed_data'):
+        if not context_scope or not context_scope.get("seed_data"):
             return {}
 
         try:
             logger.debug("[SEED_DATA_LOAD] Starting seed data loading...")
             # Determine seed_data directory from workflow config path
             static_data_dir = PromptPreparationService._determine_static_data_dir(
-                agent_config.get('workflow_config_path')
+                agent_config.get("workflow_config_path")
             )
             logger.debug("[SEED_DATA_LOAD] Seed data directory: %s", static_data_dir)
 
             # Load seed data
             static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
-            static_data = static_data_loader.load_static_data(
-                context_scope.get('seed_data', {})
-            )
+            static_data = static_data_loader.load_static_data(context_scope.get("seed_data", {}))
 
             logger.debug(
                 "[SEED_DATA_LOAD] Loaded %d seed data files: %s",
                 len(static_data),
-                list(static_data.keys())
+                list(static_data.keys()),
             )
-            logger.debug(
-                "[SEED_DATA_LOAD] Seed data keys: %s", list(static_data.keys())
-            )
+            logger.debug("[SEED_DATA_LOAD] Seed data keys: %s", list(static_data.keys()))
             return static_data
         except StaticDataLoadError as e:
             logger.error("Failed to load static data: %s", e)
@@ -493,11 +472,11 @@ class PromptPreparationService:
             raise StaticDataLoadError(
                 f"Failed to load static data: {str(e)}",
                 context={
-                    'agent_name': agent_name,
-                    'error': str(e),
-                    'error_type': 'unexpected_static_data_error'
+                    "agent_name": agent_name,
+                    "error": str(e),
+                    "error_type": "unexpected_static_data_error",
                 },
-                cause=e
+                cause=e,
             ) from e
 
     @staticmethod
@@ -505,7 +484,7 @@ class PromptPreparationService:
         mode: str,
         contents: Dict[str, Any],
         llm_additional_context: Dict[str, Any],
-        context_scope: Optional[Dict[str, Any]] = None
+        context_scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Build the complete LLM context (mode-specific).
@@ -527,28 +506,26 @@ class PromptPreparationService:
         # Ensure contents is a dict (handle None or non-dict gracefully)
         safe_contents = contents if isinstance(contents, dict) else {}
 
-        if mode == 'batch':
+        if mode == "batch":
             # Batch mode: Start with row_content, remove drops, add observes
             return LLMContextBuilder.build_llm_context_for_batch(
                 row_content=safe_contents,
                 llm_context=llm_additional_context,
-                context_scope=context_scope
+                context_scope=context_scope,
             )
-        if mode == 'realtime':
+        if mode == "realtime":
             # Realtime mode: Start with processed_context, use DataTransformer for drops
             result = LLMContextBuilder.build_llm_context_for_realtime(
                 processed_context=safe_contents,
                 llm_additional_context=llm_additional_context,
-                context_scope=context_scope
+                context_scope=context_scope,
             )
             # Ensure result is always a dict (DataTransformer might return non-dict)
             return result if isinstance(result, dict) else {}
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
 
     @staticmethod
-    def _determine_static_data_dir(
-        workflow_config_path: Optional[str]
-    ) -> Path:
+    def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:
         """
         Determine seed_data/ directory for loading static data files.
 
@@ -572,11 +549,11 @@ class PromptPreparationService:
             # This ensures we're at workflow root regardless of nesting
             current = file_path_obj.parent
             while current != current.parent:  # Stop at filesystem root
-                if (current / 'agent_config').exists():
+                if (current / "agent_config").exists():
                     base_dir = current
                     break
                 # Also check if current directory name is 'agent_config'
-                if current.name == 'agent_config' and current.parent != current:
+                if current.name == "agent_config" and current.parent != current:
                     base_dir = current.parent
                     break
                 current = current.parent
@@ -587,7 +564,7 @@ class PromptPreparationService:
         logger.debug("Determined workflow base directory: %s", base_dir)
 
         # Check for seed_data/ folder at workflow root
-        seed_data_dir = base_dir / 'seed_data'
+        seed_data_dir = base_dir / "seed_data"
         if seed_data_dir.exists() and seed_data_dir.is_dir():
             logger.debug("Found seed_data/ folder: %s", seed_data_dir)
             return seed_data_dir
@@ -599,10 +576,10 @@ class PromptPreparationService:
             f"at workflow root (same level as agent_config/, schema/, prompt_store/) "
             f"to store static reference data files.",
             context={
-                'workflow_dir': str(base_dir),
-                'checked_path': str(seed_data_dir),
-                'error_type': 'missing_seed_data_directory'
-            }
+                "workflow_dir": str(base_dir),
+                "checked_path": str(seed_data_dir),
+                "error_type": "missing_seed_data_directory",
+            },
         )
 
 

@@ -5,6 +5,7 @@ REFACTORED: Unified source saving logic to prevent timing issues.
 - Single source of truth for source saving eliminates duplication
 - Helper functions separate concerns and improve maintainability
 """
+
 from dataclasses import dataclass
 from pathlib import Path
 import json
@@ -27,6 +28,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class StagingContext:
     """Context for staging data processing."""
+
     agent_config: dict
     agent_name: str
     file_path: str
@@ -38,9 +40,10 @@ class StagingContext:
 @dataclass
 class DataPreparationContext:
     """Context for data preparation."""
+
     content: str
     file_type: str
-    content_processor: 'StagingContentLoader'
+    content_processor: "StagingContentLoader"
     agent_config: dict
     file_path: str
     agent_name: str
@@ -50,6 +53,7 @@ class DataPreparationContext:
 @dataclass
 class BatchProcessingContext:
     """Context for batch mode processing."""
+
     agent_config: dict
     agent_name: str
     data_chunk: list
@@ -101,16 +105,11 @@ def _save_source_items_helper(source_items, file_path, base_directory, output_di
 
     # Use unified saver with batch mode settings
     saver = UnifiedSourceDataSaver(
-        base_directory=str(workflow_root),
-        enable_deduplication=True,
-        enable_locking=True
+        base_directory=str(workflow_root), enable_deduplication=True, enable_locking=True
     )
 
     # Save source items
-    saver.save_source_items(
-        items=source_items,
-        relative_path=str(relative_path.with_suffix(""))
-    )
+    saver.save_source_items(items=source_items, relative_path=str(relative_path.with_suffix("")))
 
 
 def generate_staging(ctx: StagingContext):
@@ -138,7 +137,7 @@ def generate_staging(ctx: StagingContext):
     content = file_reader.read()
     file_type = file_reader.file_type
     content_processor = StagingContentLoader(ctx.agent_config, ctx.agent_name)
-    run_mode = ctx.agent_config.get('run_mode')
+    run_mode = ctx.agent_config.get("run_mode")
 
     # DEBUG: Log what run_mode we're actually getting
     logger.info(
@@ -147,11 +146,11 @@ def generate_staging(ctx: StagingContext):
         ctx.agent_name,
         Path(ctx.file_path).name,
         extra={
-            'run_mode': run_mode,
-            'agent_name': ctx.agent_name,
-            'has_run_mode_in_config': 'run_mode' in ctx.agent_config,
-            'agent_config_keys': list(ctx.agent_config.keys())[:10]
-        }
+            "run_mode": run_mode,
+            "agent_name": ctx.agent_name,
+            "has_run_mode_in_config": "run_mode" in ctx.agent_config,
+            "agent_config_keys": list(ctx.agent_config.keys())[:10],
+        },
     )
 
     # ============================================================================
@@ -164,10 +163,10 @@ def generate_staging(ctx: StagingContext):
         agent_config=ctx.agent_config,
         file_path=ctx.file_path,
         agent_name=ctx.agent_name,
-        idx=ctx.idx
+        idx=ctx.idx,
     )
 
-    if run_mode == 'batch':
+    if run_mode == "batch":
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
         data_chunk, src_text = _prepare_realtime_data(prep_ctx)
@@ -182,7 +181,7 @@ def generate_staging(ctx: StagingContext):
     # ============================================================================
     # STEP 3: Process based on mode (source is now guaranteed to exist)
     # ============================================================================
-    if run_mode == 'batch':
+    if run_mode == "batch":
         batch_ctx = BatchProcessingContext(
             agent_config=ctx.agent_config,
             agent_name=ctx.agent_name,
@@ -190,7 +189,7 @@ def generate_staging(ctx: StagingContext):
             file_path=ctx.file_path,
             base_directory=ctx.base_directory,
             output_directory=ctx.output_directory,
-            idx=ctx.idx
+            idx=ctx.idx,
         )
         return _process_batch_mode(batch_ctx)
     return _process_realtime_mode(
@@ -228,11 +227,7 @@ def _save_source_data(src_text, data_chunk, file_path, base_directory, output_di
         source_items = src_text if isinstance(src_text, list) else [src_text]
     else:
         # Batch mode: extract from data_chunk (each row has source_guid)
-        source_items = [
-            row.copy()
-            for row in data_chunk
-            if row.get('source_guid')
-        ]
+        source_items = [row.copy() for row in data_chunk if row.get("source_guid")]
 
     # Save to source folder (single source of truth)
     if source_items:
@@ -253,22 +248,25 @@ def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):
         List of dicts with chunked content and batch metadata
     """
     chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
-    chunk_size = chunk_config.get('chunk_size', 1000)
-    chunk_overlap = chunk_config.get('overlap', 200)
-    tokenizer_model = chunk_config.get('tokenizer_model', 'cl100k_base')
-    split_method = chunk_config.get('split_method', 'tiktoken')
+    chunk_size = chunk_config.get("chunk_size", 1000)
+    chunk_overlap = chunk_config.get("overlap", 200)
+    tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
+    split_method = chunk_config.get("split_method", "tiktoken")
     chunks = Tokenizer.split_text_content(
-        content, chunk_size, chunk_overlap,
-        tokenizer_model=tokenizer_model, split_method=split_method
+        content,
+        chunk_size,
+        chunk_overlap,
+        tokenizer_model=tokenizer_model,
+        split_method=split_method,
     )
     return [
         {
-            'content': chunk,
-            'batch_id': batch_id,
-            'batch_uuid': f'{batch_id}_{idx}',
-            'source_guid': str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
-            'target_id': str(uuid.uuid4()),
-            'node_id': node_id
+            "content": chunk,
+            "batch_id": batch_id,
+            "batch_uuid": f"{batch_id}_{idx}",
+            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
+            "target_id": str(uuid.uuid4()),
+            "node_id": node_id,
         }
         for idx, chunk in enumerate(chunks)
     ]
@@ -293,13 +291,14 @@ def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
     except (ValueError, TypeError, json.JSONDecodeError) as e:
         logger.warning(
             "Failed to parse JSON from %s: %s",
-            file_path, str(e),
+            file_path,
+            str(e),
             extra={
-                'file_path': file_path,
-                'agent_name': agent_name,
-                'operation': 'json_parse',
-                'content_length': len(content) if content else 0
-            }
+                "file_path": file_path,
+                "agent_name": agent_name,
+                "operation": "json_parse",
+                "content_length": len(content) if content else 0,
+            },
         )
         parsed = content
 
@@ -307,23 +306,15 @@ def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
         return [
             {
                 **row,
-                'batch_id': batch_id,
-                'batch_uuid': f'{batch_id}_{idx}',
-                'source_guid': str(
-                    uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))
-                ),
-                'target_id': str(uuid.uuid4()),
-                'node_id': node_id
+                "batch_id": batch_id,
+                "batch_uuid": f"{batch_id}_{idx}",
+                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                "target_id": str(uuid.uuid4()),
+                "node_id": node_id,
             }
             for idx, row in enumerate(parsed)
         ]
-    return [
-        {
-            'content': parsed,
-            'batch_id': batch_id,
-            'batch_uuid': f'{batch_id}_0'
-        }
-    ]
+    return [{"content": parsed, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
 def _add_batch_metadata(rows, batch_id, node_id):
@@ -341,13 +332,11 @@ def _add_batch_metadata(rows, batch_id, node_id):
     return [
         {
             **row,
-            'batch_id': batch_id,
-            'batch_uuid': f'{batch_id}_{idx}',
-            'source_guid': str(
-                uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))
-            ),
-            'target_id': str(uuid.uuid4()),
-            'node_id': node_id
+            "batch_id": batch_id,
+            "batch_uuid": f"{batch_id}_{idx}",
+            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+            "target_id": str(uuid.uuid4()),
+            "node_id": node_id,
         }
         for idx, row in enumerate(rows)
     ]
@@ -367,59 +356,52 @@ def _prepare_batch_data(ctx: DataPreparationContext):
         - data_chunk: List of dicts with batch metadata
         - src_text: Empty list (not used in batch mode)
     """
-    local_batch_id = f'batch_{uuid.uuid4().hex}'
-    node_id = f'node_{ctx.idx}_{uuid.uuid4()}'
+    local_batch_id = f"batch_{uuid.uuid4().hex}"
+    node_id = f"node_{ctx.idx}_{uuid.uuid4()}"
 
-    if ctx.file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
+    if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         data_chunk = _prepare_text_chunks_batch(
             ctx.content, ctx.agent_config, local_batch_id, node_id
         )
         src_text = []
 
-    elif ctx.file_type == '.json':
+    elif ctx.file_type == ".json":
         data_chunk = _prepare_json_batch(
             ctx.content, local_batch_id, node_id, ctx.file_path, ctx.agent_name
         )
         src_text = []
 
-    elif ctx.file_type in ('.csv', '.xlsx'):
+    elif ctx.file_type in (".csv", ".xlsx"):
         rows = ctx.content_processor.tabular_loader.process(ctx.content)
         data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         src_text = []
 
-    elif ctx.file_type == '.xml':
+    elif ctx.file_type == ".xml":
         rows = ctx.content_processor.xml_loader.process(ctx.content)
         if isinstance(rows, list):
             data_chunk = _add_batch_metadata(rows, local_batch_id, node_id)
         else:
             data_chunk = [
-                {
-                    'content': rows,
-                    'batch_id': local_batch_id,
-                    'batch_uuid': f'{local_batch_id}_0'
-                }
+                {"content": rows, "batch_id": local_batch_id, "batch_uuid": f"{local_batch_id}_0"}
             ]
         src_text = []
 
     else:
-        supported = [
-            '.txt', '.md', '.pdf', '.docx', '.html',
-            '.json', '.csv', '.xlsx', '.xml'
-        ]
+        supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
         raise AgentActionsException(
-            'Unsupported file type in staging loader',
+            "Unsupported file type in staging loader",
             context={
-                'file_type': ctx.file_type,
-                'file_path': ctx.file_path,
-                'agent_name': ctx.agent_name,
-                'supported_types': supported
-            }
+                "file_type": ctx.file_type,
+                "file_path": ctx.file_path,
+                "agent_name": ctx.agent_name,
+                "supported_types": supported,
+            },
         )
 
     # Ensure all rows have target_id
     for row in data_chunk:
-        if 'target_id' not in row or not row['target_id']:
-            row['target_id'] = str(uuid.uuid4())
+        if "target_id" not in row or not row["target_id"]:
+            row["target_id"] = str(uuid.uuid4())
 
     return data_chunk, src_text
 
@@ -438,46 +420,46 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
         - data_chunk: List of dicts for staging
         - src_text: List of source items with source_guid
     """
-    if ctx.file_type in ['.txt', '.md', '.pdf', '.docx', '.html']:
+    if ctx.file_type in [".txt", ".md", ".pdf", ".docx", ".html"]:
         chunk_config = ctx.agent_config.get(CHUNK_CONFIG_KEY, {})
-        chunk_size = chunk_config.get('chunk_size', 1000)
-        chunk_overlap = chunk_config.get('overlap', 200)
-        tokenizer_model = chunk_config.get('tokenizer_model', 'cl100k_base')
-        split_method = chunk_config.get('split_method', 'tiktoken')
+        chunk_size = chunk_config.get("chunk_size", 1000)
+        chunk_overlap = chunk_config.get("overlap", 200)
+        tokenizer_model = chunk_config.get("tokenizer_model", "cl100k_base")
+        split_method = chunk_config.get("split_method", "tiktoken")
         chunks = Tokenizer.split_text_content(
-            ctx.content, chunk_size, chunk_overlap,
-            tokenizer_model=tokenizer_model, split_method=split_method
+            ctx.content,
+            chunk_size,
+            chunk_overlap,
+            tokenizer_model=tokenizer_model,
+            split_method=split_method,
         )
         data_chunk, src_text = ctx.content_processor.process_chunks(chunks)
 
-    elif ctx.file_type == '.json':
+    elif ctx.file_type == ".json":
         data_chunk, src_text = ctx.content_processor.process_json_content(
             ctx.content, ctx.file_path
         )
 
-    elif ctx.file_type in ('.csv', '.xlsx'):
+    elif ctx.file_type in (".csv", ".xlsx"):
         data_chunk, src_text = ctx.content_processor.process_tabular_content(
             ctx.content, ctx.agent_config, ctx.agent_name
         )
 
-    elif ctx.file_type == '.xml':
+    elif ctx.file_type == ".xml":
         data_chunk, src_text = ctx.content_processor.process_xml_content(
             ctx.content, ctx.agent_config, ctx.agent_name
         )
 
     else:
-        supported = [
-            '.txt', '.md', '.pdf', '.docx', '.html',
-            '.json', '.csv', '.xlsx', '.xml'
-        ]
+        supported = [".txt", ".md", ".pdf", ".docx", ".html", ".json", ".csv", ".xlsx", ".xml"]
         raise AgentActionsException(
-            'Unsupported file type in staging loader',
+            "Unsupported file type in staging loader",
             context={
-                'file_type': ctx.file_type,
-                'file_path': ctx.file_path,
-                'agent_name': ctx.agent_name,
-                'supported_types': supported
-            }
+                "file_type": ctx.file_type,
+                "file_path": ctx.file_path,
+                "agent_name": ctx.agent_name,
+                "supported_types": supported,
+            },
         )
 
     return data_chunk, src_text
@@ -486,28 +468,28 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
 def _get_batch_id_from_chunk(data_chunk):
     """Get batch ID from data chunk or generate new one."""
     if data_chunk:
-        default_batch_id = f'batch_{uuid.uuid4().hex}'
-        return data_chunk[0].get('batch_id', default_batch_id)
-    return f'batch_{uuid.uuid4().hex}'
+        default_batch_id = f"batch_{uuid.uuid4().hex}"
+        return data_chunk[0].get("batch_id", default_batch_id)
+    return f"batch_{uuid.uuid4().hex}"
 
 
 def _write_passthrough_result(output_file_path, result_data):
     """Write passthrough result and create marker file."""
     file_writer = FileWriter(str(output_file_path))
     file_writer.write_target(result_data)
-    passthrough_marker = output_file_path.parent / '.passthrough_processed'
+    passthrough_marker = output_file_path.parent / ".passthrough_processed"
     passthrough_marker.touch()
 
 
 def _write_batch_placeholder(output_file_path, local_batch_id, result, agent_name):
     """Write batch job placeholder file."""
     placeholder = {
-        'batch_job_id': local_batch_id,
-        'vendor_batch_id': result,
-        'status': 'submitted',
-        'agent': agent_name
+        "batch_job_id": local_batch_id,
+        "vendor_batch_id": result,
+        "status": "submitted",
+        "agent": agent_name,
     }
-    with open(output_file_path, 'w', encoding='utf-8') as f:
+    with open(output_file_path, "w", encoding="utf-8") as f:
         json.dump(placeholder, f)
 
 
@@ -532,11 +514,11 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     )
 
     relative_path = Path(ctx.file_path).relative_to(ctx.base_directory)
-    output_file_path = Path(ctx.output_directory) / relative_path.with_suffix('.json')
+    output_file_path = Path(ctx.output_directory) / relative_path.with_suffix(".json")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if isinstance(result, dict) and result.get('type') == 'passthrough':
-        _write_passthrough_result(output_file_path, result['data'])
+    if isinstance(result, dict) and result.get("type") == "passthrough":
+        _write_passthrough_result(output_file_path, result["data"])
     else:
         _write_batch_placeholder(output_file_path, local_batch_id, result, ctx.agent_name)
 
@@ -557,7 +539,7 @@ def _process_realtime_mode(data_chunk, file_path, base_directory, output_directo
         None (writes output files as side effect)
     """
     relative_path = Path(file_path).relative_to(base_directory)
-    output_file_path = Path(output_directory) / relative_path.with_suffix('.json')
+    output_file_path = Path(output_directory) / relative_path.with_suffix(".json")
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
 
     file_writer = FileWriter(str(output_file_path))

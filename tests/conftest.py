@@ -388,7 +388,7 @@ def sample_batch_task():
     Includes all common fields that every provider should handle correctly.
     Used for basic format_task_for_provider() testing.
     """
-    from agent_actions.llm_invocation.providers.base import BatchTask
+    from agent_actions.llm_invocation.providers.batch_client_base import BatchTask
 
     return BatchTask(
         custom_id="test-123",
@@ -406,7 +406,7 @@ def sample_batch_task_no_max_tokens():
     Tests that providers correctly handle missing max_tokens and don't
     add it as null/None to the request body.
     """
-    from agent_actions.llm_invocation.providers.base import BatchTask
+    from agent_actions.llm_invocation.providers.batch_client_base import BatchTask
 
     return BatchTask(
         custom_id="test-456",

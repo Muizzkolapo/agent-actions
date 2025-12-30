@@ -14,7 +14,7 @@ from agent_actions.utilities.lineage import LineageBuilder
 class LineageTrackingMixin:
     """
     Mixin class that provides standardized lineage tracking functionality.
-    
+
     This mixin can be inherited by any processor class that needs to track
     lineage information across processing operations.
     """
@@ -23,14 +23,12 @@ class LineageTrackingMixin:
         """Initialize the mixin."""
         super().__init__(*args, **kwargs)
         # Get idx from agent_config if available
-        self._idx = getattr(self, 'idx', None) or (
-            getattr(self, 'agent_config', {}).get('idx', 0)
-        )
+        self._idx = getattr(self, "idx", None) or (getattr(self, "agent_config", {}).get("idx", 0))
 
     def _get_processor_idx(self) -> int:
         """
         Get the processor index for node ID generation.
-        
+
         Returns:
             Processor index
         """
@@ -115,17 +113,17 @@ class LineageTrackingMixin:
         source_guid: str,
         content: Any,
         source_item: Optional[Dict] = None,
-        context_data: Optional[Any] = None
+        context_data: Optional[Any] = None,
     ) -> Dict:
         """
         Create a processed item with lineage tracking.
-        
+
         Args:
             source_guid: Source GUID for the item
             content: Content of the item
             source_item: Optional source item for lineage tracking
             context_data: Optional context data for lineage tracking
-            
+
         Returns:
             Processed item with lineage tracking
         """
@@ -133,24 +131,20 @@ class LineageTrackingMixin:
 
         if source_item is not None:
             lineage = LineageBuilder.build_lineage(source_item, node_id)
-        elif (context_data is not None and isinstance(context_data, dict)
-              and "lineage" in context_data):
+        elif (
+            context_data is not None
+            and isinstance(context_data, dict)
+            and "lineage" in context_data
+        ):
             lineage = context_data["lineage"] + [node_id]
         else:
             lineage = [node_id]
 
         return FieldManager().create_processed_item(
-            source_guid=source_guid,
-            content=content,
-            node_id=node_id,
-            lineage=lineage
+            source_guid=source_guid, content=content, node_id=node_id, lineage=lineage
         )
 
-    def ensure_items_have_required_fields(
-        self,
-        items: List[Dict],
-        source_guid: str
-    ) -> List[Dict]:
+    def ensure_items_have_required_fields(self, items: List[Dict], source_guid: str) -> List[Dict]:
         """
         Ensure all items have required fields (target_id, source_guid, node_id).
 

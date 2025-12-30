@@ -4,6 +4,7 @@ Initialize command for the Agent Actions CLI.
 This module provides the implementation of the 'init' command,
 which handles creating new Agent Actions projects.
 """
+
 import shutil
 from pathlib import Path
 from typing import Optional, List
@@ -13,10 +14,13 @@ import click
 from agent_actions.cli.cli_decorators import handles_user_errors
 from agent_actions.configuration.init import ProjectInitializer
 from agent_actions.errors import (
-    ValidationError, FileSystemError, ConfigurationError
+    ValidationError,
+    FileSystemError,
+    ConfigurationError,
 )  # New modular pattern!
 from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project_validator import ProjectValidator
+
 
 class InitCommand:  # pylint: disable=too-few-public-methods
     """Implementation of the init command."""
@@ -56,14 +60,14 @@ class InitCommand:  # pylint: disable=too-few-public-methods
             path_str = str(Path(self.args.output_dir))
 
             # Check for explicit path traversal patterns
-            if '..' in path_str:
+            if ".." in path_str:
                 raise ValidationError(
-                    'Path traversal not allowed in output directory',
+                    "Path traversal not allowed in output directory",
                     context={
-                        'output_dir': path_str,
-                        'resolved': str(resolved),
-                        'operation': '_validate_output_dir'
-                    }
+                        "output_dir": path_str,
+                        "resolved": str(resolved),
+                        "operation": "_validate_output_dir",
+                    },
                 )
 
             # Ensure resolved path is within cwd or is an absolute path the user explicitly chose
@@ -73,43 +77,43 @@ class InitCommand:  # pylint: disable=too-few-public-methods
                     resolved.relative_to(cwd)
                 except ValueError as exc:
                     raise ValidationError(
-                        'Output directory must be within current working directory',
+                        "Output directory must be within current working directory",
                         context={
-                            'output_dir': path_str,
-                            'resolved': str(resolved),
-                            'cwd': str(cwd),
-                            'operation': '_validate_output_dir'
-                        }
+                            "output_dir": path_str,
+                            "resolved": str(resolved),
+                            "cwd": str(cwd),
+                            "operation": "_validate_output_dir",
+                        },
                     ) from exc
 
         # Additional safety: prevent writing to sensitive system directories
-        sensitive_prefixes = ('/etc', '/usr', '/bin', '/sbin', '/var', '/root')
+        sensitive_prefixes = ("/etc", "/usr", "/bin", "/sbin", "/var", "/root")
         resolved_str = str(resolved)
         for prefix in sensitive_prefixes:
             if resolved_str.startswith(prefix):
                 raise ValidationError(
-                    'Cannot create project in system directory',
+                    "Cannot create project in system directory",
                     context={
-                        'output_dir': str(self.output_dir),
-                        'resolved': resolved_str,
-                        'blocked_prefix': prefix,
-                        'operation': '_validate_output_dir'
-                    }
+                        "output_dir": str(self.output_dir),
+                        "resolved": resolved_str,
+                        "blocked_prefix": prefix,
+                        "operation": "_validate_output_dir",
+                    },
                 )
 
     def _get_available_templates(self) -> List[str]:
         """
         Get a list of available templates.
-        
+
         Returns:
             List of available template names.
         """
-        return ['default', 'minimal', 'full']
+        return ["default", "minimal", "full"]
 
     def _create_project_directory(self) -> None:
         """
         Create the project directory.
-        
+
         Raises:
             FileSystemError: If there's a permission issue.
         """
@@ -119,23 +123,23 @@ class InitCommand:  # pylint: disable=too-few-public-methods
             self.project_dir.mkdir(exist_ok=self.args.force)
         except FileSystemError as e:
             raise FileSystemError(
-                'Permission denied when creating project directory',
+                "Permission denied when creating project directory",
                 context={
-                    'project_dir': str(self.project_dir),
-                    'project_name': self.args.project_name,
-                    'operation': '_create_project_directory'
+                    "project_dir": str(self.project_dir),
+                    "project_name": self.args.project_name,
+                    "operation": "_create_project_directory",
                 },
-                cause=e
+                cause=e,
             ) from e
         except Exception as e:
             raise ValidationError(
-                'Failed to create project directory',
+                "Failed to create project directory",
                 context={
-                    'project_dir': str(self.project_dir),
-                    'project_name': self.args.project_name,
-                    'operation': '_create_project_directory'
+                    "project_dir": str(self.project_dir),
+                    "project_name": self.args.project_name,
+                    "operation": "_create_project_directory",
                 },
-                cause=e
+                cause=e,
             ) from e
 
     def _initialize_project(self) -> None:
@@ -148,20 +152,19 @@ class InitCommand:  # pylint: disable=too-few-public-methods
         try:
             # ProjectInitializer takes project_name and base_path (parent dir)
             initializer = ProjectInitializer(
-                project_name=self.args.project_name,
-                base_path=self.output_dir
+                project_name=self.args.project_name, base_path=self.output_dir
             )
             initializer.init_project()
         except Exception as e:
             raise ConfigurationError(
-                'Failed to initialize project',
+                "Failed to initialize project",
                 context={
-                    'project_name': self.args.project_name,
-                    'project_dir': str(self.project_dir),
-                    'template': self.args.template,
-                    'operation': '_initialize_project'
+                    "project_name": self.args.project_name,
+                    "project_dir": str(self.project_dir),
+                    "template": self.args.template,
+                    "operation": "_initialize_project",
                 },
-                cause=e
+                cause=e,
             ) from e
 
     def execute(self) -> None:
@@ -174,47 +177,46 @@ class InitCommand:  # pylint: disable=too-few-public-methods
         # Use ProjectValidator.validate() with data dict
         validator = ProjectValidator()
         validation_data = {
-            'project_name': self.args.project_name,
-            'output_dir': self.output_dir,
-            'project_dir': self.project_dir,
-            'template': self.args.template,
-            'available_templates': self._get_available_templates(),
-            'force': self.args.force
+            "project_name": self.args.project_name,
+            "output_dir": self.output_dir,
+            "project_dir": self.project_dir,
+            "template": self.args.template,
+            "available_templates": self._get_available_templates(),
+            "force": self.args.force,
         }
         if not validator.validate(validation_data):
             errors = validator.get_errors()
-            raise ValidationError(
-                'Project validation failed',
-                context={'errors': errors}
-            )
+            raise ValidationError("Project validation failed", context={"errors": errors})
         self._create_project_directory()
         self._initialize_project()
-        click.echo(f'Successfully initialized project: {self.args.project_name}')
-        click.echo(f'Project created at: {self.project_dir}')
-        click.echo('\nNext steps:')
-        click.echo(f'  cd {self.args.project_name}')
-        click.echo('  agent-actions run -a sample_agent')
+        click.echo(f"Successfully initialized project: {self.args.project_name}")
+        click.echo(f"Project created at: {self.project_dir}")
+        click.echo("\nNext steps:")
+        click.echo(f"  cd {self.args.project_name}")
+        click.echo("  agent-actions run -a sample_agent")
+
 
 @click.command()
-@click.argument('project_name')
+@click.argument("project_name")
 @click.option(
-    '-o', '--output-dir',
-    help='Directory to create the project in (default: current directory)'
+    "-o", "--output-dir", help="Directory to create the project in (default: current directory)"
 )
 @click.option(
-    '-t', '--template', default='default',
-    help='Template to use for project initialization'
+    "-t", "--template", default="default", help="Template to use for project initialization"
 )
 @click.option(
-    '-f', '--force', is_flag=True, default=False,
-    help='Force project creation even if directory exists'
+    "-f",
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force project creation even if directory exists",
 )
-@handles_user_errors('init')
+@handles_user_errors("init")
 def init(
     project_name: str,
-    output_dir: Optional[str]=None,
-    template: str='default',
-    force: bool=False
+    output_dir: Optional[str] = None,
+    template: str = "default",
+    force: bool = False,
 ) -> None:
     """
     Initialize a new Agent Actions project.
@@ -229,8 +231,7 @@ def init(
         agent-actions init my_project --output-dir /path/to/dir
     """
     args = InitCommandArgs(
-        project_name=project_name, output_dir=output_dir,
-        template=template, force=force
+        project_name=project_name, output_dir=output_dir, template=template, force=force
     )
     command = InitCommand(args)
     command.execute()

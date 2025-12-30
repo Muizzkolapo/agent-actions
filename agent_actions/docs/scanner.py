@@ -1,6 +1,7 @@
 """
 Project scanner for finding workflow files and prompts.
 """
+
 import ast
 import re
 from pathlib import Path
@@ -35,34 +36,28 @@ class ProjectScanner:
             }
         """
         workflows = {}
-        artefact_dir = self.project_root / 'artefact'
+        artefact_dir = self.project_root / "artefact"
 
         # First, scan for rendered workflows inside artefact/
-        rendered_dir = artefact_dir / 'rendered_workflows'
+        rendered_dir = artefact_dir / "rendered_workflows"
         if rendered_dir.exists():
-            for yaml_file in rendered_dir.glob('*.yml'):
+            for yaml_file in rendered_dir.glob("*.yml"):
                 workflow_name = yaml_file.stem
-                workflows[workflow_name] = {
-                    'rendered': str(yaml_file),
-                    'original': None
-                }
+                workflows[workflow_name] = {"rendered": str(yaml_file), "original": None}
 
         # Then, scan for original workflows with plan sections
         # Skip the artefact directory to avoid scanning generated docs
-        for agent_config_dir in self.project_root.rglob('agent_config'):
+        for agent_config_dir in self.project_root.rglob("agent_config"):
             # Skip if inside artefact directory
             if artefact_dir in agent_config_dir.parents or agent_config_dir == artefact_dir:
                 continue
 
-            for yaml_file in agent_config_dir.glob('*.yml'):
+            for yaml_file in agent_config_dir.glob("*.yml"):
                 workflow_name = yaml_file.stem
                 if workflow_name in workflows:
-                    workflows[workflow_name]['original'] = str(yaml_file)
+                    workflows[workflow_name]["original"] = str(yaml_file)
                 else:
-                    workflows[workflow_name] = {
-                        'rendered': None,
-                        'original': str(yaml_file)
-                    }
+                    workflows[workflow_name] = {"rendered": None, "original": str(yaml_file)}
 
         return workflows
 
@@ -89,18 +84,15 @@ class ProjectScanner:
             }
         """
         prompts = {}
-        prompt_store_dir = self.project_root / 'prompt_store'
+        prompt_store_dir = self.project_root / "prompt_store"
 
         if not prompt_store_dir.exists():
             return prompts
 
         # Pattern to match {prompt name} ... {end_prompt}
-        prompt_pattern = re.compile(
-            r'\{prompt\s+(\w+)\}(.*?)\{end_prompt\}',
-            re.DOTALL
-        )
+        prompt_pattern = re.compile(r"\{prompt\s+(\w+)\}(.*?)\{end_prompt\}", re.DOTALL)
 
-        for md_file in prompt_store_dir.glob('*.md'):
+        for md_file in prompt_store_dir.glob("*.md"):
             content = md_file.read_text()
 
             # Find all prompts in this file
@@ -109,19 +101,19 @@ class ProjectScanner:
                 prompt_content = match.group(2).strip()
 
                 # Calculate line numbers
-                content_before = content[:match.start()]
-                line_start = content_before.count('\n') + 1
-                line_end = line_start + prompt_content.count('\n')
+                content_before = content[: match.start()]
+                line_start = content_before.count("\n") + 1
+                line_end = line_start + prompt_content.count("\n")
 
                 prompts[prompt_name] = {
-                    'id': prompt_name,
-                    'name': prompt_name,
-                    'content': prompt_content,
-                    'source_file': str(md_file),
-                    'source_file_name': md_file.name,
-                    'line_start': line_start,
-                    'line_end': line_end,
-                    'length': len(prompt_content)
+                    "id": prompt_name,
+                    "name": prompt_name,
+                    "content": prompt_content,
+                    "source_file": str(md_file),
+                    "source_file_name": md_file.name,
+                    "line_start": line_start,
+                    "line_end": line_end,
+                    "length": len(prompt_content),
                 }
 
         return prompts
@@ -137,14 +129,14 @@ class ProjectScanner:
         from .parser import WorkflowParser  # pylint: disable=import-outside-toplevel
 
         schemas = {}
-        schema_dir = self.project_root / 'schema'
+        schema_dir = self.project_root / "schema"
 
         if not schema_dir.exists():
             return schemas
 
         parser = WorkflowParser()
 
-        for yml_file in schema_dir.glob('*.yml'):
+        for yml_file in schema_dir.glob("*.yml"):
             schema_name = yml_file.stem
 
             # Use the parser's load_schema method which handles all formats
@@ -154,13 +146,13 @@ class ProjectScanner:
                 continue
 
             schemas[schema_name] = {
-                'id': schema_name,
-                'name': schema_data['name'],
-                'type': schema_data['type'],
-                'source_file': str(yml_file),
-                'source_file_name': yml_file.name,
-                'fields': schema_data.get('fields', []),
-                'field_count': len(schema_data.get('fields', []))
+                "id": schema_name,
+                "name": schema_data["name"],
+                "type": schema_data["type"],
+                "source_file": str(yml_file),
+                "source_file_name": yml_file.name,
+                "fields": schema_data.get("fields", []),
+                "field_count": len(schema_data.get("fields", [])),
             }
 
         return schemas
@@ -193,9 +185,9 @@ class ProjectScanner:
 
         # Look for user_code directory
         user_code_dirs = [
-            self.project_root / 'user_code',
-            self.project_root / 'tools',
-            self.project_root / 'functions',
+            self.project_root / "user_code",
+            self.project_root / "tools",
+            self.project_root / "functions",
         ]
 
         for user_code_dir in user_code_dirs:
@@ -203,7 +195,7 @@ class ProjectScanner:
                 continue
 
             # Scan all Python files
-            for py_file in user_code_dir.rglob('*.py'):
+            for py_file in user_code_dir.rglob("*.py"):
                 try:
                     source = py_file.read_text()
                     tree = ast.parse(source)
@@ -216,7 +208,7 @@ class ProjectScanner:
                             func_name = node.name
 
                             # Skip private functions
-                            if func_name.startswith('_'):
+                            if func_name.startswith("_"):
                                 continue
 
                             # Extract function details including UDF metadata
@@ -252,10 +244,12 @@ class ProjectScanner:
             if isinstance(node, ast.ClassDef):
                 # Check if this class inherits from TypedDict
                 is_typed_dict = any(
-                    (isinstance(base, ast.Name) and base.id == 'TypedDict') or
-                    (isinstance(base, ast.Call) and
-                     isinstance(base.func, ast.Name) and
-                     base.func.id == 'TypedDict')
+                    (isinstance(base, ast.Name) and base.id == "TypedDict")
+                    or (
+                        isinstance(base, ast.Call)
+                        and isinstance(base.func, ast.Name)
+                        and base.func.id == "TypedDict"
+                    )
                     for base in node.bases
                 )
 
@@ -267,7 +261,7 @@ class ProjectScanner:
                 for base in node.bases:
                     if isinstance(base, ast.Call):
                         for keyword in base.keywords:
-                            if keyword.arg == 'total' and isinstance(keyword.value, ast.Constant):
+                            if keyword.arg == "total" and isinstance(keyword.value, ast.Constant):
                                 all_optional = not keyword.value.value
 
                 # Extract field definitions from class body
@@ -275,12 +269,10 @@ class ProjectScanner:
                 for item in node.body:
                     if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
                         field_name = item.target.id
-                        field_type = ast.unparse(item.annotation) if item.annotation else 'Any'
-                        fields.append({
-                            'name': field_name,
-                            'type': field_type,
-                            'required': not all_optional
-                        })
+                        field_type = ast.unparse(item.annotation) if item.annotation else "Any"
+                        fields.append(
+                            {"name": field_name, "type": field_type, "required": not all_optional}
+                        )
 
                 typed_dicts[node.name] = fields
 
@@ -292,7 +284,7 @@ class ProjectScanner:
         node: ast.FunctionDef,
         source: str,
         file_path: Path,
-        typed_dicts: Optional[Dict[str, List[Dict[str, str]]]] = None
+        typed_dicts: Optional[Dict[str, List[Dict[str, str]]]] = None,
     ) -> Optional[Dict[str, Any]]:
         """Extract details from a function AST node, including UDF metadata."""
         try:
@@ -305,42 +297,42 @@ class ProjectScanner:
                 arg_str = arg.arg
                 # Add type annotation if present
                 if arg.annotation:
-                    arg_str += f': {ast.unparse(arg.annotation)}'
+                    arg_str += f": {ast.unparse(arg.annotation)}"
                 args.append(arg_str)
 
             # Handle *args and **kwargs
             if node.args.vararg:
-                args.append(f'*{node.args.vararg.arg}')
+                args.append(f"*{node.args.vararg.arg}")
             if node.args.kwarg:
-                args.append(f'**{node.args.kwarg.arg}')
+                args.append(f"**{node.args.kwarg.arg}")
 
             signature = f"def {node.name}({', '.join(args)})"
 
             # Add return type if present
             if node.returns:
-                signature += f' -> {ast.unparse(node.returns)}'
+                signature += f" -> {ast.unparse(node.returns)}"
 
-            signature += ':'
+            signature += ":"
 
             # Get docstring
-            docstring = ast.get_docstring(node) or ''
+            docstring = ast.get_docstring(node) or ""
 
             # Get source code (from function start to end)
             start_line = node.lineno - 1
-            end_line = node.end_lineno if hasattr(node, 'end_lineno') else start_line + 1
-            source_code = '\n'.join(lines[start_line:end_line])
+            end_line = node.end_lineno if hasattr(node, "end_lineno") else start_line + 1
+            source_code = "\n".join(lines[start_line:end_line])
 
             result = {
-                'found': True,
-                'file_path': str(file_path.relative_to(self.project_root)),
-                'signature': signature,
-                'docstring': docstring,
-                'source_code': source_code,
-                'line_start': node.lineno,
-                'line_end': end_line,
-                'is_udf': False,
-                'input_schema': None,
-                'output_schema': None
+                "found": True,
+                "file_path": str(file_path.relative_to(self.project_root)),
+                "signature": signature,
+                "docstring": docstring,
+                "source_code": source_code,
+                "line_start": node.lineno,
+                "line_end": end_line,
+                "is_udf": False,
+                "input_schema": None,
+                "output_schema": None,
             }
 
             # Check for @udf_tool decorator
@@ -361,23 +353,23 @@ class ProjectScanner:
                         if keyword.arg and isinstance(keyword.value, ast.Name):
                             decorator_args[keyword.arg] = keyword.value.id
 
-                if decorator_name in ('udf_tool', 'udf'):
-                    result['is_udf'] = True
+                if decorator_name in ("udf_tool", "udf"):
+                    result["is_udf"] = True
 
                     # Resolve input_type to TypedDict fields
-                    input_type_name = decorator_args.get('input_type')
+                    input_type_name = decorator_args.get("input_type")
                     if input_type_name and typed_dicts and input_type_name in typed_dicts:
-                        result['input_schema'] = {
-                            'name': input_type_name,
-                            'fields': typed_dicts[input_type_name]
+                        result["input_schema"] = {
+                            "name": input_type_name,
+                            "fields": typed_dicts[input_type_name],
                         }
 
                     # Resolve output_type to TypedDict fields
-                    output_type_name = decorator_args.get('output_type')
+                    output_type_name = decorator_args.get("output_type")
                     if output_type_name and typed_dicts and output_type_name in typed_dicts:
-                        result['output_schema'] = {
-                            'name': output_type_name,
-                            'fields': typed_dicts[output_type_name]
+                        result["output_schema"] = {
+                            "name": output_type_name,
+                            "fields": typed_dicts[output_type_name],
                         }
 
                     break  # Found the UDF decorator, no need to check others

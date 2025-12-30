@@ -1,8 +1,15 @@
 """Tests for UDF registry and @udf_tool decorator."""
+
 import pytest
 from pathlib import Path
 from typing import TypedDict
-from agent_actions.utilities.udf_management.udf_registry import udf_tool, get_udf, list_udfs, clear_registry, UDF_REGISTRY
+from agent_actions.utilities.udf_management.udf_registry import (
+    udf_tool,
+    get_udf,
+    list_udfs,
+    clear_registry,
+    UDF_REGISTRY,
+)
 from agent_actions.errors import DuplicateFunctionError, FunctionNotFoundError
 
 
@@ -28,28 +35,27 @@ class TestUDFRegistration:
         @udf_tool(input_type=SimpleInput)
         def test_function():
             """Test docstring."""
-            return 'test'
-        assert 'test_function' in UDF_REGISTRY
-        assert UDF_REGISTRY['test_function']['name'] == 'test_function'
-        assert UDF_REGISTRY['test_function']['function']() == 'test'
+            return "test"
 
-    def test_duplicate_udf_raises_error(self):
-        """Test that duplicate function names raise DuplicateFunctionError."""
+        assert "test_function" in UDF_REGISTRY
+        assert UDF_REGISTRY["test_function"]["name"] == "test_function"
+        assert UDF_REGISTRY["test_function"]["function"]() == "test"
+
+    def test_same_file_duplicate_returns_existing(self):
+        """Test that same-file duplicates return existing function (import deduplication)."""
 
         @udf_tool(input_type=SimpleInput)
         def duplicate_func():
-            pass
-        with pytest.raises(DuplicateFunctionError) as exc_info:
+            return "first"
 
-            @udf_tool(input_type=SimpleInput)
-            def duplicate_func():  # noqa: F811
-                pass
-        error = exc_info.value
-        assert error.context['function_name'] == 'duplicate_func'
-        assert 'existing_location' in error.context
-        assert 'new_location' in error.context
-        assert 'existing_file' in error.context
-        assert 'new_file' in error.context
+        # Same file duplicate should return the existing function, not raise error
+        @udf_tool(input_type=SimpleInput)
+        def duplicate_func():  # noqa: F811
+            return "second"
+
+        # The decorator returns the first registered function
+        assert duplicate_func() == "first"
+        assert UDF_REGISTRY["duplicate_func"]["function"]() == "first"
 
     def test_registry_stores_metadata(self):
         """Test that all metadata is captured and stored."""
@@ -58,14 +64,15 @@ class TestUDFRegistration:
         def metadata_func(x, y):
             """Function with metadata."""
             return x + y
-        meta = UDF_REGISTRY['metadata_func']
-        assert meta['function'] == metadata_func
-        assert meta['name'] == 'metadata_func'
-        assert 'test_udf_registry' in meta['module']
-        assert meta['docstring'] == 'Function with metadata.'
-        assert 'file' in meta
-        assert 'signature' in meta
-        assert str(meta['signature']) == '(x, y)'
+
+        meta = UDF_REGISTRY["metadata_func"]
+        assert meta["function"] == metadata_func
+        assert meta["name"] == "metadata_func"
+        assert "test_udf_registry" in meta["module"]
+        assert meta["docstring"] == "Function with metadata."
+        assert "file" in meta
+        assert "signature" in meta
+        assert str(meta["signature"]) == "(x, y)"
 
     def test_decorator_preserves_function(self):
         """Test that decorator returns original function unchanged."""
@@ -74,21 +81,26 @@ class TestUDFRegistration:
         def preserved_func(a, b):
             """Original docstring."""
             return a * b
-        assert preserved_func(3, 4) == 12
-        assert preserved_func.__name__ == 'preserved_func'
-        assert preserved_func.__doc__ == 'Original docstring.'
 
-    def test_case_insensitive_duplicate_detection(self):
-        """Test that duplicate detection is case-insensitive."""
+        assert preserved_func(3, 4) == 12
+        assert preserved_func.__name__ == "preserved_func"
+        assert preserved_func.__doc__ == "Original docstring."
+
+    def test_case_insensitive_duplicate_returns_existing(self):
+        """Test that case-insensitive duplicates in same file return existing function."""
 
         @udf_tool(input_type=SimpleInput)
         def My_Function():
-            pass
-        with pytest.raises(DuplicateFunctionError):
+            return "original"
 
-            @udf_tool(input_type=SimpleInput)
-            def my_function():  # noqa: F811
-                pass
+        # Same file, different case - returns existing function
+        @udf_tool(input_type=SimpleInput)
+        def my_function():  # noqa: F811
+            return "duplicate"
+
+        # Both keys map to same lowercase key, first one wins
+        assert "my_function" in UDF_REGISTRY
+        assert UDF_REGISTRY["my_function"]["function"]() == "original"
 
 
 class TestUDFRetrieval:
@@ -99,20 +111,22 @@ class TestUDFRetrieval:
 
         @udf_tool(input_type=SimpleInput)
         def retrieve_test():
-            return 'retrieved'
-        func = get_udf('retrieve_test')
-        assert func() == 'retrieved'
+            return "retrieved"
+
+        func = get_udf("retrieve_test")
+        assert func() == "retrieved"
 
     def test_get_udf_case_insensitive(self):
         """Test that get_udf() is case-insensitive."""
 
         @udf_tool(input_type=SimpleInput)
         def CaseSensitive():
-            return 'result'
-        assert get_udf('CaseSensitive')() == 'result'
-        assert get_udf('casesensitive')() == 'result'
-        assert get_udf('CASESENSITIVE')() == 'result'
-        assert get_udf('cAsEsEnSiTiVe')() == 'result'
+            return "result"
+
+        assert get_udf("CaseSensitive")() == "result"
+        assert get_udf("casesensitive")() == "result"
+        assert get_udf("CASESENSITIVE")() == "result"
+        assert get_udf("cAsEsEnSiTiVe")() == "result"
 
     def test_get_udf_not_found_raises_error(self):
         """Test that FunctionNotFoundError is raised when function not found."""
@@ -120,11 +134,12 @@ class TestUDFRetrieval:
         @udf_tool(input_type=SimpleInput)
         def existing_func():
             pass
+
         with pytest.raises(FunctionNotFoundError) as exc_info:
-            get_udf('nonexistent_func')
+            get_udf("nonexistent_func")
         error = exc_info.value
-        assert error.context['function_name'] == 'nonexistent_func'
-        assert 'existing_func' in error.context['available_functions']
+        assert error.context["function_name"] == "nonexistent_func"
+        assert "existing_func" in error.context["available_functions"]
 
     def test_get_udf_returns_callable(self):
         """Test that retrieved function is callable."""
@@ -132,7 +147,8 @@ class TestUDFRetrieval:
         @udf_tool(input_type=SimpleInput)
         def callable_test(x):
             return x * 2
-        func = get_udf('callable_test')
+
+        func = get_udf("callable_test")
         assert callable(func)
         assert func(5) == 10
 
@@ -154,12 +170,13 @@ class TestListUDFs:
         @udf_tool(input_type=SimpleInput)
         def func3():
             pass
+
         udfs = list_udfs()
         assert len(udfs) == 3
-        names = [udf['name'] for udf in udfs]
-        assert 'func1' in names
-        assert 'func2' in names
-        assert 'func3' in names
+        names = [udf["name"] for udf in udfs]
+        assert "func1" in names
+        assert "func2" in names
+        assert "func3" in names
 
     def test_list_udfs_includes_metadata(self):
         """Test that list_udfs() includes all metadata fields."""
@@ -168,14 +185,15 @@ class TestListUDFs:
         def meta_test(a, b):
             """Test function."""
             pass
+
         udfs = list_udfs()
         assert len(udfs) == 1
         udf = udfs[0]
-        assert udf['name'] == 'meta_test'
-        assert 'test_udf_registry' in udf['module']
-        assert 'file' in udf
-        assert udf['docstring'] == 'Test function.'
-        assert udf['signature'] == '(a, b)'
+        assert udf["name"] == "meta_test"
+        assert "test_udf_registry" in udf["module"]
+        assert "file" in udf
+        assert udf["docstring"] == "Test function."
+        assert udf["signature"] == "(a, b)"
 
     def test_list_udfs_sorted_alphabetically(self):
         """Test that list_udfs() returns functions sorted alphabetically."""
@@ -191,9 +209,10 @@ class TestListUDFs:
         @udf_tool(input_type=SimpleInput)
         def middle():
             pass
+
         udfs = list_udfs()
-        names = [udf['name'] for udf in udfs]
-        assert names == ['Alpha', 'middle', 'zebra']
+        names = [udf["name"] for udf in udfs]
+        assert names == ["Alpha", "middle", "zebra"]
 
 
 class TestClearRegistry:
@@ -209,6 +228,7 @@ class TestClearRegistry:
         @udf_tool(input_type=SimpleInput)
         def func2():
             pass
+
         assert len(UDF_REGISTRY) == 2
         clear_registry()
         assert len(UDF_REGISTRY) == 0
@@ -220,9 +240,10 @@ class TestClearRegistry:
         @udf_tool(input_type=SimpleInput)
         def test_func():
             pass
+
         clear_registry()
         with pytest.raises(FunctionNotFoundError):
-            get_udf('test_func')
+            get_udf("test_func")
 
 
 class TestExceptionContext:
@@ -234,19 +255,20 @@ class TestExceptionContext:
         @udf_tool(input_type=SimpleInput)
         def dup_func():
             pass
+
         try:
 
             @udf_tool(input_type=SimpleInput)
             def dup_func():  # noqa: F811
                 pass
         except DuplicateFunctionError as e:
-            assert e.context['function_name'] == 'dup_func'
-            assert 'existing_location' in e.context
-            assert 'new_location' in e.context
-            assert 'test_udf_registry' in e.context['existing_location']
-            assert 'test_udf_registry' in e.context['new_location']
-            assert Path(e.context['existing_file']).exists()
-            assert Path(e.context['new_file']).exists()
+            assert e.context["function_name"] == "dup_func"
+            assert "existing_location" in e.context
+            assert "new_location" in e.context
+            assert "test_udf_registry" in e.context["existing_location"]
+            assert "test_udf_registry" in e.context["new_location"]
+            assert Path(e.context["existing_file"]).exists()
+            assert Path(e.context["new_file"]).exists()
 
     def test_not_found_error_lists_available(self):
         """Test that FunctionNotFoundError lists available functions."""
@@ -258,10 +280,11 @@ class TestExceptionContext:
         @udf_tool(input_type=SimpleInput)
         def available2():
             pass
+
         try:
-            get_udf('missing_func')
+            get_udf("missing_func")
         except FunctionNotFoundError as e:
-            assert e.context['function_name'] == 'missing_func'
-            assert 'available1' in e.context['available_functions']
-            assert 'available2' in e.context['available_functions']
-            assert len(e.context['available_functions']) == 2
+            assert e.context["function_name"] == "missing_func"
+            assert "available1" in e.context["available_functions"]
+            assert "available2" in e.context["available_functions"]
+            assert len(e.context["available_functions"]) == 2

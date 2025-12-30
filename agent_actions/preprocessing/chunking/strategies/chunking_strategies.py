@@ -32,7 +32,7 @@ class ChunkingStrategy(ABC):
 class TiktokenChunkingStrategy(ChunkingStrategy):
     """Token-based chunking strategy using tiktoken tokenizer."""
 
-    def __init__(self, tokenizer_model_name: str = 'cl100k_base'):
+    def __init__(self, tokenizer_model_name: str = "cl100k_base"):
         """
         Initialize tiktoken-based chunking strategy.
 
@@ -60,14 +60,14 @@ class TiktokenChunkingStrategy(ChunkingStrategy):
             List of text chunks with token-based boundaries
         """
         if not text_content:
-            return ['']
+            return [""]
 
         return Tokenizer.split_text_content(
             text_content,
             maximum_chunk_size,
             overlap_size,
             tokenizer_model=self.tokenizer_model_name,
-            split_method='tiktoken'
+            split_method="tiktoken",
         )
 
 
@@ -93,13 +93,10 @@ class CharBasedChunkingStrategy(ChunkingStrategy):
             List of text chunks with character-based boundaries
         """
         if not text_content:
-            return ['']
+            return [""]
 
         return Tokenizer.split_text_content(
-            text_content,
-            maximum_chunk_size,
-            overlap_size,
-            split_method='chars'
+            text_content, maximum_chunk_size, overlap_size, split_method="chars"
         )
 
 
@@ -125,11 +122,8 @@ class SpacyChunkingStrategy(ChunkingStrategy):
             List of text chunks with semantic sentence boundaries
         """
         if not text_content:
-            return ['']
+            return [""]
 
         return Tokenizer.split_text_content(
-            text_content,
-            maximum_chunk_size,
-            overlap_size,
-            split_method='spacy'
+            text_content, maximum_chunk_size, overlap_size, split_method="spacy"
         )

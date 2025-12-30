@@ -1,15 +1,19 @@
 """Consolidated guard configuration with explicit behavior control."""
+
 from enum import Enum
 from typing import Union, Dict, Any
 from agent_actions.errors import ConfigValidationError
 from .guard_parser import GuardParser, GuardType
 
+
 class GuardBehavior(str, Enum):
     """Behavior options when guard condition fails."""
-    SKIP = 'skip'
-    FILTER = 'filter'
-    WRITE_TO = 'write_to'
-    REPROCESS = 'reprocess'
+
+    SKIP = "skip"
+    FILTER = "filter"
+    WRITE_TO = "write_to"
+    REPROCESS = "reprocess"
+
 
 class GuardConfig:
     """Consolidated guard configuration with condition and behavior control."""
@@ -39,7 +43,7 @@ class GuardConfig:
         return self._parsed_condition.expression
 
     @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> 'GuardConfig':
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "GuardConfig":
         """
         Create GuardConfig from dictionary (YAML format).
 
@@ -54,28 +58,25 @@ class GuardConfig:
         """
         if not isinstance(config_dict, dict):
             raise ConfigValidationError(
-                'guard_config_type',
-                'Guard config must be a dictionary',
-                context={
-                    'config_type': str(type(config_dict)),
-                    'operation': 'parse_guard_config'
-                }
+                "guard_config_type",
+                "Guard config must be a dictionary",
+                context={"config_type": str(type(config_dict)), "operation": "parse_guard_config"},
             )
-        if 'condition' not in config_dict:
+        if "condition" not in config_dict:
             raise ConfigValidationError(
-                'guard_config_condition',
+                "guard_config_condition",
                 "Guard dict must have 'condition' key",
                 context={
-                    'config_keys': list(config_dict.keys()),
-                    'operation': 'parse_guard_config'
-                }
+                    "config_keys": list(config_dict.keys()),
+                    "operation": "parse_guard_config",
+                },
             )
-        condition = config_dict['condition']
-        on_false = config_dict.get('on_false', 'filter')
+        condition = config_dict["condition"]
+        on_false = config_dict.get("on_false", "filter")
         return cls(condition=condition, on_false=on_false)
 
     @classmethod
-    def from_string(cls, guard_string: str) -> 'GuardConfig':
+    def from_string(cls, guard_string: str) -> "GuardConfig":
         """
         Create GuardConfig from legacy string format.
 
@@ -94,6 +95,7 @@ class GuardConfig:
 
     def __repr__(self):
         return f"GuardConfig(condition='{self.condition}', on_false={self.on_false})"
+
 
 def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
     """
@@ -114,12 +116,10 @@ def parse_guard_config(guard_data: Union[str, Dict[str, Any]]) -> GuardConfig:
         return GuardConfig.from_dict(guard_data)
 
     raise ConfigValidationError(
-        'guard_data_type',
-        f'Guard must be string or dict, got {type(guard_data)}',
-        context={
-            'guard_type': str(type(guard_data)),
-            'operation': 'parse_guard_config'
-        }
+        "guard_data_type",
+        f"Guard must be string or dict, got {type(guard_data)}",
+        context={"guard_type": str(type(guard_data)), "operation": "parse_guard_config"},
     )
 
-__all__ = ['GuardBehavior', 'GuardConfig', 'parse_guard_config']
+
+__all__ = ["GuardBehavior", "GuardConfig", "parse_guard_config"]

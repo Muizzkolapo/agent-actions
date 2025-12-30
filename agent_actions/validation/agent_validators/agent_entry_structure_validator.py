@@ -8,7 +8,7 @@ This is the first validator in the chain and performs critical checks:
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 
 

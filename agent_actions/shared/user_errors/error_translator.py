@@ -3,10 +3,7 @@
 import logging
 from typing import Dict, Any, Optional, List
 
-from agent_actions.utilities.safe_format import (
-    extract_root_cause,
-    safe_get_exception_message
-)
+from agent_actions.utilities.safe_format import extract_root_cause, safe_get_exception_message
 from .user_error import UserError
 from .formatters import (
     ErrorFormatter,
@@ -17,7 +14,7 @@ from .formatters import (
     APIErrorFormatter,
     YAMLSyntaxErrorFormatter,
     FunctionNotFoundFormatter,
-    GenericErrorFormatter
+    GenericErrorFormatter,
 )
 from .services import ErrorContextService
 
@@ -69,7 +66,7 @@ class ErrorTranslator:  # pylint: disable=too-few-public-methods
             "Translating error: %s -> %s: %s",
             type(exc).__name__,
             type(root_cause).__name__,
-            root_message
+            root_message,
         )
 
         # Find first formatter that can handle this error

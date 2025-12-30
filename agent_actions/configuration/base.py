@@ -27,13 +27,14 @@ class ArtifactMetadata:  # pylint: disable=too-few-public-methods
     def _get_version(self) -> str:
         try:
             import agent_actions  # type: ignore  # pylint: disable=import-outside-toplevel
+
             return getattr(agent_actions, "__version__")
         except Exception as e:  # pylint: disable=broad-except
             logger.warning(
                 "Failed to retrieve agent_actions version, using fallback: %s",
                 e,
                 exc_info=True,
-                extra={'operation': 'version_retrieval'}
+                extra={"operation": "version_retrieval"},
             )
             return "1.2.0"
 
@@ -81,14 +82,14 @@ class BaseArtifact(ABC):
             raise SecurityError(f"Filename too long (max {self.MAX_FILENAME_LENGTH} chars)")
 
         # Sanitize filename
-        if not re.match(r'^[\w\-_./]+$', str(resolved_path)):
+        if not re.match(r"^[\w\-_./]+$", str(resolved_path)):
             raise SecurityError("Path contains invalid characters")
 
         return resolved_path
 
     def _validate_content_size(self, content: str) -> None:
         """Validate content size for security."""
-        if len(content.encode('utf-8')) > self.MAX_FILE_SIZE:
+        if len(content.encode("utf-8")) > self.MAX_FILE_SIZE:
             raise SecurityError(f"Content too large (max {self.MAX_FILE_SIZE} bytes)")
 
     def save(self, path: Path) -> None:

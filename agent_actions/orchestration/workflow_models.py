@@ -13,6 +13,7 @@ from typing import Optional, Any
 @dataclass
 class WorkflowPaths:
     """Path configuration for workflow."""
+
     constructor_path: str
     user_code_path: Optional[str]
     default_path: str
@@ -24,6 +25,7 @@ class WorkflowPaths:
 @dataclass
 class WorkflowConfig:
     """Configuration container for workflow initialization."""
+
     paths: WorkflowPaths
     use_tools: bool
     run_upstream: bool = False
@@ -34,6 +36,7 @@ class WorkflowConfig:
 @dataclass
 class WorkflowState:
     """Runtime state for workflow execution."""
+
     previous_agent_type: Optional[str] = None
     ephemeral_directories: list = None
     failed: bool = False
@@ -47,6 +50,7 @@ class WorkflowState:
 @dataclass
 class RuntimeContext:
     """Runtime context for workflow execution."""
+
     state: WorkflowState
     console: Any  # Rich Console
 
@@ -54,6 +58,7 @@ class RuntimeContext:
 @dataclass
 class WorkflowMetadata:
     """Workflow configuration metadata."""
+
     agent_name: str
     execution_order: list
     agent_indices: dict
@@ -64,6 +69,7 @@ class WorkflowMetadata:
 @dataclass
 class AgentLogParams:
     """Parameters for logging agent results."""
+
     idx: int
     agent_name: str
     total_agents: int
@@ -75,6 +81,7 @@ class AgentLogParams:
 @dataclass
 class CoreServices:
     """Core execution services."""
+
     agent_runner: Any
     state_manager: Any
     agent_executor: Any
@@ -84,6 +91,7 @@ class CoreServices:
 @dataclass
 class SupportServices:
     """Supporting services for workflow execution."""
+
     output_processor: Any
     batch_service: Any
     loop_correlator: Any
@@ -95,5 +103,6 @@ class SupportServices:
 @dataclass
 class WorkflowServices:
     """Container for workflow orchestration services."""
+
     core: CoreServices
     support: SupportServices

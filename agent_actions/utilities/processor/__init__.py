@@ -1,4 +1,5 @@
 """Processor infrastructure and helpers."""
+
 # Lazy imports to avoid circular dependencies
 # processor_helpers imports agent_builder which imports preprocessing
 # which may import back to processor_helpers
@@ -9,5 +10,5 @@ from .error_handling import ProcessorErrorHandlerMixin
 __all__ = [
     # 'run_dynamic_agent',  # Import directly from processor_helpers
     # 'transform_with_passthrough',  # Import directly from processor_helpers
-    'ProcessorErrorHandlerMixin',
+    "ProcessorErrorHandlerMixin",
 ]

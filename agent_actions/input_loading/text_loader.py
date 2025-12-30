@@ -1,4 +1,5 @@
 """Text content loader implementation."""
+
 # pylint: disable=duplicate-code
 # Similar loader pattern is intentional across different file type loaders
 import logging
@@ -29,19 +30,15 @@ class TextLoader(BaseLoader[str]):
             if content:
                 return str(content)
 
-            error = ValueError('Either file_path or content must be provided')
-            self.handle_validation_error(
-                error, 'text input', file_path=file_path
-            )
+            error = ValueError("Either file_path or content must be provided")
+            self.handle_validation_error(error, "text input", file_path=file_path)
             raise error
         except FileLoadError:
             raise
         except Exception as e:
-            self.handle_processing_error(
-                e, 'Processing text content', file_path=file_path
-            )
+            self.handle_processing_error(e, "Processing text content", file_path=file_path)
             raise
 
     def supports_filetype(self, file_extension: str) -> bool:
         """Return True if the file extension is supported."""
-        return file_extension.lower() in ['.txt', '.md', '.html']
+        return file_extension.lower() in [".txt", ".md", ".html"]

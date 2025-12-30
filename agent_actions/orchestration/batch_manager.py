@@ -37,10 +37,7 @@ class BatchLifecycleManager:
         self.console = console or Console()
 
     def handle_batch_agent(
-        self,
-        agent_name: str,
-        output_directory: str,
-        agent_config: Optional[Dict[str, Any]] = None
+        self, agent_name: str, output_directory: str, agent_config: Optional[Dict[str, Any]] = None
     ) -> Tuple[Optional[str], str]:
         """
         Handle batch agent status checking and result processing.
@@ -55,57 +52,45 @@ class BatchLifecycleManager:
             - output_folder: Path to output folder if completed, None otherwise
             - batch_status: 'completed', 'in_progress', or 'failed'
         """
-        registry_status = (
-            self.batch_service.get_batch_registry_status(output_directory)
-        )
+        registry_status = self.batch_service.get_batch_registry_status(output_directory)
 
         # Case 1: All batches completed
-        if registry_status == 'completed':
-            self.console.print(
-                '[green]All batch jobs are completed. Processing results...[/green]'
-            )
+        if registry_status == "completed":
+            self.console.print("[green]All batch jobs are completed. Processing results...[/green]")
             self._process_batch_results(output_directory, agent_config, agent_name)
-            self.console.print(
-                f'[green]✅ Processed all batch results for {agent_name}[/green]'
-            )
-            return (output_directory, 'completed')
+            self.console.print(f"[green]✅ Processed all batch results for {agent_name}[/green]")
+            return (output_directory, "completed")
 
         # Case 2: Batches in progress or partial failure
-        if registry_status in ['in_progress', 'partial_failed']:
+        if registry_status in ["in_progress", "partial_failed"]:
             if self.batch_service.are_all_batch_jobs_completed(output_directory):
                 self.console.print(
-                    '[green]All batch jobs are now completed. '
-                    'Processing results...[/green]'
+                    "[green]All batch jobs are now completed. Processing results...[/green]"
                 )
-                self._process_batch_results(
-                    output_directory, agent_config, agent_name
-                )
+                self._process_batch_results(output_directory, agent_config, agent_name)
                 self.console.print(
-                    f'[green]✅ Processed all batch results for {agent_name}[/green]'
+                    f"[green]✅ Processed all batch results for {agent_name}[/green]"
                 )
-                return (output_directory, 'completed')
-            return (None, 'in_progress')
+                return (output_directory, "completed")
+            return (None, "in_progress")
 
         # Case 3: No batches found, check for passthrough
-        if registry_status == 'no_batches':
-            passthrough_marker = Path(output_directory) / '.passthrough_processed'
+        if registry_status == "no_batches":
+            passthrough_marker = Path(output_directory) / ".passthrough_processed"
             if passthrough_marker.exists():
                 self.console.print(
-                    f'[green]All items filtered by conditional clause - '
-                    f'passthrough data processed for {agent_name}[/green]'
+                    f"[green]All items filtered by conditional clause - "
+                    f"passthrough data processed for {agent_name}[/green]"
                 )
-                return (output_directory, 'completed')
-            self.console.print(f'[yellow]No batch jobs found for {agent_name}[/yellow]')
-            return (None, 'failed')
+                return (output_directory, "completed")
+            self.console.print(f"[yellow]No batch jobs found for {agent_name}[/yellow]")
+            return (None, "failed")
 
         # Case 4: Failed status
-        return (None, 'failed')
+        return (None, "failed")
 
     def _process_batch_results(
-        self,
-        output_directory: str,
-        agent_config: Optional[Dict[str, Any]],
-        agent_name: str
+        self, output_directory: str, agent_config: Optional[Dict[str, Any]], agent_name: str
     ):
         """
         Process all completed batch job results.
@@ -120,31 +105,25 @@ class BatchLifecycleManager:
         """
         try:
             processed_files = self.batch_service.process_all_batch_results(
-                output_directory,
-                agent_config=agent_config
+                output_directory, agent_config=agent_config
             )
 
             if not processed_files:
-                raise ProcessingError('No batch results were successfully processed')
+                raise ProcessingError("No batch results were successfully processed")
 
         except ProcessingError:
             self.console.print(
-                f'[red]Error: Could not process batch results for '
-                f'{agent_name}[/red]'
+                f"[red]Error: Could not process batch results for {agent_name}[/red]"
             )
             raise
         except Exception as e:
             self.console.print(
-                f'[red]Error: Could not process batch results for '
-                f'{agent_name}: {e}[/red]'
+                f"[red]Error: Could not process batch results for {agent_name}: {e}[/red]"
             )
             raise
 
     def check_batch_submission(
-        self,
-        agent_name: str,
-        agent_idx: int,
-        agent_io_path: Path
+        self, agent_name: str, agent_idx: int, agent_io_path: Path
     ) -> Optional[str]:
         """
         Check if batch jobs were submitted for an agent.
@@ -157,17 +136,17 @@ class BatchLifecycleManager:
         Returns:
             Status string: 'batch_submitted', 'passthrough', 'no_batches', or None
         """
-        node_output_dir = agent_io_path / 'target' / f'node_{agent_idx}_{agent_name}'
-        registry_file = node_output_dir / 'batch' / '.batch_registry.json'
-        passthrough_marker = node_output_dir / '.passthrough_processed'
+        node_output_dir = agent_io_path / "target" / f"node_{agent_idx}_{agent_name}"
+        registry_file = node_output_dir / "batch" / ".batch_registry.json"
+        passthrough_marker = node_output_dir / ".passthrough_processed"
 
         if registry_file.exists():
-            return 'batch_submitted'
+            return "batch_submitted"
         if passthrough_marker.exists():
-            return 'passthrough'
+            return "passthrough"
         if node_output_dir.exists():
             # Output dir exists but no batch registry or passthrough
-            return 'no_batches'
+            return "no_batches"
         return None
 
     def cleanup_passthrough_marker(self, output_dir: Path):
@@ -177,7 +156,7 @@ class BatchLifecycleManager:
         Args:
             output_dir: Path to output directory
         """
-        passthrough_marker = output_dir / '.passthrough_processed'
+        passthrough_marker = output_dir / ".passthrough_processed"
         try:
             if passthrough_marker.exists():
                 passthrough_marker.unlink()
@@ -186,10 +165,11 @@ class BatchLifecycleManager:
         except (OSError, PermissionError) as e:
             logger.warning(
                 "Could not remove passthrough file %s: %s",
-                passthrough_marker, e,
+                passthrough_marker,
+                e,
                 exc_info=True,
                 extra={
-                    'passthrough_marker': str(passthrough_marker),
-                    'operation': 'cleanup_passthrough_marker'
-                }
+                    "passthrough_marker": str(passthrough_marker),
+                    "operation": "cleanup_passthrough_marker",
+                },
             )

@@ -1,5 +1,6 @@
 """Module for preprocessing context data."""
 
+
 class ContextPreprocessor:
     """Handles context data preprocessing (Single Responsibility)."""
 
@@ -21,12 +22,8 @@ class ContextPreprocessor:
         """
         if isinstance(context_data, dict):
             for _, value in context_data.items():
-                if isinstance(value, dict) and 'source_guid' in value:
-                    excluded_keys = [
-                        'source_guid', 'target_id', 'record_index', 'chunk_index'
-                    ]
-                    content_data = {
-                        k: v for k, v in value.items() if k not in excluded_keys
-                    }
-                    return (value['source_guid'], content_data)
+                if isinstance(value, dict) and "source_guid" in value:
+                    excluded_keys = ["source_guid", "target_id", "record_index", "chunk_index"]
+                    content_data = {k: v for k, v in value.items() if k not in excluded_keys}
+                    return (value["source_guid"], content_data)
         return (None, context_data)

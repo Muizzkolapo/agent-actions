@@ -1,4 +1,5 @@
 """Batch source data persistence handler."""
+
 from pathlib import Path
 from typing import Dict, List, Any, Union
 

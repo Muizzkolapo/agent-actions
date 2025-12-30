@@ -12,32 +12,27 @@ class FunctionNotFoundFormatter(ErrorFormatter):
     def can_handle(self, exc: Exception, root: Exception, message: str) -> bool:
         """Detect function not found errors."""
         exc_names = [type(exc).__name__, type(root).__name__]
-        if 'FunctionNotFoundError' in exc_names:
+        if "FunctionNotFoundError" in exc_names:
             return True
 
-        if 'function' in message.lower() and 'not found' in message.lower():
+        if "function" in message.lower() and "not found" in message.lower():
             return True
 
         return False
 
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """Format function not found errors with suggestions."""
-        function_name = context.get('function_name', 'unknown')
-        available_functions = context.get('available_functions', [])
+        function_name = context.get("function_name", "unknown")
+        available_functions = context.get("available_functions", [])
 
         # Build title
         title = f"Function '{function_name}' not found"
 
         # Build details
         details = (
-            f"The function '{function_name}' is not registered as a "
-            "UDF (User Defined Function)."
+            f"The function '{function_name}' is not registered as a UDF (User Defined Function)."
         )
 
         # Find similar function names
@@ -65,10 +60,10 @@ class FunctionNotFoundFormatter(ErrorFormatter):
             details=details,
             fix="\n".join(fix_parts),
             context={
-                'function_name': function_name,
-                'similar_functions': similar[:3] if similar else None
+                "function_name": function_name,
+                "similar_functions": similar[:3] if similar else None,
             },
-            docs_url="https://docs.agent-actions.com/user-defined-functions"
+            docs_url="https://docs.agent-actions.com/user-defined-functions",
         )
 
     def _find_similar_functions(self, target: str, available: List[str]) -> List[str]:

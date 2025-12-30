@@ -6,11 +6,13 @@ by both batch and realtime modes, as well as orchestration and preprocessing.
 
 Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 """
+
 import json
 import csv
 from pathlib import Path
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
+
 
 class FileWriter(ProcessorErrorHandlerMixin):
     """
@@ -36,29 +38,31 @@ class FileWriter(ProcessorErrorHandlerMixin):
             AgentActionsException: If file type is unsupported
         """
         try:
-            with open(self.file_path, 'w', encoding='utf-8') as file:
-                if self.file_type == '.json':
+            with open(self.file_path, "w", encoding="utf-8") as file:
+                if self.file_type == ".json":
                     json.dump(data, file, indent=4)
-                elif self.file_type == '.txt':
+                elif self.file_type == ".txt":
                     if isinstance(data, list):
-                        file.write('\n'.join(data))
+                        file.write("\n".join(data))
                     else:
                         file.write(data)
-                elif self.file_type == '.csv':
+                elif self.file_type == ".csv":
                     writer = csv.writer(file)
                     writer.writerows(data)
                 else:
                     raise AgentActionsException(
-                        f'Unsupported file type for staging: {self.file_type} '
-                        f'for file {self.file_path}'
+                        f"Unsupported file type for staging: {self.file_type} "
+                        f"for file {self.file_path}"
                     )
         except IOError as e:
-            self.handle_file_error(e, 'write_staging', self.file_path, file_type=self.file_type)
+            self.handle_file_error(e, "write_staging", self.file_path, file_type=self.file_type)
         except Exception as e:  # pylint: disable=broad-exception-caught
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
-                e, f'Write staging file {self.file_path}',
-                file_path=self.file_path, file_type=self.file_type
+                e,
+                f"Write staging file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type,
             )
 
     def write_target(self, data):
@@ -72,15 +76,17 @@ class FileWriter(ProcessorErrorHandlerMixin):
         """
         try:
             Path(self.file_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(self.file_path, 'w', encoding='utf-8') as file:
+            with open(self.file_path, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            self.handle_file_error(e, 'write_target', self.file_path, file_type=self.file_type)
+            self.handle_file_error(e, "write_target", self.file_path, file_type=self.file_type)
         except Exception as e:  # pylint: disable=broad-exception-caught
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
-                e, f'Write target file {self.file_path}',
-                file_path=self.file_path, file_type=self.file_type
+                e,
+                f"Write target file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type,
             )
 
     def write_source(self, data):
@@ -91,13 +97,15 @@ class FileWriter(ProcessorErrorHandlerMixin):
             data: Data to write as JSON
         """
         try:
-            with open(self.file_path, 'w', encoding='utf-8') as file:
+            with open(self.file_path, "w", encoding="utf-8") as file:
                 json.dump(data, file, indent=4)
         except IOError as e:
-            self.handle_file_error(e, 'write_source', self.file_path, file_type=self.file_type)
+            self.handle_file_error(e, "write_source", self.file_path, file_type=self.file_type)
         except Exception as e:  # pylint: disable=broad-exception-caught
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
-                e, f'Write source file {self.file_path}',
-                file_path=self.file_path, file_type=self.file_type
+                e,
+                f"Write source file {self.file_path}",
+                file_path=self.file_path,
+                file_type=self.file_type,
             )

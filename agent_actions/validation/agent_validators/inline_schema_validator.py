@@ -11,7 +11,7 @@ Validates:
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.schema_type_validator import SchemaTypeValidator
 from agent_actions.utilities.constants import SCHEMA_KEY, SCHEMA_NAME_KEY
@@ -67,10 +67,13 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
             return AgentEntryValidationResult.with_errors(errors)
 
         # Define valid schema types
-        valid_types = {'string', 'number', 'integer', 'boolean', 'array', 'object'}
+        valid_types = {"string", "number", "integer", "boolean", "array", "object"}
         valid_array_types = {
-            'array[string]', 'array[number]', 'array[integer]',
-            'array[boolean]', 'array[object]'
+            "array[string]",
+            "array[number]",
+            "array[integer]",
+            "array[boolean]",
+            "array[object]",
         }
 
         # Validate each field in the schema
@@ -78,8 +81,7 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
             # Check field name is string
             if not isinstance(field_name, str):
                 errors.append(
-                    f"{desc} 'schema' keys must be strings, "
-                    f"found {type(field_name).__name__}."
+                    f"{desc} 'schema' keys must be strings, found {type(field_name).__name__}."
                 )
                 continue
 
@@ -92,7 +94,7 @@ class InlineSchemaValidator(BaseAgentEntryValidator):
                 continue
 
             # Strip trailing '!' (required marker)
-            base_type = field_type.rstrip('!')
+            base_type = field_type.rstrip("!")
 
             # Validate the type using SchemaTypeValidator
             if not self.schema_type_validator.is_valid_schema_type(

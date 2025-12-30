@@ -5,6 +5,7 @@ Dependency Injection Configuration for Agent Actions.
 This module configures the DI container with all application dependencies
 based on configuration settings.
 """
+
 from typing import Any, Dict
 
 from agent_actions.configuration.interfaces import (
@@ -18,6 +19,7 @@ from agent_actions.orchestration.dependency_injection import (
     ProcessorFactory,
     registry,
 )
+
 
 class DIConfigurator:
     """Configures the dependency container with application services."""
@@ -33,7 +35,8 @@ class DIConfigurator:
 
     @staticmethod
     def _register_core_services(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register core application services."""
         # pylint: disable=import-outside-toplevel
@@ -47,12 +50,14 @@ class DIConfigurator:
 
     @staticmethod
     def _register_processors(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register processor implementations."""
         # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
+
         # Import to trigger decorator-based registration with ProcessorRegistry
         # pylint: disable-next=unused-import
         from agent_actions.prompt_generation import target_content_processor  # noqa: F401
@@ -65,7 +70,8 @@ class DIConfigurator:
 
     @staticmethod
     def _register_utilities(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register utility services."""
         # pylint: disable=import-outside-toplevel
@@ -95,8 +101,8 @@ class DIConfigurator:
         container = DependencyContainer()
         mock_loader = Mock()
         mock_loader.load_source_data.return_value = [
-            {'source_guid': 'test-guid-1', 'content': 'test content 1'},
-            {'source_guid': 'test-guid-2', 'content': 'test content 2'},
+            {"source_guid": "test-guid-1", "content": "test content 1"},
+            {"source_guid": "test-guid-2", "content": "test content 2"},
         ]
         container.register_instance(ISourceDataLoader, mock_loader)
         container.register_instance(IDataLoader, mock_loader)
@@ -122,6 +128,7 @@ class DIConfigurator:
         container.register_instance(BatchService, Mock(spec=BatchService))
         return container
 
+
 class ConfigurationProfile:
     """Predefined configuration profiles for different environments."""
 
@@ -129,28 +136,28 @@ class ConfigurationProfile:
     def development() -> Dict[str, Any]:
         """Development configuration profile."""
         return {
-            'environment': 'development',
-            'logging': {'level': 'DEBUG', 'enable_console': True},
-            'processors': {'cache_enabled': False, 'parallel_processing': False},
-            'services': {'batch_size': 10, 'timeout': 30},
+            "environment": "development",
+            "logging": {"level": "DEBUG", "enable_console": True},
+            "processors": {"cache_enabled": False, "parallel_processing": False},
+            "services": {"batch_size": 10, "timeout": 30},
         }
 
     @staticmethod
     def production() -> Dict[str, Any]:
         """Production configuration profile."""
         return {
-            'environment': 'production',
-            'logging': {'level': 'INFO', 'enable_console': False},
-            'processors': {'cache_enabled': True, 'parallel_processing': True},
-            'services': {'batch_size': 100, 'timeout': 120},
+            "environment": "production",
+            "logging": {"level": "INFO", "enable_console": False},
+            "processors": {"cache_enabled": True, "parallel_processing": True},
+            "services": {"batch_size": 100, "timeout": 120},
         }
 
     @staticmethod
     def testing() -> Dict[str, Any]:
         """Testing configuration profile."""
         return {
-            'environment': 'testing',
-            'logging': {'level': 'ERROR', 'enable_console': False},
-            'processors': {'cache_enabled': False, 'parallel_processing': False},
-            'services': {'batch_size': 5, 'timeout': 10},
+            "environment": "testing",
+            "logging": {"level": "ERROR", "enable_console": False},
+            "processors": {"cache_enabled": False, "parallel_processing": False},
+            "services": {"batch_size": 5, "timeout": 10},
         }

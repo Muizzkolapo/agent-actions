@@ -3,6 +3,7 @@ Pytest configuration for UDF schema tests.
 
 Provides shared fixtures and test utilities.
 """
+
 import pytest
 from agent_actions.utilities.udf_management.udf_registry import clear_registry
 
@@ -11,7 +12,7 @@ from agent_actions.utilities.udf_management.udf_registry import clear_registry
 def reset_udf_registry():
     """
     Automatically clear UDF registry before and after each test.
-    
+
     This ensures test isolation and prevents test interference.
     """
     clear_registry()
@@ -23,12 +24,12 @@ def reset_udf_registry():
 def sample_inline_schema():
     """Provide a sample inline schema for testing."""
     return {
-        'name': 'sample_schema',
-        'description': 'Sample schema for testing',
-        'fields': [
-            {'id': 'text', 'type': 'string', 'required': True},
-            {'id': 'count', 'type': 'number', 'required': False}
-        ]
+        "name": "sample_schema",
+        "description": "Sample schema for testing",
+        "fields": [
+            {"id": "text", "type": "string", "required": True},
+            {"id": "count", "type": "number", "required": False},
+        ],
     }
 
 
@@ -36,9 +37,9 @@ def sample_inline_schema():
 def sample_simple_schema():
     """Provide a simple dict schema for testing."""
     return {
-        'text': 'string!',  # Required
-        'count': 'number',  # Optional
-        'tags': 'array'
+        "text": "string!",  # Required
+        "count": "number",  # Optional
+        "tags": "array",
     }
 
 
@@ -79,21 +80,18 @@ fields:
 def sample_batch_schema():
     """Provide a sample schema for FILE mode (batch processing)."""
     return {
-        'name': 'batch_schema',
-        'description': 'Schema for batch processing',
-        'fields': [
+        "name": "batch_schema",
+        "description": "Schema for batch processing",
+        "fields": [
             {
-                'id': 'items',
-                'type': 'array',
-                'required': True,
-                'items': {
-                    'type': 'object',
-                    'properties': {
-                        'id': {'type': 'string'},
-                        'value': {'type': 'number'}
-                    },
-                    'required': ['id', 'value']
-                }
+                "id": "items",
+                "type": "array",
+                "required": True,
+                "items": {
+                    "type": "object",
+                    "properties": {"id": {"type": "string"}, "value": {"type": "number"}},
+                    "required": ["id", "value"],
+                },
             }
-        ]
+        ],
     }

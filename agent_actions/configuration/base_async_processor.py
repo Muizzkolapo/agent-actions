@@ -1,4 +1,5 @@
 """Base async processor implementation with proper async patterns."""
+
 import asyncio
 import logging
 from abc import abstractmethod
@@ -36,11 +37,7 @@ class BaseAsyncProcessor(IAsyncCapable):
         return ProcessingMode.ASYNC
 
     async def process_items_parallel(
-        self,
-        items: List[Any],
-        process_func: callable,
-        *args,
-        **kwargs
+        self, items: List[Any], process_func: callable, *args, **kwargs
     ) -> List[Any]:
         """
         Process multiple items in parallel with proper concurrency control.
@@ -54,6 +51,7 @@ class BaseAsyncProcessor(IAsyncCapable):
         Returns:
             List of processed results
         """
+
         async def process_with_semaphore(item):
             if self._semaphore:
                 async with self._semaphore:  # pylint: disable=not-async-context-manager
@@ -64,11 +62,7 @@ class BaseAsyncProcessor(IAsyncCapable):
         return await asyncio.gather(*tasks, return_exceptions=False)
 
     async def process_items_sequential(
-        self,
-        items: List[Any],
-        process_func: callable,
-        *args,
-        **kwargs
+        self, items: List[Any], process_func: callable, *args, **kwargs
     ) -> List[Any]:
         """
         Process items sequentially (useful for order-dependent operations).
@@ -101,16 +95,16 @@ class BaseAsyncProcessor(IAsyncCapable):
         try:
             import aiofiles  # pylint: disable=import-outside-toplevel,import-error
 
-            async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
                 return await f.read()
         except ImportError:
             # Fallback to asyncio.to_thread if aiofiles not available
-            logger.info(
-                "aiofiles not available, using asyncio.to_thread fallback for file reading"
-            )
+            logger.info("aiofiles not available, using asyncio.to_thread fallback for file reading")
+
             def _read_file():
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     return f.read()
+
             return await asyncio.to_thread(_read_file)
 
     async def write_file_async(self, file_path: str, content: str) -> None:
@@ -124,16 +118,16 @@ class BaseAsyncProcessor(IAsyncCapable):
         try:
             import aiofiles  # pylint: disable=import-outside-toplevel,import-error
 
-            async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
                 await f.write(content)
         except ImportError:
             # Fallback to asyncio.to_thread if aiofiles not available
-            logger.info(
-                "aiofiles not available, using asyncio.to_thread fallback for file writing"
-            )
+            logger.info("aiofiles not available, using asyncio.to_thread fallback for file writing")
+
             def _write_file():
-                with open(file_path, 'w', encoding='utf-8') as f:
+                with open(file_path, "w", encoding="utf-8") as f:
                     f.write(content)
+
             await asyncio.to_thread(_write_file)
 
     @abstractmethod
@@ -160,17 +154,18 @@ class AsyncProcessorMixin:
 
     def supports_async(self) -> bool:
         """Return True if async capabilities are enabled."""
-        return hasattr(self, '_async_processor') and self._async_processor is not None
+        return hasattr(self, "_async_processor") and self._async_processor is not None
 
     def get_processing_mode(self) -> ProcessingMode:
         """Return AUTO to let the system choose based on context."""
         return ProcessingMode.AUTO
 
     def enable_async(
-        self, concurrency_limit: Optional[int] = None  # pylint: disable=unused-argument
+        self,
+        concurrency_limit: Optional[int] = None,  # pylint: disable=unused-argument
     ):
         """Enable async processing capabilities."""
-        if not hasattr(self, '_async_processor') or self._async_processor is None:
+        if not hasattr(self, "_async_processor") or self._async_processor is None:
             # This is a mixin, so we can't directly instantiate BaseAsyncProcessor
             # Subclasses should override this method with proper implementation
             self._async_processor = None  # Placeholder for subclasses to implement
@@ -189,7 +184,7 @@ class ProcessingContext:  # pylint: disable=too-few-public-methods
         mode: ProcessingMode = ProcessingMode.AUTO,
         concurrency_limit: Optional[int] = None,
         timeout: Optional[float] = None,
-        retry_count: int = 0
+        retry_count: int = 0,
     ):
         self.mode = mode
         self.concurrency_limit = concurrency_limit

@@ -4,32 +4,37 @@ Clean command for the Agent Actions CLI.
 This module provides the implementation of the 'clean' command,
 which removes temporary directories created by an agent.
 """
+
 import click
 
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from agent_actions.llm_invocation.realtime.cleaner import Cleaner
 from agent_actions.validation.clean_validator import CleanCommandArgs
 
+
 @click.command(
-    name='clean',
+    name="clean",
     help=(
-        'Remove temporary directories created by an agent. '
-        'By default removes source and target directories only.'
-    )
+        "Remove temporary directories created by an agent. "
+        "By default removes source and target directories only."
+    ),
 )
 @click.option(
-    '-a', '--agent', required=True, metavar='<agent>',
-    help='Name of the agent whose workspace should be cleaned.'
+    "-a",
+    "--agent",
+    required=True,
+    metavar="<agent>",
+    help="Name of the agent whose workspace should be cleaned.",
 )
+@click.option("-f", "--force", is_flag=True, default=False, help="Skip interactive confirmation.")
 @click.option(
-    '-f', '--force', is_flag=True, default=False,
-    help='Skip interactive confirmation.'
+    "--all",
+    "remove_all",
+    is_flag=True,
+    default=False,
+    help="Remove all directories including staging.",
 )
-@click.option(
-    '--all', 'remove_all', is_flag=True, default=False,
-    help='Remove all directories including staging.'
-)
-@handles_user_errors('clean')
+@handles_user_errors("clean")
 @requires_project
 def clean_cli(agent: str, force: bool, remove_all: bool) -> None:
     """

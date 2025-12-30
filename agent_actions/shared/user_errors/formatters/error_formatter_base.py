@@ -29,11 +29,7 @@ class ErrorFormatter(ABC):
 
     @abstractmethod
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """
         Format the error into a user-friendly UserError.
@@ -64,13 +60,13 @@ class ErrorFormatter(ABC):
         """
         message_lower = message.lower()
 
-        if 'anthropic' in message_lower:
-            return 'anthropic'
-        if 'openai' in message_lower:
-            return 'openai'
-        if 'gemini' in message_lower:
-            return 'gemini'
-        if 'cohere' in message_lower:
-            return 'cohere'
+        if "anthropic" in message_lower:
+            return "anthropic"
+        if "openai" in message_lower:
+            return "openai"
+        if "gemini" in message_lower:
+            return "gemini"
+        if "cohere" in message_lower:
+            return "cohere"
 
-        return context.get('provider', 'API')
+        return context.get("provider", "API")

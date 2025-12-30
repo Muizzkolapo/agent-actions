@@ -6,6 +6,7 @@ This module provides thread-safe loop correlation ID management:
 - Maintain a registry for consistency across loop iterations
 - Support both source_guid-based and position-based correlation
 """
+
 import threading
 import hashlib
 from typing import Dict, Optional
@@ -24,10 +25,7 @@ class LoopIdGenerator:
 
     @classmethod
     def get_or_create_loop_correlation_id(
-        cls,
-        source_guid: str,
-        loop_base_name: str,
-        workflow_session_id: str
+        cls, source_guid: str, loop_base_name: str, workflow_session_id: str
     ) -> str:
         """
         Get or create a loop correlation ID for a source_guid.
@@ -42,15 +40,12 @@ class LoopIdGenerator:
         Returns:
             Consistent loop correlation ID for this combination
         """
-        registry_key = (
-            f'{workflow_session_id}:{loop_base_name}:{source_guid}'
-        )
+        registry_key = f"{workflow_session_id}:{loop_base_name}:{source_guid}"
         with cls._loop_correlation_lock:
             if registry_key not in cls._loop_correlation_registry:
-                content = f'{loop_base_name}:{source_guid}'
+                content = f"{loop_base_name}:{source_guid}"
                 correlation_id = cls._generate_deterministic_correlation_id(
-                    workflow_session_id,
-                    content
+                    workflow_session_id, content
                 )
                 cls._loop_correlation_registry[registry_key] = correlation_id
             return cls._loop_correlation_registry[registry_key]
@@ -61,7 +56,7 @@ class LoopIdGenerator:
         record_index: int,
         loop_base_name: str,
         workflow_session_id: str,
-        file_context: str = ''
+        file_context: str = "",
     ) -> str:
         """
         Get or create a loop correlation ID based on record position.
@@ -79,28 +74,19 @@ class LoopIdGenerator:
             all loop iterations
         """
         registry_key = (
-            f'{workflow_session_id}:{loop_base_name}:'
-            f'position_{record_index}:{file_context}'
+            f"{workflow_session_id}:{loop_base_name}:position_{record_index}:{file_context}"
         )
         with cls._loop_correlation_lock:
             if registry_key not in cls._loop_correlation_registry:
-                content = (
-                    f'{loop_base_name}:position_{record_index}:'
-                    f'{file_context}'
-                )
+                content = f"{loop_base_name}:position_{record_index}:{file_context}"
                 correlation_id = cls._generate_deterministic_correlation_id(
-                    workflow_session_id,
-                    content
+                    workflow_session_id, content
                 )
                 cls._loop_correlation_registry[registry_key] = correlation_id
             return cls._loop_correlation_registry[registry_key]
 
     @classmethod
-    def _generate_deterministic_correlation_id(
-        cls,
-        workflow_session_id: str,
-        content: str
-    ) -> str:
+    def _generate_deterministic_correlation_id(cls, workflow_session_id: str, content: str) -> str:
         """
         Generate a deterministic correlation ID based on session.
 
@@ -112,9 +98,9 @@ class LoopIdGenerator:
         Returns:
             Deterministic correlation ID in format: corr_{16_char_hash}
         """
-        hash_input = f'{workflow_session_id}:{content}'
+        hash_input = f"{workflow_session_id}:{content}"
         hash_digest = hashlib.sha256(hash_input.encode()).hexdigest()
-        return f'corr_{hash_digest[:16]}'
+        return f"corr_{hash_digest[:16]}"
 
     @classmethod
     def clear_loop_correlation_registry(cls):
@@ -128,10 +114,7 @@ class LoopIdGenerator:
 
     @classmethod
     def add_loop_correlation_id(
-        cls,
-        obj: Dict,
-        agent_config: Dict,
-        record_index: Optional[int] = None
+        cls, obj: Dict, agent_config: Dict, record_index: Optional[int] = None
     ) -> Dict:
         """
         Add loop correlation ID to an object if agent is in a loop.
@@ -147,38 +130,30 @@ class LoopIdGenerator:
         Raises:
             ValueError: If workflow_session_id is missing in loop context
         """
-        if not agent_config.get('is_loop_agent', False):
+        if not agent_config.get("is_loop_agent", False):
             return obj
 
-        loop_base_name = agent_config.get('loop_base_name')
+        loop_base_name = agent_config.get("loop_base_name")
         if not loop_base_name:
             return obj
 
-        workflow_session_id = agent_config.get('workflow_session_id')
+        workflow_session_id = agent_config.get("workflow_session_id")
         if not workflow_session_id:
             raise ValueError(
-                'Missing workflow_session_id in agent_config. '
-                'This is required for deterministic correlation IDs. '
-                'Ensure AgentWorkflow properly injects session IDs.'
+                "Missing workflow_session_id in agent_config. "
+                "This is required for deterministic correlation IDs. "
+                "Ensure AgentWorkflow properly injects session IDs."
             )
 
         obj = obj.copy()
         if record_index is not None:
-            obj['loop_correlation_id'] = (
-                cls.get_or_create_position_based_loop_correlation_id(
-                    record_index,
-                    loop_base_name,
-                    workflow_session_id
-                )
+            obj["loop_correlation_id"] = cls.get_or_create_position_based_loop_correlation_id(
+                record_index, loop_base_name, workflow_session_id
             )
         else:
-            source_guid = obj.get('source_guid')
+            source_guid = obj.get("source_guid")
             if source_guid:
-                obj['loop_correlation_id'] = (
-                    cls.get_or_create_loop_correlation_id(
-                        source_guid,
-                        loop_base_name,
-                        workflow_session_id
-                    )
+                obj["loop_correlation_id"] = cls.get_or_create_loop_correlation_id(
+                    source_guid, loop_base_name, workflow_session_id
                 )
         return obj

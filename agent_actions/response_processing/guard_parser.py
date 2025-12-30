@@ -1,12 +1,16 @@
 """Guard expression parser for handling both UDF and SQL-like conditions."""
+
 import re
 from enum import Enum
 from agent_actions.errors import ValidationError
 
+
 class GuardType(str, Enum):
     """Types of guard expressions."""
-    SQL = 'sql'
-    UDF = 'udf'
+
+    SQL = "sql"
+    UDF = "udf"
+
 
 class GuardExpression:  # pylint: disable=too-few-public-methods
     """Parsed guard expression."""
@@ -19,9 +23,11 @@ class GuardExpression:  # pylint: disable=too-few-public-methods
     def __repr__(self):
         return f"GuardExpression(type={self.type}, expression='{self.expression}')"
 
+
 class GuardParser:
     """Parser for guard expressions supporting both SQL-like and UDF syntax."""
-    UDF_PREFIX = 'udf:'
+
+    UDF_PREFIX = "udf:"
 
     @classmethod
     def parse(cls, guard: str) -> GuardExpression:
@@ -41,51 +47,49 @@ class GuardParser:
         """
         if not guard or not isinstance(guard, str):
             raise ValidationError(
-                'Guard expression must be a non-empty string',
+                "Guard expression must be a non-empty string",
                 context={
-                    'guard': guard,
-                    'guard_type': str(type(guard)),
-                    'operation': 'parse_guard',
-                    'failed_field': 'guard',
-                    'expected': 'Non-empty string (e.g., "udf:module.function" or SQL expression)',
-                    'actual_value': guard,
-                    'suggestion': (
-                        'Provide a valid guard expression as a non-empty string. '
+                    "guard": guard,
+                    "guard_type": str(type(guard)),
+                    "operation": "parse_guard",
+                    "failed_field": "guard",
+                    "expected": 'Non-empty string (e.g., "udf:module.function" or SQL expression)',
+                    "actual_value": guard,
+                    "suggestion": (
+                        "Provide a valid guard expression as a non-empty string. "
                         'Use "udf:module.function" for UDF guards or SQL-like expressions '
-                        'for SQL guards.'
-                    )
-                }
+                        "for SQL guards."
+                    ),
+                },
             )
         original_guard = guard
         guard = guard.strip()
         if guard.startswith(cls.UDF_PREFIX):
-            udf_expression = guard[len(cls.UDF_PREFIX):].strip()
+            udf_expression = guard[len(cls.UDF_PREFIX) :].strip()
             if not udf_expression:
                 raise ValidationError(
                     "UDF guard expression cannot be empty after 'udf:' prefix",
                     context={
-                        'guard': original_guard,
-                        'operation': 'parse_udf_guard',
-                        'failed_field': 'udf_expression',
-                        'expected': (
+                        "guard": original_guard,
+                        "operation": "parse_udf_guard",
+                        "failed_field": "udf_expression",
+                        "expected": (
                             'Non-empty UDF expression after "udf:" prefix '
                             '(e.g., "udf:module.function")'
                         ),
-                        'actual_value': udf_expression,
-                        'suggestion': (
-                            'Provide a valid UDF expression in the format '
+                        "actual_value": udf_expression,
+                        "suggestion": (
+                            "Provide a valid UDF expression in the format "
                             '"udf:module.function" or "udf:module.submodule.function".'
-                        )
-                    }
+                        ),
+                    },
                 )
             cls._validate_udf_expression(udf_expression)
             return GuardExpression(
                 guard_type=GuardType.UDF, expression=udf_expression, original=original_guard
             )
         cls._validate_sql_expression(guard)
-        return GuardExpression(
-            guard_type=GuardType.SQL, expression=guard, original=original_guard
-        )
+        return GuardExpression(guard_type=GuardType.SQL, expression=guard, original=original_guard)
 
     @classmethod
     def _validate_udf_expression(cls, expression: str) -> None:
@@ -98,53 +102,68 @@ class GuardParser:
         Raises:
             ValueError: If expression format is invalid
         """
-        pattern = '^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$'
+        pattern = "^[a-zA-Z_][a-zA-Z0-9_]*(?:\\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
         if not re.match(pattern, expression):
             raise ValidationError(
                 f"Invalid UDF expression format: '{expression}'. "
                 "Expected format: 'module.function' or 'module.submodule.function'",
                 context={
-                    'expression': expression,
-                    'expected_pattern': pattern,
-                    'operation': 'validate_udf_expression',
-                    'failed_field': 'udf_expression',
-                    'expected': (
-                        'Valid Python module path '
+                    "expression": expression,
+                    "expected_pattern": pattern,
+                    "operation": "validate_udf_expression",
+                    "failed_field": "udf_expression",
+                    "expected": (
+                        "Valid Python module path "
                         '(e.g., "module.function" or "module.submodule.function")'
                     ),
-                    'actual_value': expression,
-                    'suggestion': (
-                        'Ensure the UDF expression follows Python module naming conventions: '
-                        'starts with letter/underscore, contains only alphanumeric characters '
-                        'and underscores, separated by dots.'
-                    )
-                }
+                    "actual_value": expression,
+                    "suggestion": (
+                        "Ensure the UDF expression follows Python module naming conventions: "
+                        "starts with letter/underscore, contains only alphanumeric characters "
+                        "and underscores, separated by dots."
+                    ),
+                },
             )
         dangerous_patterns = [
-            '__import__', 'exec', 'eval', 'compile', 'open', 'file', 'input',
-            'raw_input', 'reload', 'vars', 'globals', 'locals', 'dir', 'hasattr',
-            'getattr', 'setattr', 'delattr', '__'
+            "__import__",
+            "exec",
+            "eval",
+            "compile",
+            "open",
+            "file",
+            "input",
+            "raw_input",
+            "reload",
+            "vars",
+            "globals",
+            "locals",
+            "dir",
+            "hasattr",
+            "getattr",
+            "setattr",
+            "delattr",
+            "__",
         ]
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
                 raise ValidationError(
-                    f'UDF expression contains potentially dangerous pattern: {pattern}',
+                    f"UDF expression contains potentially dangerous pattern: {pattern}",
                     context={
-                        'expression': expression,
-                        'dangerous_pattern': pattern,
-                        'operation': 'validate_udf_expression',
-                        'failed_field': 'udf_expression',
-                        'expected': (
-                            'UDF expression without dangerous patterns '
-                            'like exec, eval, __import__, etc.'
+                        "expression": expression,
+                        "dangerous_pattern": pattern,
+                        "operation": "validate_udf_expression",
+                        "failed_field": "udf_expression",
+                        "expected": (
+                            "UDF expression without dangerous patterns "
+                            "like exec, eval, __import__, etc."
                         ),
-                        'actual_value': expression,
-                        'suggestion': (
+                        "actual_value": expression,
+                        "suggestion": (
                             f'Remove the dangerous pattern "{pattern}" from your UDF expression. '
-                            'Use safe function calls only.'
-                        )
-                    }
+                            "Use safe function calls only."
+                        ),
+                    },
                 )
 
     @classmethod
@@ -159,31 +178,45 @@ class GuardParser:
             ValueError: If expression contains dangerous patterns
         """
         dangerous_patterns = [
-            '__import__', 'exec', 'eval', 'compile', 'open', 'file', 'input',
-            'raw_input', 'reload', 'vars', 'globals', 'locals', 'dir', 'hasattr',
-            'getattr', 'setattr', 'delattr'
+            "__import__",
+            "exec",
+            "eval",
+            "compile",
+            "open",
+            "file",
+            "input",
+            "raw_input",
+            "reload",
+            "vars",
+            "globals",
+            "locals",
+            "dir",
+            "hasattr",
+            "getattr",
+            "setattr",
+            "delattr",
         ]
         expression_lower = expression.lower()
         for pattern in dangerous_patterns:
             if pattern in expression_lower:
                 raise ValidationError(
-                    f'SQL expression contains potentially dangerous pattern: {pattern}',
+                    f"SQL expression contains potentially dangerous pattern: {pattern}",
                     context={
-                        'expression': expression,
-                        'dangerous_pattern': pattern,
-                        'operation': 'validate_sql_expression',
-                        'failed_field': 'sql_expression',
-                        'expected': (
-                            'SQL expression without dangerous patterns '
-                            'like exec, eval, __import__, etc.'
+                        "expression": expression,
+                        "dangerous_pattern": pattern,
+                        "operation": "validate_sql_expression",
+                        "failed_field": "sql_expression",
+                        "expected": (
+                            "SQL expression without dangerous patterns "
+                            "like exec, eval, __import__, etc."
                         ),
-                        'actual_value': expression,
-                        'suggestion': (
+                        "actual_value": expression,
+                        "suggestion": (
                             f'Remove the dangerous pattern "{pattern}" '
-                            'from your SQL guard expression. '
-                            'Use safe SQL operators and column references only.'
-                        )
-                    }
+                            "from your SQL guard expression. "
+                            "Use safe SQL operators and column references only."
+                        ),
+                    },
                 )
 
     @classmethod
@@ -197,7 +230,7 @@ class GuardParser:
         return guard and (not guard.strip().startswith(cls.UDF_PREFIX))
 
     @classmethod
-    def parse_consolidated(cls, guard_data) -> 'GuardConfig':
+    def parse_consolidated(cls, guard_data) -> "GuardConfig":
         """
         Parse consolidated guard configuration.
 
@@ -208,9 +241,13 @@ class GuardParser:
             GuardConfig instance
         """
         from .consolidated_guard import parse_guard_config  # pylint: disable=import-outside-toplevel,cyclic-import
+
         return parse_guard_config(guard_data)
+
 
 def parse_guard(guard: str) -> GuardExpression:
     """Convenience function to parse guard expressions."""
     return GuardParser.parse(guard)
-__all__ = ['GuardType', 'GuardExpression', 'GuardParser', 'parse_guard']
+
+
+__all__ = ["GuardType", "GuardExpression", "GuardParser", "parse_guard"]

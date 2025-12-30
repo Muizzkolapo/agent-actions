@@ -28,7 +28,7 @@ class ContextScopeProcessor:
                 f"Expected non-empty string in format 'action.field'"
             )
 
-        parts = field_ref.split('.', 1)
+        parts = field_ref.split(".", 1)
         if len(parts) != 2:
             raise ValueError(
                 f"Invalid field reference: '{field_ref}'. "
@@ -39,16 +39,14 @@ class ContextScopeProcessor:
 
         if not action_name or not field_name:
             raise ValueError(
-                f"Invalid field reference: '{field_ref}'. "
-                f"Both action and field must be non-empty"
+                f"Invalid field reference: '{field_ref}'. Both action and field must be non-empty"
             )
 
         return (action_name, field_name)
 
     @staticmethod
     def extract_field_names_from_references(
-        field_refs: List[str],
-        _return_type: str = 'list'
+        field_refs: List[str], _return_type: str = "list"
     ) -> List[str]:
         """
         Extract field names from list of field references.
@@ -76,11 +74,7 @@ class ContextScopeProcessor:
         return field_names
 
     @staticmethod
-    def extract_field_value(
-        field_context: Dict,
-        action_name: str,
-        field_name: str
-    ) -> Any:
+    def extract_field_value(field_context: Dict, action_name: str, field_name: str) -> Any:
         """Extract field value from nested field_context structure, returning None if not found."""
         if not isinstance(field_context, dict):
             return None
@@ -97,9 +91,7 @@ class ContextScopeProcessor:
 
     @staticmethod
     def apply_context_scope(
-        field_context: Dict,
-        context_scope: Dict,
-        static_data: Optional[Dict] = None
+        field_context: Dict, context_scope: Dict, static_data: Optional[Dict] = None
     ) -> Tuple[Dict, Dict, Dict]:
         """Apply context_scope rules, returning (prompt_context, llm_context, passthrough_fields)."""
         # Deep copy to avoid mutating original field_context
@@ -109,7 +101,9 @@ class ContextScopeProcessor:
 
         # Process STATIC_DATA: Add to both prompt_context and llm_context
         if static_data:
-            logger.debug("[STATIC_DATA] Merging %s static data fields into context", len(static_data))
+            logger.debug(
+                "[STATIC_DATA] Merging %s static data fields into context", len(static_data)
+            )
             logger.debug("[STATIC_DATA] Fields: %s", list(static_data.keys()))
 
             # Add to llm_context (for LLM visibility)
@@ -117,16 +111,16 @@ class ContextScopeProcessor:
 
             # Add under 'seed' namespace in prompt_context (for field reference replacement)
             # This allows references like {seed.exam_syllabus} in prompts
-            if 'seed' in prompt_context:
+            if "seed" in prompt_context:
                 logger.warning(
                     "Seed data namespace 'seed' conflicts with existing action. "
                     "Seed data will overwrite it."
                 )
-            prompt_context['seed'] = static_data
+            prompt_context["seed"] = static_data
             logger.debug("[SEED_DATA] Added to prompt_context under 'seed' namespace")
 
         # Process DROP: Remove from prompt_context (security)
-        for field_ref in context_scope.get('drop', []):
+        for field_ref in context_scope.get("drop", []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
@@ -139,7 +133,7 @@ class ContextScopeProcessor:
                 continue
 
         # Process OBSERVE: Extract to llm_context, KEEP in prompt_context for template rendering
-        for field_ref in context_scope.get('observe', []):
+        for field_ref in context_scope.get("observe", []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
@@ -159,7 +153,7 @@ class ContextScopeProcessor:
                 continue
 
         # Process PASSTHROUGH: Extract to passthrough_fields, remove from prompt_context
-        for field_ref in context_scope.get('passthrough', []):
+        for field_ref in context_scope.get("passthrough", []):
             try:
                 action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
 
@@ -194,10 +188,7 @@ class ContextScopeProcessor:
         return "\n".join(lines)
 
     @staticmethod
-    def merge_passthrough_fields(
-        llm_response: List[Dict],
-        passthrough_fields: Dict
-    ) -> List[Dict]:
+    def merge_passthrough_fields(llm_response: List[Dict], passthrough_fields: Dict) -> List[Dict]:
         """Merge passthrough fields into LLM response."""
         if not passthrough_fields:
             # No passthrough fields to merge
@@ -208,9 +199,9 @@ class ContextScopeProcessor:
             for item in llm_response:
                 if isinstance(item, dict):
                     # Check if structured format with 'content' key
-                    if 'content' in item and isinstance(item['content'], dict):
+                    if "content" in item and isinstance(item["content"], dict):
                         # Merge into content
-                        item['content'].update(passthrough_fields)
+                        item["content"].update(passthrough_fields)
                     else:
                         # Merge directly into item
                         item.update(passthrough_fields)
@@ -219,9 +210,9 @@ class ContextScopeProcessor:
         # Handle single dict
         if isinstance(llm_response, dict):
             # Check if structured format with 'content' key
-            if 'content' in llm_response and isinstance(llm_response['content'], dict):
+            if "content" in llm_response and isinstance(llm_response["content"], dict):
                 # Merge into content
-                llm_response['content'].update(passthrough_fields)
+                llm_response["content"].update(passthrough_fields)
             else:
                 # Merge directly
                 llm_response.update(passthrough_fields)
@@ -244,23 +235,29 @@ class ContextScopeProcessor:
         loop_context: Optional[Dict] = None,
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
-        file_path: Optional[str] = None
+        file_path: Optional[str] = None,
     ) -> Dict:
         """Build field context with agent namespaces, auto-loading previous actions from lineage."""
         from agent_actions.utilities.context_scope.llm_context_utils import LLMContextUtils
-        from agent_actions.preprocessing.context.historical_node_loader import HistoricalNodeDataLoader
+        from agent_actions.preprocessing.context.historical_node_loader import (
+            HistoricalNodeDataLoader,
+        )
 
         field_context = {}
 
         # Load source content internally (unified for batch and realtime)
         # This ensures both modes get the ACTUAL source data from the source folder
         if current_item and file_path and agent_name:
-            source_guid = current_item.get('source_guid')
+            source_guid = current_item.get("source_guid")
 
             if source_guid:
                 # Import required classes for source loading
-                from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
-                from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
+                from agent_actions.input_loading.extractors_source_data_loader import (
+                    SourceDataLoader,
+                )
+                from agent_actions.preprocessing.transformation.data_transformer import (
+                    DataTransformer,
+                )
                 from agent_actions.state_management.path_manager import PathManager
 
                 try:
@@ -273,25 +270,27 @@ class ContextScopeProcessor:
 
                     # Get the specific source item by source_guid
                     if source_data:
-                        source_item = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+                        source_item = DataTransformer.get_content_by_source_guid(
+                            source_data, source_guid
+                        )
                         if source_item:
-                            field_context['source'] = source_item
+                            field_context["source"] = source_item
                 except Exception as e:
                     # Fallback to passed source_content if loading fails
                     if source_content:
-                        field_context['source'] = source_content
+                        field_context["source"] = source_content
                     # Log the error but don't fail - some workflows may not have source folder
                     logger.debug("Could not load source from folder: %s", e)
 
         # Fallback: Use passed source_content if not loaded above
         # This maintains backward compatibility
-        if 'source' not in field_context and source_content:
-            field_context['source'] = source_content
+        if "source" not in field_context and source_content:
+            field_context["source"] = source_content
 
         # Auto-load ALL previous actions from lineage
         if current_item and file_path and agent_indices:
-            lineage = current_item.get('lineage', [])
-            source_guid = current_item.get('source_guid')
+            lineage = current_item.get("lineage", [])
+            source_guid = current_item.get("source_guid")
             current_idx = agent_indices.get(agent_name, 999)
 
             if lineage and source_guid:
@@ -303,15 +302,16 @@ class ContextScopeProcessor:
 
                     # Load historical data for this action
                     from agent_actions.preprocessing.context.historical_node_loader import (
-                        HistoricalDataRequest
+                        HistoricalDataRequest,
                     )
+
                     request = HistoricalDataRequest(
                         action_name=action_name,
                         lineage=lineage,
                         source_guid=source_guid,
                         file_path=file_path,
                         agent_indices=agent_indices,
-                        caller_lineage=lineage
+                        caller_lineage=lineage,
                     )
                     historical_data = HistoricalNodeDataLoader.load_historical_node_data(request)
 
@@ -321,7 +321,7 @@ class ContextScopeProcessor:
         # Fallback: Also check declared dependencies for flat contents
         # (Backward compatibility for immediate predecessor data in contents)
         if dependency_configs:
-            dependencies = agent_config.get('dependencies', [])
+            dependencies = agent_config.get("dependencies", [])
             for dep_name in dependencies:
                 # Skip if already loaded from historical data
                 if dep_name in field_context:
@@ -343,8 +343,8 @@ class ContextScopeProcessor:
 
         # Add loop and workflow contexts
         if loop_context:
-            field_context['loop'] = loop_context
+            field_context["loop"] = loop_context
         if workflow_metadata:
-            field_context['workflow'] = workflow_metadata
+            field_context["workflow"] = workflow_metadata
 
         return field_context

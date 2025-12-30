@@ -12,7 +12,7 @@ Validates that optional fields have correct types when present:
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.utilities.constants import JSON_MODE_KEY
 
@@ -52,20 +52,20 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
 
     def _validate_description_field(self, context, errors: list) -> None:
         """Validate description field type."""
-        if 'description' in context.normalized_entry:
-            if not isinstance(context.normalized_entry['description'], str):
+        if "description" in context.normalized_entry:
+            if not isinstance(context.normalized_entry["description"], str):
                 errors.append(f"{context.description} 'description' should be a string.")
 
     def _validate_version_field(self, context, errors: list) -> None:
         """Validate version field type."""
-        if 'version' in context.normalized_entry:
-            if not isinstance(context.normalized_entry['version'], (str, int, float)):
+        if "version" in context.normalized_entry:
+            if not isinstance(context.normalized_entry["version"], (str, int, float)):
                 errors.append(f"{context.description} 'version' should be a string or number.")
 
     def _validate_dependencies_field(self, context, errors: list) -> None:
         """Validate dependencies field type."""
-        if 'dependencies' in context.normalized_entry:
-            if not isinstance(context.normalized_entry['dependencies'], list):
+        if "dependencies" in context.normalized_entry:
+            if not isinstance(context.normalized_entry["dependencies"], list):
                 errors.append(f"{context.description} 'dependencies' should be a list.")
 
     def _validate_boolean_fields(self, context, errors: list) -> None:
@@ -74,8 +74,8 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
         desc = context.description
 
         # Check 'is_operational' field type
-        if 'is_operational' in normalized_entry:
-            if not isinstance(normalized_entry['is_operational'], bool):
+        if "is_operational" in normalized_entry:
+            if not isinstance(normalized_entry["is_operational"], bool):
                 errors.append(f"{desc} 'is_operational' should be a boolean.")
 
         # Check 'json_mode' field type
@@ -84,6 +84,6 @@ class OptionalFieldTypeValidator(BaseAgentEntryValidator):
                 errors.append(f"{desc} 'json_mode' should be a boolean.")
 
         # Check 'prompt_debug' field type
-        if 'prompt_debug' in normalized_entry:
-            if not isinstance(normalized_entry['prompt_debug'], bool):
+        if "prompt_debug" in normalized_entry:
+            if not isinstance(normalized_entry["prompt_debug"], bool):
                 errors.append(f"{desc} 'prompt_debug' should be a boolean.")

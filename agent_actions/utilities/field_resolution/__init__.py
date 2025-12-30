@@ -93,26 +93,22 @@ from .exceptions import (
 
 __all__ = [
     # Core resolver
-    'FieldReferenceResolver',
-    'ResolvedReference',
-
+    "FieldReferenceResolver",
+    "ResolvedReference",
     # Parser
-    'ReferenceParser',
-    'ParsedReference',
-    'ReferenceFormat',
-
+    "ReferenceParser",
+    "ParsedReference",
+    "ReferenceFormat",
     # Context
-    'EvaluationContextProvider',
-    'EvaluationContext',
-
+    "EvaluationContextProvider",
+    "EvaluationContext",
     # Validation
-    'ReferenceValidator',
-    'SPECIAL_NAMESPACES',
-
+    "ReferenceValidator",
+    "SPECIAL_NAMESPACES",
     # Exceptions
-    'FieldResolutionError',
-    'InvalidReferenceError',
-    'ReferenceNotFoundError',
-    'DependencyValidationError',
-    'SchemaFieldValidationError',
+    "FieldResolutionError",
+    "InvalidReferenceError",
+    "ReferenceNotFoundError",
+    "DependencyValidationError",
+    "SchemaFieldValidationError",
 ]

@@ -7,10 +7,10 @@ which may indicate typos or deprecated fields.
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities
+    AgentConfigValidationUtilities,
 )
 
 
@@ -44,16 +44,13 @@ class UnknownKeysDetector(BaseAgentEntryValidator):
         desc = context.description
 
         # Get agent_type to include type-specific keys
-        agent_type = str(normalized_entry.get('agent_type', '')).lower()
+        agent_type = str(normalized_entry.get("agent_type", "")).lower()
 
         # Build set of all known keys
         all_known_keys = AgentConfigValidationUtilities.get_all_known_agent_keys(agent_type)
 
         # Get keys from entry (exclude 'config' key from check)
-        keys_to_check = {
-            k.lower() for k in entry.keys()
-            if k.lower() != 'config'
-        }
+        keys_to_check = {k.lower() for k in entry.keys() if k.lower() != "config"}
 
         # Find unknown keys
         unknown_keys = keys_to_check - all_known_keys

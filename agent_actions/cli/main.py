@@ -4,6 +4,7 @@ Main entry point for the Agent Actions CLI.
 This module provides the primary entry point for the CLI application,
 handling command registration, initialization, and execution.
 """
+
 import logging
 import signal
 import sys
@@ -20,16 +21,15 @@ from agent_actions.cli.status import status
 from agent_actions.cli.test import clean_cli as clean
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
 from agent_actions.llm_invocation.batch.batch_cli import (
-    batch  # CLI command group for batch processing operations
+    batch,  # CLI command group for batch processing operations
 )
 from agent_actions.logging import LoggerFactory, LoggingConfig
 from agent_actions.validation.validate_udfs import validate_udfs_cmd
 from agent_actions.shared.user_errors import format_user_error
-from agent_actions.utilities.safe_format import (
-    format_exception_chain_for_debug
-)
+from agent_actions.utilities.safe_format import format_exception_chain_for_debug
 
-__version__ = '1.0.0'
+__version__ = "1.0.0"
+
 
 class CLI:  # pylint: disable=too-few-public-methods
     """Agent Actions CLI application."""
@@ -46,14 +46,14 @@ class CLI:  # pylint: disable=too-few-public-methods
     def _create_click_group(self) -> click.Group:
         """Create the main click group with global options."""
 
-        @click.group(name='agent-actions')
+        @click.group(name="agent-actions")
         @click.version_option(version=__version__)
         @click.option(
-            '--debug',
+            "--debug",
             is_flag=True,
-            help='Enable debug mode with verbose logging and source file/line references'
+            help="Enable debug mode with verbose logging and source file/line references",
         )
-        @click.option('-v', '--verbose', is_flag=True, help='Enable verbose output')
+        @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
         def group(debug: bool, verbose: bool) -> None:  # pylint: disable=unused-argument
             """Agent Actions CLI tool for managing and running agent workflows."""
 
@@ -61,7 +61,7 @@ class CLI:  # pylint: disable=too-few-public-methods
 
     def _register_commands(self) -> None:
         """Register all available commands with the CLI."""
-        self.logger.debug('Registering CLI commands')
+        self.logger.debug("Registering CLI commands")
         self.click_group.add_command(clean)
         self.click_group.add_command(init)
         self.click_group.add_command(render)
@@ -77,11 +77,11 @@ class CLI:  # pylint: disable=too-few-public-methods
         try:
             signal.signal(signal.SIGINT, self._handle_termination)
             signal.signal(signal.SIGTERM, self._handle_termination)
-            if hasattr(signal, 'SIGBREAK'):
+            if hasattr(signal, "SIGBREAK"):
                 signal.signal(signal.SIGBREAK, self._handle_termination)
-            self.logger.debug('Signal handlers registered successfully')
+            self.logger.debug("Signal handlers registered successfully")
         except (AttributeError, ValueError) as e:
-            self.logger.warning('Failed to register signal handlers: %s', str(e))
+            self.logger.warning("Failed to register signal handlers: %s", str(e))
 
     def _handle_termination(self, signum: int, _frame) -> None:
         """
@@ -92,8 +92,8 @@ class CLI:  # pylint: disable=too-few-public-methods
             _frame: Current stack frame (unused but required by signal handler signature)
         """
         signal_name = signal.Signals(signum).name
-        self.logger.info('Received termination signal: %s', signal_name)
-        print(f'\nOperation interrupted by {signal_name}. Exiting gracefully...')
+        self.logger.info("Received termination signal: %s", signal_name)
+        print(f"\nOperation interrupted by {signal_name}. Exiting gracefully...")
         sys.exit(130)
 
     def _configure_logging(self, argv: List[str]) -> None:
@@ -106,16 +106,16 @@ class CLI:  # pylint: disable=too-few-public-methods
         Args:
             argv: Command-line arguments
         """
-        debug_mode = '--debug' in argv
-        verbose_mode = '--verbose' in argv or '-v' in argv
+        debug_mode = "--debug" in argv
+        verbose_mode = "--verbose" in argv or "-v" in argv
 
         # Determine log level
         if debug_mode:
-            level = 'DEBUG'
+            level = "DEBUG"
         elif verbose_mode:
-            level = 'INFO'
+            level = "INFO"
         else:
-            level = 'INFO'  # Default to INFO (not CRITICAL)
+            level = "INFO"  # Default to INFO (not CRITICAL)
 
         # Determine source location setting (only in debug mode)
         include_source = debug_mode
@@ -132,18 +132,18 @@ class CLI:  # pylint: disable=too-few-public-methods
         # Set source location based on debug mode
         if debug_mode:
             config.include_source_location = include_source
-            config.file_log_level = 'DEBUG'
+            config.file_log_level = "DEBUG"
 
         LoggerFactory.initialize(config=config, force=True)
-        self.logger = LoggerFactory.get_logger('cli')
+        self.logger = LoggerFactory.get_logger("cli")
 
     def _show_version_and_exit(self) -> int:
         """Display version information and return exit code."""
-        print(f'Agent Actions CLI v{__version__}')
+        print(f"Agent Actions CLI v{__version__}")
         return 0
 
     # pylint: disable=too-many-return-statements
-    def execute(self, argv: Optional[Sequence[str]]=None) -> int:
+    def execute(self, argv: Optional[Sequence[str]] = None) -> int:
         """
         Execute the CLI application with the provided arguments.
 
@@ -156,41 +156,36 @@ class CLI:  # pylint: disable=too-few-public-methods
         try:
             if argv is None:
                 argv = sys.argv[1:]
-            if '--version' in argv or '-V' in argv:
+            if "--version" in argv or "-V" in argv:
                 return self._show_version_and_exit()
             self._configure_logging(argv)
             self.logger.info(
-                'Starting agent-actions CLI',
-                extra={'version': __version__, 'cli_args': argv}
+                "Starting agent-actions CLI", extra={"version": __version__, "cli_args": argv}
             )
             self.click_group.main(argv, standalone_mode=False)
-            self.logger.info('CLI execution completed successfully')
+            self.logger.info("CLI execution completed successfully")
             return 0
         except click.Abort:
-            self.logger.info('Operation aborted by user')
+            self.logger.info("Operation aborted by user")
             return 130
         except click.UsageError as e:
-            self.logger.error('Usage error: %s', str(e))
-            print(f'Error: {str(e)}', file=sys.stderr)
+            self.logger.error("Usage error: %s", str(e))
+            print(f"Error: {str(e)}", file=sys.stderr)
             return 2
         except click.ClickException as e:
             # ClickException already has formatted message from decorator
             # Just print it without re-formatting
-            print(f'Error: {e.format_message()}', file=sys.stderr)
-            return e.exit_code if hasattr(e, 'exit_code') else 1
+            print(f"Error: {e.format_message()}", file=sys.stderr)
+            return e.exit_code if hasattr(e, "exit_code") else 1
         except ProjectNotFoundError as e:
-            self.logger.info('Not in project directory')
-            context = e.context if hasattr(e, 'context') else {}
-            marker_file = context.get('marker_file', 'agent_actions.yml')
-            search_path = context.get('search_path', 'unknown')
+            self.logger.info("Not in project directory")
+            context = e.context if hasattr(e, "context") else {}
+            marker_file = context.get("marker_file", "agent_actions.yml")
+            search_path = context.get("search_path", "unknown")
             solution_1 = context.get(
-                'solution_1',
-                'Navigate to your agent-actions project directory'
+                "solution_1", "Navigate to your agent-actions project directory"
             )
-            solution_2 = context.get(
-                'solution_2',
-                "Run 'agac init' to create a new project"
-            )
+            solution_2 = context.get("solution_2", "Run 'agac init' to create a new project")
             error_msg = (
                 f"Not in an agent-actions project\n\n"
                 f"Could not find '{marker_file}' in current directory "
@@ -198,33 +193,28 @@ class CLI:  # pylint: disable=too-few-public-methods
                 f"Current directory: {search_path}\n\n"
                 f"Solutions:\n  1. {solution_1}\n  2. {solution_2}"
             )
-            print(
-                click.style('Error: ', fg='red', bold=True) + error_msg,
-                file=sys.stderr
-            )
+            print(click.style("Error: ", fg="red", bold=True) + error_msg, file=sys.stderr)
             return 1
         except Exception as e:  # pylint: disable=broad-exception-caught
             context = {
-                'command': argv[0] if argv else 'agent-actions',
-                'operation': 'cli_execution'
+                "command": argv[0] if argv else "agent-actions",
+                "operation": "cli_execution",
             }
 
             # Format and print the user-friendly error message
             error_message = format_user_error(e, context)
-            print(f'Error: {error_message}', file=sys.stderr)
+            print(f"Error: {error_message}", file=sys.stderr)
 
             # Only log details in debug mode
-            if '--debug' in (argv or []):
-                self.logger.exception(
-                    'CLI execution failed',
-                    extra={'error': str(e)}
-                )
+            if "--debug" in (argv or []):
+                self.logger.exception("CLI execution failed", extra={"error": str(e)})
                 self.logger.debug("Debug Information:")
                 self.logger.debug("Exception Chain:")
                 self.logger.debug("%s", format_exception_chain_for_debug(e))
             return 1
 
-def main_entrypoint(argv: Optional[Sequence[str]]=None) -> int:
+
+def main_entrypoint(argv: Optional[Sequence[str]] = None) -> int:
     """
     Main entry point for the CLI application.
 
@@ -236,6 +226,7 @@ def main_entrypoint(argv: Optional[Sequence[str]]=None) -> int:
     """
     app = CLI()
     return app.execute(argv)
+
 
 def main() -> None:
     """
@@ -249,5 +240,5 @@ def main() -> None:
 # Tests use cli_runner.invoke(cli, ...) pattern
 cli = CLI().click_group
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

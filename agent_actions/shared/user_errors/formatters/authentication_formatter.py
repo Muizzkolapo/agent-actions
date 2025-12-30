@@ -13,27 +13,23 @@ class AuthenticationErrorFormatter(ErrorFormatter):
         exc_names = [type(exc).__name__, type(root).__name__]
 
         # Check exception types
-        if any('Auth' in name for name in exc_names):
+        if any("Auth" in name for name in exc_names):
             return True
 
         message_lower = message.lower()
         auth_patterns = [
-            'api key',
-            'authentication',
-            'unauthorized',
-            'invalid key',
-            'permission denied',
-            '401',
-            '403'
+            "api key",
+            "authentication",
+            "unauthorized",
+            "invalid key",
+            "permission denied",
+            "401",
+            "403",
         ]
         return any(pattern in message_lower for pattern in auth_patterns)
 
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """Handle authentication errors."""
         # Determine provider from error message or context
@@ -59,5 +55,5 @@ class AuthenticationErrorFormatter(ErrorFormatter):
             details="Your API key is invalid, expired, or not set",
             fix=fix_msg,
             context=context,
-            docs_url="https://docs.agent-actions.com/setup/authentication"
+            docs_url="https://docs.agent-actions.com/setup/authentication",
         )

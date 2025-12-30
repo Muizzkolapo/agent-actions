@@ -4,6 +4,7 @@ Project validation utilities.
 This module provides utilities for validating project creation
 parameters and ensuring they meet the required constraints.
 """
+
 import logging
 import os
 import re
@@ -14,24 +15,35 @@ from agent_actions.validation.base_validator import BaseValidator
 
 logger = logging.getLogger(__name__)
 
+
 class ProjectValidator(BaseValidator):
     """
     Handles project validation operations by inheriting from BaseValidator.
     Validates project name, directory, and template.
     """
-    PROJECT_NAME_PATTERN = re.compile('^[a-zA-Z][a-zA-Z0-9_-]*$')
+
+    PROJECT_NAME_PATTERN = re.compile("^[a-zA-Z][a-zA-Z0-9_-]*$")
     RESERVED_NAMES: Set[str] = {
-        'agent', 'actions', 'cli', 'core', 'docs', 'handlers',
-        'schema', 'templates', 'test', 'utils', 'workflow'
+        "agent",
+        "actions",
+        "cli",
+        "core",
+        "docs",
+        "handlers",
+        "schema",
+        "templates",
+        "test",
+        "utils",
+        "workflow",
     }
 
     def _validate_project_name_logic(self, project_name: str) -> None:
         """
         Validates the project name and adds errors if any.
         """
-        logger.debug('Validating project name: %s', project_name)
+        logger.debug("Validating project name: %s", project_name)
         if not project_name:
-            self.add_error('Project name cannot be empty.')
+            self.add_error("Project name cannot be empty.")
             return
         if not self.PROJECT_NAME_PATTERN.match(project_name):
             self.add_error(
@@ -40,62 +52,45 @@ class ProjectValidator(BaseValidator):
                 f"underscores, and hyphens."
             )
         if project_name.lower() in self.RESERVED_NAMES:
-            self.add_error(
-                f"Project name '{project_name}' is a reserved name and "
-                f"cannot be used."
-            )
+            self.add_error(f"Project name '{project_name}' is a reserved name and cannot be used.")
 
     def _validate_project_directory_logic(
-        self,
-        output_dir: Path,
-        project_dir: Path,
-        force: bool = False
+        self, output_dir: Path, project_dir: Path, force: bool = False
     ) -> None:
         """
         Validates the project directory location and adds errors if any.
         """
         logger.debug(
-            'Validating project directory: %s within output directory: %s',
-            project_dir,
-            output_dir
+            "Validating project directory: %s within output directory: %s", project_dir, output_dir
         )
         if not self._ensure_path_exists(output_dir):
-            self.add_error(f'Output directory does not exist: {output_dir}')
+            self.add_error(f"Output directory does not exist: {output_dir}")
             return
         if not os.access(output_dir, os.W_OK):
-            self.add_error(f'Output directory is not writable: {output_dir}')
+            self.add_error(f"Output directory is not writable: {output_dir}")
         if self._ensure_path_exists(project_dir) and not force:
             self.add_error(
-                f'Project directory already exists: {project_dir}. '
-                f'Use --force to overwrite if intentional.'
+                f"Project directory already exists: {project_dir}. "
+                f"Use --force to overwrite if intentional."
             )
 
     def _validate_project_template_logic(
-        self,
-        template: str,
-        available_templates: List[str]
+        self, template: str, available_templates: List[str]
     ) -> None:
         """
         Validates the project template and adds errors if any.
         """
-        logger.debug('Validating template: %s', template)
+        logger.debug("Validating template: %s", template)
         if not template:
-            self.add_error('Project template name cannot be empty.')
+            self.add_error("Project template name cannot be empty.")
             return
         if template not in available_templates:
-            templates_str = (
-                ', '.join(available_templates) if available_templates else 'None'
-            )
+            templates_str = ", ".join(available_templates) if available_templates else "None"
             self.add_error(
-                f"Template '{template}' not found. "
-                f"Available templates: {templates_str}."
+                f"Template '{template}' not found. Available templates: {templates_str}."
             )
 
-    def validate(
-        self,
-        data: Any,
-        config: Optional[Dict[str, Any]] = None
-    ) -> bool:
+    def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """
         Validates project creation parameters.
 
@@ -118,12 +113,12 @@ class ProjectValidator(BaseValidator):
         """
         if not self._prepare_validation(data):
             return False
-        project_name = data.get('project_name')
-        output_dir = data.get('output_dir')
-        project_dir = data.get('project_dir')
-        template = data.get('template')
-        available_templates = data.get('available_templates')
-        force = data.get('force', False)
+        project_name = data.get("project_name")
+        output_dir = data.get("output_dir")
+        project_dir = data.get("project_dir")
+        template = data.get("template")
+        available_templates = data.get("available_templates")
+        force = data.get("force", False)
         if not isinstance(project_name, str):
             self.add_error("Data field 'project_name' must be a string.")
         if not isinstance(output_dir, Path):

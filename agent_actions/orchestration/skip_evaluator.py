@@ -12,7 +12,7 @@ from rich.console import Console
 
 from agent_actions.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
-    FilterItemRequest
+    FilterItemRequest,
 )
 
 logger = logging.getLogger(__name__)
@@ -48,26 +48,21 @@ class SkipConditionStrategy(SkipStrategy):
     def get_strategy_name(self) -> str:
         return "skip_condition"
 
-    def should_skip(
-        self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
-    ) -> bool:
+    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
         """Evaluate skip_condition using modern WHERE filter."""
-        skip_condition = agent_config.get('skip_condition')
+        skip_condition = agent_config.get("skip_condition")
         if not skip_condition:
             return False
 
-        agent_name = agent_config.get('agent_type', 'unknown')
+        agent_name = agent_config.get("agent_type", "unknown")
 
         try:
-            context = {
-                'previous_outputs': previous_outputs or {},
-                'agent_config': agent_config
-            }
+            context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
 
             # Extract WHERE clause from skip_condition config
             where_clause = None
-            if isinstance(skip_condition, dict) and 'where' in skip_condition:
-                where_clause = skip_condition['where']
+            if isinstance(skip_condition, dict) and "where" in skip_condition:
+                where_clause = skip_condition["where"]
             elif isinstance(skip_condition, str):
                 where_clause = skip_condition
 
@@ -82,8 +77,7 @@ class SkipConditionStrategy(SkipStrategy):
             # If evaluation failed, don't skip (fail-open)
             if not filter_result.success:
                 logger.debug(
-                    "Skip condition evaluation failed for %s: %s",
-                    agent_name, filter_result.error
+                    "Skip condition evaluation failed for %s: %s", agent_name, filter_result.error
                 )
                 return False
 
@@ -92,13 +86,12 @@ class SkipConditionStrategy(SkipStrategy):
 
             if should_skip:
                 self.console.print(
-                    f'[yellow]🔍 Agent {agent_name} SKIPPED: '
-                    f'skip_condition evaluated to True[/yellow]'
+                    f"[yellow]🔍 Agent {agent_name} SKIPPED: "
+                    f"skip_condition evaluated to True[/yellow]"
                 )
             else:
                 self.console.print(
-                    f'[green]✓ Agent {agent_name} passed '
-                    f'skip_condition check[/green]'
+                    f"[green]✓ Agent {agent_name} passed skip_condition check[/green]"
                 )
 
             return should_skip
@@ -106,12 +99,10 @@ class SkipConditionStrategy(SkipStrategy):
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             logger.warning(
                 "Error evaluating skip condition for %s: %s",
-                agent_name, e,
+                agent_name,
+                e,
                 exc_info=True,
-                extra={
-                    'agent_name': agent_name,
-                    'operation': 'skip_condition_evaluation'
-                }
+                extra={"agent_name": agent_name, "operation": "skip_condition_evaluation"},
             )
             return False  # Don't skip on error
 
@@ -128,112 +119,95 @@ class GuardStrategy(SkipStrategy):
         """Handle filter evaluation errors."""
         logger.warning(
             "Guard evaluation error for %s: %s",
-            agent_name, error_msg,
-            extra={
-                'agent_name': agent_name,
-                'operation': 'guard_evaluation'
-            }
+            agent_name,
+            error_msg,
+            extra={"agent_name": agent_name, "operation": "guard_evaluation"},
         )
 
         if passthrough_on_error:
             logger.debug(
-                "Agent %s proceeding despite error "
-                "(passthrough_on_error=True)",
+                "Agent %s proceeding despite error (passthrough_on_error=True)",
                 agent_name,
-                extra={
-                    'agent_name': agent_name,
-                    'passthrough_on_error': True
-                }
+                extra={"agent_name": agent_name, "passthrough_on_error": True},
             )
             return False
 
         self.console.print(
-            f'[red]→ Agent {agent_name} SKIPPED due to error and '
-            f'passthrough_on_error=False[/red]'
+            f"[red]→ Agent {agent_name} SKIPPED due to error and passthrough_on_error=False[/red]"
         )
         return True
 
-    def should_skip(
-        self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
-    ) -> bool:
+    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
         """Evaluate agent-level guard condition."""
-        guard_config = agent_config.get('guard')
+        guard_config = agent_config.get("guard")
 
         # Only handle agent-scope guards
-        if not guard_config or guard_config.get('scope') != 'agent':
+        if not guard_config or guard_config.get("scope") != "agent":
             return False
 
-        agent_name = agent_config.get('agent_type', 'unknown')
-        guard_clause = guard_config['clause']
-        passthrough_on_error = guard_config.get('passthrough_on_error', True)
+        agent_name = agent_config.get("agent_type", "unknown")
+        guard_clause = guard_config["clause"]
+        passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
         try:
             filter_service = get_global_guard_filter()
 
             context_data = {
-                'previous_outputs': previous_outputs or {},
-                'agent_type': agent_config.get('agent_type'),
-                'dependencies': agent_config.get('dependencies', []),
-                'agent_config': {
-                    k: v for k, v in agent_config.items()
-                    if k not in ['guard']
-                }
+                "previous_outputs": previous_outputs or {},
+                "agent_type": agent_config.get("agent_type"),
+                "dependencies": agent_config.get("dependencies", []),
+                "agent_config": {k: v for k, v in agent_config.items() if k not in ["guard"]},
             }
 
             logger.debug(
                 "Evaluating agent-level guard for %s",
                 agent_name,
                 extra={
-                    'agent_name': agent_name,
-                    'guard': guard_clause,
-                    'operation': 'guard_evaluation'
-                }
+                    "agent_name": agent_name,
+                    "guard": guard_clause,
+                    "operation": "guard_evaluation",
+                },
             )
 
             filter_result = filter_service.filter_item(
                 FilterItemRequest(
                     data=context_data,
                     condition=guard_clause,
-                    timeout=agent_config.get('max_execution_time', 5)
+                    timeout=agent_config.get("max_execution_time", 5),
                 )
             )
 
             # Handle filter execution errors
             if not filter_result.success:
-                error_msg = filter_result.error or 'Unknown filter error'
-                return self._handle_filter_error(
-                    agent_name, error_msg, passthrough_on_error
-                )
+                error_msg = filter_result.error or "Unknown filter error"
+                return self._handle_filter_error(agent_name, error_msg, passthrough_on_error)
 
             # Handle filter result
             if not filter_result.matched:
                 self.console.print(
-                    f'[yellow]🚫 Agent {agent_name} SKIPPED: '
-                    f'guard condition not met[/yellow]'
+                    f"[yellow]🚫 Agent {agent_name} SKIPPED: guard condition not met[/yellow]"
                 )
                 logger.debug(
                     "Guard details: %s",
                     guard_clause,
                     extra={
-                        'agent_name': agent_name,
-                        'guard': guard_clause,
-                        'context_data': context_data,
-                        'operation': 'guard_evaluation'
-                    }
+                        "agent_name": agent_name,
+                        "guard": guard_clause,
+                        "context_data": context_data,
+                        "operation": "guard_evaluation",
+                    },
                 )
                 return True
 
             exec_time = filter_result.execution_time
             self.console.print(
-                f'[green]✓ Agent {agent_name} passed guard check '
-                f'(execution time: {exec_time:.3f}s)[/green]'
+                f"[green]✓ Agent {agent_name} passed guard check "
+                f"(execution time: {exec_time:.3f}s)[/green]"
             )
             return False
 
         except (ValueError, KeyError, TypeError, AttributeError) as e:
-            return self._handle_filter_error(
-                agent_name, str(e), passthrough_on_error
-            )
+            return self._handle_filter_error(agent_name, str(e), passthrough_on_error)
 
 
 class LegacySkipIfStrategy(SkipStrategy):
@@ -242,21 +216,16 @@ class LegacySkipIfStrategy(SkipStrategy):
     def get_strategy_name(self) -> str:
         return "skip_if (legacy)"
 
-    def should_skip(
-        self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]
-    ) -> bool:
+    def should_skip(self, agent_config: Dict[str, Any], previous_outputs: Dict[str, Any]) -> bool:
         """Evaluate legacy skip_if condition using modern WHERE filter."""
-        skip_if = agent_config.get('skip_if')
+        skip_if = agent_config.get("skip_if")
         if not skip_if:
             return False
 
-        agent_name = agent_config.get('agent_type', 'unknown')
+        agent_name = agent_config.get("agent_type", "unknown")
 
         try:
-            context = {
-                'previous_outputs': previous_outputs or {},
-                'agent_config': agent_config
-            }
+            context = {"previous_outputs": previous_outputs or {}, "agent_config": agent_config}
 
             # Use modern guard filter - skip_if expression evaluated as guard condition
             filter_service = get_global_guard_filter()
@@ -266,8 +235,7 @@ class LegacySkipIfStrategy(SkipStrategy):
             # If evaluation failed, don't skip (fail-open)
             if not filter_result.success:
                 logger.debug(
-                    "Legacy skip_if evaluation failed for %s: %s",
-                    agent_name, filter_result.error
+                    "Legacy skip_if evaluation failed for %s: %s", agent_name, filter_result.error
                 )
                 return False
 
@@ -276,13 +244,11 @@ class LegacySkipIfStrategy(SkipStrategy):
 
             if should_skip:
                 self.console.print(
-                    f'[yellow]🔍 Agent {agent_name} SKIPPED: '
-                    f'legacy skip_if condition[/yellow]'
+                    f"[yellow]🔍 Agent {agent_name} SKIPPED: legacy skip_if condition[/yellow]"
                 )
             else:
                 self.console.print(
-                    f'[green]✓ Agent {agent_name} passed '
-                    f'legacy skip_if check[/green]'
+                    f"[green]✓ Agent {agent_name} passed legacy skip_if check[/green]"
                 )
 
             return should_skip
@@ -290,13 +256,14 @@ class LegacySkipIfStrategy(SkipStrategy):
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             logger.warning(
                 "Error evaluating legacy skip_if condition for %s: %s",
-                agent_name, e,
+                agent_name,
+                e,
                 exc_info=True,
                 extra={
-                    'agent_name': agent_name,
-                    'skip_if': skip_if,
-                    'operation': 'legacy_skip_if_evaluation'
-                }
+                    "agent_name": agent_name,
+                    "skip_if": skip_if,
+                    "operation": "legacy_skip_if_evaluation",
+                },
             )
             return False  # Don't skip on error
 
@@ -352,15 +319,17 @@ class SkipEvaluator:
                 if strategy.should_skip(agent_config, previous_outputs):
                     return True
             except (ValueError, KeyError, TypeError, AttributeError) as e:
-                agent_name = agent_config.get('agent_type', 'unknown')
+                agent_name = agent_config.get("agent_type", "unknown")
                 logger.exception(
                     "Unexpected error in skip strategy %s for %s: %s",
-                    strategy.get_strategy_name(), agent_name, e,
+                    strategy.get_strategy_name(),
+                    agent_name,
+                    e,
                     extra={
-                        'agent_name': agent_name,
-                        'strategy_name': strategy.get_strategy_name(),
-                        'operation': 'skip_strategy_evaluation'
-                    }
+                        "agent_name": agent_name,
+                        "strategy_name": strategy.get_strategy_name(),
+                        "operation": "skip_strategy_evaluation",
+                    },
                 )
                 # Continue to next strategy on error
 

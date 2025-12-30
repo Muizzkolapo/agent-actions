@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class PathType(Enum):
     """Enumeration of standard path types in the agent-actions system."""
+
     PROJECT_ROOT = "project_root"
     AGENT_CONFIG = "agent_config"
     AGENT_IO = "agent_io"
@@ -35,18 +36,19 @@ class PathType(Enum):
 @dataclass
 class PathConfig:
     """Configuration for path operations."""
+
     create_if_missing: bool = True
     validate_permissions: bool = True
     marker_file: str = "agent_actions.yml"
     cache_paths: bool = True
 
     @classmethod
-    def for_environment(cls, environment: str = "default") -> 'PathConfig':
+    def for_environment(cls, environment: str = "default") -> "PathConfig":
         """Get environment-specific configuration."""
         configs = {
             "test": cls(marker_file="test_agent_actions.yml"),
             "dev": cls(create_if_missing=True),
-            "prod": cls(validate_permissions=True, create_if_missing=False)
+            "prod": cls(validate_permissions=True, create_if_missing=False),
         }
         return configs.get(environment, cls())
 
@@ -132,7 +134,7 @@ class PathManager:
         path_type: PathType,
         agent_name: Optional[str] = None,
         node_name: Optional[str] = None,
-        **template_vars
+        **template_vars,
     ) -> Path:
         """
         Get a standard path based on type and parameters.
@@ -147,8 +149,7 @@ class PathManager:
             Resolved path for the requested type
         """
         cache_key = (
-            f"{path_type.value}:{agent_name}:{node_name}:"
-            f"{hash(frozenset(template_vars.items()))}"
+            f"{path_type.value}:{agent_name}:{node_name}:{hash(frozenset(template_vars.items()))}"
         )
 
         if cache_key in self._path_cache and self.config.cache_paths:
@@ -160,11 +161,7 @@ class PathManager:
             path = project_root
         elif path_type in self.PATH_TEMPLATES:
             template = self.PATH_TEMPLATES[path_type]
-            format_vars = {
-                "agent_name": agent_name,
-                "node_name": node_name,
-                **template_vars
-            }
+            format_vars = {"agent_name": agent_name, "node_name": node_name, **template_vars}
 
             # Filter out None values
             format_vars = {k: v for k, v in format_vars.items() if v is not None}
@@ -240,12 +237,14 @@ class PathManager:
         mode = path.stat().st_mode
 
         permission_checks = [
-            ("must_be_readable", os.R_OK, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH,
-             "readable"),
-            ("must_be_writable", os.W_OK, stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH,
-             "writable"),
-            ("must_be_executable", os.X_OK, stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
-             "executable"),
+            ("must_be_readable", os.R_OK, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH, "readable"),
+            ("must_be_writable", os.W_OK, stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH, "writable"),
+            (
+                "must_be_executable",
+                os.X_OK,
+                stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH,
+                "executable",
+            ),
         ]
 
         for req_key, access_mode, stat_mode, perm_name in permission_checks:
@@ -289,7 +288,7 @@ class PathManager:
         if errors:
             if self.config.validate_permissions:
                 raise PathValidationError("; ".join(errors))
-            logger.warning("Path validation warnings: %s", '; '.join(errors))
+            logger.warning("Path validation warnings: %s", "; ".join(errors))
             return False
 
         return True
@@ -423,7 +422,7 @@ class PathManager:
             ) from exc
 
         # Replace source base with target base
-        new_parts = parts[:base_index] + (target_base,) + parts[base_index + 1:]
+        new_parts = parts[:base_index] + (target_base,) + parts[base_index + 1 :]
 
         return Path(*new_parts)
 

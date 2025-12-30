@@ -1,4 +1,5 @@
 """Utility for splitting outputs into main and side outputs."""
+
 from typing import List, Dict, Any, Tuple
 
 
@@ -14,8 +15,8 @@ def split_main_and_side_outputs(processed_items: List[Dict[str, Any]]) -> Tuple[
     """
     main_output, side_output = ([], [])
     for item in processed_items:
-        content = item.get('content', {})
-        if isinstance(content, dict) and content.get('side_output', False):
+        content = item.get("content", {})
+        if isinstance(content, dict) and content.get("side_output", False):
             side_output.append(item)
         else:
             main_output.append(item)

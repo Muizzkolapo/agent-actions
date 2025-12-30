@@ -120,8 +120,7 @@ class RepromptConfig:  # pylint: disable=too-many-instance-attributes
             if preset_name not in PRESETS:
                 valid_presets = ", ".join(PRESETS.keys())
                 raise ValueError(
-                    f"Unknown reprompt preset '{preset_name}'. "
-                    f"Valid presets: {valid_presets}"
+                    f"Unknown reprompt preset '{preset_name}'. Valid presets: {valid_presets}"
                 )
             preset_values = PRESETS[preset_name]
             return cls(
@@ -143,8 +142,7 @@ class RepromptConfig:  # pylint: disable=too-many-instance-attributes
             if preset_name not in PRESETS:
                 valid_presets = ", ".join(PRESETS.keys())
                 raise ValueError(
-                    f"Unknown reprompt preset '{preset_name}'. "
-                    f"Valid presets: {valid_presets}"
+                    f"Unknown reprompt preset '{preset_name}'. Valid presets: {valid_presets}"
                 )
 
             # Start with preset defaults
@@ -156,9 +154,7 @@ class RepromptConfig:  # pylint: disable=too-many-instance-attributes
                 preset=preset_name,
                 max_attempts=value.get("max_attempts", preset_values["max_attempts"]),
                 json_repair=value.get("json_repair", preset_values["json_repair"]),
-                use_llm_critique=value.get(
-                    "use_llm_critique", preset_values["use_llm_critique"]
-                ),
+                use_llm_critique=value.get("use_llm_critique", preset_values["use_llm_critique"]),
                 use_self_reflection=value.get(
                     "use_self_reflection", preset_values["use_self_reflection"]
                 ),
@@ -169,8 +165,7 @@ class RepromptConfig:  # pylint: disable=too-many-instance-attributes
             )
 
         raise ValueError(
-            f"Invalid reprompt config type: {type(value).__name__}. "
-            "Expected bool, str, or dict."
+            f"Invalid reprompt config type: {type(value).__name__}. Expected bool, str, or dict."
         )
 
     def should_use_critique(self, attempt: int) -> bool:

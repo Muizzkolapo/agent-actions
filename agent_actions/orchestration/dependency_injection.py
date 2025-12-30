@@ -4,23 +4,23 @@ Dependency Injection Framework for Agent Actions.
 This module provides a lightweight dependency injection container and registry
 for managing processor dependencies and improving testability.
 """
+
 from typing import Dict, Type, Any, TypeVar, Callable, get_type_hints
 import inspect
 import threading
 from dataclasses import dataclass
 
-from agent_actions.errors import (
-    DependencyError,
-    ConfigurationError
-)
-T = TypeVar('T')
+from agent_actions.errors import DependencyError, ConfigurationError
+
+T = TypeVar("T")
 
 
 class ServiceLifetime:
     """Service lifetime constants."""
-    SINGLETON = 'singleton'
-    TRANSIENT = 'transient'
-    SCOPED = 'scoped'
+
+    SINGLETON = "singleton"
+    TRANSIENT = "transient"
+    SCOPED = "scoped"
 
     @classmethod
     def is_valid(cls, lifetime: str) -> bool:
@@ -31,12 +31,15 @@ class ServiceLifetime:
         """Return string representation."""
         return f"ServiceLifetime({self.SINGLETON}, {self.TRANSIENT}, {self.SCOPED})"
 
+
 @dataclass
 class ServiceDescriptor:
     """Describes how a service should be created and managed."""
+
     service_type: Type
     implementation: Type
     lifetime: str
+
 
 class DependencyContainer:
     """Lightweight dependency injection container."""
@@ -49,7 +52,7 @@ class DependencyContainer:
 
     def register_singleton(
         self, interface: Type[T], implementation: Type[T]
-    ) -> 'DependencyContainer':
+    ) -> "DependencyContainer":
         """Register a singleton service."""
         self._services[interface] = ServiceDescriptor(
             interface, implementation, ServiceLifetime.SINGLETON
@@ -58,7 +61,7 @@ class DependencyContainer:
 
     def register_transient(
         self, interface: Type[T], implementation: Type[T]
-    ) -> 'DependencyContainer':
+    ) -> "DependencyContainer":
         """Register a transient service."""
         self._services[interface] = ServiceDescriptor(
             interface, implementation, ServiceLifetime.TRANSIENT
@@ -67,14 +70,12 @@ class DependencyContainer:
 
     def register_factory(
         self, interface: Type[T], factory: Callable[[], T]
-    ) -> 'DependencyContainer':
+    ) -> "DependencyContainer":
         """Register a factory function."""
         self._factories[interface] = factory
         return self
 
-    def register_instance(
-        self, interface: Type[T], instance: T
-    ) -> 'DependencyContainer':
+    def register_instance(self, interface: Type[T], instance: T) -> "DependencyContainer":
         """Register a specific instance."""
         with self._lock:
             self._instances[interface] = instance
@@ -91,24 +92,22 @@ class DependencyContainer:
             if descriptor.lifetime == ServiceLifetime.SINGLETON:
                 with self._lock:
                     if interface not in self._instances:
-                        instance = self._create_instance(
-                            descriptor.implementation
-                        )
+                        instance = self._create_instance(descriptor.implementation)
                         self._instances[interface] = instance
                     return self._instances[interface]
             return self._create_instance(descriptor.implementation)
 
         raise DependencyError(
-            f'DependencyContainer: Service {interface.__name__} not found',
-            {'interface': interface.__name__, 'operation': 'get_service'}
+            f"DependencyContainer: Service {interface.__name__} not found",
+            {"interface": interface.__name__, "operation": "get_service"},
         )
 
     def has(self, interface: Type) -> bool:
         """Check if a service is registered."""
         return (
-            interface in self._services or
-            interface in self._factories or
-            interface in self._instances
+            interface in self._services
+            or interface in self._factories
+            or interface in self._instances
         )
 
     def _create_instance(self, cls: Type[T]) -> T:
@@ -117,9 +116,9 @@ class DependencyContainer:
         type_hints = get_type_hints(cls.__init__)
         init_kwargs = {}
         for param_name, param in signature.parameters.items():
-            if param_name == 'self' or param.kind in (
+            if param_name == "self" or param.kind in (
                 inspect.Parameter.VAR_POSITIONAL,
-                inspect.Parameter.VAR_KEYWORD
+                inspect.Parameter.VAR_KEYWORD,
             ):
                 continue
             param_type = type_hints.get(param_name)
@@ -129,15 +128,15 @@ class DependencyContainer:
                 init_kwargs[param_name] = param.default
             else:
                 raise DependencyError(
-                    f'{cls.__name__}: Missing required dependency '
-                    f'{param_name}',
+                    f"{cls.__name__}: Missing required dependency {param_name}",
                     {
-                        'param_name': param_name,
-                        'class': cls.__name__,
-                        'operation': '_create_instance'
-                    }
+                        "param_name": param_name,
+                        "class": cls.__name__,
+                        "operation": "_create_instance",
+                    },
                 )
         return cls(**init_kwargs)
+
 
 class ProcessorRegistry:
     """Registry for managing processor implementations."""
@@ -154,6 +153,7 @@ class ProcessorRegistry:
         def decorator(cls: Type):
             self._processors[name] = cls
             return cls
+
         return decorator
 
     def register_loader(self, name: str):
@@ -162,6 +162,7 @@ class ProcessorRegistry:
         def decorator(cls: Type):
             self._loaders[name] = cls
             return cls
+
         return decorator
 
     def register_generator(self, name: str):
@@ -170,6 +171,7 @@ class ProcessorRegistry:
         def decorator(cls: Type):
             self._generators[name] = cls
             return cls
+
         return decorator
 
     def register_service(self, name: str):
@@ -178,6 +180,7 @@ class ProcessorRegistry:
         def decorator(cls: Type):
             self._services[name] = cls
             return cls
+
         return decorator
 
     def get_processor(self, name: str) -> Type:
@@ -185,10 +188,7 @@ class ProcessorRegistry:
         if name not in self._processors:
             raise ConfigurationError(
                 f"Processor '{name}' not registered",
-                context={
-                    'processor_name': name,
-                    'operation': 'get_processor'
-                }
+                context={"processor_name": name, "operation": "get_processor"},
             )
         return self._processors[name]
 
@@ -197,10 +197,7 @@ class ProcessorRegistry:
         if name not in self._loaders:
             raise ConfigurationError(
                 f"Loader '{name}' not registered",
-                context={
-                    'loader_name': name,
-                    'operation': 'get_loader'
-                }
+                context={"loader_name": name, "operation": "get_loader"},
             )
         return self._loaders[name]
 
@@ -209,10 +206,7 @@ class ProcessorRegistry:
         if name not in self._generators:
             raise ConfigurationError(
                 f"Generator '{name}' not registered",
-                context={
-                    'generator_name': name,
-                    'operation': 'get_generator'
-                }
+                context={"generator_name": name, "operation": "get_generator"},
             )
         return self._generators[name]
 
@@ -221,10 +215,7 @@ class ProcessorRegistry:
         if name not in self._services:
             raise ConfigurationError(
                 f"Service '{name}' not registered",
-                context={
-                    'service_name': name,
-                    'operation': 'get_service'
-                }
+                context={"service_name": name, "operation": "get_service"},
             )
         return self._services[name]
 
@@ -243,6 +234,7 @@ class ProcessorRegistry:
     def list_services(self) -> Dict[str, Type]:
         """List all registered services."""
         return self._services.copy()
+
 
 class ProcessorFactory:
     """Factory for creating processors with dependency injection."""
@@ -281,7 +273,7 @@ class ProcessorFactory:
         type_hints = get_type_hints(cls.__init__)
         init_kwargs = {}
         for param_name, param in signature.parameters.items():
-            if param_name == 'self':
+            if param_name == "self":
                 continue
             if param_name in override_kwargs:
                 init_kwargs[param_name] = override_kwargs[param_name]
@@ -293,14 +285,14 @@ class ProcessorFactory:
                 init_kwargs[param_name] = param.default
             else:
                 raise DependencyError(
-                    f'{cls.__name__}: Missing required dependency '
-                    f'{param_name}',
+                    f"{cls.__name__}: Missing required dependency {param_name}",
                     {
-                        'param_name': param_name,
-                        'class': cls.__name__,
-                        'operation': '_create_with_dependencies'
-                    }
+                        "param_name": param_name,
+                        "class": cls.__name__,
+                        "operation": "_create_with_dependencies",
+                    },
                 )
         return cls(**init_kwargs)
+
 
 registry = ProcessorRegistry()

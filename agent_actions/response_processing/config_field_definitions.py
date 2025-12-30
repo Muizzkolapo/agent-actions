@@ -30,34 +30,28 @@ from typing import Dict, Any
 # 'string' = string defaults
 SIMPLE_CONFIG_FIELDS = {
     # Required model configuration (no defaults - must be provided)
-    'model_vendor': None,
-    'model_name': None,
-    'api_key': None,
-    'base_url': None,               # Optional: base URL for vendors like Ollama
-
+    "model_vendor": None,
+    "model_name": None,
+    "api_key": None,
+    "base_url": None,  # Optional: base URL for vendors like Ollama
     # Execution settings
-    'run_mode': 'online',           # Default: online mode
-    'is_operational': True,         # Default: enabled
-
+    "run_mode": "online",  # Default: online mode
+    "is_operational": True,  # Default: enabled
     # LLM configuration
-    'json_mode': True,              # Default: True (JSON-based system)
-    'prompt_debug': False,          # Default: False (no debug output)
-    'few_shot': 0,                  # Default: 0 (no few-shot examples)
-    'output_field': 'raw_response', # Default: 'raw_response' (for non-JSON vendors like Ollama)
-
+    "json_mode": True,  # Default: True (JSON-based system)
+    "prompt_debug": False,  # Default: False (no debug output)
+    "few_shot": 0,  # Default: 0 (no few-shot examples)
+    "output_field": "raw_response",  # Default: 'raw_response' (for non-JSON vendors like Ollama)
     # Tool configuration
-    'side_output': False,           # Default: False (tool-specific conditional output)
-
+    "side_output": False,  # Default: False (tool-specific conditional output)
     # Reprompt configuration
-    'reprompt': False,              # Default: False (reprompting disabled)
-    'constraints': [],              # Default: empty list (no constraints)
+    "reprompt": False,  # Default: False (reprompting disabled)
+    "constraints": [],  # Default: empty list (no constraints)
 }
 
 
 def inherit_simple_fields(
-    agent: Dict[str, Any],
-    action: Dict[str, Any],
-    defaults: Dict[str, Any]
+    agent: Dict[str, Any], action: Dict[str, Any], defaults: Dict[str, Any]
 ) -> None:
     """
     Automatically inherit simple config fields from action/defaults.
@@ -96,4 +90,4 @@ def inherit_simple_fields(
         agent[field] = action.get(field, defaults.get(field, default_value))
 
 
-__all__ = ['SIMPLE_CONFIG_FIELDS', 'inherit_simple_fields']
+__all__ = ["SIMPLE_CONFIG_FIELDS", "inherit_simple_fields"]

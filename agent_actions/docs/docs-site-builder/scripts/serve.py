@@ -9,6 +9,7 @@ with live reload for development.
 import subprocess
 import sys
 
+
 def main():
     print("🚀 Starting Agent-Actions documentation server...")
     print("📍 Server will be available at http://localhost:8000")
@@ -16,9 +17,7 @@ def main():
 
     try:
         # Start the server using Python module syntax
-        subprocess.run([
-            sys.executable, "-m", "agent_actions.docs.server"
-        ], check=True)
+        subprocess.run([sys.executable, "-m", "agent_actions.docs.server"], check=True)
     except KeyboardInterrupt:
         print("\n✅ Server stopped")
     except subprocess.CalledProcessError as e:
@@ -28,6 +27,7 @@ def main():
         print("❌ Error: agent_actions module not found", file=sys.stderr)
         print("Make sure you're running from the project root directory", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

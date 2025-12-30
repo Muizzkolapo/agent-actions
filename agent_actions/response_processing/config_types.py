@@ -1,8 +1,11 @@
 """Type definitions for agent configuration structures."""
+
 from typing import TypedDict, Optional, List, Dict, Any
+
 
 class AgentEntryDict(TypedDict, total=False):
     """Typed representation of a single agent configuration entry."""
+
     agent_type: str
     name: Optional[str]
     model_name: Optional[str]
@@ -28,6 +31,7 @@ class AgentEntryDict(TypedDict, total=False):
     enable_prompt_caching: Optional[bool]
     # Control field flow: observe (LLM context), drop (block), passthrough (output)
     context_scope: Optional[Dict[str, List[str]]]
+
 
 # Alias for the list of agent entries under a pipeline name
 AgentConfigList = List[AgentEntryDict]

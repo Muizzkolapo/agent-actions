@@ -1,4 +1,5 @@
 """Base classes and utilities for response interceptors."""
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -55,6 +56,4 @@ class InterceptorChain:
                     metadata=result.metadata,
                 )
 
-        return InterceptorResult(
-            continue_processing=True, modified_response=current_response
-        )
+        return InterceptorResult(continue_processing=True, modified_response=current_response)

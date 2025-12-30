@@ -19,28 +19,24 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
 
         # Check if it's a wrapped YAML error (ConfigurationError with YAML context)
         # This happens when render_workflow.py catches yaml.YAMLError and wraps it
-        if hasattr(exc, 'context') and isinstance(exc.context, dict):
+        if hasattr(exc, "context") and isinstance(exc.context, dict):
             ctx = exc.context
             # If context has line, column, and problem fields, it's likely a YAML error
-            if 'problem' in ctx and 'line' in ctx and 'column' in ctx:
+            if "problem" in ctx and "line" in ctx and "column" in ctx:
                 return True
             # Check if operation suggests YAML parsing
-            if ctx.get('operation') == 'parse_yaml':
+            if ctx.get("operation") == "parse_yaml":
                 return True
 
         # Also check exception names for YAML-related errors
         exc_names = [type(exc).__name__, type(root).__name__]
-        if any('YAML' in name for name in exc_names):
+        if any("YAML" in name for name in exc_names):
             return True
 
         return False
 
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """Format YAML syntax errors with code snippet and visual indicators."""
         # Extract and organize YAML context
@@ -51,52 +47,48 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
 
         # Build details with location and problem
         details_parts = []
-        if yaml_context['line'] and yaml_context['column']:
+        if yaml_context["line"] and yaml_context["column"]:
             details_parts.append(
                 f"Line {yaml_context['line']}, Column {yaml_context['column']}: "
                 f"{yaml_context['problem']}"
             )
         else:
-            details_parts.append(yaml_context['problem'])
+            details_parts.append(yaml_context["problem"])
 
         # Add code snippet if available
-        if yaml_context['rendered_content'] and yaml_context['line']:
+        if yaml_context["rendered_content"] and yaml_context["line"]:
             snippet = self._get_code_snippet(
-                yaml_context['rendered_content'],
-                yaml_context['line'],
-                yaml_context['column']
+                yaml_context["rendered_content"], yaml_context["line"], yaml_context["column"]
             )
             if snippet:
                 details_parts.append("\n" + snippet)
 
         # Get fix suggestion
-        fix = self._get_fix_suggestion(yaml_context['problem'])
+        fix = self._get_fix_suggestion(yaml_context["problem"])
 
         return UserError(
             category="YAML Syntax Error",
             title=title,
             details="\n".join(details_parts),
             fix=fix,
-            context={'file_path': yaml_context['file_path']} if yaml_context['file_path'] else None,
-            docs_url="https://docs.agent-actions.com/troubleshooting/yaml-errors"
+            context={"file_path": yaml_context["file_path"]} if yaml_context["file_path"] else None,
+            docs_url="https://docs.agent-actions.com/troubleshooting/yaml-errors",
         )
 
     def _extract_yaml_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Extract and organize YAML error context from context dict."""
         file_path = (
-            context.get('file_path') or
-            context.get('config_file') or
-            context.get('yaml_path')
+            context.get("file_path") or context.get("config_file") or context.get("yaml_path")
         )
-        file_name = Path(file_path).name if file_path else 'configuration file'
+        file_name = Path(file_path).name if file_path else "configuration file"
 
         return {
-            'file_path': file_path,
-            'file_name': file_name,
-            'rendered_content': context.get('rendered_content'),
-            'line': context.get('line'),
-            'column': context.get('column'),
-            'problem': context.get('problem', 'syntax error')
+            "file_path": file_path,
+            "file_name": file_name,
+            "rendered_content": context.get("rendered_content"),
+            "line": context.get("line"),
+            "column": context.get("column"),
+            "problem": context.get("problem", "syntax error"),
         }
 
     def _get_code_snippet(self, content: str, line_num: int, column_num: int) -> str:
@@ -104,7 +96,7 @@ class YAMLSyntaxErrorFormatter(ErrorFormatter):
         if not content or not line_num:
             return ""
 
-        lines = content.split('\n')
+        lines = content.split("\n")
         if line_num > len(lines):
             return ""
 

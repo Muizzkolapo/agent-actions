@@ -8,7 +8,7 @@ from agent_actions.utilities.safe_format import (
     safe_format_error,
     extract_root_cause,
     get_error_chain,
-    format_exception_context
+    format_exception_context,
 )
 
 
@@ -206,6 +206,7 @@ class TestFormatExceptionContext:
 
     def test_broken_context_formatting(self):
         """Test handling context that breaks during formatting."""
+
         class BrokenContext:
             def __str__(self):
                 raise ValueError("Broken context")
@@ -220,13 +221,7 @@ class TestFormatExceptionContext:
 
     def test_nested_dict_context(self):
         """Test formatting nested dictionary context."""
-        context = {
-            "agent": "test_agent",
-            "config": {
-                "file": "test.yml",
-                "section": "agents"
-            }
-        }
+        context = {"agent": "test_agent", "config": {"file": "test.yml", "section": "agents"}}
         result = format_exception_context(context)
         assert "agent=test_agent" in result
         assert "config=" in result

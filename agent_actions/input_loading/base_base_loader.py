@@ -1,4 +1,5 @@
 """Base class for content loaders."""
+
 # pylint: disable=import-outside-toplevel,super-init-not-called,unnecessary-pass
 # import-outside-toplevel: anyio is an optional dependency with fallback behavior
 # super-init-not-called: ProcessorErrorHandlerMixin doesn't require __init__ call
@@ -13,9 +14,9 @@ from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
 from agent_actions.utilities.retry import retry
 
-__version__ = '0.1.0'
+__version__ = "0.1.0"
 logger = logging.getLogger(__name__)
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
@@ -45,12 +46,13 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
 
         @retry(max_attempts=3, delay=0.5, exceptions=(IOError, OSError))
         def _load_file() -> str:
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 return f.read()
+
         try:
             return _load_file()
         except Exception as e:
-            self.handle_file_error(e, 'read', file_path)
+            self.handle_file_error(e, "read", file_path)
             raise
 
     async def load_file_async(self, file_path: str) -> str:
@@ -58,7 +60,8 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         try:
             try:
                 import anyio
-                async with await anyio.open_file(file_path, 'r', encoding='utf-8') as f:
+
+                async with await anyio.open_file(file_path, "r", encoding="utf-8") as f:
                     return await f.read()
             except ImportError:
                 try:
@@ -67,11 +70,11 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
                     loop = asyncio.get_event_loop()
                     return await loop.run_in_executor(None, self.load_file, file_path)
         except Exception as e:
-            self.handle_file_error(e, 'read', file_path)
+            self.handle_file_error(e, "read", file_path)
             raise
 
     @abstractmethod
-    def process(self, content: Any, file_path: Optional[str]=None) -> T:
+    def process(self, content: Any, file_path: Optional[str] = None) -> T:
         """Load and parse content from a file or in-memory input.
 
         Args:
@@ -83,7 +86,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         """
         pass
 
-    async def process_async(self, content: Any, file_path: Optional[str]=None) -> T:
+    async def process_async(self, content: Any, file_path: Optional[str] = None) -> T:
         """Async version of process method.
 
         Args:
@@ -95,6 +98,7 @@ class BaseLoader(ProcessorErrorHandlerMixin, IDataLoader, ABC, Generic[T]):
         """
         try:
             import anyio
+
             return await anyio.to_thread.run_sync(self.process, content, file_path)
         except ImportError:
             try:

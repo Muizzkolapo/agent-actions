@@ -30,6 +30,7 @@ from agent_actions.utilities.field_resolution import (
 # Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def resolver():
     """Create a default resolver instance."""
@@ -58,81 +59,66 @@ def validator():
 def field_context():
     """Sample field context with various data types."""
     return {
-        'extract_facts': {
-            'facts': [{'name': 'fact1'}, {'name': 'fact2'}],
-            'count': 2,
-            'response': {
-                'data': {
-                    'status': 'success',
-                    'items': [1, 2, 3]
-                }
-            }
+        "extract_facts": {
+            "facts": [{"name": "fact1"}, {"name": "fact2"}],
+            "count": 2,
+            "response": {"data": {"status": "success", "items": [1, 2, 3]}},
         },
-        'source': {
-            'title': 'Test Document',
-            'content': 'Sample content',
-            'metadata': {
-                'type': 'pdf',
-                'pages': 10
-            }
+        "source": {
+            "title": "Test Document",
+            "content": "Sample content",
+            "metadata": {"type": "pdf", "pages": 10},
         },
-        'classifier': {
-            'category': 'technical',
-            'confidence': 0.95
-        }
+        "classifier": {"category": "technical", "confidence": 0.95},
     }
 
 
 @pytest.fixture
 def agent_indices():
     """Sample agent indices for validation tests."""
-    return {
-        'extract_facts': 0,
-        'classifier': 1,
-        'filter_action': 2,
-        'final_action': 3
-    }
+    return {"extract_facts": 0, "classifier": 1, "filter_action": 2, "final_action": 3}
 
 
 # =============================================================================
 # ReferenceParser Tests
 # =============================================================================
 
+
 class TestReferenceParser:
     """Tests for the ReferenceParser class."""
 
     def test_parse_simple_selector(self, parser):
         """Test parsing simple action.field selector."""
-        ref = parser.parse('extract_facts.count')
+        ref = parser.parse("extract_facts.count")
 
-        assert ref.action_name == 'extract_facts'
-        assert ref.field_path == ['count']
-        assert ref.full_reference == 'extract_facts.count'
+        assert ref.action_name == "extract_facts"
+        assert ref.field_path == ["count"]
+        assert ref.full_reference == "extract_facts.count"
         assert not ref.is_nested
 
     def test_parse_nested_path(self, parser):
         """Test parsing nested path like action.response.data.status."""
-        ref = parser.parse('extract_facts.response.data.status')
+        ref = parser.parse("extract_facts.response.data.status")
 
-        assert ref.action_name == 'extract_facts'
-        assert ref.field_path == ['response', 'data', 'status']
+        assert ref.action_name == "extract_facts"
+        assert ref.field_path == ["response", "data", "status"]
         assert ref.is_nested
-        assert ref.field_name == 'response'
+        assert ref.field_name == "response"
 
     def test_parse_template_format(self, parser):
         """Test parsing {action.field} template format."""
-        ref = parser.parse('{source.title}')
+        ref = parser.parse("{source.title}")
 
-        assert ref.action_name == 'source'
-        assert ref.field_path == ['title']
+        assert ref.action_name == "source"
+        assert ref.field_path == ["title"]
         assert ref.format_type == ReferenceFormat.TEMPLATE
 
     def test_parse_jinja_format(self, parser):
         """Test parsing {{ action.field }} Jinja format."""
-        ref = parser.parse('{{ source.title }}')
+        ref = parser.parse("{{ source.title }}")
 
-        assert ref.action_name == 'source'
-        assert ref.field_path == ['title']
+        assert ref.action_name == "source"
+        assert ref.field_path == ["title"]
         assert ref.format_type == ReferenceFormat.JINJA
 
     def test_parse_batch_finds_all_references(self, parser):
@@ -142,8 +128,8 @@ class TestReferenceParser:
 
         assert len(refs) == 2
         action_names = [r.action_name for r in refs]
-        assert 'extract_facts' in action_names
-        assert 'source' in action_names
+        assert "extract_facts" in action_names
+        assert "source" in action_names
 
     def test_parse_batch_selector_format(self, parser):
         """Test extracting selector-style references from guard conditions."""
@@ -152,81 +138,72 @@ class TestReferenceParser:
 
         assert len(refs) == 2
         # Check that nested paths are captured
-        paths = ['.'.join(r.field_path) for r in refs]
-        assert 'count' in paths
-        assert 'metadata.type' in paths
+        paths = [".".join(r.field_path) for r in refs]
+        assert "count" in paths
+        assert "metadata.type" in paths
 
     def test_parse_invalid_reference_non_strict(self, parser):
         """Test that invalid references don't raise in non-strict mode."""
         # Missing dot - should create fallback reference
-        ref = parser.parse('invalid', strict=False)
-        assert ref.action_name == 'invalid'
+        ref = parser.parse("invalid", strict=False)
+        assert ref.action_name == "invalid"
         assert ref.field_path == []
 
     def test_parse_invalid_reference_strict(self, parser):
         """Test that invalid references raise in strict mode."""
         with pytest.raises(InvalidReferenceError):
-            parser.parse('invalid_no_dot', strict=True)
+            parser.parse("invalid_no_dot", strict=True)
 
 
 # =============================================================================
 # FieldReferenceResolver Tests
 # =============================================================================
 
+
 class TestFieldReferenceResolver:
     """Tests for the FieldReferenceResolver class."""
 
     def test_resolve_simple_field(self, resolver, field_context):
         """Test resolving a simple field reference."""
-        result = resolver.resolve('extract_facts.count', field_context)
+        result = resolver.resolve("extract_facts.count", field_context)
 
         assert result.success
         assert result.value == 2
-        assert result.source_action == 'extract_facts'
+        assert result.source_action == "extract_facts"
 
     def test_resolve_nested_path(self, resolver, field_context):
         """Test resolving a nested path reference."""
-        result = resolver.resolve(
-            'extract_facts.response.data.status',
-            field_context
-        )
+        result = resolver.resolve("extract_facts.response.data.status", field_context)
 
         assert result.success
-        assert result.value == 'success'
+        assert result.value == "success"
 
     def test_resolve_array_element(self, resolver, field_context):
         """Test resolving array element by index."""
-        result = resolver.resolve(
-            'extract_facts.facts.0.name',
-            field_context
-        )
+        result = resolver.resolve("extract_facts.facts.0.name", field_context)
 
         assert result.success
-        assert result.value == 'fact1'
+        assert result.value == "fact1"
 
     def test_resolve_missing_action(self, resolver, field_context):
         """Test resolving reference to non-existent action."""
-        result = resolver.resolve('nonexistent.field', field_context)
+        result = resolver.resolve("nonexistent.field", field_context)
 
         assert not result.success
         assert result.value is None
-        assert 'not found' in result.error
+        assert "not found" in result.error
 
     def test_resolve_with_fallback(self, resolver, field_context):
         """Test fallback value for missing reference."""
-        result = resolver.resolve(
-            'missing.field',
-            field_context,
-            fallback_value='default'
-        )
+        result = resolver.resolve("missing.field", field_context, fallback_value="default")
 
         assert not result.success
-        assert result.value == 'default'
+        assert result.value == "default"
 
     def test_resolve_strict_mode_raises(self, strict_resolver, field_context):
         """Test that strict mode raises on missing reference."""
         with pytest.raises(ReferenceNotFoundError):
-            strict_resolver.resolve('nonexistent.field', field_context)
+            strict_resolver.resolve("nonexistent.field", field_context)
 
     def test_substitute_single_reference(self, resolver, field_context):
         """Test substituting a single reference in text."""
@@ -261,120 +238,109 @@ class TestFieldReferenceResolver:
 # ReferenceValidator Tests
 # =============================================================================
 
+
 class TestReferenceValidator:
     """Tests for the ReferenceValidator class."""
 
     def test_validate_valid_reference(self, validator, agent_indices):
         """Test validation passes for valid upstream reference."""
         agent_config = {
-            'agent_type': 'filter_action',
-            'dependencies': ['extract_facts', 'classifier']
+            "agent_type": "filter_action",
+            "dependencies": ["extract_facts", "classifier"],
         }
 
         errors = validator.validate(
-            references=['extract_facts.count', 'classifier.category'],
+            references=["extract_facts.count", "classifier.category"],
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='filter_action'
+            current_agent_name="filter_action",
         )
 
         assert len(errors) == 0
 
     def test_validate_missing_action(self, validator, agent_indices):
         """Test validation fails for non-existent action."""
-        agent_config = {
-            'agent_type': 'filter_action',
-            'dependencies': ['extract_facts']
-        }
+        agent_config = {"agent_type": "filter_action", "dependencies": ["extract_facts"]}
 
         errors = validator.validate(
-            references=['nonexistent.field'],
+            references=["nonexistent.field"],
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='filter_action'
+            current_agent_name="filter_action",
         )
 
         assert len(errors) == 1
-        assert 'not found in workflow' in errors[0]
+        assert "not found in workflow" in errors[0]
 
     def test_validate_not_upstream(self, validator, agent_indices):
         """Test validation fails for non-upstream action."""
         agent_config = {
-            'agent_type': 'extract_facts',  # First action
-            'dependencies': []
+            "agent_type": "extract_facts",  # First action
+            "dependencies": [],
         }
 
         errors = validator.validate(
-            references=['final_action.result'],  # Later action
+            references=["final_action.result"],  # Later action
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='extract_facts'
+            current_agent_name="extract_facts",
         )
 
         assert len(errors) == 1
-        assert 'not upstream' in errors[0]
+        assert "not upstream" in errors[0]
 
     def test_validate_not_in_dependencies(self, validator, agent_indices):
         """Test validation fails when action not in declared dependencies."""
         agent_config = {
-            'agent_type': 'final_action',
-            'dependencies': ['filter_action']  # extract_facts not declared
+            "agent_type": "final_action",
+            "dependencies": ["filter_action"],  # extract_facts not declared
         }
 
         errors = validator.validate(
-            references=['extract_facts.count'],  # Not in dependencies
+            references=["extract_facts.count"],  # Not in dependencies
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='final_action'
+            current_agent_name="final_action",
         )
 
         assert len(errors) == 1
-        assert 'not in dependencies' in errors[0]
+        assert "not in dependencies" in errors[0]
 
     def test_validate_special_namespaces_allowed(self, validator, agent_indices):
         """Test that special namespaces are always allowed."""
-        agent_config = {
-            'agent_type': 'extract_facts',
-            'dependencies': []
-        }
+        agent_config = {"agent_type": "extract_facts", "dependencies": []}
 
         # source, loop, workflow, seed are always allowed
         errors = validator.validate(
-            references=['source.title', 'loop.index', 'workflow.name', 'seed.data'],
+            references=["source.title", "loop.index", "workflow.name", "seed.data"],
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='extract_facts'
+            current_agent_name="extract_facts",
         )
 
         assert len(errors) == 0
 
     def test_validate_strict_raises_exception(self, validator, agent_indices):
         """Test validate_strict raises on errors."""
-        agent_config = {
-            'agent_type': 'filter_action',
-            'dependencies': []
-        }
+        agent_config = {"agent_type": "filter_action", "dependencies": []}
 
         with pytest.raises(DependencyValidationError):
             validator.validate_strict(
-                references=['nonexistent.field'],
+                references=["nonexistent.field"],
                 agent_config=agent_config,
                 agent_indices=agent_indices,
-                current_agent_name='filter_action'
+                current_agent_name="filter_action",
             )
 
     def test_extract_and_validate(self, validator, agent_indices):
         """Test extracting and validating from guard condition."""
-        agent_config = {
-            'agent_type': 'filter_action',
-            'dependencies': ['extract_facts']
-        }
+        agent_config = {"agent_type": "filter_action", "dependencies": ["extract_facts"]}
 
         errors = validator.extract_and_validate(
             guard_condition="extract_facts.count > 5 AND source.type == 'pdf'",
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name='filter_action'
+            current_agent_name="filter_action",
         )
 
         # source is a special namespace, so no errors
@@ -386,14 +352,15 @@ class TestReferenceValidator:
             "extract_facts.count > 5 AND classifier.category == 'tech'"
         )
 
-        assert 'extract_facts' in actions
-        assert 'classifier' in actions
-        assert 'source' not in actions  # Special namespace excluded
+        assert "extract_facts" in actions
+        assert "classifier" in actions
+        assert "source" not in actions  # Special namespace excluded
 
 
 # =============================================================================
 # EvaluationContext Tests
 # =============================================================================
+
 
 class TestEvaluationContext:
     """Tests for the EvaluationContext dataclass."""
@@ -401,47 +368,41 @@ class TestEvaluationContext:
     def test_to_flat_dict(self):
         """Test converting context to flat dict."""
         context = EvaluationContext(
-            current_content={'current_field': 'value'},
-            field_context={
-                'extract_facts': {'count': 5},
-                'source': {'title': 'Test'}
-            }
+            current_content={"current_field": "value"},
+            field_context={"extract_facts": {"count": 5}, "source": {"title": "Test"}},
         )
 
         flat = context.to_flat_dict()
 
-        assert flat['current_field'] == 'value'
-        assert flat['extract_facts']['count'] == 5
-        assert flat['source']['title'] == 'Test'
+        assert flat["current_field"] == "value"
+        assert flat["extract_facts"]["count"] == 5
+        assert flat["source"]["title"] == "Test"
 
     def test_get_field_value(self):
         """Test getting field value from context."""
         context = EvaluationContext(
-            current_content={},
-            field_context={
-                'extract_facts': {'count': 5, 'status': 'done'}
-            }
+            current_content={}, field_context={"extract_facts": {"count": 5, "status": "done"}}
         )
 
-        assert context.get_field_value('extract_facts', 'count') == 5
-        assert context.get_field_value('extract_facts', 'status') == 'done'
-        assert context.get_field_value('extract_facts', 'missing') is None
-        assert context.get_field_value('missing', 'field') is None
+        assert context.get_field_value("extract_facts", "count") == 5
+        assert context.get_field_value("extract_facts", "status") == "done"
+        assert context.get_field_value("extract_facts", "missing") is None
+        assert context.get_field_value("missing", "field") is None
 
     def test_has_action(self):
         """Test checking action existence."""
         context = EvaluationContext(
-            current_content={},
-            field_context={'extract_facts': {'count': 5}}
+            current_content={}, field_context={"extract_facts": {"count": 5}}
         )
 
-        assert context.has_action('extract_facts')
-        assert not context.has_action('missing_action')
+        assert context.has_action("extract_facts")
+        assert not context.has_action("missing_action")
 
 
 # =============================================================================
 # EvaluationContextProvider Tests
 # =============================================================================
+
 
 class TestEvaluationContextProvider:
     """Tests for the EvaluationContextProvider class."""
@@ -451,39 +412,36 @@ class TestEvaluationContextProvider:
         provider = EvaluationContextProvider()
 
         context = provider.build_minimal_context(
-            current_content={'status': 'active'},
-            upstream_data={'extract_facts': {'count': 10}}
+            current_content={"status": "active"}, upstream_data={"extract_facts": {"count": 10}}
         )
 
-        assert context.current_content['status'] == 'active'
-        assert context.get_field_value('extract_facts', 'count') == 10
+        assert context.current_content["status"] == "active"
+        assert context.get_field_value("extract_facts", "count") == 10
 
     def test_to_flat_dict_merges_correctly(self):
         """Test that to_flat_dict properly merges contexts."""
         provider = EvaluationContextProvider()
 
         context = provider.build_minimal_context(
-            current_content={'status': 'active', 'type': 'doc'},
-            upstream_data={
-                'extract': {'count': 5},
-                'source': {'title': 'My Doc'}
-            }
+            current_content={"status": "active", "type": "doc"},
+            upstream_data={"extract": {"count": 5}, "source": {"title": "My Doc"}},
         )
 
         flat = context.to_flat_dict()
 
         # Current content should be at top level
-        assert flat['status'] == 'active'
-        assert flat['type'] == 'doc'
+        assert flat["status"] == "active"
+        assert flat["type"] == "doc"
 
         # Upstream data should be under action names
-        assert flat['extract']['count'] == 5
-        assert flat['source']['title'] == 'My Doc'
+        assert flat["extract"]["count"] == 5
+        assert flat["source"]["title"] == "My Doc"
 
 
 # =============================================================================
 # Integration Tests
 # =============================================================================
+
 
 class TestIntegration:
     """Integration tests combining multiple components."""
@@ -507,10 +465,10 @@ class TestIntegration:
             assert result.success, f"Failed to resolve: {ref_str}"
 
         # Verify actual values
-        count_result = resolver.resolve('extract_facts.count', field_context)
+        count_result = resolver.resolve("extract_facts.count", field_context)
         assert count_result.value == 2
 
-        confidence_result = resolver.resolve('classifier.confidence', field_context)
+        confidence_result = resolver.resolve("classifier.confidence", field_context)
         assert confidence_result.value == 0.95
 
     def test_context_provider_with_resolver(self, field_context):
@@ -520,8 +478,7 @@ class TestIntegration:
 
         # Build context
         context = provider.build_minimal_context(
-            current_content={'local_field': 'local_value'},
-            upstream_data=field_context
+            current_content={"local_field": "local_value"}, upstream_data=field_context
         )
 
         # Get flat dict for evaluation
@@ -529,6 +486,6 @@ class TestIntegration:
 
         # Resolve references against flat dict
         # The flat dict should enable "extract_facts.count" style access
-        assert eval_data['extract_facts']['count'] == 2
-        assert eval_data['source']['title'] == 'Test Document'
-        assert eval_data['local_field'] == 'local_value'
+        assert eval_data["extract_facts"]["count"] == 2
+        assert eval_data["source"]["title"] == "Test Document"
+        assert eval_data["local_field"] == "local_value"

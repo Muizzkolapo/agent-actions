@@ -1,4 +1,5 @@
 """Common dictionary utility functions."""
+
 from typing import Any, Optional
 
 
@@ -13,7 +14,7 @@ def get_nested_value(data: Any, field_path: str) -> Optional[Any]:
     Returns:
         The field value or None if not found
     """
-    keys = field_path.split('.')
+    keys = field_path.split(".")
     value = data
 
     for key in keys:

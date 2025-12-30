@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class ConfigManager:
-
     def __init__(self, constructor_path: str, default_path: str):
         self.constructor_path = constructor_path
         self.default_path = default_path
@@ -75,7 +74,10 @@ class ConfigManager:
             except (TemplateRenderingError, ConfigurationError) as e:
                 raise ConfigurationError(
                     "Error rendering or loading default config",
-                    context={"config_path": str(self.default_path), "operation": "load_default_config"},
+                    context={
+                        "config_path": str(self.default_path),
+                        "operation": "load_default_config",
+                    },
                     cause=e,
                 )
             except yaml.YAMLError as e:
@@ -87,7 +89,10 @@ class ConfigManager:
             except Exception as e:
                 raise ConfigurationError(
                     "Unexpected error loading default config",
-                    context={"config_path": str(self.default_path), "operation": "load_default_config"},
+                    context={
+                        "config_path": str(self.default_path),
+                        "operation": "load_default_config",
+                    },
                     cause=e,
                 )
         # Resolve tool_path with priority: workflow > default > project config

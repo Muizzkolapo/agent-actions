@@ -50,7 +50,7 @@ class TestOperatorInfo:
             precedence=7,
             associativity="left",
             arity=2,
-            description="Equality comparison"
+            description="Equality comparison",
         )
 
         assert info.name == "EQ"
@@ -65,32 +65,38 @@ class TestOperatorInfo:
 class TestEqualityOperators:
     """Test equality comparison operators."""
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (5, 5, True),
-        (5, 10, False),
-        ("test", "test", True),
-        ("test", "TEST", False),
-        (None, None, True),
-        (None, 5, False),
-        (True, True, True),
-        (True, False, False),
-        ([1, 2], [1, 2], True),
-        ([1, 2], [2, 1], False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (5, 5, True),
+            (5, 10, False),
+            ("test", "test", True),
+            ("test", "TEST", False),
+            (None, None, True),
+            (None, 5, False),
+            (True, True, True),
+            (True, False, False),
+            ([1, 2], [1, 2], True),
+            ([1, 2], [2, 1], False),
+        ],
+    )
     def test_equal_operator(self, left, right, expected):
         """Test EqualOperator evaluation."""
         op = EqualOperator()
         result = op.evaluate(left, right)
         assert result == expected
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (5, 10, True),
-        (5, 5, False),
-        ("test", "TEST", True),
-        ("test", "test", False),
-        (None, 5, True),
-        (None, None, False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (5, 10, True),
+            (5, 5, False),
+            ("test", "TEST", True),
+            ("test", "test", False),
+            (None, 5, True),
+            (None, None, False),
+        ],
+    )
     def test_not_equal_operator(self, left, right, expected):
         """Test NotEqualOperator evaluation."""
         op = NotEqualOperator()
@@ -101,14 +107,17 @@ class TestEqualityOperators:
 class TestRelationalOperators:
     """Test relational comparison operators (<, <=, >, >=)."""
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (5, 10, True),
-        (10, 5, False),
-        (5, 5, False),
-        (3.14, 3.15, True),
-        ("a", "b", True),
-        ("b", "a", False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (5, 10, True),
+            (10, 5, False),
+            (5, 5, False),
+            (3.14, 3.15, True),
+            ("a", "b", True),
+            ("b", "a", False),
+        ],
+    )
     def test_less_than_operator(self, left, right, expected):
         """Test LessThanOperator evaluation."""
         op = LessThanOperator()
@@ -122,12 +131,15 @@ class TestRelationalOperators:
         result = op.evaluate("test", 5)
         assert result is False
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (5, 10, True),
-        (10, 5, False),
-        (5, 5, True),
-        (3.14, 3.15, True),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (5, 10, True),
+            (10, 5, False),
+            (5, 5, True),
+            (3.14, 3.15, True),
+        ],
+    )
     def test_less_equal_operator(self, left, right, expected):
         """Test LessEqualOperator evaluation."""
         op = LessEqualOperator()
@@ -140,12 +152,15 @@ class TestRelationalOperators:
         result = op.evaluate("test", 5)
         assert result is False
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (10, 5, True),
-        (5, 10, False),
-        (5, 5, False),
-        (3.15, 3.14, True),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (10, 5, True),
+            (5, 10, False),
+            (5, 5, False),
+            (3.15, 3.14, True),
+        ],
+    )
     def test_greater_than_operator(self, left, right, expected):
         """Test GreaterThanOperator evaluation."""
         op = GreaterThanOperator()
@@ -158,12 +173,15 @@ class TestRelationalOperators:
         result = op.evaluate("test", 5)
         assert result is False
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (10, 5, True),
-        (5, 10, False),
-        (5, 5, True),
-        (3.15, 3.14, True),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (10, 5, True),
+            (5, 10, False),
+            (5, 5, True),
+            (3.15, 3.14, True),
+        ],
+    )
     def test_greater_equal_operator(self, left, right, expected):
         """Test GreaterEqualOperator evaluation."""
         op = GreaterEqualOperator()
@@ -180,14 +198,17 @@ class TestRelationalOperators:
 class TestArrayOperators:
     """Test array/list operators (IN, NOT IN)."""
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (5, [1, 2, 3, 4, 5], True),
-        (6, [1, 2, 3, 4, 5], False),
-        ("apple", ["apple", "banana", "cherry"], True),
-        ("grape", ["apple", "banana", "cherry"], False),
-        (5, (1, 2, 3, 4, 5), True),
-        (5, {1, 2, 3, 4, 5}, True),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (5, [1, 2, 3, 4, 5], True),
+            (6, [1, 2, 3, 4, 5], False),
+            ("apple", ["apple", "banana", "cherry"], True),
+            ("grape", ["apple", "banana", "cherry"], False),
+            (5, (1, 2, 3, 4, 5), True),
+            (5, {1, 2, 3, 4, 5}, True),
+        ],
+    )
     def test_in_operator(self, left, right, expected):
         """Test InOperator evaluation."""
         op = InOperator()
@@ -200,12 +221,15 @@ class TestArrayOperators:
         result = op.evaluate(5, "not_a_list")
         assert result is False
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (6, [1, 2, 3, 4, 5], True),
-        (5, [1, 2, 3, 4, 5], False),
-        ("grape", ["apple", "banana", "cherry"], True),
-        ("apple", ["apple", "banana", "cherry"], False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (6, [1, 2, 3, 4, 5], True),
+            (5, [1, 2, 3, 4, 5], False),
+            ("grape", ["apple", "banana", "cherry"], True),
+            ("apple", ["apple", "banana", "cherry"], False),
+        ],
+    )
     def test_not_in_operator(self, left, right, expected):
         """Test NotInOperator evaluation."""
         op = NotInOperator()
@@ -222,13 +246,16 @@ class TestArrayOperators:
 class TestStringOperators:
     """Test string operators (CONTAINS, NOT CONTAINS)."""
 
-    @pytest.mark.parametrize('left,right,expected', [
-        ("hello world", "world", True),
-        ("hello world", "WORLD", False),  # Case-sensitive
-        ("hello world", "universe", False),
-        ("test123", "123", True),
-        ("", "test", False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            ("hello world", "world", True),
+            ("hello world", "WORLD", False),  # Case-sensitive
+            ("hello world", "universe", False),
+            ("test123", "123", True),
+            ("", "test", False),
+        ],
+    )
     def test_contains_operator(self, left, right, expected):
         """Test ContainsOperator evaluation (case-sensitive)."""
         op = ContainsOperator()
@@ -247,11 +274,14 @@ class TestStringOperators:
         result = op.evaluate(12345, 234)
         assert result is True
 
-    @pytest.mark.parametrize('left,right,expected', [
-        ("hello world", "universe", True),
-        ("hello world", "world", False),
-        ("test123", "456", True),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            ("hello world", "universe", True),
+            ("hello world", "world", False),
+            ("test123", "456", True),
+        ],
+    )
     def test_not_contains_operator(self, left, right, expected):
         """Test NotContainsOperator evaluation."""
         op = NotContainsOperator()
@@ -268,18 +298,21 @@ class TestStringOperators:
 class TestLikeOperator:
     """Test SQL LIKE pattern matching operator."""
 
-    @pytest.mark.parametrize('text,pattern,expected', [
-        ("hello world", "%world", True),
-        ("hello world", "hello%", True),
-        ("hello world", "%llo%", True),
-        ("hello world", "hello_world", True),
-        ("hello world", "hello_____", False),
-        ("test", "test", True),
-        ("TEST", "test", True),  # Case insensitive
-        ("hello", "goodbye", False),
-        ("abc123def", "%123%", True),
-        ("abc123def", "abc%def", True),
-    ])
+    @pytest.mark.parametrize(
+        "text,pattern,expected",
+        [
+            ("hello world", "%world", True),
+            ("hello world", "hello%", True),
+            ("hello world", "%llo%", True),
+            ("hello world", "hello_world", True),
+            ("hello world", "hello_____", False),
+            ("test", "test", True),
+            ("TEST", "test", True),  # Case insensitive
+            ("hello", "goodbye", False),
+            ("abc123def", "%123%", True),
+            ("abc123def", "abc%def", True),
+        ],
+    )
     def test_like_operator_basic(self, text, pattern, expected):
         """Test LikeOperator basic pattern matching."""
         op = LikeOperator()
@@ -310,17 +343,20 @@ class TestLikeOperator:
 class TestBetweenOperator:
     """Test BETWEEN range operator."""
 
-    @pytest.mark.parametrize('value,range_vals,expected', [
-        (5, [1, 10], True),
-        (1, [1, 10], True),
-        (10, [1, 10], True),
-        (0, [1, 10], False),
-        (11, [1, 10], False),
-        (5.5, [1.0, 10.0], True),
-        ("m", ["a", "z"], True),
-        ("a", ["a", "z"], True),
-        ("z", ["a", "z"], True),
-    ])
+    @pytest.mark.parametrize(
+        "value,range_vals,expected",
+        [
+            (5, [1, 10], True),
+            (1, [1, 10], True),
+            (10, [1, 10], True),
+            (0, [1, 10], False),
+            (11, [1, 10], False),
+            (5.5, [1.0, 10.0], True),
+            ("m", ["a", "z"], True),
+            ("a", ["a", "z"], True),
+            ("z", ["a", "z"], True),
+        ],
+    )
     def test_between_operator_basic(self, value, range_vals, expected):
         """Test BetweenOperator basic evaluation."""
         op = BetweenOperator()
@@ -352,26 +388,32 @@ class TestBetweenOperator:
 class TestNullOperators:
     """Test NULL checking operators."""
 
-    @pytest.mark.parametrize('value,expected', [
-        (None, True),
-        (0, False),
-        ("", False),
-        ([], False),
-        (False, False),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (None, True),
+            (0, False),
+            ("", False),
+            ([], False),
+            (False, False),
+        ],
+    )
     def test_is_null_operator(self, value, expected):
         """Test IsNullOperator evaluation."""
         op = IsNullOperator()
         result = op.evaluate(value)
         assert result == expected
 
-    @pytest.mark.parametrize('value,expected', [
-        (None, False),
-        (0, True),
-        ("", True),
-        ([], True),
-        (False, True),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (None, False),
+            (0, True),
+            ("", True),
+            ([], True),
+            (False, True),
+        ],
+    )
     def test_is_not_null_operator(self, value, expected):
         """Test IsNotNullOperator evaluation."""
         op = IsNotNullOperator()
@@ -382,43 +424,52 @@ class TestNullOperators:
 class TestLogicalOperators:
     """Test logical operators (AND, OR, NOT)."""
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (True, True, True),
-        (True, False, False),
-        (False, True, False),
-        (False, False, False),
-        (1, 1, True),
-        (0, 1, False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (True, True, True),
+            (True, False, False),
+            (False, True, False),
+            (False, False, False),
+            (1, 1, True),
+            (0, 1, False),
+        ],
+    )
     def test_and_operator(self, left, right, expected):
         """Test AndOperator evaluation."""
         op = AndOperator()
         result = op.evaluate(left, right)
         assert result == expected
 
-    @pytest.mark.parametrize('left,right,expected', [
-        (True, True, True),
-        (True, False, True),
-        (False, True, True),
-        (False, False, False),
-        (1, 0, True),
-        (0, 0, False),
-    ])
+    @pytest.mark.parametrize(
+        "left,right,expected",
+        [
+            (True, True, True),
+            (True, False, True),
+            (False, True, True),
+            (False, False, False),
+            (1, 0, True),
+            (0, 0, False),
+        ],
+    )
     def test_or_operator(self, left, right, expected):
         """Test OrOperator evaluation."""
         op = OrOperator()
         result = op.evaluate(left, right)
         assert result == expected
 
-    @pytest.mark.parametrize('value,expected', [
-        (True, False),
-        (False, True),
-        (1, False),
-        (0, True),
-        (None, True),
-        ("", True),
-        ("test", False),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            (True, False),
+            (False, True),
+            (1, False),
+            (0, True),
+            (None, True),
+            ("", True),
+            ("test", False),
+        ],
+    )
     def test_not_operator(self, value, expected):
         """Test NotOperator evaluation."""
         op = NotOperator()
@@ -429,14 +480,17 @@ class TestLogicalOperators:
 class TestFunctionOperators:
     """Test function operators (LENGTH, UPPER, LOWER, TRIM)."""
 
-    @pytest.mark.parametrize('value,expected', [
-        ("hello", 5),
-        ([1, 2, 3], 3),
-        ((1, 2), 2),
-        ({"a": 1, "b": 2}, 2),
-        (None, 0),
-        ("", 0),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("hello", 5),
+            ([1, 2, 3], 3),
+            ((1, 2), 2),
+            ({"a": 1, "b": 2}, 2),
+            (None, 0),
+            ("", 0),
+        ],
+    )
     def test_length_function(self, value, expected):
         """Test LengthFunction evaluation."""
         func = LengthFunction()
@@ -451,39 +505,48 @@ class TestFunctionOperators:
         with pytest.raises(ValueError, match="LENGTH function requires exactly 1 argument"):
             func.evaluate_function([1, 2])
 
-    @pytest.mark.parametrize('value,expected', [
-        ("hello", "HELLO"),
-        ("HELLO", "HELLO"),
-        ("HeLLo", "HELLO"),
-        (None, ""),
-        (123, "123"),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("hello", "HELLO"),
+            ("HELLO", "HELLO"),
+            ("HeLLo", "HELLO"),
+            (None, ""),
+            (123, "123"),
+        ],
+    )
     def test_upper_function(self, value, expected):
         """Test UpperFunction evaluation."""
         func = UpperFunction()
         result = func.evaluate_function([value])
         assert result == expected
 
-    @pytest.mark.parametrize('value,expected', [
-        ("HELLO", "hello"),
-        ("hello", "hello"),
-        ("HeLLo", "hello"),
-        (None, ""),
-        (123, "123"),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("HELLO", "hello"),
+            ("hello", "hello"),
+            ("HeLLo", "hello"),
+            (None, ""),
+            (123, "123"),
+        ],
+    )
     def test_lower_function(self, value, expected):
         """Test LowerFunction evaluation."""
         func = LowerFunction()
         result = func.evaluate_function([value])
         assert result == expected
 
-    @pytest.mark.parametrize('value,expected', [
-        ("  hello  ", "hello"),
-        ("hello", "hello"),
-        ("\thello\n", "hello"),
-        ("  ", ""),
-        (None, ""),
-    ])
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("  hello  ", "hello"),
+            ("hello", "hello"),
+            ("\thello\n", "hello"),
+            ("  ", ""),
+            (None, ""),
+        ],
+    )
     def test_trim_function(self, value, expected):
         """Test TrimFunction evaluation."""
         func = TrimFunction()

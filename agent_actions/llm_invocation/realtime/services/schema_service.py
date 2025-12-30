@@ -12,7 +12,7 @@ class SchemaService:
         agent_config: Dict[str, Any],
         model_vendor: str,
         tools_path: Optional[str] = None,
-        context_data: Optional[Any] = None
+        context_data: Optional[Any] = None,
     ) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any]]:
         """
         Prepare schema for the given vendor.

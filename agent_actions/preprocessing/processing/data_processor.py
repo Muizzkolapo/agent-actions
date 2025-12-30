@@ -1,4 +1,5 @@
 """Module for processing generated data."""
+
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 from agent_actions.utilities.processor.processor_helpers import transform_with_passthrough
@@ -12,13 +13,15 @@ from agent_actions.utilities.output_splitter import split_main_and_side_outputs
 @dataclass
 class ProcessItemRequest:
     """Request parameters for processing a single item."""
+
     contents: Dict
     generated_data: List[Dict]
     source_guid: str
     idx: int = 0
     passthrough_fields: Optional[Dict] = None
 
-@registry.register_processor('data_processor')
+
+@registry.register_processor("data_processor")
 class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
     """Handles post-processing of generated data (Single Responsibility)."""
 
@@ -45,7 +48,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
         contents: Dict,
         generated_data: List[Dict],
         source_guid: str,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List[Dict]:
         """
         Process a generated data item with transformations.
@@ -68,17 +71,15 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
                 contents,
                 source_guid,
                 self.agent_config,
-                passthrough_fields=passthrough_fields
+                passthrough_fields=passthrough_fields,
             )
         except (ValueError, TypeError, KeyError) as e:
             self.handle_processing_error(
                 e,
-                'Processing generated data item',
+                "Processing generated data item",
                 TransformationError,
                 source_guid=source_guid,
-                item_count=len(generated_data) if isinstance(
-                    generated_data, list
-                ) else 1
+                item_count=len(generated_data) if isinstance(generated_data, list) else 1,
             )
             return None
 

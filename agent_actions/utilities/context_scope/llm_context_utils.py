@@ -44,18 +44,18 @@ class LLMContextUtils:
             {'summary', 'confidence', 'document_id', 'filename'}
         """
         # Get fields from output schema
-        schema = agent_config.get('output_schema', {})
-        schema_fields = set(schema.get('properties', {}).keys())
+        schema = agent_config.get("output_schema", {})
+        schema_fields = set(schema.get("properties", {}).keys())
 
         # Get passthrough fields from context_scope
-        context_scope = agent_config.get('context_scope', {})
-        passthrough_refs = context_scope.get('passthrough', [])
+        context_scope = agent_config.get("context_scope", {})
+        passthrough_refs = context_scope.get("passthrough", [])
 
         passthrough_fields = set()
         for field_ref in passthrough_refs:
             # Extract field name from 'action.field' reference
-            if isinstance(field_ref, str) and '.' in field_ref:
-                parts = field_ref.split('.', 1)
+            if isinstance(field_ref, str) and "." in field_ref:
+                parts = field_ref.split(".", 1)
                 if len(parts) == 2:
                     field_name = parts[1]
                     passthrough_fields.add(field_name)

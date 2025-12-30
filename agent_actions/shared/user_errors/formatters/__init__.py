@@ -11,13 +11,13 @@ from .function_formatter import FunctionNotFoundFormatter
 from .generic_formatter import GenericErrorFormatter
 
 __all__ = [
-    'ErrorFormatter',
-    'ConfigurationErrorFormatter',
-    'ModelErrorFormatter',
-    'AuthenticationErrorFormatter',
-    'FileErrorFormatter',
-    'APIErrorFormatter',
-    'YAMLSyntaxErrorFormatter',
-    'FunctionNotFoundFormatter',
-    'GenericErrorFormatter',
+    "ErrorFormatter",
+    "ConfigurationErrorFormatter",
+    "ModelErrorFormatter",
+    "AuthenticationErrorFormatter",
+    "FileErrorFormatter",
+    "APIErrorFormatter",
+    "YAMLSyntaxErrorFormatter",
+    "FunctionNotFoundFormatter",
+    "GenericErrorFormatter",
 ]

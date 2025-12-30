@@ -19,6 +19,7 @@ else:
 # Optional Pydantic support
 try:
     from pydantic import BaseModel as PydanticBaseModel
+
     HAS_PYDANTIC = True
 except ImportError:
     HAS_PYDANTIC = False
@@ -26,13 +27,13 @@ except ImportError:
 
 # JSON Schema type mapping - int maps to 'integer' (not 'number')
 TYPE_MAP: Dict[type, str] = {
-    str: 'string',
-    int: 'integer',
-    float: 'number',
-    bool: 'boolean',
-    list: 'array',
-    dict: 'object',
-    type(None): 'null',
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+    list: "array",
+    dict: "object",
+    type(None): "null",
 }
 
 # Type schema cache for memoization
@@ -56,9 +57,9 @@ def is_typeddict(tp: Type) -> bool:
         return False
 
     return (
-        hasattr(tp, '__annotations__') and
-        hasattr(tp, '__total__') and
-        hasattr(tp, '__required_keys__')
+        hasattr(tp, "__annotations__")
+        and hasattr(tp, "__total__")
+        and hasattr(tp, "__required_keys__")
     )
 
 
@@ -87,11 +88,11 @@ def _get_json_schema_type(py_type: Any) -> str:
 
     # Handle List[T]
     if origin is list:
-        return 'array'
+        return "array"
 
     # Handle Dict[K, V]
     if origin is dict:
-        return 'object'
+        return "object"
 
     # Handle Union - unwrap and recurse
     if origin is Union:
@@ -99,10 +100,10 @@ def _get_json_schema_type(py_type: Any) -> str:
         non_none = [a for a in args if a is not type(None)]
         if len(non_none) == 1:
             return _get_json_schema_type(non_none[0])
-        return 'string'  # Complex unions default to string
+        return "string"  # Complex unions default to string
 
     # Primitive type lookup
-    return TYPE_MAP.get(py_type, 'string')
+    return TYPE_MAP.get(py_type, "string")
 
 
 def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
@@ -131,7 +132,7 @@ def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
     # 2. dataclass (stdlib is_dataclass)
     # 3. TypedDict (must be last - least specific markers)
 
-    if HAS_PYDANTIC and hasattr(type_hint, 'model_json_schema'):
+    if HAS_PYDANTIC and hasattr(type_hint, "model_json_schema"):
         result = _from_pydantic(type_hint)
     elif dataclasses.is_dataclass(type_hint):
         result = _from_dataclass(type_hint)
@@ -142,10 +143,10 @@ def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
             f"Unsupported type hint: {type_hint}. "
             f"Expected TypedDict, Pydantic BaseModel, or dataclass.",
             context={
-                'type': str(type_hint),
-                'operation': 'derive_schema_from_type',
-                'supported_types': ['TypedDict', 'Pydantic BaseModel', 'dataclass']
-            }
+                "type": str(type_hint),
+                "operation": "derive_schema_from_type",
+                "supported_types": ["TypedDict", "Pydantic BaseModel", "dataclass"],
+            },
         )
 
     # Cache the result
@@ -155,16 +156,16 @@ def derive_schema_from_type(type_hint: Type) -> Dict[str, Any]:
 
 def _deep_copy_schema(schema: Dict[str, Any]) -> Dict[str, Any]:
     """Create a deep copy of a schema dict to prevent mutation."""
-    result = {'name': schema['name'], 'fields': []}
-    for field in schema['fields']:
-        result['fields'].append(dict(field))
+    result = {"name": schema["name"], "fields": []}
+    for field in schema["fields"]:
+        result["fields"].append(dict(field))
     return result
 
 
 def _from_typeddict(tp: Type) -> Dict[str, Any]:
     """Convert TypedDict to unified schema format."""
-    annotations = getattr(tp, '__annotations__', {})
-    required_keys = getattr(tp, '__required_keys__', set(annotations.keys()))
+    annotations = getattr(tp, "__annotations__", {})
+    required_keys = getattr(tp, "__required_keys__", set(annotations.keys()))
 
     fields: List[Dict[str, Any]] = []
 
@@ -174,14 +175,11 @@ def _from_typeddict(tp: Type) -> Dict[str, Any]:
             name=field_name,
             _py_type=field_type,
             unwrapped_type=unwrapped,
-            is_required=field_name in required_keys and not is_optional
+            is_required=field_name in required_keys and not is_optional,
         )
         fields.append(field_schema)
 
-    return {
-        'name': tp.__name__,
-        'fields': fields
-    }
+    return {"name": tp.__name__, "fields": fields}
 
 
 def _from_dataclass(tp: Type) -> Dict[str, Any]:
@@ -191,8 +189,7 @@ def _from_dataclass(tp: Type) -> Dict[str, Any]:
     for field in dataclasses.fields(tp):
         # Check if field has a default value
         has_default = not (
-            field.default is dataclasses.MISSING and
-            field.default_factory is dataclasses.MISSING
+            field.default is dataclasses.MISSING and field.default_factory is dataclasses.MISSING
         )
 
         unwrapped, is_optional = _analyze_type(field.type)
@@ -200,14 +197,11 @@ def _from_dataclass(tp: Type) -> Dict[str, Any]:
             name=field.name,
             _py_type=field.type,
             unwrapped_type=unwrapped,
-            is_required=not has_default and not is_optional
+            is_required=not has_default and not is_optional,
         )
         fields.append(field_schema)
 
-    return {
-        'name': tp.__name__,
-        'fields': fields
-    }
+    return {"name": tp.__name__, "fields": fields}
 
 
 def _from_pydantic(tp: Type) -> Dict[str, Any]:
@@ -215,31 +209,28 @@ def _from_pydantic(tp: Type) -> Dict[str, Any]:
     if not HAS_PYDANTIC:
         raise ConfigurationError(
             "Pydantic is not installed. Install with: pip install pydantic",
-            context={'operation': 'pydantic_type_conversion'}
+            context={"operation": "pydantic_type_conversion"},
         )
 
-    if not hasattr(tp, 'model_json_schema'):
+    if not hasattr(tp, "model_json_schema"):
         raise ConfigurationError(
             f"{tp.__name__} is not a Pydantic v2 model (missing model_json_schema)",
-            context={
-                'type': tp.__name__,
-                'operation': 'pydantic_type_conversion'
-            }
+            context={"type": tp.__name__, "operation": "pydantic_type_conversion"},
         )
 
     # Get JSON Schema from Pydantic
     json_schema = tp.model_json_schema()
-    defs = json_schema.get('$defs', {})
-    properties = json_schema.get('properties', {})
-    required = set(json_schema.get('required', []))
+    defs = json_schema.get("$defs", {})
+    properties = json_schema.get("properties", {})
+    required = set(json_schema.get("required", []))
 
     fields: List[Dict[str, Any]] = []
 
     for field_name, field_def in properties.items():
         # Inline $ref resolution
         resolved_def = field_def
-        if '$ref' in field_def:
-            ref_name = field_def['$ref'].split('/')[-1]
+        if "$ref" in field_def:
+            ref_name = field_def["$ref"].split("/")[-1]
             if ref_name in defs:
                 resolved_def = defs[ref_name]
 
@@ -248,60 +239,50 @@ def _from_pydantic(tp: Type) -> Dict[str, Any]:
         )
         fields.append(field_schema)
 
-    return {
-        'name': json_schema.get('title', tp.__name__),
-        'fields': fields
-    }
+    return {"name": json_schema.get("title", tp.__name__), "fields": fields}
 
 
 def _pydantic_property_to_field(
-    field_name: str,
-    field_def: Dict[str, Any],
-    is_required: bool,
-    defs: Dict[str, Any]
+    field_name: str, field_def: Dict[str, Any], is_required: bool, defs: Dict[str, Any]
 ) -> Dict[str, Any]:
     """Convert Pydantic JSON Schema property to unified field format."""
-    field_type = field_def.get('type', 'string')
+    field_type = field_def.get("type", "string")
 
     # Handle anyOf (Pydantic's Optional representation)
-    if 'anyOf' in field_def:
-        any_of = field_def['anyOf']
-        non_null = [t for t in any_of if t.get('type') != 'null']
+    if "anyOf" in field_def:
+        any_of = field_def["anyOf"]
+        non_null = [t for t in any_of if t.get("type") != "null"]
         if non_null:
             # Inline $ref resolution for anyOf items
             resolved = non_null[0]
-            if '$ref' in resolved:
-                ref_name = resolved['$ref'].split('/')[-1]
+            if "$ref" in resolved:
+                ref_name = resolved["$ref"].split("/")[-1]
                 if ref_name in defs:
                     resolved = defs[ref_name]
-            field_type = resolved.get('type', 'string')
+            field_type = resolved.get("type", "string")
             is_required = False  # anyOf with null means optional
 
-    field_schema: Dict[str, Any] = {
-        'id': field_name,
-        'type': field_type,
-        'required': is_required
-    }
+    field_schema: Dict[str, Any] = {"id": field_name, "type": field_type, "required": is_required}
 
     # Copy relevant metadata
-    if 'description' in field_def:
-        field_schema['description'] = field_def['description']
-    if 'enum' in field_def:
-        field_schema['enum'] = field_def['enum']
+    if "description" in field_def:
+        field_schema["description"] = field_def["description"]
+    if "enum" in field_def:
+        field_schema["enum"] = field_def["enum"]
 
     # Handle array items
-    if field_type == 'array' and 'items' in field_def:
-        items = field_def['items']
+    if field_type == "array" and "items" in field_def:
+        items = field_def["items"]
         # Inline $ref resolution for items
-        if '$ref' in items:
-            ref_name = items['$ref'].split('/')[-1]
+        if "$ref" in items:
+            ref_name = items["$ref"].split("/")[-1]
             if ref_name in defs:
                 items = defs[ref_name]
-        field_schema['items'] = items
+        field_schema["items"] = items
 
     # Handle nested objects
-    if field_type == 'object' and 'properties' in field_def:
-        field_schema['properties'] = field_def['properties']
+    if field_type == "object" and "properties" in field_def:
+        field_schema["properties"] = field_def["properties"]
 
     return field_schema
 
@@ -310,15 +291,15 @@ def _build_field(
     name: str,
     _py_type: Any,  # Used in error messages and validation
     unwrapped_type: Any,
-    is_required: bool
+    is_required: bool,
 ) -> Dict[str, Any]:
     """Build unified schema field from name and Python type."""
     origin = get_origin(unwrapped_type)
 
     field_schema: Dict[str, Any] = {
-        'id': name,
-        'type': _get_json_schema_type(unwrapped_type),
-        'required': is_required
+        "id": name,
+        "type": _get_json_schema_type(unwrapped_type),
+        "required": is_required,
     }
 
     # Handle List[T]
@@ -328,38 +309,36 @@ def _build_field(
             item_type = args[0]
             if is_typeddict(item_type):
                 nested = _from_typeddict(item_type)
-                field_schema['items'] = _nested_to_json_schema(nested)
+                field_schema["items"] = _nested_to_json_schema(nested)
             elif dataclasses.is_dataclass(item_type):
                 nested = _from_dataclass(item_type)
-                field_schema['items'] = _nested_to_json_schema(nested)
+                field_schema["items"] = _nested_to_json_schema(nested)
             else:
-                field_schema['items'] = {'type': _get_json_schema_type(item_type)}
+                field_schema["items"] = {"type": _get_json_schema_type(item_type)}
 
     # Handle Dict[str, V]
     elif origin is dict:
         args = get_args(unwrapped_type)
         if len(args) == 2:
             value_type = args[1]
-            field_schema['additionalProperties'] = {
-                'type': _get_json_schema_type(value_type)
-            }
+            field_schema["additionalProperties"] = {"type": _get_json_schema_type(value_type)}
 
     # Handle nested structured types
     elif is_typeddict(unwrapped_type):
         nested = _from_typeddict(unwrapped_type)
-        field_schema['type'] = 'object'
+        field_schema["type"] = "object"
         schema_obj = _nested_to_json_schema(nested)
-        field_schema['properties'] = schema_obj.get('properties', {})
-        if 'required' in schema_obj:
-            field_schema['required_fields'] = schema_obj['required']
+        field_schema["properties"] = schema_obj.get("properties", {})
+        if "required" in schema_obj:
+            field_schema["required_fields"] = schema_obj["required"]
 
     elif dataclasses.is_dataclass(unwrapped_type):
         nested = _from_dataclass(unwrapped_type)
-        field_schema['type'] = 'object'
+        field_schema["type"] = "object"
         schema_obj = _nested_to_json_schema(nested)
-        field_schema['properties'] = schema_obj.get('properties', {})
-        if 'required' in schema_obj:
-            field_schema['required_fields'] = schema_obj['required']
+        field_schema["properties"] = schema_obj.get("properties", {})
+        if "required" in schema_obj:
+            field_schema["required_fields"] = schema_obj["required"]
 
     return field_schema
 
@@ -369,30 +348,27 @@ def _nested_to_json_schema(unified_schema: Dict[str, Any]) -> Dict[str, Any]:
     properties: Dict[str, Any] = {}
     required: List[str] = []
 
-    for field in unified_schema.get('fields', []):
-        field_id = field['id']
-        prop: Dict[str, Any] = {'type': field['type']}
+    for field in unified_schema.get("fields", []):
+        field_id = field["id"]
+        prop: Dict[str, Any] = {"type": field["type"]}
 
-        if 'items' in field:
-            prop['items'] = field['items']
-        if 'properties' in field:
-            prop['properties'] = field['properties']
-        if 'additionalProperties' in field:
-            prop['additionalProperties'] = field['additionalProperties']
-        if 'description' in field:
-            prop['description'] = field['description']
+        if "items" in field:
+            prop["items"] = field["items"]
+        if "properties" in field:
+            prop["properties"] = field["properties"]
+        if "additionalProperties" in field:
+            prop["additionalProperties"] = field["additionalProperties"]
+        if "description" in field:
+            prop["description"] = field["description"]
 
         properties[field_id] = prop
 
-        if field.get('required', False):
+        if field.get("required", False):
             required.append(field_id)
 
-    result: Dict[str, Any] = {
-        'type': 'object',
-        'properties': properties
-    }
+    result: Dict[str, Any] = {"type": "object", "properties": properties}
     if required:
-        result['required'] = required
+        result["required"] = required
 
     return result
 
@@ -410,7 +386,7 @@ def unified_to_json_schema(unified_schema: Dict[str, Any]) -> Dict[str, Any]:
         Standard JSON Schema dict ready for jsonschema.validate()
     """
     json_schema = _nested_to_json_schema(unified_schema)
-    json_schema['additionalProperties'] = False
+    json_schema["additionalProperties"] = False
     return json_schema
 
 

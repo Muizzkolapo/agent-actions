@@ -17,7 +17,7 @@ class LLMContextBuilder:
     def build_llm_context_for_batch(
         row_content: Dict[str, Any],
         llm_context: Dict[str, Any],
-        context_scope: Optional[Dict[str, Any]] = None
+        context_scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Build LLM context for batch mode.
@@ -31,8 +31,8 @@ class LLMContextBuilder:
             llm_full_context = row_content.copy()
 
         # Remove dropped fields (context_scope.drop)
-        if context_scope and context_scope.get('drop'):
-            for field_ref in context_scope.get('drop', []):
+        if context_scope and context_scope.get("drop"):
+            for field_ref in context_scope.get("drop", []):
                 try:
                     # Parse field reference (e.g., 'source.api_key' -> 'api_key')
                     _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
@@ -51,7 +51,7 @@ class LLMContextBuilder:
     def build_llm_context_for_realtime(
         processed_context: Dict[str, Any],
         llm_additional_context: Optional[Dict[str, Any]],
-        context_scope: Optional[Dict[str, Any]] = None
+        context_scope: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Build LLM context for realtime mode.
@@ -65,10 +65,10 @@ class LLMContextBuilder:
         result_context = processed_context
 
         # Apply context_scope.drop field filtering using DataTransformer
-        if context_scope and context_scope.get('drop'):
+        if context_scope and context_scope.get("drop"):
             # Extract field names from context_scope.drop
             drop_fields = []
-            for field_ref in context_scope.get('drop', []):
+            for field_ref in context_scope.get("drop", []):
                 try:
                     # Parse field reference (e.g., 'source.api_key' -> 'api_key')
                     _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)

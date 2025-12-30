@@ -86,7 +86,7 @@ class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
         idx: int,
         source_guid: Optional[str] = None,
         custom_id: Optional[str] = None,
-        mode: str = 'batch'
+        mode: str = "batch",
     ) -> Dict[str, Any]:
         """
         Build passthrough item with consistent structure.
@@ -152,15 +152,15 @@ class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
              'skipped_by_where_clause': True}
         """
         # Generate IDs
-        target_id = row.get('target_id') or custom_id or IDGenerator.generate_target_id()
-        resolved_source_guid = source_guid or row.get('source_guid', target_id)
+        target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
+        resolved_source_guid = source_guid or row.get("source_guid", target_id)
         node_id = IDGenerator.generate_node_id(idx)
 
         # Build lineage (preserve existing lineage chain)
         lineage = LineageBuilder.build_lineage(row, node_id)
 
         # Extract content
-        content = row.get('content', row)
+        content = row.get("content", row)
 
         # Create base processed item using FieldManager
         processed_item = FieldManager().create_processed_item(
@@ -168,25 +168,25 @@ class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
             content=content,
             node_id=node_id,
             lineage=lineage,
-            target_id=target_id
+            target_id=target_id,
         )
 
         # Ensure metadata exists
-        if 'metadata' not in processed_item:
-            processed_item['metadata'] = {}
+        if "metadata" not in processed_item:
+            processed_item["metadata"] = {}
 
         # Set agent_type to passthrough
-        processed_item['metadata']['agent_type'] = 'passthrough'
+        processed_item["metadata"]["agent_type"] = "passthrough"
 
         # Add mode-specific metadata
-        if mode == 'online':
+        if mode == "online":
             # Online mode: Use new reason-based metadata
-            processed_item['metadata']['reason'] = reason
-            processed_item['metadata']['skipped_by_where_clause'] = True
+            processed_item["metadata"]["reason"] = reason
+            processed_item["metadata"]["skipped_by_where_clause"] = True
         else:  # batch
             # Batch mode: Use legacy flag-based metadata for backward compatibility
             flag_name = PassthroughItemBuilder._reason_to_legacy_flag(reason)
-            processed_item['metadata'][flag_name] = True
+            processed_item["metadata"][flag_name] = True
 
         return processed_item
 
@@ -215,7 +215,7 @@ class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
             'skipped_by_where_clause'
         """
         mapping = {
-            'conditional_clause_failed': 'skipped_by_conditional',
-            'where_clause_not_matched': 'skipped_by_where_clause'
+            "conditional_clause_failed": "skipped_by_conditional",
+            "where_clause_not_matched": "skipped_by_where_clause",
         }
-        return mapping.get(reason, 'skipped_by_where_clause')
+        return mapping.get(reason, "skipped_by_where_clause")
