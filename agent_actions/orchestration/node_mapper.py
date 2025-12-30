@@ -1,4 +1,5 @@
 """Module for mapping agent names to node indices."""
+
 from typing import Dict, Optional
 
 
@@ -42,20 +43,17 @@ class NodeMappingService:
 
         for agent_name, config in agent_configs.items():
             if isinstance(config, dict):
-                idx = config.get('idx')
+                idx = config.get("idx")
                 if idx is not None:
                     agent_index_map[agent_name] = idx
-            elif hasattr(config, 'idx'):
+            elif hasattr(config, "idx"):
                 # Support for config objects with idx attribute
                 agent_index_map[agent_name] = config.idx
 
         return agent_index_map
 
     @staticmethod
-    def get_node_index_for_agent(
-        agent_name: str,
-        agent_indices: Dict[str, int]
-    ) -> Optional[int]:
+    def get_node_index_for_agent(agent_name: str, agent_indices: Dict[str, int]) -> Optional[int]:
         """
         Get the node index for a specific agent.
 

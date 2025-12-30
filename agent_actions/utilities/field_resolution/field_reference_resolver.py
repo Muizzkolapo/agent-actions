@@ -92,11 +92,7 @@ class FieldReferenceResolver:
         )
     """
 
-    def __init__(
-        self,
-        strict_mode: bool = False,
-        validate_dependencies: bool = True
-    ):
+    def __init__(self, strict_mode: bool = False, validate_dependencies: bool = True):
         """
         Initialize the resolver.
 
@@ -109,9 +105,7 @@ class FieldReferenceResolver:
         self._parser = ReferenceParser()
 
     def parse(
-        self,
-        reference: str,
-        format_hint: Optional[ReferenceFormat] = None
+        self, reference: str, format_hint: Optional[ReferenceFormat] = None
     ) -> ParsedReference:
         """
         Parse a field reference string into structured format.
@@ -137,9 +131,7 @@ class FieldReferenceResolver:
         return self._parser.parse(reference, format_hint, self.strict_mode)
 
     def parse_batch(
-        self,
-        text: str,
-        format_hint: Optional[ReferenceFormat] = None
+        self, text: str, format_hint: Optional[ReferenceFormat] = None
     ) -> List[ParsedReference]:
         """
         Extract all field references from a text string.
@@ -165,7 +157,7 @@ class FieldReferenceResolver:
         self,
         reference: Union[str, ParsedReference],
         field_context: Dict[str, Any],
-        fallback_value: Any = None
+        fallback_value: Any = None,
     ) -> ResolvedReference:
         """
         Resolve a field reference to its value in the context.
@@ -205,7 +197,7 @@ class FieldReferenceResolver:
                     source_action="",
                     field_path=[],
                     success=False,
-                    error=str(e)
+                    error=str(e),
                 )
 
         try:
@@ -224,7 +216,7 @@ class FieldReferenceResolver:
                     source_action=reference.action_name,
                     field_path=reference.field_path,
                     success=False,
-                    error=error_msg
+                    error=error_msg,
                 )
 
             action_data = field_context[reference.action_name]
@@ -242,7 +234,7 @@ class FieldReferenceResolver:
                 value=value if value is not None else fallback_value,
                 source_action=reference.action_name,
                 field_path=reference.field_path,
-                success=value is not None
+                success=value is not None,
             )
 
         except ReferenceNotFoundError as e:
@@ -261,13 +253,11 @@ class FieldReferenceResolver:
                 source_action=reference.action_name,
                 field_path=reference.field_path,
                 success=False,
-                error=str(e)
+                error=str(e),
             )
 
     def resolve_batch(
-        self,
-        references: List[Union[str, ParsedReference]],
-        field_context: Dict[str, Any]
+        self, references: List[Union[str, ParsedReference]], field_context: Dict[str, Any]
     ) -> Dict[str, ResolvedReference]:
         """
         Resolve multiple references efficiently.
@@ -291,7 +281,7 @@ class FieldReferenceResolver:
         self,
         text: str,
         field_context: Dict[str, Any],
-        format_hint: Optional[ReferenceFormat] = None
+        format_hint: Optional[ReferenceFormat] = None,
     ) -> str:
         """
         Replace all field references in text with their resolved values.
@@ -322,9 +312,7 @@ class FieldReferenceResolver:
                 text = text.replace(ref.full_reference, value_str)
             else:
                 logger.debug(
-                    "Could not resolve reference '%s': %s",
-                    ref.full_reference,
-                    resolved.error
+                    "Could not resolve reference '%s': %s", ref.full_reference, resolved.error
                 )
 
         return text
@@ -334,7 +322,7 @@ class FieldReferenceResolver:
         references: List[Union[str, ParsedReference]],
         agent_config: Dict[str, Any],
         agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None
+        current_agent_name: Optional[str] = None,
     ) -> List[str]:
         """
         Validate that referenced actions exist in dependency graph.
@@ -353,7 +341,7 @@ class FieldReferenceResolver:
             references=references,
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name=current_agent_name
+            current_agent_name=current_agent_name,
         )
 
     def _resolve_nested_path(self, data: Any, path: List[str]) -> Any:

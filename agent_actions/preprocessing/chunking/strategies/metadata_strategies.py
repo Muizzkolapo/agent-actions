@@ -56,9 +56,9 @@ class BasicMetadataStrategy(MetadataStrategy):
             Dictionary with source_field, chunk_index, and total_chunks
         """
         return {
-            'source_field': context.field_name,
-            'chunk_index': context.chunk_index,
-            'total_chunks': context.total_chunks,
+            "source_field": context.field_name,
+            "chunk_index": context.chunk_index,
+            "total_chunks": context.total_chunks,
         }
 
 
@@ -91,28 +91,28 @@ class EnhancedMetadataStrategy(MetadataStrategy):
             Dictionary with basic metadata plus any configured enhancements
         """
         metadata = {
-            'source_field': context.field_name,
-            'chunk_index': context.chunk_index,
-            'total_chunks': context.total_chunks,
+            "source_field": context.field_name,
+            "chunk_index": context.chunk_index,
+            "total_chunks": context.total_chunks,
         }
 
         # Add chunk ID if configured
-        if self.config.get('chunk_id_field'):
+        if self.config.get("chunk_id_field"):
             chunk_id = self._create_chunk_id(context)
-            metadata[self.config['chunk_id_field']] = chunk_id
+            metadata[self.config["chunk_id_field"]] = chunk_id
 
         # Add original record ID if configured
-        if self.config.get('original_record_id'):
-            original_id = context.record.get('id')
+        if self.config.get("original_record_id"):
+            original_id = context.record.get("id")
             if original_id:
-                metadata[self.config['original_record_id']] = original_id
+                metadata[self.config["original_record_id"]] = original_id
 
         # Add character position information if configured
-        if self.config.get('add_char_positions', False):
+        if self.config.get("add_char_positions", False):
             metadata.update(self._calculate_character_positions(context))
 
         # Add token count information if configured
-        if self.config.get('add_token_counts', False):
+        if self.config.get("add_token_counts", False):
             metadata.update(self._calculate_token_counts(context))
 
         return metadata
@@ -127,8 +127,8 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         Returns:
             Unique chunk identifier string
         """
-        original_id = context.record.get('id', 'unknown')
-        return f'{original_id}_{context.field_name}_{context.chunk_index}'
+        original_id = context.record.get("id", "unknown")
+        return f"{original_id}_{context.field_name}_{context.chunk_index}"
 
     def _calculate_character_positions(self, context: MetadataContext) -> Dict[str, Any]:
         """
@@ -145,10 +145,10 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         estimated_end_position = estimated_start_position + chunk_size_in_characters
 
         return {
-            'chunk_start_char': max(0, estimated_start_position),
-            'chunk_end_char': estimated_end_position,
-            'chunk_size_chars': chunk_size_in_characters,
-            'original_field_size_chars': len(context.field_value),
+            "chunk_start_char": max(0, estimated_start_position),
+            "chunk_end_char": estimated_end_position,
+            "chunk_size_chars": chunk_size_in_characters,
+            "original_field_size_chars": len(context.field_value),
         }
 
     def _calculate_token_counts(self, context: MetadataContext) -> Dict[str, Any]:
@@ -161,14 +161,12 @@ class EnhancedMetadataStrategy(MetadataStrategy):
         Returns:
             Dictionary with token count metadata for chunk and original field
         """
-        chunk_token_count = Tokenizer.num_tokens_from_string(
-            context.chunk, self.tokenizer_model
-        )
+        chunk_token_count = Tokenizer.num_tokens_from_string(context.chunk, self.tokenizer_model)
         original_field_token_count = Tokenizer.num_tokens_from_string(
             context.field_value, self.tokenizer_model
         )
 
         return {
-            'chunk_size_tokens': chunk_token_count,
-            'original_field_size_tokens': original_field_token_count,
+            "chunk_size_tokens": chunk_token_count,
+            "original_field_size_tokens": original_field_token_count,
         }

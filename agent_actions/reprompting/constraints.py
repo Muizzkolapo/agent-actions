@@ -96,9 +96,7 @@ def _check_min_length(response: Any, min_len: int) -> Tuple[bool, str]:
     return True, ""
 
 
-def _check_required_fields(
-    response: Any, fields: Union[str, List[str]]
-) -> Tuple[bool, str]:
+def _check_required_fields(response: Any, fields: Union[str, List[str]]) -> Tuple[bool, str]:
     """Check that response (dict) contains all required fields."""
     if not isinstance(response, dict):
         return False, "Response must be a dictionary to check required_fields"
@@ -127,9 +125,7 @@ def _check_non_empty(response: Any, fields: Union[str, List[str]]) -> Tuple[bool
     return True, ""
 
 
-def _check_field_types(
-    response: Any, type_map: Dict[str, str]
-) -> Tuple[bool, str]:
+def _check_field_types(response: Any, type_map: Dict[str, str]) -> Tuple[bool, str]:
     """Check that fields have expected types.
 
     Args:
@@ -153,9 +149,7 @@ def _check_field_types(
         expected_class = TYPE_MAP[expected_type]
         if not isinstance(value, expected_class):
             actual_type = type(value).__name__
-            mismatches.append(
-                f"Field '{field_name}' expected {expected_type}, got {actual_type}"
-            )
+            mismatches.append(f"Field '{field_name}' expected {expected_type}, got {actual_type}")
 
     if mismatches:
         return False, f"Type mismatches: {'; '.join(mismatches)}"
@@ -220,9 +214,7 @@ class ConstraintValidator:
         """
         self.constraints[name] = func
 
-    def validate(
-        self, response: Any, constraint_configs: List[Dict[str, Any]]
-    ) -> ConstraintResult:
+    def validate(self, response: Any, constraint_configs: List[Dict[str, Any]]) -> ConstraintResult:
         """Validate response against all constraints.
 
         Runs constraints in order and returns on first failure.

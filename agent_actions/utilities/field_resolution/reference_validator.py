@@ -31,12 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 # Special namespaces that are always allowed (not actual actions)
-SPECIAL_NAMESPACES = frozenset({
-    'source',     # Source data
-    'loop',       # Loop context
-    'workflow',   # Workflow metadata
-    'seed',       # Static seed data
-})
+SPECIAL_NAMESPACES = frozenset(
+    {
+        "source",  # Source data
+        "loop",  # Loop context
+        "workflow",  # Workflow metadata
+        "seed",  # Static seed data
+    }
+)
 
 
 class ReferenceValidator:
@@ -67,7 +69,7 @@ class ReferenceValidator:
         references: List[Union[str, ParsedReference]],
         agent_config: Dict[str, Any],
         agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None
+        current_agent_name: Optional[str] = None,
     ) -> List[str]:
         """
         Validate references against dependency graph.
@@ -88,12 +90,12 @@ class ReferenceValidator:
 
         # Get current agent info
         if current_agent_name is None:
-            current_agent_name = agent_config.get('agent_type', 'unknown')
+            current_agent_name = agent_config.get("agent_type", "unknown")
 
         current_idx = agent_indices.get(current_agent_name, 999)
 
         # Get declared dependencies
-        declared_deps = set(agent_config.get('dependencies', []))
+        declared_deps = set(agent_config.get("dependencies", []))
 
         for ref in references:
             # Parse if string
@@ -144,7 +146,7 @@ class ReferenceValidator:
         references: List[Union[str, ParsedReference]],
         agent_config: Dict[str, Any],
         agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None
+        current_agent_name: Optional[str] = None,
     ) -> None:
         """
         Validate references and raise exception if invalid.
@@ -162,14 +164,14 @@ class ReferenceValidator:
             references=references,
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name=current_agent_name
+            current_agent_name=current_agent_name,
         )
 
         if errors:
-            agent_name = current_agent_name or agent_config.get('agent_type', 'unknown')
+            agent_name = current_agent_name or agent_config.get("agent_type", "unknown")
             raise DependencyValidationError(
-                f"Invalid guard references in '{agent_name}':\n" +
-                "\n".join(f"  - {e}" for e in errors)
+                f"Invalid guard references in '{agent_name}':\n"
+                + "\n".join(f"  - {e}" for e in errors)
             )
 
     def extract_and_validate(
@@ -177,7 +179,7 @@ class ReferenceValidator:
         guard_condition: str,
         agent_config: Dict[str, Any],
         agent_indices: Dict[str, int],
-        current_agent_name: Optional[str] = None
+        current_agent_name: Optional[str] = None,
     ) -> List[str]:
         """
         Extract references from guard condition and validate them.
@@ -203,13 +205,10 @@ class ReferenceValidator:
             references=references,
             agent_config=agent_config,
             agent_indices=agent_indices,
-            current_agent_name=current_agent_name
+            current_agent_name=current_agent_name,
         )
 
-    def get_referenced_actions(
-        self,
-        guard_condition: str
-    ) -> List[str]:
+    def get_referenced_actions(self, guard_condition: str) -> List[str]:
         """
         Extract action names referenced in a guard condition.
 
@@ -234,7 +233,7 @@ class ReferenceValidator:
         self,
         references: List[Union[str, ParsedReference]],
         action_schemas: Dict[str, Dict[str, Any]],
-        _current_agent_name: Optional[str] = None
+        _current_agent_name: Optional[str] = None,
     ) -> List[str]:
         """
         Validate field references against action output schemas.
@@ -293,9 +292,7 @@ class ReferenceValidator:
             # Validate field path against schema
             schema = action_schemas[action_name]
             validation_result = self._schema_validator.validate_field_path(
-                field_path=ref.field_path,
-                json_schema=schema,
-                action_name=action_name
+                field_path=ref.field_path, json_schema=schema, action_name=action_name
             )
 
             if not validation_result.exists:
@@ -304,9 +301,7 @@ class ReferenceValidator:
         return errors
 
     def validate_with_schemas(
-        self,
-        references: List[Union[str, ParsedReference]],
-        validation_context: Dict[str, Any]
+        self, references: List[Union[str, ParsedReference]], validation_context: Dict[str, Any]
     ) -> List[str]:
         """
         Perform both dependency and schema validation.
@@ -340,15 +335,14 @@ class ReferenceValidator:
         # Phase 1: Dependency graph validation
         dep_errors = self.validate(
             references=references,
-            agent_config=validation_context['agent_config'],
-            agent_indices=validation_context['agent_indices'],
-            current_agent_name=validation_context.get('current_agent_name')
+            agent_config=validation_context["agent_config"],
+            agent_indices=validation_context["agent_indices"],
+            current_agent_name=validation_context.get("current_agent_name"),
         )
 
         # Phase 2: Schema validation
         schema_errors = self.validate_against_schemas(
-            references=references,
-            action_schemas=validation_context['action_schemas']
+            references=references, action_schemas=validation_context["action_schemas"]
         )
 
         # Combine all errors

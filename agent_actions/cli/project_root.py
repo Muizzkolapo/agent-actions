@@ -4,14 +4,17 @@ Project root detection utilities.
 Provides functionality to locate the project root by searching for
 agent_actions.yml marker file in the current directory and parent directories.
 """
+
 from pathlib import Path
 import os
 from typing import Optional
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
-PROJECT_MARKER_FILE = 'agent_actions.yml'
+
+PROJECT_MARKER_FILE = "agent_actions.yml"
 MAX_PARENT_LEVELS = 100
 
-def find_project_root(start_path: Optional[str]=None) -> Optional[Path]:
+
+def find_project_root(start_path: Optional[str] = None) -> Optional[Path]:
     """
     Find the project root by walking up directories to locate agent_actions.yml.
 
@@ -49,6 +52,7 @@ def find_project_root(start_path: Optional[str]=None) -> Optional[Path]:
             continue
     return None
 
+
 def ensure_in_project() -> Path:
     """
     Ensure the current working directory is within an agent-actions project.
@@ -66,13 +70,11 @@ def ensure_in_project() -> Path:
     project_root = find_project_root()
     if project_root is None:
         raise ProjectNotFoundError(
-            'Project not found',
-            context={
-                'marker_file': PROJECT_MARKER_FILE,
-                'search_path': os.getcwd()
-            }
+            "Project not found",
+            context={"marker_file": PROJECT_MARKER_FILE, "search_path": os.getcwd()},
         )
     return project_root
+
 
 def get_project_root_or_cwd() -> Path:
     """
@@ -88,6 +90,7 @@ def get_project_root_or_cwd() -> Path:
         >>> # Will be project root if in project, CWD otherwise
     """
     return find_project_root() or Path.cwd()
+
 
 def is_in_project() -> bool:
     """

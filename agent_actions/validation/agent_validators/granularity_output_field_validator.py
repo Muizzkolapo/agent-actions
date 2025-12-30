@@ -8,10 +8,10 @@ Checks:
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities
+    AgentConfigValidationUtilities,
 )
 from agent_actions.utilities.constants import JSON_MODE_KEY
 
@@ -43,27 +43,23 @@ class GranularityAndOutputFieldValidator(BaseAgentEntryValidator):
         errors = []
 
         # Check granularity enum value
-        if 'granularity' in normalized_entry:
-            granularity_raw = normalized_entry.get('granularity', 'record')
+        if "granularity" in normalized_entry:
+            granularity_raw = normalized_entry.get("granularity", "record")
             granularity = str(granularity_raw).lower()
 
             valid_granularity_values = AgentConfigValidationUtilities.get_valid_granularity_values()
 
             if granularity not in valid_granularity_values:
                 valid_values_str = "' or '".join(sorted(valid_granularity_values))
-                errors.append(
-                    f"{desc} 'granularity' must be '{valid_values_str}'."
-                )
+                errors.append(f"{desc} 'granularity' must be '{valid_values_str}'.")
 
         # Check output_field compatibility with json_mode
-        if 'output_field' in normalized_entry:
+        if "output_field" in normalized_entry:
             # output_field can only be used when json_mode is false
             json_mode = normalized_entry.get(JSON_MODE_KEY, True)
 
             if json_mode:
-                errors.append(
-                    f"{desc} 'output_field' can only be used when 'json_mode' is false."
-                )
+                errors.append(f"{desc} 'output_field' can only be used when 'json_mode' is false.")
 
         if errors:
             return AgentEntryValidationResult.with_errors(errors)

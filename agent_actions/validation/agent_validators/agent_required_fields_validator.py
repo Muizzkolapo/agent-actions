@@ -6,10 +6,10 @@ Checks that all mandatory fields are present in the agent entry.
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities
+    AgentConfigValidationUtilities,
 )
 
 
@@ -46,10 +46,7 @@ class AgentRequiredFieldsValidator(BaseAgentEntryValidator):
 
         if missing_keys:
             sorted_missing = sorted(missing_keys)
-            error_msg = (
-                f"{desc} missing required key(s): "
-                f"{', '.join(sorted_missing)}."
-            )
+            error_msg = f"{desc} missing required key(s): {', '.join(sorted_missing)}."
             return AgentEntryValidationResult.with_errors([error_msg])
 
         return AgentEntryValidationResult.success()

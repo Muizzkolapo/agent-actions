@@ -2,4 +2,4 @@
 
 from .passthrough_transformer import PassthroughTransformer
 
-__all__ = ['PassthroughTransformer']
+__all__ = ["PassthroughTransformer"]

@@ -19,27 +19,28 @@ class AgentEntryValidationResult:
         warnings: List of validation warning messages
         is_critical_failure: If True, stops the validation chain
     """
+
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     is_critical_failure: bool = False
 
     @classmethod
-    def success(cls) -> 'AgentEntryValidationResult':
+    def success(cls) -> "AgentEntryValidationResult":
         """Create a success result (no errors/warnings)."""
         return cls(errors=[], warnings=[], is_critical_failure=False)
 
     @classmethod
-    def critical_failure(cls, error_message: str) -> 'AgentEntryValidationResult':
+    def critical_failure(cls, error_message: str) -> "AgentEntryValidationResult":
         """Create a critical failure result that stops validation chain."""
         return cls(errors=[error_message], warnings=[], is_critical_failure=True)
 
     @classmethod
-    def with_errors(cls, errors: List[str]) -> 'AgentEntryValidationResult':
+    def with_errors(cls, errors: List[str]) -> "AgentEntryValidationResult":
         """Create a result with errors (but not critical)."""
         return cls(errors=errors, warnings=[], is_critical_failure=False)
 
     @classmethod
-    def with_warnings(cls, warnings: List[str]) -> 'AgentEntryValidationResult':
+    def with_warnings(cls, warnings: List[str]) -> "AgentEntryValidationResult":
         """Create a result with warnings only."""
         return cls(errors=[], warnings=warnings, is_critical_failure=False)
 

@@ -4,6 +4,7 @@ Status command for the Agent Actions CLI.
 This module provides the implementation of the 'status' command,
 which displays the current status of an agent workflow.
 """
+
 import json
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from rich.table import Table
 from agent_actions.cli.cli_decorators import requires_project, handles_user_errors
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.validation.status_validator import StatusCommandArgs
+
 
 class StatusCommand:  # pylint: disable=too-few-public-methods
     """Implementation of the status command."""
@@ -34,34 +36,34 @@ class StatusCommand:  # pylint: disable=too-few-public-methods
         Execute the status command.
         """
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
-        status_file = paths.io_dir / '.agent_status.json'
+        status_file = paths.io_dir / ".agent_status.json"
         if not status_file.exists():
             self.console.print(
                 f"[yellow]No status file found for agent '{self.agent_name}'. "
                 "Has a workflow been run?[/yellow]"
             )
             return
-        with open(status_file, 'r', encoding='utf-8') as f:
+        with open(status_file, "r", encoding="utf-8") as f:
             status_data = json.load(f)
-        table = Table(title=f'Workflow Status for {self.agent_name}')
-        table.add_column('Agent Name', justify='left', style='green')
-        table.add_column('Status', justify='center', style='yellow')
+        table = Table(title=f"Workflow Status for {self.agent_name}")
+        table.add_column("Agent Name", justify="left", style="green")
+        table.add_column("Status", justify="center", style="yellow")
         for agent, details in status_data.items():
             if details is None:
-                workflow_status = 'N/A'
+                workflow_status = "N/A"
             elif isinstance(details, dict):
-                workflow_status = details.get('status', 'N/A')
+                workflow_status = details.get("status", "N/A")
             else:
-                workflow_status = 'N/A'
+                workflow_status = "N/A"
             table.add_row(agent, workflow_status)
         self.console.print(table)
 
+
 @click.command()
 @click.option(
-    '-a', '--agent', required=True,
-    help='Agent configuration file name without path or extension'
+    "-a", "--agent", required=True, help="Agent configuration file name without path or extension"
 )
-@handles_user_errors('status')
+@handles_user_errors("status")
 @requires_project
 def status(agent: str) -> None:
     """

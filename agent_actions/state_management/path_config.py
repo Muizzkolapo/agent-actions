@@ -3,6 +3,7 @@ Path configuration for agent-actions.
 
 This module provides utilities for loading project-specific configuration files.
 """
+
 from typing import Dict, Any
 from pathlib import Path
 import yaml
@@ -29,26 +30,23 @@ def load_project_config(project_root: Path) -> Dict[str, Any]:
         ConfigValidationError: If YAML file exists but contains invalid syntax
     """
     config_files = [
-        project_root / 'agent_actions.yml',
-        project_root / 'agent_actions.yaml',
-        project_root / '.agent_actions.yml',
-        project_root / 'config' / 'agent_actions.yml'
+        project_root / "agent_actions.yml",
+        project_root / "agent_actions.yaml",
+        project_root / ".agent_actions.yml",
+        project_root / "config" / "agent_actions.yml",
     ]
 
     for config_file in config_files:
         if config_file.exists():
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(config_file, "r", encoding="utf-8") as f:
                     return yaml.safe_load(f) or {}
             except yaml.YAMLError as e:
                 raise ConfigValidationError(
-                    'path_config_yaml',
-                    f'Invalid YAML in config file {config_file}',
-                    context={
-                        'config_path': str(config_file),
-                        'operation': 'load_config'
-                    },
-                    cause=e
+                    "path_config_yaml",
+                    f"Invalid YAML in config file {config_file}",
+                    context={"config_path": str(config_file), "operation": "load_config"},
+                    cause=e,
                 ) from e
 
     return {}

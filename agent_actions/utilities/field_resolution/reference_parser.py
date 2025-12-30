@@ -79,26 +79,17 @@ class ReferenceParser:
 
     # Regex patterns for extracting references from text
     # Template: {action.field} or {action.nested.path}
-    TEMPLATE_PATTERN = re.compile(
-        r'\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\}'
-    )
+    TEMPLATE_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\}")
 
     # Jinja: {{ action.field }} with optional whitespace
-    JINJA_PATTERN = re.compile(
-        r'\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\s*\}\}'
-    )
+    JINJA_PATTERN = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\s*\}\}")
 
     # Selector in expressions: action.field patterns (for guards)
     # Matches word.word patterns that aren't inside quotes
-    SELECTOR_PATTERN = re.compile(
-        r'\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\b'
-    )
+    SELECTOR_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)\b")
 
     def parse(
-        self,
-        reference: str,
-        format_hint: Optional[ReferenceFormat] = None,
-        strict: bool = False
+        self, reference: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
     ) -> ParsedReference:
         """
         Parse a single field reference string into structured format.
@@ -157,10 +148,7 @@ class ReferenceParser:
             return self._create_fallback_reference(reference)
 
     def parse_batch(
-        self,
-        text: str,
-        format_hint: Optional[ReferenceFormat] = None,
-        strict: bool = False
+        self, text: str, format_hint: Optional[ReferenceFormat] = None, strict: bool = False
     ) -> List[ParsedReference]:
         """
         Extract all field references from a text string.
@@ -209,7 +197,7 @@ class ReferenceParser:
                         action_name=parsed.action_name,
                         field_path=parsed.field_path,
                         full_reference=full_match,
-                        format_type=fmt
+                        format_type=fmt,
                     )
                     references.append(parsed)
                 except InvalidReferenceError:
@@ -220,10 +208,7 @@ class ReferenceParser:
         return references
 
     def _try_parse_format(
-        self,
-        reference: str,
-        fmt: ReferenceFormat,
-        strict: bool
+        self, reference: str, fmt: ReferenceFormat, strict: bool
     ) -> Optional[ParsedReference]:
         """Try parsing reference with specific format."""
         try:
@@ -239,17 +224,13 @@ class ReferenceParser:
             return None
         return None
 
-    def _parse_selector_format(
-        self,
-        reference: str,
-        fmt: ReferenceFormat
-    ) -> ParsedReference:
+    def _parse_selector_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """
         Parse selector format: action.field or action.nested.path
 
         Supports nested paths for deep field access.
         """
-        parts = reference.split('.')
+        parts = reference.split(".")
 
         if len(parts) < 2:
             raise InvalidReferenceError(
@@ -274,20 +255,15 @@ class ReferenceParser:
             action_name=action_name,
             field_path=field_path,
             full_reference=reference,
-            format_type=fmt
+            format_type=fmt,
         )
 
-    def _parse_template_format(
-        self,
-        reference: str,
-        fmt: ReferenceFormat
-    ) -> ParsedReference:
+    def _parse_template_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """Parse template format: {action.field}"""
         # Check if wrapped in braces
-        if not (reference.startswith('{') and reference.endswith('}')):
+        if not (reference.startswith("{") and reference.endswith("}")):
             raise InvalidReferenceError(
-                f"Invalid template reference: '{reference}'. "
-                f"Expected format: '{{action.field}}'"
+                f"Invalid template reference: '{reference}'. Expected format: '{{action.field}}'"
             )
 
         # Strip braces and parse as selector
@@ -299,20 +275,15 @@ class ReferenceParser:
             action_name=parsed.action_name,
             field_path=parsed.field_path,
             full_reference=reference,
-            format_type=fmt
+            format_type=fmt,
         )
 
-    def _parse_jinja_format(
-        self,
-        reference: str,
-        fmt: ReferenceFormat
-    ) -> ParsedReference:
+    def _parse_jinja_format(self, reference: str, fmt: ReferenceFormat) -> ParsedReference:
         """Parse Jinja format: {{ action.field }}"""
         # Check if wrapped in double braces
-        if not (reference.startswith('{{') and reference.endswith('}}')):
+        if not (reference.startswith("{{") and reference.endswith("}}")):
             raise InvalidReferenceError(
-                f"Invalid Jinja reference: '{reference}'. "
-                f"Expected format: '{{{{ action.field }}}}'"
+                f"Invalid Jinja reference: '{reference}'. Expected format: '{{{{ action.field }}}}'"
             )
 
         # Strip double braces and whitespace
@@ -324,13 +295,10 @@ class ReferenceParser:
             action_name=parsed.action_name,
             field_path=parsed.field_path,
             full_reference=reference,
-            format_type=fmt
+            format_type=fmt,
         )
 
-    def _get_patterns_for_format(
-        self,
-        format_hint: Optional[ReferenceFormat]
-    ) -> List[tuple]:
+    def _get_patterns_for_format(self, format_hint: Optional[ReferenceFormat]) -> List[tuple]:
         """Get regex patterns to use based on format hint."""
         if format_hint == ReferenceFormat.TEMPLATE:
             return [(self.TEMPLATE_PATTERN, ReferenceFormat.TEMPLATE)]
@@ -351,5 +319,5 @@ class ReferenceParser:
             action_name=reference,
             field_path=[],
             full_reference=reference,
-            format_type=ReferenceFormat.SELECTOR
+            format_type=ReferenceFormat.SELECTOR,
         )

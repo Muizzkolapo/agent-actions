@@ -17,4 +17,4 @@ from .text_loader import *
 from .xml_loader import *
 
 # Register loaders after imports to avoid circular dependencies
-_registry.register_loader('source_data')(SourceDataLoader)
+_registry.register_loader("source_data")(SourceDataLoader)

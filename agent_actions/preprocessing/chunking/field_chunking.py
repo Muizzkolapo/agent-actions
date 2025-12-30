@@ -1,4 +1,5 @@
 """Utility classes for field-level chunking of structured data."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -26,15 +27,19 @@ from agent_actions.preprocessing.chunking.strategies.metadata_strategies import 
 )
 from agent_actions.preprocessing.chunking.strategies.validation import ConfigValidator
 
+
 class FieldChunkingValidationError(ValueError):
     """Raised when field chunking configuration is invalid."""
+
 
 class FieldChunkingError(Exception):
     """Raised when field chunking operations fail."""
 
+
 @dataclass
 class FieldAnalysisResult:
     """Result from analysing a record for chunking needs."""
+
     fields_to_chunk: List[str] = field(default_factory=list)
     field_sizes: Dict[str, int] = field(default_factory=dict)
 
@@ -43,13 +48,15 @@ class FieldAnalysisResult:
         """Return True if any fields require chunking."""
         return bool(self.fields_to_chunk)
 
+
 @dataclass
 class AnalyzerConfig:
     """Configuration for field analyzer."""
+
     chunk_fields: List[str] = field(default_factory=list)
     preserve_fields: List[str] = field(default_factory=list)
     chunk_threshold: int = 0
-    tokenizer_model: str = 'cl100k_base'
+    tokenizer_model: str = "cl100k_base"
     field_rules: Dict[str, Any] = field(default_factory=dict)
     auto_detect_enabled: bool = False
 
@@ -58,16 +65,16 @@ class FieldAnalyzer:
     """Analyse structured records to determine which fields need chunking."""
 
     def __init__(self, chunk_config: Dict[str, Any]):
-        field_chunking = chunk_config.get('field_chunking', {})
-        auto_detection = field_chunking.get('auto_detection', {})
+        field_chunking = chunk_config.get("field_chunking", {})
+        auto_detection = field_chunking.get("auto_detection", {})
 
         self.config = AnalyzerConfig(
-            chunk_fields=field_chunking.get('chunk_fields', []),
-            preserve_fields=field_chunking.get('preserve_fields', []),
-            chunk_threshold=field_chunking.get('chunk_threshold', 0),
-            tokenizer_model=chunk_config.get('tokenizer_model', 'cl100k_base'),
-            field_rules=field_chunking.get('field_rules', {}),
-            auto_detect_enabled=auto_detection.get('enabled', False)
+            chunk_fields=field_chunking.get("chunk_fields", []),
+            preserve_fields=field_chunking.get("preserve_fields", []),
+            chunk_threshold=field_chunking.get("chunk_threshold", 0),
+            tokenizer_model=chunk_config.get("tokenizer_model", "cl100k_base"),
+            field_rules=field_chunking.get("field_rules", {}),
+            auto_detect_enabled=auto_detection.get("enabled", False),
         )
         ConfigValidator.validate_field_analyzer_config(chunk_config)
 
@@ -118,7 +125,7 @@ class FieldAnalyzer:
         if self.config.chunk_fields and field_name not in self.config.chunk_fields:
             return False
         field_rule = self.config.field_rules.get(field_name, {})
-        threshold = field_rule.get('chunk_threshold', self.config.chunk_threshold)
+        threshold = field_rule.get("chunk_threshold", self.config.chunk_threshold)
         return token_count > threshold
 
     def detect_text_fields(self, record: Dict[str, Any]) -> List[str]:
@@ -139,9 +146,11 @@ class FieldAnalyzer:
             detected_fields.append(field_name)
         return detected_fields
 
+
 @dataclass
 class ChunkMetadataParams:
     """Parameters for creating chunk metadata."""
+
     record: Dict[str, Any]
     field_name: str
     field_value: str
@@ -154,9 +163,10 @@ class ChunkMetadataParams:
 @dataclass
 class ChunkerConfig:
     """Configuration for field chunker."""
+
     chunk_size: int = 1000
     overlap: int = 200
-    tokenizer_model: str = 'cl100k_base'
+    tokenizer_model: str = "cl100k_base"
     max_chunks_per_record: int = 100
     truncate_at: int = 50000
     field_rules: Dict[str, Any] = field(default_factory=dict)
@@ -168,17 +178,17 @@ class FieldChunker:
 
     def __init__(self, chunk_config: Dict[str, Any]):
         self.chunk_config = chunk_config
-        field_chunking = chunk_config.get('field_chunking', {})
+        field_chunking = chunk_config.get("field_chunking", {})
 
         # Extract configuration into structured config object
         self.config = ChunkerConfig(
-            chunk_size=chunk_config.get('chunk_size', 1000),
-            overlap=chunk_config.get('overlap', 200),
-            tokenizer_model=chunk_config.get('tokenizer_model', 'cl100k_base'),
-            max_chunks_per_record=field_chunking.get('max_chunks_per_record', 100),
-            truncate_at=field_chunking.get('truncate_at', 50000),
-            field_rules=field_chunking.get('field_rules', {}),
-            chunk_metadata=field_chunking.get('chunk_metadata', {})
+            chunk_size=chunk_config.get("chunk_size", 1000),
+            overlap=chunk_config.get("overlap", 200),
+            tokenizer_model=chunk_config.get("tokenizer_model", "cl100k_base"),
+            max_chunks_per_record=field_chunking.get("max_chunks_per_record", 100),
+            truncate_at=field_chunking.get("truncate_at", 50000),
+            field_rules=field_chunking.get("field_rules", {}),
+            chunk_metadata=field_chunking.get("chunk_metadata", {}),
         )
 
         # Initialize strategies
@@ -191,41 +201,39 @@ class FieldChunker:
 
     def _create_chunking_strategy(self, config: Dict[str, Any]) -> ChunkingStrategy:
         """Factory method to create chunking strategy."""
-        split_method = config.get('split_method', 'tiktoken')
-        tokenizer_model = config.get('tokenizer_model', 'cl100k_base')
+        split_method = config.get("split_method", "tiktoken")
+        tokenizer_model = config.get("tokenizer_model", "cl100k_base")
 
-        if split_method == 'tiktoken':
+        if split_method == "tiktoken":
             return TiktokenChunkingStrategy(tokenizer_model)
-        if split_method == 'chars':
+        if split_method == "chars":
             return CharBasedChunkingStrategy()
-        if split_method == 'spacy':
+        if split_method == "spacy":
             return SpacyChunkingStrategy()
         return TiktokenChunkingStrategy(tokenizer_model)
 
     def _create_fallback_strategy(self, config: Dict[str, Any]) -> FallbackStrategy:
         """Factory method to create fallback strategy."""
-        strategy_name = config.get('field_chunking', {}).get(
-            'fallback_strategy', 'preserve_original'
+        strategy_name = config.get("field_chunking", {}).get(
+            "fallback_strategy", "preserve_original"
         )
 
-        if strategy_name == 'preserve_original':
+        if strategy_name == "preserve_original":
             return PreserveOriginalStrategy()
-        if strategy_name == 'truncate':
+        if strategy_name == "truncate":
             return TruncateStrategy()
-        if strategy_name == 'skip':
+        if strategy_name == "skip":
             return SkipStrategy()
-        if strategy_name == 'error':
+        if strategy_name == "error":
             return ErrorStrategy()
         return PreserveOriginalStrategy()
 
     def _create_metadata_strategy(self, config: Dict[str, Any]) -> MetadataStrategy:
         """Factory method to create metadata strategy."""
-        chunk_metadata = config.get('field_chunking', {}).get('chunk_metadata', {})
+        chunk_metadata = config.get("field_chunking", {}).get("chunk_metadata", {})
 
-        if chunk_metadata.get('add_chunk_info', False):
-            return EnhancedMetadataStrategy(
-                chunk_metadata, self.config.tokenizer_model
-            )
+        if chunk_metadata.get("add_chunk_info", False):
+            return EnhancedMetadataStrategy(chunk_metadata, self.config.tokenizer_model)
         return BasicMetadataStrategy()
 
     def _prepare_field_value(self, field_value: str, field_name: str):
@@ -258,13 +266,16 @@ class FieldChunker:
         chunk_metadata_info = self.metadata_strategy.create_metadata(metadata_context)
 
         if params.fallback_msg:
-            chunk_metadata_info['fallback_applied'] = params.fallback_msg
+            chunk_metadata_info["fallback_applied"] = params.fallback_msg
 
         return chunk_metadata_info
 
     def _create_chunked_record(
-        self, record: Dict[str, Any], field_name: str, chunk_text: str,
-        chunk_metadata_info: Dict[str, Any]
+        self,
+        record: Dict[str, Any],
+        field_name: str,
+        chunk_text: str,
+        chunk_metadata_info: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Create a single chunked record with metadata."""
         chunked_record = record.copy()
@@ -273,15 +284,15 @@ class FieldChunker:
         # Extract special metadata fields to record level
         self._extract_special_metadata(chunked_record, chunk_metadata_info)
 
-        chunked_record['chunk_info'] = chunk_metadata_info
+        chunked_record["chunk_info"] = chunk_metadata_info
         return chunked_record
 
     def _extract_special_metadata(
         self, chunked_record: Dict[str, Any], chunk_metadata_info: Dict[str, Any]
     ):
         """Extract special metadata fields to record level."""
-        chunk_id_field = self.config.chunk_metadata.get('chunk_id_field')
-        parent_id_field = self.config.chunk_metadata.get('original_record_id')
+        chunk_id_field = self.config.chunk_metadata.get("chunk_id_field")
+        parent_id_field = self.config.chunk_metadata.get("original_record_id")
 
         if chunk_id_field and chunk_id_field in chunk_metadata_info:
             chunked_record[chunk_id_field] = chunk_metadata_info.pop(chunk_id_field)
@@ -306,7 +317,7 @@ class FieldChunker:
 
         for field_name in analysis.fields_to_chunk:
             try:
-                field_value = record.get(field_name, '')
+                field_value = record.get(field_name, "")
 
                 # Prepare field value (handle oversized fields)
                 field_value, fallback_msg = self._prepare_field_value(field_value, field_name)
@@ -328,7 +339,7 @@ class FieldChunker:
                         chunk_text=chunk_text,
                         chunk_index=chunk_index,
                         total_chunks=len(chunk_list),
-                        fallback_msg=fallback_msg
+                        fallback_msg=fallback_msg,
                     )
                     chunk_metadata_info = self._create_chunk_metadata(metadata_params)
                     chunked_record = self._create_chunked_record(
@@ -348,26 +359,24 @@ class FieldChunker:
     def chunk_field(self, field_value: str, field_name: str = None) -> List[str]:
         """Chunk a specific field value using field-specific or global rules."""
         if not field_value:
-            return ['']
+            return [""]
 
         # Get field-specific rules or use defaults
         field_rule = self.config.field_rules.get(field_name, {}) if field_name else {}
-        chunk_size = field_rule.get('chunk_size', self.config.chunk_size)
-        overlap = field_rule.get('overlap', self.config.overlap)
+        chunk_size = field_rule.get("chunk_size", self.config.chunk_size)
+        overlap = field_rule.get("overlap", self.config.overlap)
 
         # Use field-specific chunking strategy if specified, otherwise use default
-        if field_name and 'split_method' in field_rule:
+        if field_name and "split_method" in field_rule:
             field_specific_strategy = self._create_chunking_strategy(
                 {
-                    'split_method': field_rule['split_method'],
-                    'tokenizer_model': field_rule.get(
-                        'tokenizer_model', self.config.tokenizer_model
+                    "split_method": field_rule["split_method"],
+                    "tokenizer_model": field_rule.get(
+                        "tokenizer_model", self.config.tokenizer_model
                     ),
                 }
             )
         else:
             field_specific_strategy = self.chunking_strategy
 
-        return field_specific_strategy.split_text_into_chunks(
-            field_value, chunk_size, overlap
-        )
+        return field_specific_strategy.split_text_into_chunks(field_value, chunk_size, overlap)

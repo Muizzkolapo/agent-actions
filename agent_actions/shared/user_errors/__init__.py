@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 from agent_actions.utilities.safe_format import (
     safe_format_error,
     safe_get_exception_message,
-    format_exception_chain_for_debug
+    format_exception_chain_for_debug,
 )
 from .user_error import UserError
 from .error_translator import ErrorTranslator
@@ -39,9 +39,9 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
     logger.debug(
         "Formatting user error: %s",
         safe_get_exception_message(exc),
-        extra={'context': context or {}}
+        extra={"context": context or {}},
     )
-    logger.debug("Error occurred during operation", exc_info=exc, extra={'context': context or {}})
+    logger.debug("Error occurred during operation", exc_info=exc, extra={"context": context or {}})
     logger.debug("Exception chain details:\n%s", format_exception_chain_for_debug(exc))
 
     try:
@@ -54,4 +54,4 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
         return safe_format_error(exc)
 
 
-__all__ = ['UserError', 'ErrorTranslator', 'format_user_error']
+__all__ = ["UserError", "ErrorTranslator", "format_user_error"]

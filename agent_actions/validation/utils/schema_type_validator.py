@@ -39,10 +39,7 @@ class SchemaTypeValidator:
         return True
 
     def is_valid_schema_type(
-        self,
-        type_str: str,
-        valid_types: Set[str],
-        valid_array_types: Set[str]
+        self, type_str: str, valid_types: Set[str], valid_array_types: Set[str]
     ) -> bool:
         """
         Check if a schema type string is valid.
@@ -68,7 +65,7 @@ class SchemaTypeValidator:
             return True
 
         # Check if it's a complex array[object:...] type
-        if type_str.startswith('array[object:') and type_str.endswith(']'):
+        if type_str.startswith("array[object:") and type_str.endswith("]"):
             return self._validate_complex_object_type(type_str)
 
         return False
@@ -139,7 +136,7 @@ class SchemaTypeValidator:
         Returns:
             bool: True if all properties valid, False otherwise
         """
-        valid_prop_types = {'string', 'number', 'integer', 'boolean', 'object'}
+        valid_prop_types = {"string", "number", "integer", "boolean", "object"}
 
         for prop_name, prop_type in properties.items():
             # Check property name is string
@@ -151,8 +148,8 @@ class SchemaTypeValidator:
                 return False
 
             # Clean backslashes and strip required marker
-            cleaned_type = prop_type.replace('\\', '')
-            base_prop_type = cleaned_type.rstrip('!')
+            cleaned_type = prop_type.replace("\\", "")
+            base_prop_type = cleaned_type.rstrip("!")
 
             # Check type is valid
             if base_prop_type not in valid_prop_types:

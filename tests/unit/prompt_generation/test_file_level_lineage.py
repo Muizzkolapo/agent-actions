@@ -257,8 +257,8 @@ class TestFileLevelLineagePreservation:
         # Simulate multiple input records with unique lineages
         input_data = [
             {
-                "node_id": f"node_2_{chr(97+i)}_0",  # node_2_a_0, node_2_b_0, etc.
-                "lineage": ["node_0_start", "node_1_middle", f"node_2_{chr(97+i)}_0"],
+                "node_id": f"node_2_{chr(97 + i)}_0",  # node_2_a_0, node_2_b_0, etc.
+                "lineage": ["node_0_start", "node_1_middle", f"node_2_{chr(97 + i)}_0"],
                 "content": f"Record {i}",
             }
             for i in range(5)
@@ -294,8 +294,8 @@ class TestFileLevelLineagePreservation:
         """
         input_data = [
             {
-                "node_id": f"node_2_{chr(97+i)}_0",
-                "lineage": ["node_0_start", "node_1_middle", f"node_2_{chr(97+i)}_0"],
+                "node_id": f"node_2_{chr(97 + i)}_0",
+                "lineage": ["node_0_start", "node_1_middle", f"node_2_{chr(97 + i)}_0"],
                 "content": f"Record {i}",
             }
             for i in range(5)

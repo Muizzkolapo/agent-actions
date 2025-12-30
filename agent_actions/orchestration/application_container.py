@@ -4,19 +4,17 @@ Application Container for managing all DI configuration and bootstrapping.
 This module provides the main application container that sets up all dependencies
 and provides factory methods for creating key application components.
 """
+
 import datetime
 import logging
 from typing import Dict, Any, Optional
 
-from agent_actions.configuration.di_configurator import (
-    DIConfigurator,
-    ConfigurationProfile
-)
+from agent_actions.configuration.di_configurator import DIConfigurator, ConfigurationProfile
 from agent_actions.configuration.interfaces import (
     IDataLoader,
     IDataProcessor,
     IGenerator,
-    ISourceDataLoader
+    ISourceDataLoader,
 )
 from agent_actions.errors import ConfigValidationError, DependencyError
 from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
@@ -25,7 +23,7 @@ from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import (
     DependencyContainer,
     ProcessorFactory,
-    registry
+    registry,
 )
 from agent_actions.orchestration.node_mapper import NodeMappingService
 from agent_actions.preprocessing.processing.data_processor import DataProcessor
@@ -35,10 +33,11 @@ from .agent_runner import AgentRunner
 
 logger = logging.getLogger(__name__)
 
+
 class ApplicationContainer:
     """Main application container that manages all dependencies."""
 
-    def __init__(self, config: Optional[Dict[str, Any]]=None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         Initialize the application container.
 
@@ -50,11 +49,9 @@ class ApplicationContainer:
             config = ConfigurationProfile.development()
         self.config = config
         self.container = DIConfigurator.configure_container(config)
-        self.processor_factory = (
-            DIConfigurator.create_processor_factory(self.container)
-        )
+        self.processor_factory = DIConfigurator.create_processor_factory(self.container)
 
-    def get_agent_runner(self, use_tools: bool=True) -> AgentRunner:
+    def get_agent_runner(self, use_tools: bool = True) -> AgentRunner:
         """
         Create an AgentRunner with all dependencies injected.
 
@@ -64,9 +61,7 @@ class ApplicationContainer:
         Returns:
             Configured AgentRunner instance.
         """
-        return AgentRunner(
-            use_tools=use_tools, processor_factory=self.processor_factory
-        )
+        return AgentRunner(use_tools=use_tools, processor_factory=self.processor_factory)
 
     def get_processor_factory(self) -> ProcessorFactory:
         """
@@ -87,9 +82,7 @@ class ApplicationContainer:
         return self.container
 
     def _get_dependency_configs_for_agent(
-        self,
-        agent_config: Dict,
-        agent_configs: Optional[Dict[str, Dict]]=None
+        self, agent_config: Dict, agent_configs: Optional[Dict[str, Dict]] = None
     ) -> Dict[str, Dict]:
         """
         Extract configs for all dependencies of an agent.
@@ -103,7 +96,7 @@ class ApplicationContainer:
         """
         if not agent_configs:
             return {}
-        dependency_names = agent_config.get('dependencies', [])
+        dependency_names = agent_config.get("dependencies", [])
         dependency_configs = {}
         for dep_name in dependency_names:
             if dep_name in agent_configs:
@@ -116,7 +109,7 @@ class ApplicationContainer:
             source_loader = self.container.get(ISourceDataLoader)
             logger.debug(
                 "Retrieved ISourceDataLoader from DI container",
-                extra={'agent_name': agent_name, 'idx': idx}
+                extra={"agent_name": agent_name, "idx": idx},
             )
             return source_loader
         except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
@@ -126,13 +119,13 @@ class ApplicationContainer:
             source_loader = self.container.get(IDataLoader)
             logger.info(
                 "Using IDataLoader as fallback for ISourceDataLoader",
-                extra={'agent_name': agent_name, 'idx': idx}
+                extra={"agent_name": agent_name, "idx": idx},
             )
             return source_loader
         except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             logger.debug(
                 "Creating source_loader via processor_factory",
-                extra={'agent_name': agent_name, 'idx': idx}
+                extra={"agent_name": agent_name, "idx": idx},
             )
             path_manager = self.container.get(PathManager)
             return SourceDataLoader(agent_name=agent_name, path_manager=path_manager)
@@ -143,18 +136,14 @@ class ApplicationContainer:
         agent_name: str,
         _idx: int,
         agent_configs: Optional[Dict[str, Dict]],
-        agent_indices: Dict
+        agent_indices: Dict,
     ):
         """Get data generator from container or create manually."""
         try:
             return self.container.get(IGenerator)
         except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
-            dependency_configs = self._get_dependency_configs_for_agent(
-                agent_config, agent_configs
-            )
-            return DataGenerator(
-                agent_config, agent_name, dependency_configs, agent_indices
-            )
+            dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
+            return DataGenerator(agent_config, agent_name, dependency_configs, agent_indices)
 
     def _get_data_processor(self, agent_config: Dict):
         """Get data processor from container or create manually."""
@@ -168,7 +157,7 @@ class ApplicationContainer:
         agent_config: Dict,
         agent_name: str,
         idx: int,
-        agent_configs: Optional[Dict[str, Dict]]=None
+        agent_configs: Optional[Dict[str, Dict]] = None,
     ):
         """
         Create a TargetContentProcessor with all dependencies injected.
@@ -185,8 +174,7 @@ class ApplicationContainer:
         source_loader = self._get_source_loader(agent_name, idx)
 
         agent_indices = (
-            NodeMappingService.build_agent_index_map(agent_configs)
-            if agent_configs else {}
+            NodeMappingService.build_agent_index_map(agent_configs) if agent_configs else {}
         )
 
         data_generator = self._get_data_generator(
@@ -194,27 +182,24 @@ class ApplicationContainer:
         )
         data_processor = self._get_data_processor(agent_config)
 
-        dependency_configs = self._get_dependency_configs_for_agent(
-            agent_config, agent_configs
-        )
+        dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
         batch_service = BatchService(
-            agent_indices=agent_indices,
-            dependency_configs=dependency_configs or agent_configs
+            agent_indices=agent_indices, dependency_configs=dependency_configs or agent_configs
         )
 
         return self.processor_factory.create_processor(
-            'target_content',
+            "target_content",
             agent_config=agent_config,
             agent_name=agent_name,
             idx=idx,
             source_loader=source_loader,
             data_generator=data_generator,
             data_processor=data_processor,
-            batch_service=batch_service
+            batch_service=batch_service,
         )
 
     @classmethod
-    def create_for_environment(cls, environment: str) -> 'ApplicationContainer':
+    def create_for_environment(cls, environment: str) -> "ApplicationContainer":
         """
         Create application container for specific environment.
 
@@ -224,28 +209,26 @@ class ApplicationContainer:
         Returns:
             ApplicationContainer configured for the environment.
         """
-        if environment == 'development':
+        if environment == "development":
             config = ConfigurationProfile.development()
-        elif environment == 'production':
+        elif environment == "production":
             config = ConfigurationProfile.production()
-        elif environment == 'testing':
+        elif environment == "testing":
             config = ConfigurationProfile.testing()
         else:
             raise ConfigValidationError(
-                'environment',
-                f'Unknown environment: {environment}',
+                "environment",
+                f"Unknown environment: {environment}",
                 context={
-                    'environment': environment,
-                    'valid_environments': [
-                        'development', 'production', 'testing'
-                    ],
-                    'operation': 'create_for_environment'
-                }
+                    "environment": environment,
+                    "valid_environments": ["development", "production", "testing"],
+                    "operation": "create_for_environment",
+                },
             )
         return cls(config)
 
     @classmethod
-    def create_for_testing(cls) -> 'ApplicationContainer':
+    def create_for_testing(cls) -> "ApplicationContainer":
         """
         Create application container configured for testing.
 
@@ -270,22 +253,19 @@ class ApplicationContainer:
         Returns:
             Health check results.
         """
-        results = {'status': 'healthy', 'services': {}, 'timestamp': None}
+        results = {"status": "healthy", "services": {}, "timestamp": None}
         try:
             self.container.get(IDataLoader)
-            results['services']['data_loader'] = 'healthy'
+            results["services"]["data_loader"] = "healthy"
             self.container.get(IDataProcessor)
-            results['services']['data_processor'] = 'healthy'
+            results["services"]["data_processor"] = "healthy"
             self.container.get(IGenerator)
-            results['services']['generator'] = 'healthy'
+            results["services"]["generator"] = "healthy"
             # BatchService not registered, create instance for health check
             BatchService()
-            results['services']['batch_service'] = 'healthy'
-        except (
-            KeyError, ValueError, AttributeError, TypeError,
-            RuntimeError, ImportError
-        ) as e:
-            results['status'] = 'unhealthy'
-            results['error'] = str(e)
-        results['timestamp'] = datetime.datetime.utcnow().isoformat()
+            results["services"]["batch_service"] = "healthy"
+        except (KeyError, ValueError, AttributeError, TypeError, RuntimeError, ImportError) as e:
+            results["status"] = "unhealthy"
+            results["error"] = str(e)
+        results["timestamp"] = datetime.datetime.utcnow().isoformat()
         return results

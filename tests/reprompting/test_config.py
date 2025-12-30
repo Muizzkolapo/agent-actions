@@ -70,20 +70,24 @@ class TestRepromptConfigFromYaml:
 
     def test_from_yaml_dict_with_overrides(self):
         """Test dict config with preset and overrides."""
-        config = RepromptConfig.from_yaml({
-            "preset": "basic",
-            "max_attempts": 5,
-        })
+        config = RepromptConfig.from_yaml(
+            {
+                "preset": "basic",
+                "max_attempts": 5,
+            }
+        )
         assert config.preset == "basic"
         assert config.max_attempts == 5  # Overridden
         assert config.json_repair is True  # From preset
 
     def test_from_yaml_dict_with_constraints(self):
         """Test dict config with constraints."""
-        config = RepromptConfig.from_yaml({
-            "preset": "basic",
-            "constraints": [{"not_contains": "maze"}],
-        })
+        config = RepromptConfig.from_yaml(
+            {
+                "preset": "basic",
+                "constraints": [{"not_contains": "maze"}],
+            }
+        )
         assert config.constraints == [{"not_contains": "maze"}]
 
     def test_from_yaml_dict_disabled(self):

@@ -34,7 +34,7 @@ class AgentActionsError(Exception):
         message: str,
         context: Optional[Dict[str, Any]] = None,
         *,
-        cause: Optional[Exception] = None
+        cause: Optional[Exception] = None,
     ):
         super().__init__(message)
         self.context = context or {}

@@ -42,7 +42,8 @@ class DIConfigurator:
 
     @staticmethod
     def _register_core_services(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register core application services."""
         # pylint: disable=import-outside-toplevel
@@ -55,7 +56,8 @@ class DIConfigurator:
 
     @staticmethod
     def _register_processors(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register processor implementations."""
         # Data processors
@@ -68,7 +70,8 @@ class DIConfigurator:
 
     @staticmethod
     def _register_utilities(
-        container: DependencyContainer, config: Dict[str, Any]  # pylint: disable=unused-argument
+        container: DependencyContainer,
+        config: Dict[str, Any],  # pylint: disable=unused-argument
     ):
         """Register utility services."""
         # Note: These imports may need to be updated based on the new structure
@@ -90,8 +93,8 @@ class DIConfigurator:
         # Register mocks for testing with basic behavior
         mock_loader = Mock()
         mock_loader.load_source_data.return_value = [
-            {'source_guid': 'test-guid-1', 'content': 'test content 1'},
-            {'source_guid': 'test-guid-2', 'content': 'test content 2'},
+            {"source_guid": "test-guid-1", "content": "test content 1"},
+            {"source_guid": "test-guid-2", "content": "test content 2"},
         ]
         container.register_instance(ISourceDataLoader, mock_loader)
         container.register_instance(IDataLoader, mock_loader)
@@ -128,55 +131,28 @@ class ConfigurationProfile:
     def development() -> Dict[str, Any]:
         """Development configuration profile."""
         return {
-            'environment': 'development',
-            'logging': {
-                'level': 'DEBUG',
-                'enable_console': True
-            },
-            'processors': {
-                'cache_enabled': False,
-                'parallel_processing': False
-            },
-            'services': {
-                'batch_size': 10,
-                'timeout': 30
-            }
+            "environment": "development",
+            "logging": {"level": "DEBUG", "enable_console": True},
+            "processors": {"cache_enabled": False, "parallel_processing": False},
+            "services": {"batch_size": 10, "timeout": 30},
         }
 
     @staticmethod
     def production() -> Dict[str, Any]:
         """Production configuration profile."""
         return {
-            'environment': 'production',
-            'logging': {
-                'level': 'INFO',
-                'enable_console': False
-            },
-            'processors': {
-                'cache_enabled': True,
-                'parallel_processing': True
-            },
-            'services': {
-                'batch_size': 100,
-                'timeout': 120
-            }
+            "environment": "production",
+            "logging": {"level": "INFO", "enable_console": False},
+            "processors": {"cache_enabled": True, "parallel_processing": True},
+            "services": {"batch_size": 100, "timeout": 120},
         }
 
     @staticmethod
     def testing() -> Dict[str, Any]:
         """Testing configuration profile."""
         return {
-            'environment': 'testing',
-            'logging': {
-                'level': 'ERROR',
-                'enable_console': False
-            },
-            'processors': {
-                'cache_enabled': False,
-                'parallel_processing': False
-            },
-            'services': {
-                'batch_size': 5,
-                'timeout': 10
-            }
+            "environment": "testing",
+            "logging": {"level": "ERROR", "enable_console": False},
+            "processors": {"cache_enabled": False, "parallel_processing": False},
+            "services": {"batch_size": 5, "timeout": 10},
         }

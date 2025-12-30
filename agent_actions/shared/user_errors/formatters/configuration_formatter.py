@@ -13,76 +13,72 @@ class ConfigurationErrorFormatter(ErrorFormatter):
         exc_names = [type(exc).__name__, type(root).__name__]
 
         # Check exception types
-        if any('Config' in name for name in exc_names):
+        if any("Config" in name for name in exc_names):
             return True
-        if any(name in ['ValidationError', 'SchemaValidationError'] for name in exc_names):
+        if any(name in ["ValidationError", "SchemaValidationError"] for name in exc_names):
             return True
 
         # Check error message patterns
         message_lower = message.lower()
         config_patterns = [
-            'missing required configuration',  # More specific - config errors
-            'required configuration field',    # More specific - config errors
-            'invalid config',
-            'configuration error',
-            'schema validation',
-            'yaml',
-            'missing key'
+            "missing required configuration",  # More specific - config errors
+            "required configuration field",  # More specific - config errors
+            "invalid config",
+            "configuration error",
+            "schema validation",
+            "yaml",
+            "missing key",
         ]
         # Avoid matching UDF data validation errors like "Missing required fields: options"
-        if 'missing required fields:' in message_lower:
+        if "missing required fields:" in message_lower:
             return False
         return any(pattern in message_lower for pattern in config_patterns)
 
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """Handle configuration errors."""
         # Check for missing required fields (hierarchy resolution)
         missing_field_patterns = [
-            'missing required field',
-            'required configuration fields are missing'
+            "missing required field",
+            "required configuration fields are missing",
         ]
         if any(pattern in message.lower() for pattern in missing_field_patterns):
             return self._format_missing_required_fields_error(message, context)
 
         # Check for missing environment variable
-        if 'environment variable' in message.lower() and 'not set' in message.lower():
+        if "environment variable" in message.lower() and "not set" in message.lower():
             return self._format_missing_env_var_error(message, context)
 
-        if 'schema validation' in message.lower():
+        if "schema validation" in message.lower():
             return UserError(
                 category="Configuration Error",
                 title="Schema validation failed",
                 details="The configuration format is invalid",
                 fix="Check your YAML/JSON syntax and required fields",
                 context=context,
-                docs_url="https://docs.agent-actions.com/config/schema"
+                docs_url="https://docs.agent-actions.com/config/schema",
             )
 
         # Generic config error
-        agent = context.get('agent', 'unknown')
+        agent = context.get("agent", "unknown")
         return UserError(
             category="Configuration Error",
             title=f"Invalid configuration in agent '{agent}'",
             details=message,
             fix="Check your agent configuration file for errors",
             context=context,
-            docs_url="https://docs.agent-actions.com/config"
+            docs_url="https://docs.agent-actions.com/config",
         )
 
     def _format_missing_required_fields_error(self, _message: str, context: Dict) -> UserError:
         """Format error for missing required configuration fields after hierarchy resolution."""
-        action_name = context.get('action_name', context.get('agent', 'unknown'))
-        missing_fields = context.get('missing_fields', [])
-        missing_display = context.get('missing_display', missing_fields)
+        action_name = context.get("action_name", context.get("agent", "unknown"))
+        missing_fields = context.get("missing_fields", [])
+        missing_display = context.get("missing_display", missing_fields)
 
         # Create details message
-        fields_str = ', '.join([f"'{f}'" for f in missing_display])
+        fields_str = ", ".join([f"'{f}'" for f in missing_display])
         details = f"Action '{action_name}' is missing required configuration: {fields_str}\n\n"
         details += "These fields were not found at any level (project → workflow → action)."
 
@@ -95,40 +91,44 @@ class ConfigurationErrorFormatter(ErrorFormatter):
 
         # Add examples for each missing field
         for field in missing_fields:
-            if field == 'model_vendor':
+            if field == "model_vendor":
                 fix_parts.append("     model_vendor: anthropic  # or openai, gemini, groq")
-            elif field == 'model_name':
+            elif field == "model_name":
                 fix_parts.append("     model_name: claude-3-5-sonnet-20241022")
-            elif field == 'api_key':
+            elif field == "api_key":
                 fix_parts.append("     api_key: ${ANTHROPIC_API_KEY}")
 
-        fix_parts.extend([
-            "",
-            "2. Workflow defaults:",
-            "   defaults:",
-        ])
+        fix_parts.extend(
+            [
+                "",
+                "2. Workflow defaults:",
+                "   defaults:",
+            ]
+        )
 
         for field in missing_fields:
-            if field == 'model_vendor':
+            if field == "model_vendor":
                 fix_parts.append("     vendor: anthropic")
-            elif field == 'model_name':
+            elif field == "model_name":
                 fix_parts.append("     model: claude-3-5-sonnet-20241022")
-            elif field == 'api_key':
+            elif field == "api_key":
                 fix_parts.append("     api_key: ${ANTHROPIC_API_KEY}")
 
-        fix_parts.extend([
-            "",
-            "3. Action-level config:",
-            "   actions:",
-            "     - name: " + action_name,
-        ])
+        fix_parts.extend(
+            [
+                "",
+                "3. Action-level config:",
+                "   actions:",
+                "     - name: " + action_name,
+            ]
+        )
 
         for field in missing_fields:
-            if field == 'model_vendor':
+            if field == "model_vendor":
                 fix_parts.append("       vendor: anthropic")
-            elif field == 'model_name':
+            elif field == "model_name":
                 fix_parts.append("       model: claude-3-5-sonnet-20241022")
-            elif field == 'api_key':
+            elif field == "api_key":
                 fix_parts.append("       api_key: ${ANTHROPIC_API_KEY}")
 
         return UserError(
@@ -136,15 +136,15 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Missing required configuration fields",
             details=details,
             fix="\n".join(fix_parts),
-            context={'action': action_name, 'missing_fields': missing_display},
-            docs_url="https://docs.agent-actions.com/core-concepts/configuration-hierarchy"
+            context={"action": action_name, "missing_fields": missing_display},
+            docs_url="https://docs.agent-actions.com/core-concepts/configuration-hierarchy",
         )
 
     def _format_missing_env_var_error(self, _message: str, context: Dict) -> UserError:
         """Format error for missing environment variable."""
-        env_var = context.get('env_var', 'UNKNOWN')
-        agent_name = context.get('agent', 'unknown')
-        config_value = context.get('config_value', f'${{{env_var}}}')
+        env_var = context.get("env_var", "UNKNOWN")
+        agent_name = context.get("agent", "unknown")
+        config_value = context.get("config_value", f"${{{env_var}}}")
 
         details = f"Environment variable '{env_var}' is not set.\n\n"
         details += f"Your configuration references this variable: {config_value}"
@@ -155,7 +155,7 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             "Or add to your .env file:",
             f"  {env_var}=your-api-key-here\n",
             "Or add to your shell profile (~/.bashrc, ~/.zshrc):",
-            f"  export {env_var}=your-api-key-here"
+            f"  export {env_var}=your-api-key-here",
         ]
 
         return UserError(
@@ -163,5 +163,5 @@ class ConfigurationErrorFormatter(ErrorFormatter):
             title="Environment variable not set",
             details=details,
             fix="\n".join(fix_parts),
-            context={'agent': agent_name, 'env_var': env_var}
+            context={"agent": agent_name, "env_var": env_var},
         )

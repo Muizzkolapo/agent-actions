@@ -7,9 +7,9 @@ from typing import Optional, Dict, Any
 from agent_actions.errors.base import AgentActionsError
 
 
-
 class ExternalServiceError(AgentActionsError):
     """Base exception for external service interactions."""
+
     pass
 
 
@@ -23,7 +23,7 @@ class VendorAPIError(ExternalServiceError):
         context: Optional[Dict[str, Any]] = None,
         *,
         cause: Optional[Exception] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize VendorAPIError.
@@ -39,24 +39,24 @@ class VendorAPIError(ExternalServiceError):
             cause: Underlying exception
             **kwargs: Support for 'vendor' keyword argument
         """
-        vendor = kwargs.pop('vendor', None)
+        vendor = kwargs.pop("vendor", None)
 
         if vendor:
             # Case: vendor passed as kwarg
             message = f"Error calling {vendor} API endpoint {endpoint}"
             if context is None:
                 context = {}
-            context['vendor'] = vendor
+            context["vendor"] = vendor
             if endpoint:
-                context['endpoint'] = endpoint
+                context["endpoint"] = endpoint
         elif endpoint is not None and message_or_vendor:
             # Case: vendor passed as positional first arg
             vendor = message_or_vendor
             message = f"Error calling {vendor} API endpoint {endpoint}"
             if context is None:
                 context = {}
-            context['vendor'] = vendor
-            context['endpoint'] = endpoint
+            context["vendor"] = vendor
+            context["endpoint"] = endpoint
         else:
             # Case: message passed as first arg
             message = message_or_vendor or "Unknown Vendor API Error"
@@ -66,24 +66,29 @@ class VendorAPIError(ExternalServiceError):
 
 class OpenAIError(VendorAPIError):
     """Specific error for OpenAI API failures."""
+
     pass
 
 
 class AnthropicError(VendorAPIError):
     """Specific error for Anthropic API failures."""
+
     pass
 
 
 class GeminiError(VendorAPIError):
     """Specific error for Gemini API failures."""
+
     pass
 
 
 class NetworkError(ExternalServiceError):
     """Raised when network-related errors occur (timeout, connection, etc)."""
+
     pass
 
 
 class RateLimitError(VendorAPIError):
     """Raised when API rate limits are exceeded."""
+
     pass

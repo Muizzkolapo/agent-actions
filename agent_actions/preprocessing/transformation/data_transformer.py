@@ -53,9 +53,7 @@ class DataTransformer:
 
     @staticmethod
     def update_schema_objects(
-        data_old: Dict[str, Any],
-        data_new: Dict[str, Any],
-        keys_to_update: List[str]
+        data_old: Dict[str, Any], data_new: Dict[str, Any], keys_to_update: List[str]
     ) -> Dict[str, Any]:
         """
         Updates data based on structure comparison without side effects.
@@ -108,23 +106,14 @@ class DataTransformer:
                 for source_guid, contents in data_item.items():
                     if isinstance(contents, list):
                         for content in contents:
-                            result.append({
-                                "source_guid": source_guid,
-                                "content": content
-                            })
+                            result.append({"source_guid": source_guid, "content": content})
                     else:
-                        result.append({
-                            "source_guid": source_guid,
-                            "content": contents
-                        })
+                        result.append({"source_guid": source_guid, "content": contents})
 
         return result
 
     @staticmethod
-    def get_content_by_source_guid(
-        data: List[Dict[str, Any]],
-        source_guid: str
-    ) -> Optional[Any]:
+    def get_content_by_source_guid(data: List[Dict[str, Any]], source_guid: str) -> Optional[Any]:
         """
         Retrieve content by source_guid without side effects.
 
@@ -138,6 +127,6 @@ class DataTransformer:
         for item in data:
             if isinstance(item, dict):
                 # Check if source_guid matches
-                if item.get('source_guid') == source_guid:
+                if item.get("source_guid") == source_guid:
                     return item
         return None

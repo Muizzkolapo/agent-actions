@@ -3,6 +3,7 @@ Documentation commands for agent-actions CLI.
 
 Provides commands for generating and serving interactive workflow documentation.
 """
+
 import subprocess
 from pathlib import Path
 
@@ -19,9 +20,13 @@ def docs():
 
 
 @docs.command()
-@click.option('--output', '-o', default='artefact',
-              help='Output directory for generated files (default: artefact)')
-@handles_user_errors('docs generate')
+@click.option(
+    "--output",
+    "-o",
+    default="artefact",
+    help="Output directory for generated files (default: artefact)",
+)
+@handles_user_errors("docs generate")
 def generate(output: str):
     """
     Generate documentation data files.
@@ -52,11 +57,11 @@ def generate(output: str):
 
 
 @docs.command()
-@click.option('--port', '-p', default=8000,
-              help='Port to run server on (default: 8000)')
-@click.option('--artefact', '-a', default=None,
-              help='Path to artefact directory (default: ./artefact)')
-@handles_user_errors('docs serve')
+@click.option("--port", "-p", default=8000, help="Port to run server on (default: 8000)")
+@click.option(
+    "--artefact", "-a", default=None, help="Path to artefact directory (default: ./artefact)"
+)
+@handles_user_errors("docs serve")
 def serve(port: int, artefact: str):
     """
     Start HTTP server to view documentation.
@@ -75,13 +80,19 @@ def serve(port: int, artefact: str):
         raise click.Abort()
 
 
-@docs.command(name='test')
-@click.option('--test', '-t', 'test_suite', type=click.Choice(['schemas', 'actions', 'all']),
-              default='all',
-              help='Which test suite to run (default: all)')
-@click.option('--port', '-p', default=8890,
-              help='Port where docs server is running (default: 8890)')
-@handles_user_errors('docs test')
+@docs.command(name="test")
+@click.option(
+    "--test",
+    "-t",
+    "test_suite",
+    type=click.Choice(["schemas", "actions", "all"]),
+    default="all",
+    help="Which test suite to run (default: all)",
+)
+@click.option(
+    "--port", "-p", default=8890, help="Port where docs server is running (default: 8890)"
+)
+@handles_user_errors("docs test")
 def run_tests(test_suite: str, port: int):
     """
     Run Playwright tests to verify documentation site.
@@ -97,8 +108,7 @@ def run_tests(test_suite: str, port: int):
     """
     # Check if playwright is available
     try:
-        subprocess.run(['node', '--version'],
-                      capture_output=True, check=True)
+        subprocess.run(["node", "--version"], capture_output=True, check=True)
     except (subprocess.CalledProcessError, FileNotFoundError) as exc:
         click.echo("❌ Error: Node.js is not installed!")
         click.echo("   Install from: https://nodejs.org/")
@@ -110,12 +120,12 @@ def run_tests(test_suite: str, port: int):
 
     # Map test types to files
     test_files = {
-        'schemas': ['test-all-schemas.js'],
-        'actions': ['test-run-actions-complete.js', 'test-actions-specific.js'],
-        'all': ['test-all-schemas.js', 'test-run-actions-complete.js']
+        "schemas": ["test-all-schemas.js"],
+        "actions": ["test-run-actions-complete.js", "test-actions-specific.js"],
+        "all": ["test-all-schemas.js", "test-run-actions-complete.js"],
     }
 
-    files_to_run = test_files.get(test_suite, test_files['all'])
+    files_to_run = test_files.get(test_suite, test_files["all"])
 
     # Check if test files exist
     missing_files = [f for f in files_to_run if not (test_dir / f).exists()]
@@ -132,11 +142,7 @@ def run_tests(test_suite: str, port: int):
     for test_file in files_to_run:
         click.echo(f"▶️  Running {test_file}...")
         try:
-            subprocess.run(
-                ['node', str(test_dir / test_file)],
-                capture_output=False,
-                check=True
-            )
+            subprocess.run(["node", str(test_dir / test_file)], capture_output=False, check=True)
             click.echo(f"✅ {test_file} passed\n")
         except subprocess.CalledProcessError:
             click.echo(f"❌ {test_file} failed\n")
@@ -149,7 +155,7 @@ def run_tests(test_suite: str, port: int):
 
 
 @docs.command()
-@handles_user_errors('docs dev')
+@handles_user_errors("docs dev")
 def dev():
     """
     Start development environment.

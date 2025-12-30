@@ -59,6 +59,7 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
         - All CLI kwargs are automatically included in error context
         - Works seamlessly with other decorators (e.g., @requires_project)
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -70,17 +71,20 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
             except Exception as e:
                 # pylint: disable=import-outside-toplevel
                 from agent_actions.shared.user_errors import format_user_error
+
                 # Merge command context with extra context and all kwargs
                 context = {
-                    'command': command_name,
+                    "command": command_name,
                     **extra_context,
-                    **kwargs  # Include all CLI arguments in error context
+                    **kwargs,  # Include all CLI arguments in error context
                 }
                 error_message = format_user_error(e, context)
                 # Use 'from None' to suppress exception chaining and prevent
                 # Python traceback from being displayed to users
                 raise click.ClickException(error_message) from None
+
         return wrapper
+
     return decorator
 
 
@@ -117,6 +121,7 @@ def requires_project(func):
         >>> 📁 Project root: ../..
         >>> ✅ Running workflow...
     """
+
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         # Find and validate we're in a project

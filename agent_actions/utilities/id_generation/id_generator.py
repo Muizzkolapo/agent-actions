@@ -6,6 +6,7 @@ This module provides centralized ID generation utilities for processors:
 - Node IDs with index prefix
 - Deterministic UUID5 GUIDs from content
 """
+
 import uuid
 import json
 from typing import Any
@@ -35,7 +36,7 @@ class IDGenerator:
         Returns:
             A node ID in the format "node_{idx}_{uuid}"
         """
-        return f'node_{idx}_{uuid.uuid4()}'
+        return f"node_{idx}_{uuid.uuid4()}"
 
     @staticmethod
     def generate_deterministic_source_guid(content: Any) -> str:

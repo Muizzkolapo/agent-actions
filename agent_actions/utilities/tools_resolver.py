@@ -51,7 +51,7 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
         '/path/from/tool/config'
     """
     # Check for legacy tool_path format first (used in agent_actions.yml)
-    tool_path = agent_config.get('tool_path')
+    tool_path = agent_config.get("tool_path")
     if tool_path:
         # If it's a list, return the first path
         if isinstance(tool_path, list) and len(tool_path) > 0:
@@ -63,36 +63,32 @@ def resolve_tools_path(agent_config: Dict[str, Any]) -> Optional[str]:
             return tool_path
 
     # Check for tools configuration
-    tools = agent_config.get('tools', [])
+    tools = agent_config.get("tools", [])
 
     # Check for simple format (consistent with realtime mode)
-    if isinstance(tools, dict) and 'path' in tools:
-        path = tools.get('path')
+    if isinstance(tools, dict) and "path" in tools:
+        path = tools.get("path")
         logger.debug("Resolved tools_path from tools.path: %s", path)
         return path
 
     # Check for OpenAI tool calling format
     if isinstance(tools, list):
         for tool in tools:
-            if isinstance(tool, dict) and tool.get('type') == 'function':
-                function_def = tool.get('function', {})
-                if 'file' in function_def:
+            if isinstance(tool, dict) and tool.get("type") == "function":
+                function_def = tool.get("function", {})
+                if "file" in function_def:
                     try:
-                        tool_file_path = function_def['file']
-                        with open(tool_file_path, 'r', encoding='utf-8') as f:
+                        tool_file_path = function_def["file"]
+                        with open(tool_file_path, "r", encoding="utf-8") as f:
                             tool_config = yaml.safe_load(f)
-                            if tool_config and 'module_path' in tool_config:
-                                module_path = tool_config['module_path']
+                            if tool_config and "module_path" in tool_config:
+                                module_path = tool_config["module_path"]
                                 logger.debug(
-                                    "Resolved tools_path from OpenAI tool config: %s",
-                                    module_path
+                                    "Resolved tools_path from OpenAI tool config: %s", module_path
                                 )
                                 return module_path
                     except (yaml.YAMLError, FileNotFoundError, PermissionError) as e:
-                        logger.warning(
-                            "Failed to load tool config from %s: %s",
-                            tool_file_path, e
-                        )
+                        logger.warning("Failed to load tool config from %s: %s", tool_file_path, e)
 
     logger.debug("No tools_path found in agent_config")
     return None

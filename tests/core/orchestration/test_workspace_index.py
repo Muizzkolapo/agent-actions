@@ -4,6 +4,7 @@ Tests for WorkspaceIndex functionality.
 Tests the workspace scanning, dependency graph building, and downstream
 workflow discovery.
 """
+
 import pytest
 import tempfile
 from pathlib import Path
@@ -20,9 +21,9 @@ class TestWorkspaceIndex:
             workspace = Path(temp_dir)
 
             # Create workflow A (no dependencies)
-            workflow_a = workspace / 'workflow_a' / 'agent_config'
+            workflow_a = workspace / "workflow_a" / "agent_config"
             workflow_a.mkdir(parents=True)
-            (workflow_a / 'workflow_a.yml').write_text("""
+            (workflow_a / "workflow_a.yml").write_text("""
 name: workflow_a
 actions:
   - name: action_1
@@ -30,9 +31,9 @@ actions:
 """)
 
             # Create workflow B (depends on A)
-            workflow_b = workspace / 'workflow_b' / 'agent_config'
+            workflow_b = workspace / "workflow_b" / "agent_config"
             workflow_b.mkdir(parents=True)
-            (workflow_b / 'workflow_b.yml').write_text("""
+            (workflow_b / "workflow_b.yml").write_text("""
 name: workflow_b
 actions:
   - name: action_1
@@ -42,9 +43,9 @@ actions:
 """)
 
             # Create workflow C (depends on A)
-            workflow_c = workspace / 'workflow_c' / 'agent_config'
+            workflow_c = workspace / "workflow_c" / "agent_config"
             workflow_c.mkdir(parents=True)
-            (workflow_c / 'workflow_c.yml').write_text("""
+            (workflow_c / "workflow_c.yml").write_text("""
 name: workflow_c
 actions:
   - name: action_1
@@ -54,9 +55,9 @@ actions:
 """)
 
             # Create workflow D (depends on B and C)
-            workflow_d = workspace / 'workflow_d' / 'agent_config'
+            workflow_d = workspace / "workflow_d" / "agent_config"
             workflow_d.mkdir(parents=True)
-            (workflow_d / 'workflow_d.yml').write_text("""
+            (workflow_d / "workflow_d.yml").write_text("""
 name: workflow_d
 actions:
   - name: action_1
@@ -78,52 +79,55 @@ actions:
     def test_scan_workspace_finds_all_workflows(self, workspace_index):
         """Test that scan_workspace finds all workflow configs."""
         assert len(workspace_index.dependency_graph) == 4
-        assert 'workflow_a' in workspace_index.dependency_graph
-        assert 'workflow_b' in workspace_index.dependency_graph
-        assert 'workflow_c' in workspace_index.dependency_graph
-        assert 'workflow_d' in workspace_index.dependency_graph
+        assert "workflow_a" in workspace_index.dependency_graph
+        assert "workflow_b" in workspace_index.dependency_graph
+        assert "workflow_c" in workspace_index.dependency_graph
+        assert "workflow_d" in workspace_index.dependency_graph
 
     def test_dependency_graph_built_correctly(self, workspace_index):
         """Test that forward dependency graph is built correctly."""
-        assert workspace_index.dependency_graph['workflow_a'] == []
-        assert workspace_index.dependency_graph['workflow_b'] == ['workflow_a']
-        assert workspace_index.dependency_graph['workflow_c'] == ['workflow_a']
-        assert set(workspace_index.dependency_graph['workflow_d']) == {'workflow_b', 'workflow_c'}
+        assert workspace_index.dependency_graph["workflow_a"] == []
+        assert workspace_index.dependency_graph["workflow_b"] == ["workflow_a"]
+        assert workspace_index.dependency_graph["workflow_c"] == ["workflow_a"]
+        assert set(workspace_index.dependency_graph["workflow_d"]) == {"workflow_b", "workflow_c"}
 
     def test_reverse_dependency_graph_built_correctly(self, workspace_index):
         """Test that reverse dependency graph is built correctly."""
         # workflow_a should have B and C as downstream
-        assert workspace_index.reverse_dependency_graph['workflow_a'] == {'workflow_b', 'workflow_c'}
+        assert workspace_index.reverse_dependency_graph["workflow_a"] == {
+            "workflow_b",
+            "workflow_c",
+        }
         # workflow_b should have D as downstream
-        assert workspace_index.reverse_dependency_graph['workflow_b'] == {'workflow_d'}
+        assert workspace_index.reverse_dependency_graph["workflow_b"] == {"workflow_d"}
         # workflow_c should have D as downstream
-        assert workspace_index.reverse_dependency_graph['workflow_c'] == {'workflow_d'}
+        assert workspace_index.reverse_dependency_graph["workflow_c"] == {"workflow_d"}
         # workflow_d has no downstream
-        assert workspace_index.reverse_dependency_graph.get('workflow_d', set()) == set()
+        assert workspace_index.reverse_dependency_graph.get("workflow_d", set()) == set()
 
     def test_topological_sort_downstream(self, workspace_index):
         """Test topological sorting of downstream workflows."""
         # From A: B and C can run in any order, but D must come after both
-        sorted_downstream = workspace_index.topological_sort_downstream('workflow_a')
+        sorted_downstream = workspace_index.topological_sort_downstream("workflow_a")
 
         # All three downstream workflows should be included
         assert len(sorted_downstream) == 3
-        assert set(sorted_downstream) == {'workflow_b', 'workflow_c', 'workflow_d'}
+        assert set(sorted_downstream) == {"workflow_b", "workflow_c", "workflow_d"}
 
         # D must be last
-        assert sorted_downstream[-1] == 'workflow_d'
+        assert sorted_downstream[-1] == "workflow_d"
         # B and C must come before D
-        assert sorted_downstream.index('workflow_b') < sorted_downstream.index('workflow_d')
-        assert sorted_downstream.index('workflow_c') < sorted_downstream.index('workflow_d')
+        assert sorted_downstream.index("workflow_b") < sorted_downstream.index("workflow_d")
+        assert sorted_downstream.index("workflow_c") < sorted_downstream.index("workflow_d")
 
     def test_topological_sort_single_downstream(self, workspace_index):
         """Test topological sort with single downstream workflow."""
-        sorted_downstream = workspace_index.topological_sort_downstream('workflow_b')
-        assert sorted_downstream == ['workflow_d']
+        sorted_downstream = workspace_index.topological_sort_downstream("workflow_b")
+        assert sorted_downstream == ["workflow_d"]
 
     def test_topological_sort_no_downstream(self, workspace_index):
         """Test topological sort when no downstream exists."""
-        sorted_downstream = workspace_index.topological_sort_downstream('workflow_d')
+        sorted_downstream = workspace_index.topological_sort_downstream("workflow_d")
         assert sorted_downstream == []
 
     def test_empty_workspace(self):
@@ -134,11 +138,11 @@ actions:
             index.scan_workspace()
 
             assert len(index.dependency_graph) == 0
-            assert index.topological_sort_downstream('nonexistent') == []
+            assert index.topological_sort_downstream("nonexistent") == []
 
     def test_nonexistent_workspace(self):
         """Test handling of non-existent workspace."""
-        index = WorkspaceIndex(Path('/nonexistent/path'))
+        index = WorkspaceIndex(Path("/nonexistent/path"))
         index.scan_workspace()
 
         assert len(index.dependency_graph) == 0
@@ -149,7 +153,7 @@ actions:
         assert len(index.dependency_graph) == 0
 
         # Calling topological_sort triggers scan
-        index.topological_sort_downstream('workflow_a')
+        index.topological_sort_downstream("workflow_a")
         assert len(index.dependency_graph) == 4
 
     def test_scan_only_once(self, temp_workspace):
@@ -173,9 +177,9 @@ class TestWorkspaceIndexCycleDetection:
             workspace = Path(temp_dir)
 
             # Create workflow A (depends on C - creates cycle)
-            workflow_a = workspace / 'workflow_a' / 'agent_config'
+            workflow_a = workspace / "workflow_a" / "agent_config"
             workflow_a.mkdir(parents=True)
-            (workflow_a / 'workflow_a.yml').write_text("""
+            (workflow_a / "workflow_a.yml").write_text("""
 name: workflow_a
 actions:
   - name: action_1
@@ -184,9 +188,9 @@ actions:
 """)
 
             # Create workflow B (depends on A)
-            workflow_b = workspace / 'workflow_b' / 'agent_config'
+            workflow_b = workspace / "workflow_b" / "agent_config"
             workflow_b.mkdir(parents=True)
-            (workflow_b / 'workflow_b.yml').write_text("""
+            (workflow_b / "workflow_b.yml").write_text("""
 name: workflow_b
 actions:
   - name: action_1
@@ -195,9 +199,9 @@ actions:
 """)
 
             # Create workflow C (depends on B - completes cycle)
-            workflow_c = workspace / 'workflow_c' / 'agent_config'
+            workflow_c = workspace / "workflow_c" / "agent_config"
             workflow_c.mkdir(parents=True)
-            (workflow_c / 'workflow_c.yml').write_text("""
+            (workflow_c / "workflow_c.yml").write_text("""
 name: workflow_c
 actions:
   - name: action_1
@@ -216,6 +220,6 @@ actions:
 
         # Try to sort downstream from any node in the cycle
         with pytest.raises(WorkflowError) as exc_info:
-            index.topological_sort_downstream('workflow_a')
+            index.topological_sort_downstream("workflow_a")
 
-        assert 'Cyclic dependency' in str(exc_info.value)
+        assert "Cyclic dependency" in str(exc_info.value)

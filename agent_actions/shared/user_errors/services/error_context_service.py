@@ -12,8 +12,7 @@ class ErrorContextService:  # pylint: disable=too-few-public-methods
 
     @staticmethod
     def merge_exception_context(
-        exc: Exception,
-        additional_context: Optional[Dict[str, Any]] = None
+        exc: Exception, additional_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Merge exception context from entire exception chain.
@@ -42,25 +41,24 @@ class ErrorContextService:  # pylint: disable=too-few-public-methods
             visited.add(id(current))
             chain.append(current)
             # Check __cause__ first (explicit chaining), then __context__ (implicit)
-            current = getattr(current, '__cause__', None) or getattr(current, '__context__', None)
+            current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
 
         # Merge contexts: root first, then up the chain
         # Outer contexts override inner ones for same keys
         for exception in reversed(chain):
-            if hasattr(exception, 'context') and isinstance(exception.context, dict):
+            if hasattr(exception, "context") and isinstance(exception.context, dict):
                 merged_context.update(exception.context)
 
         # Extract other useful exception attributes from outermost exception only
         # (to avoid attribute conflicts from different exception types in chain)
-        excluded_attrs = ['args', 'with_traceback', 'context']
+        excluded_attrs = ["args", "with_traceback", "context"]
         for attr_name in dir(exc):
-            if not attr_name.startswith('_') and attr_name not in excluded_attrs:
+            if not attr_name.startswith("_") and attr_name not in excluded_attrs:
                 try:
                     attr_value = getattr(exc, attr_name)
                     # Only include simple types (not methods/callables)
                     if not callable(attr_value) and isinstance(
-                        attr_value,
-                        (str, int, float, bool, type(None))
+                        attr_value, (str, int, float, bool, type(None))
                     ):
                         merged_context[attr_name] = attr_value
                 except Exception:  # pylint: disable=broad-exception-caught

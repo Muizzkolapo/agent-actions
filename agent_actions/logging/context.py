@@ -23,7 +23,7 @@ class ExecutionContext:
 
 # Thread-safe context storage using contextvars
 _execution_context: ContextVar[Optional[ExecutionContext]] = ContextVar(
-    'execution_context',
+    "execution_context",
     default=None,
 )
 

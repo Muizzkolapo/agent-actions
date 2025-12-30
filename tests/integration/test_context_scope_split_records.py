@@ -26,7 +26,9 @@ def split_records_data():
 
     Returns the 3 split records from node_5 that demonstrate the bug.
     """
-    fixture_path = Path(__file__).parent.parent / 'fixtures' / 'historical_loader' / 'split_records_node5.json'
+    fixture_path = (
+        Path(__file__).parent.parent / "fixtures" / "historical_loader" / "split_records_node5.json"
+    )
     with open(fixture_path) as f:
         return json.load(f)
 
@@ -38,7 +40,12 @@ def caller_records_data():
 
     Returns the 3 caller records from node_23.
     """
-    fixture_path = Path(__file__).parent.parent / 'fixtures' / 'historical_loader' / 'caller_records_node23.json'
+    fixture_path = (
+        Path(__file__).parent.parent
+        / "fixtures"
+        / "historical_loader"
+        / "caller_records_node23.json"
+    )
     with open(fixture_path) as f:
         return json.load(f)
 
@@ -68,7 +75,7 @@ def split_record_temp_dir(split_records_data):
         source_dir = agent_io_dir / "source"
         source_dir.mkdir(parents=True)
         source_file = source_dir / "test_file.json"
-        with open(source_file, 'w') as f:
+        with open(source_file, "w") as f:
             json.dump(split_records_data, f, indent=2)
 
         # Create target directory with split records
@@ -78,7 +85,7 @@ def split_record_temp_dir(split_records_data):
 
         # Write split records to target file
         split_file = node_5_dir / "test_file.json"
-        with open(split_file, 'w') as f:
+        with open(split_file, "w") as f:
             json.dump(split_records_data, f, indent=2)
 
         yield tmp_path
@@ -96,7 +103,7 @@ def agent_indices_split():
         "extract_data": 1,
         "validate_input": 4,
         "split_operation": 5,  # The node that performs the split
-        "downstream": 23      # The node trying to retrieve split data
+        "downstream": 23,  # The node trying to retrieve split data
     }
 
 
@@ -107,12 +114,7 @@ def dependency_configs_split():
 
     Defines what fields the split_operation outputs.
     """
-    return {
-        "split_operation": {
-            "idx": 5,
-            "output": ["status", "tags", "priority"]
-        }
-    }
+    return {"split_operation": {"idx": 5, "output": ["status", "tags", "priority"]}}
 
 
 class TestContextScopeWithSplitRecords:
@@ -123,7 +125,7 @@ class TestContextScopeWithSplitRecords:
         split_record_temp_dir,
         caller_records_data,
         agent_indices_split,
-        dependency_configs_split
+        dependency_configs_split,
     ):
         """
         Test that field context builder correctly loads Branch A record.
@@ -135,14 +137,13 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[0]
 
         # Build agent config
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         # Construct file path to current processing location
         # NOTE: Points to downstream node, not historical node
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -152,25 +153,28 @@ class TestContextScopeWithSplitRecords:
             agent_indices=agent_indices_split,
             dependency_configs=dependency_configs_split,
             current_item=caller,
-            file_path=file_path
+            file_path=file_path,
         )
 
         # Assert: Should have loaded split_operation data
-        assert 'split_operation' in field_context, \
-            "Should have loaded split_operation from historical data"
+        assert (
+            "split_operation" in field_context
+        ), "Should have loaded split_operation from historical data"
 
         # Assert: Should have Branch A record (1 tag)
-        assert field_context['split_operation']['status'] == "active", \
-            "Branch A record should have status='active'"
-        assert field_context['split_operation']['tags'] == ["tag-a"], \
-            "Branch A record should have tags=['tag-a']"
+        assert (
+            field_context["split_operation"]["status"] == "active"
+        ), "Branch A record should have status='active'"
+        assert field_context["split_operation"]["tags"] == [
+            "tag-a"
+        ], "Branch A record should have tags=['tag-a']"
 
     def test_build_field_context_loads_branch_b(
         self,
         split_record_temp_dir,
         caller_records_data,
         agent_indices_split,
-        dependency_configs_split
+        dependency_configs_split,
     ):
         """
         Test that field context builder correctly loads Branch B record (THE BUG CASE).
@@ -185,13 +189,12 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[1]
 
         # Build agent config
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         # Construct file path to current processing location
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -201,29 +204,34 @@ class TestContextScopeWithSplitRecords:
             agent_indices=agent_indices_split,
             dependency_configs=dependency_configs_split,
             current_item=caller,
-            file_path=file_path
+            file_path=file_path,
         )
 
         # Assert: Should have loaded split_operation data
-        assert 'split_operation' in field_context, \
-            "Should have loaded split_operation from historical data"
+        assert (
+            "split_operation" in field_context
+        ), "Should have loaded split_operation from historical data"
 
         # THE KEY ASSERTIONS - These will FAIL without the fix
-        assert field_context['split_operation']['status'] == "pending", \
-            "Branch B record should have status='pending', not 'active' (BUG!)"
+        assert (
+            field_context["split_operation"]["status"] == "pending"
+        ), "Branch B record should have status='pending', not 'active' (BUG!)"
 
-        assert len(field_context['split_operation']['tags']) == 2, \
-            "Branch B record should have 2 tags, not 1 (THE BUG!)"
+        assert (
+            len(field_context["split_operation"]["tags"]) == 2
+        ), "Branch B record should have 2 tags, not 1 (THE BUG!)"
 
-        assert field_context['split_operation']['tags'] == ["tag-b", "tag-extra"], \
-            "Branch B record should have tags=['tag-b', 'tag-extra']"
+        assert field_context["split_operation"]["tags"] == [
+            "tag-b",
+            "tag-extra",
+        ], "Branch B record should have tags=['tag-b', 'tag-extra']"
 
     def test_build_field_context_loads_branch_c(
         self,
         split_record_temp_dir,
         caller_records_data,
         agent_indices_split,
-        dependency_configs_split
+        dependency_configs_split,
     ):
         """
         Test that field context builder correctly loads Branch C record.
@@ -235,13 +243,12 @@ class TestContextScopeWithSplitRecords:
         caller = caller_records_data[2]
 
         # Build agent config
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         # Construct file path to current processing location
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         # Call build_field_context_with_history
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -251,25 +258,28 @@ class TestContextScopeWithSplitRecords:
             agent_indices=agent_indices_split,
             dependency_configs=dependency_configs_split,
             current_item=caller,
-            file_path=file_path
+            file_path=file_path,
         )
 
         # Assert: Should have loaded split_operation data
-        assert 'split_operation' in field_context, \
-            "Should have loaded split_operation from historical data"
+        assert (
+            "split_operation" in field_context
+        ), "Should have loaded split_operation from historical data"
 
         # Assert: Should have Branch C record (1 tag)
-        assert field_context['split_operation']['status'] == "completed", \
-            "Branch C record should have status='completed'"
-        assert field_context['split_operation']['tags'] == ["tag-c"], \
-            "Branch C record should have tags=['tag-c']"
+        assert (
+            field_context["split_operation"]["status"] == "completed"
+        ), "Branch C record should have status='completed'"
+        assert field_context["split_operation"]["tags"] == [
+            "tag-c"
+        ], "Branch C record should have tags=['tag-c']"
 
     def test_all_branches_load_unique_data(
         self,
         split_record_temp_dir,
         caller_records_data,
         agent_indices_split,
-        dependency_configs_split
+        dependency_configs_split,
     ):
         """
         Test that all 3 branches load their own unique data, not shared data.
@@ -277,12 +287,11 @@ class TestContextScopeWithSplitRecords:
         This is a comprehensive test that verifies each branch gets its own
         correct record and they don't all get the same (first) record.
         """
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         loaded_statuses = []
         loaded_tags = []
@@ -296,19 +305,21 @@ class TestContextScopeWithSplitRecords:
                 agent_indices=agent_indices_split,
                 dependency_configs=dependency_configs_split,
                 current_item=caller,
-                file_path=file_path
+                file_path=file_path,
             )
 
-            assert 'split_operation' in field_context, \
-                f"Caller {i+1} should have loaded split_operation data"
+            assert (
+                "split_operation" in field_context
+            ), f"Caller {i + 1} should have loaded split_operation data"
 
-            loaded_statuses.append(field_context['split_operation']['status'])
-            loaded_tags.append(tuple(field_context['split_operation']['tags']))
+            loaded_statuses.append(field_context["split_operation"]["status"])
+            loaded_tags.append(tuple(field_context["split_operation"]["tags"]))
 
         # Assert: All 3 branches should have DIFFERENT data
         # Without the fix, all would have the same status/tags (from first record)
-        assert len(set(loaded_statuses)) == 3, \
-            f"All 3 branches should have unique statuses, got: {loaded_statuses}"
+        assert (
+            len(set(loaded_statuses)) == 3
+        ), f"All 3 branches should have unique statuses, got: {loaded_statuses}"
 
         # Assert: Specific expected values
         assert "active" in loaded_statuses, "Branch A status should be present"
@@ -317,18 +328,16 @@ class TestContextScopeWithSplitRecords:
 
         # Assert: Branch B should have 2 tags (the distinguishing feature)
         tag_lengths = [len(tags) for tags in loaded_tags]
-        assert 2 in tag_lengths, \
+        assert 2 in tag_lengths, (
             "One branch should have 2 tags (Branch B), got tag lengths: " + str(tag_lengths)
+        )
 
 
 class TestContextScopeSplitRecordsEdgeCases:
     """Edge case tests for context scope with split records."""
 
     def test_missing_lineage_in_current_item(
-        self,
-        split_record_temp_dir,
-        agent_indices_split,
-        dependency_configs_split
+        self, split_record_temp_dir, agent_indices_split, dependency_configs_split
     ):
         """
         Test handling when current_item has no lineage.
@@ -339,16 +348,15 @@ class TestContextScopeSplitRecordsEdgeCases:
         current_item = {
             "source_guid": "test-source-guid-12345",
             "node_id": "node_23_downstream",
-            "content": {}
+            "content": {},
             # NOTE: No lineage field
         }
 
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         # Should not crash
         field_context = ContextScopeProcessor.build_field_context_with_history(
@@ -358,7 +366,7 @@ class TestContextScopeSplitRecordsEdgeCases:
             agent_indices=agent_indices_split,
             dependency_configs=dependency_configs_split,
             current_item=current_item,
-            file_path=file_path
+            file_path=file_path,
         )
 
         # May or may not have loaded split_operation (implementation-dependent)
@@ -369,21 +377,20 @@ class TestContextScopeSplitRecordsEdgeCases:
         split_record_temp_dir,
         caller_records_data,
         agent_indices_split,
-        dependency_configs_split
+        dependency_configs_split,
     ):
         """
         Test that wrong source_guid returns None for historical data.
         """
         # Caller with WRONG source_guid
         caller = caller_records_data[0].copy()
-        caller['source_guid'] = "wrong-guid-999"
+        caller["source_guid"] = "wrong-guid-999"
 
-        agent_config = {
-            "idx": 23,
-            "dependencies": ["split_operation"]
-        }
+        agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
-        file_path = str(split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json")
+        file_path = str(
+            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+        )
 
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents={},
@@ -392,9 +399,10 @@ class TestContextScopeSplitRecordsEdgeCases:
             agent_indices=agent_indices_split,
             dependency_configs=dependency_configs_split,
             current_item=caller,
-            file_path=file_path
+            file_path=file_path,
         )
 
         # Should NOT have loaded split_operation (source_guid mismatch)
-        assert 'split_operation' not in field_context or field_context.get('split_operation') is None, \
-            "Should not load data when source_guid doesn't match"
+        assert (
+            "split_operation" not in field_context or field_context.get("split_operation") is None
+        ), "Should not load data when source_guid doesn't match"

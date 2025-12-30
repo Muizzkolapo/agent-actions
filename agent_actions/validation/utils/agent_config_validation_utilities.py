@@ -17,7 +17,7 @@ from agent_actions.utilities.constants import (
     PROMPT_KEY,
     SCHEMA_NAME_KEY,
     SCHEMA_KEY,
-    CHUNK_CONFIG_KEY
+    CHUNK_CONFIG_KEY,
 )
 
 
@@ -32,33 +32,47 @@ class AgentConfigValidationUtilities:
     # ===== Configuration Constants =====
 
     _REQUIRED_AGENT_KEYS: Set[str] = {
-        'agent_type',
-        MODEL_NAME_KEY  # 'model_name'
+        "agent_type",
+        MODEL_NAME_KEY,  # 'model_name'
     }
 
     _OPTIONAL_AGENT_KEYS: Set[str] = {
-        'description', 'version', 'author', 'dependencies', 'imports',
-        'config', 'granularity', MODEL_VENDOR_KEY, JSON_MODE_KEY,
-        'prompt_debug', API_KEY_KEY, PROMPT_KEY, SCHEMA_NAME_KEY,
-        SCHEMA_KEY, 'tools', CHUNK_CONFIG_KEY, 'few_shot',
-        'conditional_clause', 'is_operational', 'ephemeral',
-        'add_dispatch', 'output_field', 'context_scope',
-        'reprompt', 'constraints'
+        "description",
+        "version",
+        "author",
+        "dependencies",
+        "imports",
+        "config",
+        "granularity",
+        MODEL_VENDOR_KEY,
+        JSON_MODE_KEY,
+        "prompt_debug",
+        API_KEY_KEY,
+        PROMPT_KEY,
+        SCHEMA_NAME_KEY,
+        SCHEMA_KEY,
+        "tools",
+        CHUNK_CONFIG_KEY,
+        "few_shot",
+        "conditional_clause",
+        "is_operational",
+        "ephemeral",
+        "add_dispatch",
+        "output_field",
+        "context_scope",
+        "reprompt",
+        "constraints",
     }
 
     _AGENT_TYPE_SPECIFIC_KEYS: Dict[str, Set[str]] = {
-        'llm': {MODEL_NAME_KEY},
-        'function': {'code_path'},
-        'tool': {MODEL_NAME_KEY}
+        "llm": {MODEL_NAME_KEY},
+        "function": {"code_path"},
+        "tool": {MODEL_NAME_KEY},
     }
 
-    _VALID_BATCH_VENDORS: Set[str] = {
-        'openai', 'gemini', 'anthropic'
-    }
+    _VALID_BATCH_VENDORS: Set[str] = {"openai", "gemini", "anthropic"}
 
-    _VALID_GRANULARITY_VALUES: Set[str] = {
-        'record', 'file'
-    }
+    _VALID_GRANULARITY_VALUES: Set[str] = {"record", "file"}
 
     # ===== Case-Insensitive Dict Operations =====
 
@@ -80,11 +94,7 @@ class AgentConfigValidationUtilities:
         return {str(k).lower(): v for k, v in entry.items()}
 
     @staticmethod
-    def get_case_insensitive_value(
-        entry: Dict[str, Any],
-        key: str,
-        default: Any = None
-    ) -> Any:
+    def get_case_insensitive_value(entry: Dict[str, Any], key: str, default: Any = None) -> Any:
         """
         Get value from dict using case-insensitive key lookup.
 
@@ -124,7 +134,7 @@ class AgentConfigValidationUtilities:
         """
         # Try to get agent_type from entry (case-insensitive)
         agent_type = AgentConfigValidationUtilities.get_case_insensitive_value(
-            entry, 'agent_type', 'unknown'
+            entry, "agent_type", "unknown"
         )
 
         return f"agent entry {agent_type} in '{context_name}'"
@@ -168,8 +178,8 @@ class AgentConfigValidationUtilities:
             Set of all known keys
         """
         all_keys = (
-            AgentConfigValidationUtilities._REQUIRED_AGENT_KEYS |
-            AgentConfigValidationUtilities._OPTIONAL_AGENT_KEYS
+            AgentConfigValidationUtilities._REQUIRED_AGENT_KEYS
+            | AgentConfigValidationUtilities._OPTIONAL_AGENT_KEYS
         )
 
         if agent_type:

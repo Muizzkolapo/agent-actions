@@ -10,10 +10,10 @@ Different agent types have different required fields:
 from pathlib import Path
 from agent_actions.validation.agent_validators.base_agent_validator import (
     BaseAgentEntryValidator,
-    AgentEntryValidationResult
+    AgentEntryValidationResult,
 )
 from agent_actions.validation.utils.agent_config_validation_utilities import (
-    AgentConfigValidationUtilities
+    AgentConfigValidationUtilities,
 )
 
 
@@ -55,17 +55,17 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
 
     def _validate_name_field(self, context, errors: list) -> None:
         """Validate the 'name' field type."""
-        name = context.normalized_entry.get('name')
-        if 'name' in context.normalized_entry and not isinstance(name, str):
+        name = context.normalized_entry.get("name")
+        if "name" in context.normalized_entry and not isinstance(name, str):
             errors.append(f"{context.description} 'name' must be string.")
 
     def _validate_agent_type_field(self, context, errors: list) -> None:
         """Validate agent_type field and type-specific requirements."""
-        if 'agent_type' not in context.normalized_entry:
+        if "agent_type" not in context.normalized_entry:
             return
 
         agent_type_value = AgentConfigValidationUtilities.get_case_insensitive_value(
-            context.entry, 'agent_type'
+            context.entry, "agent_type"
         )
 
         if not isinstance(agent_type_value, str):
@@ -78,22 +78,17 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
         self._validate_type_specific_keys(context, agent_type, errors)
 
         # Special validation for 'function' agent type
-        if agent_type == 'function':
+        if agent_type == "function":
             self._validate_function_agent_code_path(context, errors)
 
     def _validate_type_specific_keys(self, context, agent_type: str, errors: list) -> None:
         """Validate type-specific required keys are present."""
-        type_specific_keys = AgentConfigValidationUtilities.get_agent_type_specific_keys(
-            agent_type
-        )
+        type_specific_keys = AgentConfigValidationUtilities.get_agent_type_specific_keys(agent_type)
 
         if not type_specific_keys:
             return
 
-        missing_type_keys = {
-            k for k in type_specific_keys
-            if k not in context.normalized_entry
-        }
+        missing_type_keys = {k for k in type_specific_keys if k not in context.normalized_entry}
 
         if missing_type_keys:
             sorted_missing = sorted(missing_type_keys)
@@ -104,35 +99,26 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
 
     def _validate_function_agent_code_path(self, context, errors: list) -> None:
         """Validate code_path for function agent type."""
-        if 'code_path' not in context.normalized_entry:
+        if "code_path" not in context.normalized_entry:
             return
 
-        code_path_value = context.normalized_entry['code_path']
+        code_path_value = context.normalized_entry["code_path"]
 
         if not isinstance(code_path_value, str):
-            errors.append(
-                f"{context.description} 'code_path' for function agent must be a string."
-            )
+            errors.append(f"{context.description} 'code_path' for function agent must be a string.")
             return
 
         if not context.project_root:
             return
 
-        if code_path_value.startswith(('http://', 'https://')):
+        if code_path_value.startswith(("http://", "https://")):
             return
 
         # Resolve and validate file path
         code_path = Path(code_path_value)
-        abs_code_path = (
-            code_path if code_path.is_absolute()
-            else context.project_root / code_path
-        )
+        abs_code_path = code_path if code_path.is_absolute() else context.project_root / code_path
 
         if not abs_code_path.exists():
-            errors.append(
-                f"{context.description} 'code_path' ({abs_code_path}) does not exist."
-            )
+            errors.append(f"{context.description} 'code_path' ({abs_code_path}) does not exist.")
         elif not abs_code_path.is_file():
-            errors.append(
-                f"{context.description} 'code_path' ({abs_code_path}) is not a file."
-            )
+            errors.append(f"{context.description} 'code_path' ({abs_code_path}) is not a file.")

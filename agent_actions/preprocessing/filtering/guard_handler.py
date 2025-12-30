@@ -86,37 +86,37 @@ logger = logging.getLogger(__name__)
 
 class FilterBehavior(Enum):
     """Filter behavior options."""
-    FILTER = 'filter'  # Exclude non-matching items
-    SKIP = 'skip'      # Include non-matching as passthrough
+
+    FILTER = "filter"  # Exclude non-matching items
+    SKIP = "skip"  # Include non-matching as passthrough
 
 
 @dataclass
 class GuardConfig:
     """Validated guard configuration."""
+
     clause: str
-    scope: str = 'item'
+    scope: str = "item"
     behavior: FilterBehavior = FilterBehavior.FILTER
     passthrough_on_error: bool = True
 
     @staticmethod
-    def from_dict(config: Optional[Dict[str, Any]]) -> Optional['GuardConfig']:
+    def from_dict(config: Optional[Dict[str, Any]]) -> Optional["GuardConfig"]:
         """Create GuardConfig from dict, returns None if invalid."""
-        if not config or not config.get('clause'):
+        if not config or not config.get("clause"):
             return None
 
         try:
-            behavior_str = config.get('behavior', 'filter')
+            behavior_str = config.get("behavior", "filter")
             behavior = (
-                FilterBehavior(behavior_str)
-                if isinstance(behavior_str, str)
-                else behavior_str
+                FilterBehavior(behavior_str) if isinstance(behavior_str, str) else behavior_str
             )
 
             return GuardConfig(
-                clause=config.get('clause'),
-                scope=config.get('scope', 'item'),
+                clause=config.get("clause"),
+                scope=config.get("scope", "item"),
                 behavior=behavior,
-                passthrough_on_error=config.get('passthrough_on_error', True)
+                passthrough_on_error=config.get("passthrough_on_error", True),
             )
         except (ValueError, TypeError) as e:
             logger.warning("Invalid guard config: %s", e)
@@ -125,14 +125,12 @@ class GuardConfig:
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dict for FilterService compatibility."""
         return {
-            'clause': self.clause,
-            'scope': self.scope,
-            'behavior': (
-                self.behavior.value
-                if isinstance(self.behavior, FilterBehavior)
-                else self.behavior
+            "clause": self.clause,
+            "scope": self.scope,
+            "behavior": (
+                self.behavior.value if isinstance(self.behavior, FilterBehavior) else self.behavior
             ),
-            'passthrough_on_error': self.passthrough_on_error
+            "passthrough_on_error": self.passthrough_on_error,
         }
 
 
@@ -144,6 +142,7 @@ class GuardFilteringContext:
     Tracks filtering decisions and provides analytics about what was filtered, skipped, etc.
     Used primarily in batch mode for comprehensive statistics; optional in online mode.
     """
+
     total_items: int
     included_items: int = 0
     filtered_items: int = 0
@@ -162,11 +161,11 @@ class GuardFilteringContext:
         """
         self.item_results[target_id] = status
 
-        if status == 'filtered':
+        if status == "filtered":
             self.filtered_items += 1
-        elif status == 'skipped':
+        elif status == "skipped":
             self.skipped_items += 1
-        elif status == 'included':
+        elif status == "included":
             self.included_items += 1
 
         if has_error:
@@ -175,12 +174,12 @@ class GuardFilteringContext:
     def get_summary(self) -> Dict[str, Any]:
         """Get summary statistics."""
         return {
-            'total_items': self.total_items,
-            'included_items': self.included_items,
-            'filtered_items': self.filtered_items,
-            'skipped_items': self.skipped_items,
-            'error_items': self.error_items,
-            'success_rate': self.included_items / self.total_items if self.total_items > 0 else 0.0
+            "total_items": self.total_items,
+            "included_items": self.included_items,
+            "filtered_items": self.filtered_items,
+            "skipped_items": self.skipped_items,
+            "error_items": self.error_items,
+            "success_rate": self.included_items / self.total_items if self.total_items > 0 else 0.0,
         }
 
 
@@ -196,7 +195,7 @@ class GuardHandler:
     - Online: Bulk dataset filtering with selective context tracking
     """
 
-    def __init__(self, filter_service: 'FilterService'):
+    def __init__(self, filter_service: "FilterService"):
         """
         Initialize guard handler.
 
@@ -222,7 +221,7 @@ class GuardHandler:
             return None
 
         config = GuardConfig.from_dict(guard_config)
-        if config is None and guard_config.get('clause'):
+        if config is None and guard_config.get("clause"):
             # Config present but invalid
             raise ValueError(f"Invalid guard configuration: {guard_config}")
 
@@ -238,13 +237,10 @@ class GuardHandler:
         Returns:
             True if filtering should be applied per-item, False otherwise
         """
-        return config is not None and config.scope == 'item'
+        return config is not None and config.scope == "item"
 
     def filter_single_item(
-        self,
-        item: Dict,
-        guard_config: Optional[Dict],
-        conditional_clause: Optional[str] = None
+        self, item: Dict, guard_config: Optional[Dict], conditional_clause: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Filter single item (batch mode pattern).
@@ -274,16 +270,14 @@ class GuardHandler:
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config) and not conditional_clause:
-            return True, 'included'
+            return True, "included"
 
         # Extract content for evaluation
-        item_content = item.get('content', item)
+        item_content = item.get("content", item)
 
         # Delegate to FilterService
         filter_result = self.filter_service.filter_single_item(
-            item_content,
-            config.to_dict() if config else None,
-            conditional_clause
+            item_content, config.to_dict() if config else None, conditional_clause
         )
 
         return filter_result.should_include, filter_result.status
@@ -293,7 +287,7 @@ class GuardHandler:
         item: Dict,
         guard_config: Optional[Dict],
         field_context: Optional[Dict] = None,
-        conditional_clause: Optional[str] = None
+        conditional_clause: Optional[str] = None,
     ) -> Tuple[bool, str]:
         """
         Filter single item WITH full upstream context access.
@@ -330,10 +324,10 @@ class GuardHandler:
 
         # No filtering configured
         if not self.should_evaluate_at_item_level(config) and not conditional_clause:
-            return True, 'included'
+            return True, "included"
 
         # Extract current item content
-        item_content = item.get('content', item)
+        item_content = item.get("content", item)
 
         # Build evaluation data with upstream context access
         if field_context:
@@ -353,9 +347,8 @@ class GuardHandler:
                     eval_data[action_name] = action_data
 
             logger.debug(
-                "Evaluating guard condition with upstream context. "
-                "Actions available: %s",
-                list(field_context.keys())
+                "Evaluating guard condition with upstream context. Actions available: %s",
+                list(field_context.keys()),
             )
         else:
             # No field context - use item content only (original behavior)
@@ -363,9 +356,7 @@ class GuardHandler:
 
         # Delegate to FilterService
         filter_result = self.filter_service.filter_single_item(
-            eval_data,
-            config.to_dict() if config else None,
-            conditional_clause
+            eval_data, config.to_dict() if config else None, conditional_clause
         )
 
         return filter_result.should_include, filter_result.status
@@ -374,7 +365,7 @@ class GuardHandler:
         self,
         items: List[Dict],
         guard_config: Optional[Dict],
-        conditional_clause: Optional[str] = None
+        conditional_clause: Optional[str] = None,
     ) -> Tuple[List[Dict], GuardFilteringContext]:
         """
         Filter items for batch mode with full context tracking.
@@ -414,10 +405,8 @@ class GuardHandler:
         filtered_items = []
 
         for item in items:
-            target_id = item.get('target_id', 'unknown')
-            should_include, status = self.filter_single_item(
-                item, guard_config, conditional_clause
-            )
+            target_id = item.get("target_id", "unknown")
+            should_include, status = self.filter_single_item(item, guard_config, conditional_clause)
 
             # Track decision
             context.track(target_id, status)
@@ -430,7 +419,7 @@ class GuardHandler:
             context.included_items,
             context.filtered_items,
             context.skipped_items,
-            context.error_items
+            context.error_items,
         )
 
         return filtered_items, context
@@ -439,7 +428,7 @@ class GuardHandler:
         self,
         items: List[Dict],
         guard_config: Optional[Dict],
-        conditional_clause: Optional[str] = None
+        conditional_clause: Optional[str] = None,
     ) -> Tuple[List[Dict], GuardFilteringContext]:
         """
         Filter items for online mode (bulk pre-filtering).
@@ -482,9 +471,7 @@ class GuardHandler:
 
         # Delegate to FilterService for bulk filtering
         filtered_items, status_map = self.filter_service.apply_guard_filtering(
-            items,
-            config.to_dict(),
-            conditional_clause
+            items, config.to_dict(), conditional_clause
         )
 
         # Track results
@@ -494,17 +481,13 @@ class GuardHandler:
         logger.info(
             "Online filtering complete: %s included, %s filtered",
             context.included_items,
-            context.filtered_items
+            context.filtered_items,
         )
 
         return filtered_items, context
 
     def create_passthrough_item(
-        self,
-        original_item: Dict,
-        filter_status: str,
-        node_id: str,
-        source_guid: str
+        self, original_item: Dict, filter_status: str, node_id: str, source_guid: str
     ) -> Dict:
         """
         Create passthrough item for skipped entries.
@@ -522,20 +505,20 @@ class GuardHandler:
             Passthrough item with metadata
         """
         processed_item = FieldManager().create_processed_item(
-            source_guid=source_guid,
-            content=original_item.get('content'),
-            node_id=node_id
+            source_guid=source_guid, content=original_item.get("content"), node_id=node_id
         )
 
-        if 'metadata' not in processed_item:
-            processed_item['metadata'] = {}
+        if "metadata" not in processed_item:
+            processed_item["metadata"] = {}
 
-        processed_item['metadata'].update({
-            'skipped_by_guard': True,
-            'agent_type': 'passthrough',
-            'reason': 'guard_not_matched',
-            'filter_status': filter_status
-        })
+        processed_item["metadata"].update(
+            {
+                "skipped_by_guard": True,
+                "agent_type": "passthrough",
+                "reason": "guard_not_matched",
+                "filter_status": filter_status,
+            }
+        )
 
         return processed_item
 

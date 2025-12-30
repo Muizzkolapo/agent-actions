@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 class NodeType(Enum):
     """Types of AST nodes in the WHERE clause tree."""
+
     COMPARISON = "comparison"
     LOGICAL = "logical"
     FIELD = "field"
@@ -28,6 +29,7 @@ class NodeType(Enum):
 
 class LogicalOperator(Enum):
     """Logical operators for combining expressions."""
+
     AND = "AND"
     OR = "OR"
     NOT = "NOT"
@@ -35,11 +37,12 @@ class LogicalOperator(Enum):
 
 class ComparisonOperator(Enum):
     """Comparison operators for field comparisons."""
+
     EQ = "=="  # Equal
     NE = "!="  # Not equal
-    LT = "<"   # Less than
+    LT = "<"  # Less than
     LE = "<="  # Less than or equal
-    GT = ">"   # Greater than
+    GT = ">"  # Greater than
     GE = ">="  # Greater than or equal
     IN = "IN"  # In array
     NOT_IN = "NOT IN"  # Not in array
@@ -56,16 +59,18 @@ class ComparisonOperator(Enum):
 @dataclass
 class ASTNode(ABC):
     """Base class for all AST nodes."""
+
     node_type: NodeType
 
     @abstractmethod
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         """Accept a visitor to process this node."""
 
 
 @dataclass
 class FieldNode(ASTNode):
     """Represents a field reference (e.g., 'user.name' or 'score')."""
+
     node_type: NodeType
     field_path: str
 
@@ -73,13 +78,14 @@ class FieldNode(ASTNode):
         super().__init__(node_type)
         self.field_path = field_path
 
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         return visitor.visit_field(self)
 
 
 @dataclass
 class LiteralNode(ASTNode):
     """Represents a literal value (string, number, boolean, array, null)."""
+
     node_type: NodeType
     value: Any
 
@@ -87,13 +93,14 @@ class LiteralNode(ASTNode):
         super().__init__(node_type)
         self.value = value
 
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         return visitor.visit_literal(self)
 
 
 @dataclass
 class ComparisonNode(ASTNode):
     """Represents a comparison operation (field operator value)."""
+
     node_type: NodeType
     left: ASTNode
     operator: ComparisonOperator
@@ -104,20 +111,21 @@ class ComparisonNode(ASTNode):
         left: ASTNode,
         operator: ComparisonOperator,
         right: Optional[ASTNode] = None,
-        node_type: NodeType = NodeType.COMPARISON
+        node_type: NodeType = NodeType.COMPARISON,
     ):
         super().__init__(node_type)
         self.left = left
         self.operator = operator
         self.right = right
 
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         return visitor.visit_comparison(self)
 
 
 @dataclass
 class LogicalNode(ASTNode):
     """Represents a logical operation (AND, OR, NOT)."""
+
     node_type: NodeType
     operator: LogicalOperator
     left: ASTNode
@@ -128,35 +136,33 @@ class LogicalNode(ASTNode):
         operator: LogicalOperator,
         left: ASTNode,
         right: Optional[ASTNode] = None,
-        node_type: NodeType = NodeType.LOGICAL
+        node_type: NodeType = NodeType.LOGICAL,
     ):
         super().__init__(node_type)
         self.operator = operator
         self.left = left
         self.right = right
 
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         return visitor.visit_logical(self)
 
 
 @dataclass
 class FunctionNode(ASTNode):
     """Represents a function call in the WHERE clause."""
+
     node_type: NodeType
     function_name: str
     arguments: List[ASTNode]
 
     def __init__(
-        self,
-        function_name: str,
-        arguments: List[ASTNode],
-        node_type: NodeType = NodeType.FUNCTION
+        self, function_name: str, arguments: List[ASTNode], node_type: NodeType = NodeType.FUNCTION
     ):
         super().__init__(node_type)
         self.function_name = function_name
         self.arguments = arguments
 
-    def accept(self, visitor: 'ASTVisitor') -> Any:
+    def accept(self, visitor: "ASTVisitor") -> Any:
         return visitor.visit_function(self)
 
 
@@ -191,7 +197,7 @@ class EvaluationContext:
         self,
         data: Dict[str, Any],
         functions: Optional[Dict[str, Callable[..., Any]]] = None,
-        debug: bool = False
+        debug: bool = False,
     ):
         """
         Initialize evaluation context.
@@ -251,9 +257,7 @@ class WhereClauseAST:
         self.root = root
 
     def evaluate(
-        self,
-        data: Dict[str, Any],
-        functions: Optional[Dict[str, Callable[..., Any]]] = None
+        self, data: Dict[str, Any], functions: Optional[Dict[str, Callable[..., Any]]] = None
     ) -> bool:
         """
         Evaluate the WHERE clause against the given data.
@@ -279,9 +283,7 @@ class WhereClauseEvaluator(ASTVisitor):
     """Evaluates WHERE clause AST nodes against data."""
 
     def __init__(
-        self,
-        context: EvaluationContext,
-        operator_registry: Optional[OperatorRegistry] = None
+        self, context: EvaluationContext, operator_registry: Optional[OperatorRegistry] = None
     ):
         """
         Initialize the evaluator.
@@ -378,13 +380,9 @@ class WhereClauseEvaluator(ASTVisitor):
         except (TypeError, ValueError) as e:
             # Handle type errors gracefully (e.g., comparing string to number)
             # Optional debug logging if enabled
-            if hasattr(self.context, 'debug') and self.context.debug:
+            if hasattr(self.context, "debug") and self.context.debug:
                 logger.debug(
-                    "Comparison failed: %s on %r, %r: %s",
-                    node.operator,
-                    left_value,
-                    right_value,
-                    e
+                    "Comparison failed: %s on %r, %r: %s", node.operator, left_value, right_value, e
                 )
             # Maintain backward-compatible fail-safe behavior
             return False

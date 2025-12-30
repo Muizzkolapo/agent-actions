@@ -1,4 +1,5 @@
 """Data loader for batch processing from JSON and JSONL files."""
+
 from pathlib import Path
 import json
 from typing import List, Dict, Any
@@ -38,7 +39,7 @@ class BatchDataLoader(IDataLoader):
                     return json.load(f)
                 raise ValueError(
                     f"Unsupported file type: {path.suffix}. Please use .json or .jsonl."
-                    )
+                )
         except json.JSONDecodeError as e:
             raise ValueError(f"Error decoding JSON from {file_path}: {e}") from e
         except Exception as e:

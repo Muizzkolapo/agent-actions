@@ -8,6 +8,7 @@ from agent_actions.errors.base import AgentActionsError
 
 class ConfigurationError(AgentActionsError):
     """Base exception for configuration-related errors."""
+
     pass
 
 
@@ -21,7 +22,7 @@ class ConfigValidationError(ConfigurationError):
         *,
         context: dict = None,
         config_key: str = None,
-        cause: Exception = None
+        cause: Exception = None,
     ):
         """Initialize ConfigValidationError.
 
@@ -41,13 +42,13 @@ class ConfigValidationError(ConfigurationError):
         if config_key is not None and reason is not None:
             msg = f"Configuration validation failed for '{config_key}': {reason}"
             ctx = context or {}
-            ctx.update({'config_key': config_key, 'reason': reason})
+            ctx.update({"config_key": config_key, "reason": reason})
             super().__init__(msg, context=ctx, cause=cause)
         # Handle old positional style: ConfigValidationError("key", "reason", ...)
         elif reason is not None:
             msg = f"Configuration validation failed for '{message}': {reason}"
             ctx = context or {}
-            ctx.update({'config_key': message, 'reason': reason})
+            ctx.update({"config_key": message, "reason": reason})
             super().__init__(msg, context=ctx, cause=cause)
         # New style: just message
         else:
@@ -67,7 +68,7 @@ class DuplicateFunctionError(ConfigurationError):
         new_location: str = None,
         new_file: str = None,
         context: dict = None,
-        cause: Exception = None
+        cause: Exception = None,
     ):
         if function_name:
             msg = f"Duplicate UDF function name detected: '{function_name}'"
@@ -75,13 +76,15 @@ class DuplicateFunctionError(ConfigurationError):
                 msg += f"\n  Existing: {existing_location} (in {existing_file})"
                 msg += f"\n  New:      {new_location} (in {new_file})"
             ctx = context or {}
-            ctx.update({
-                'function_name': function_name,
-                'existing_location': existing_location,
-                'existing_file': existing_file,
-                'new_location': new_location,
-                'new_file': new_file
-            })
+            ctx.update(
+                {
+                    "function_name": function_name,
+                    "existing_location": existing_location,
+                    "existing_file": existing_file,
+                    "new_location": new_location,
+                    "new_file": new_file,
+                }
+            )
             super().__init__(msg, context=ctx, cause=cause)
         else:
             super().__init__(message, context=context, cause=cause)
@@ -89,6 +92,7 @@ class DuplicateFunctionError(ConfigurationError):
 
 class FunctionNotFoundError(ConfigurationError):
     """Raised when a UDF is not found in the registry."""
+
     pass
 
 
@@ -103,14 +107,14 @@ class UDFLoadError(ConfigurationError):
         file: str = None,
         error: str = None,
         context: dict = None,
-        cause: Exception = None
+        cause: Exception = None,
     ):
         if module and error:
             msg = f"Failed to load UDF module '{module}': {error}"
             if file:
                 msg += f" (file: {file})"
             ctx = context or {}
-            ctx.update({'module': module, 'file': file, 'error': error})
+            ctx.update({"module": module, "file": file, "error": error})
             super().__init__(msg, context=ctx, cause=cause)
         else:
             super().__init__(message, context=context, cause=cause)
@@ -118,14 +122,17 @@ class UDFLoadError(ConfigurationError):
 
 class AgentNotFoundError(ConfigurationError):
     """Raised when a specified agent cannot be found."""
+
     pass
 
 
 class ProjectNotFoundError(ConfigurationError):
     """Raised when a command requires being in a project but agent_actions.yml is not found."""
+
     pass
 
 
 class EnvironmentConfigError(ConfigurationError):
     """Raised when environment configuration is invalid or missing."""
+
     pass

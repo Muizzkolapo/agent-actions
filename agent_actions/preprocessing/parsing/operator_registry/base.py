@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 
 class OperatorType(Enum):
     """Types of operators in the registry."""
+
     COMPARISON = "comparison"
     LOGICAL = "logical"
     FUNCTION = "function"
@@ -21,6 +22,7 @@ class OperatorType(Enum):
 @dataclass
 class OperatorInfo:
     """Information about a registered operator."""
+
     name: str
     symbol: str
     operator_type: OperatorType
@@ -35,12 +37,8 @@ class BaseOperator(ABC):
 
     @abstractmethod
     def evaluate(
-        self,
-        left: Any,
-        right: Any = None,
-        context: Optional[Dict[str,
-        Any]] = None) -> Any:
-
+        self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
+    ) -> Any:
         """
         Evaluate the operator with given operands.
 
@@ -62,12 +60,8 @@ class ComparisonOperator(BaseOperator):
     """Base class for comparison operators."""
 
     def evaluate(
-        self,
-        left: Any,
-        right: Any = None,
-        context: Optional[Dict[str,
-        Any]] = None) -> bool:
-
+        self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Evaluate the comparison operator with given operands.
 
@@ -86,12 +80,8 @@ class LogicalOperator(BaseOperator):
     """Base class for logical operators."""
 
     def evaluate(
-        self,
-        left: Any,
-        right: Any = None,
-        context: Optional[Dict[str,
-        Any]] = None) -> bool:
-
+        self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Evaluate the logical operator with given operands.
 
@@ -123,12 +113,8 @@ class FunctionOperator(BaseOperator):
         """
 
     def evaluate(
-        self,
-        left: Any,
-        right: Any = None,
-        context: Optional[Dict[str,
-        Any]] = None) -> Any:
-
+        self, left: Any, right: Any = None, context: Optional[Dict[str, Any]] = None
+    ) -> Any:
         """Wrapper for function evaluation."""
         args = [left] if right is None else [left, right]
         return self.evaluate_function(args, context)

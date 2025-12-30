@@ -30,7 +30,7 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
         try:
             context_data_str = StringProcessor.process_as_string(context_data)
             co = cohere.Client(api_key=api_key)
-            prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            <|begin_of_output_schema|> : GENERATE JSON with the fields {', '.join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
+            prompt = f"""\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {context_data_str} :<|end_of_text|>\n            <|begin_of_output_schema|> : GENERATE JSON with the fields {", ".join([f"'{field}'" for field in schema.keys()])} : <|end_of_output_schema|>\n            RULES: YOU CANNOT RETURN THE CONTENT OF OUTPUT SCHEMA IN YOUR OUTPUT\n            """
             prompt_dedent = dedent(prompt)
             response = co.chat(
                 model=model_name, message=prompt_dedent, response_format={"type": "json_object"}

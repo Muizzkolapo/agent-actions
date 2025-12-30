@@ -1,4 +1,5 @@
 """CLI commands for batch processing operations."""
+
 import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
@@ -20,11 +21,10 @@ def batch():
 @click.option(
     "--batch-id",
     help=(
-        "The ID of the batch job to check. "
-        "If not provided, the last submitted job ID will be used."
+        "The ID of the batch job to check. If not provided, the last submitted job ID will be used."
     ),
 )
-@handles_user_errors('batch status')
+@handles_user_errors("batch status")
 @requires_project
 def status(batch_id: str = None):
     """Checks the status of a running batch job."""
@@ -55,7 +55,7 @@ def status(batch_id: str = None):
     type=click.Path(),
     help="Directory to save the retrieved results.",
 )
-@handles_user_errors('batch retrieve')
+@handles_user_errors("batch retrieve")
 @requires_project
 def retrieve(batch_id: str = None, output_dir: str = "."):
     """Retrieves the results of a completed batch job."""

@@ -50,25 +50,20 @@ class AgentEntryValidationContext:
     """
 
     def __init__(
-        self,
-        entry: Dict[str, Any],
-        agent_name_context: str,
-        project_root: Optional[Path] = None
+        self, entry: Dict[str, Any], agent_name_context: str, project_root: Optional[Path] = None
     ):
         self.entry = entry
         self.agent_name_context = agent_name_context
         self.project_root = project_root
 
         # Case-insensitive normalized entry (cached for reuse)
-        self.normalized_entry = (
-            AgentConfigValidationUtilities.normalize_entry_keys_to_lowercase(entry)
+        self.normalized_entry = AgentConfigValidationUtilities.normalize_entry_keys_to_lowercase(
+            entry
         )
 
         # Formatted description for error messages (cached)
-        self.description = (
-            AgentConfigValidationUtilities.format_validation_context(
-                entry, agent_name_context
-            )
+        self.description = AgentConfigValidationUtilities.format_validation_context(
+            entry, agent_name_context
         )
 
     def __repr__(self) -> str:
@@ -120,10 +115,7 @@ class AgentEntryValidationOrchestrator:
         ]
 
     def validate_agent_entry(
-        self,
-        entry: Dict[str, Any],
-        agent_name_context: str,
-        project_root: Optional[Path] = None
+        self, entry: Dict[str, Any], agent_name_context: str, project_root: Optional[Path] = None
     ) -> bool:
         """
         Validate a single agent entry through the validation chain.
@@ -141,9 +133,7 @@ class AgentEntryValidationOrchestrator:
 
         # Create shared context
         context = AgentEntryValidationContext(
-            entry=entry,
-            agent_name_context=agent_name_context,
-            project_root=project_root
+            entry=entry, agent_name_context=agent_name_context, project_root=project_root
         )
 
         # Execute validation chain

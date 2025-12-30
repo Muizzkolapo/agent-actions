@@ -2,4 +2,4 @@
 
 from .lineage_builder import LineageBuilder
 
-__all__ = ['LineageBuilder']
+__all__ = ["LineageBuilder"]

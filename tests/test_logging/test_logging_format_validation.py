@@ -99,8 +99,7 @@ class TestLoggingFormatCompliance:
 
         if checker.violations:
             violation_messages = [
-                f"  {v['file']}:{v['line']}: {v['message']}"
-                for v in checker.violations
+                f"  {v['file']}:{v['line']}: {v['message']}" for v in checker.violations
             ]
             pytest.fail(
                 f"Found {len(checker.violations)} malformed logging statement(s):\n"
@@ -113,34 +112,30 @@ class TestLoggingFormatCompliance:
         checker = LoggingFormatChecker()
 
         # Code with malformed logging
-        bad_code = '''
+        bad_code = """
 logger.info("Processing {item_id}")
 logger.debug("Value is {value}")
 logger.error("Error in {module}: {error}")
-'''
+"""
         tree = ast.parse(bad_code)
         checker.current_file = "test.py"
         checker.visit(tree)
 
-        assert len(checker.violations) == 3, (
-            f"Expected 3 violations, got {len(checker.violations)}"
-        )
+        assert len(checker.violations) == 3, f"Expected 3 violations, got {len(checker.violations)}"
 
     def test_detector_allows_correct_patterns(self) -> None:
         """Verify the checker allows correct logging patterns."""
         checker = LoggingFormatChecker()
 
         # Code with correct logging
-        good_code = '''
+        good_code = """
 logger.info(f"Processing {item_id}")
 logger.debug("Processing item: %s", item_id)
 logger.error("Static message without variables")
 logger.warning("Format spec {:d} is ok", value)
-'''
+"""
         tree = ast.parse(good_code)
         checker.current_file = "test.py"
         checker.visit(tree)
 
-        assert len(checker.violations) == 0, (
-            f"Expected 0 violations, got {checker.violations}"
-        )
+        assert len(checker.violations) == 0, f"Expected 0 violations, got {checker.violations}"

@@ -1,4 +1,5 @@
 """Module for loading and managing prompts from markdown files."""
+
 import re
 import json
 import random
@@ -9,6 +10,7 @@ from typing import Any, List
 from agent_actions.io.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
+
 
 class PromptLoader:
     """
@@ -30,15 +32,15 @@ class PromptLoader:
         Raises:
             ValueError: If the prompt is not found.
         """
-        start_token = f'{{prompt {prompt_name}}}'
-        end_token = '{end_prompt}'
+        start_token = f"{{prompt {prompt_name}}}"
+        end_token = "{end_prompt}"
         start_index = content.find(start_token)
         if start_index == -1:
             raise ValueError(f"Prompt '{prompt_name}' not found in the content.")
         end_index = content.find(end_token, start_index + len(start_token))
         if end_index == -1:
             raise ValueError(f"Unclosed prompt block for '{prompt_name}'.")
-        prompt_body = content[start_index + len(start_token):end_index]
+        prompt_body = content[start_index + len(start_token) : end_index]
         return prompt_body.strip()
 
     @staticmethod
@@ -52,7 +54,7 @@ class PromptLoader:
         Returns:
             List[str]: A list of prompt names found in the content.
         """
-        pattern = re.compile('\\{prompt\\s+(\\w+)\\}')
+        pattern = re.compile("\\{prompt\\s+(\\w+)\\}")
         return pattern.findall(content)
 
     @staticmethod
@@ -75,11 +77,11 @@ class PromptLoader:
     @staticmethod
     def validate_prompt_blocks(filename: str, content: str) -> None:
         """Ensure every prompt block is closed with an end token."""
-        pattern = re.compile('\\{prompt\\s+(\\w+)\\}')
+        pattern = re.compile("\\{prompt\\s+(\\w+)\\}")
         for match in pattern.finditer(content):
             name = match.group(1)
             start = match.end()
-            if content.find('{end_prompt}', start) == -1:
+            if content.find("{end_prompt}", start) == -1:
                 raise ValueError(f"Unclosed prompt block for '{name}' in {filename}.")
 
     @staticmethod
@@ -99,17 +101,15 @@ class PromptLoader:
         Raises:
             ValueError: If the prompt file or prompt format is invalid.
         """
-        if '.' not in prompt_name:
+        if "." not in prompt_name:
             raise ValueError("Invalid prompt format. Expected 'filename.prompt_key'.")
 
-        prompt_file_name, prompt_key = prompt_name.split('.', 1)
-        target_filename = f'{prompt_file_name}.md'
+        prompt_file_name, prompt_key = prompt_name.split(".", 1)
+        target_filename = f"{prompt_file_name}.md"
 
         # Search for the .md file anywhere in the project tree
         # No requirement for a specific directory structure
-        prompt_file_str = FileHandler.find_file_in_directory(
-            str(Path.cwd()), target_filename
-        )
+        prompt_file_str = FileHandler.find_file_in_directory(str(Path.cwd()), target_filename)
 
         if not prompt_file_str:
             raise ValueError(
@@ -120,16 +120,14 @@ class PromptLoader:
 
         logger.debug("Found prompt file at: %s", prompt_file_str)
         prompt_file_path = Path(prompt_file_str)
-        content = prompt_file_path.read_text(encoding='utf-8')
+        content = prompt_file_path.read_text(encoding="utf-8")
         PromptLoader.validate_unique_prompts(prompt_file_path.name, content)
         PromptLoader.validate_prompt_blocks(prompt_file_path.name, content)
         return PromptLoader.extract_prompt(content, prompt_key)
 
     @staticmethod
     def load_few_shot_samples(
-        few_shot_samples_path: str,
-        agent_type: str,
-        sample_count: int = 3
+        few_shot_samples_path: str, agent_type: str, sample_count: int = 3
     ) -> List[Any]:
         """
         Load random sample objects from JSON files in the sample output directory.
@@ -143,24 +141,22 @@ class PromptLoader:
             List[Any]: List of randomly selected sample objects.
         """
         if not few_shot_samples_path:
-            logger.warning('Few shot samples path is not set; returning no samples.')
+            logger.warning("Few shot samples path is not set; returning no samples.")
             return []
         agent_samples_path = Path(few_shot_samples_path) / agent_type
         if not agent_samples_path.exists():
             return []
-        sample_files = list(agent_samples_path.glob('*.json'))
+        sample_files = list(agent_samples_path.glob("*.json"))
         all_samples: List[Any] = []
         for sample_file in sample_files:
             try:
-                data = json.loads(sample_file.read_text(encoding='utf-8'))
+                data = json.loads(sample_file.read_text(encoding="utf-8"))
                 if isinstance(data, list):
                     all_samples.extend(data)
                 elif isinstance(data, dict):
                     all_samples.append(data)
             except Exception as e:
-                raise ValueError(
-                    f"Error reading sample file '{sample_file}': {e}"
-                ) from e
+                raise ValueError(f"Error reading sample file '{sample_file}': {e}") from e
         if sample_count > 0 and all_samples:
             return random.sample(all_samples, min(sample_count, len(all_samples)))
         return []

@@ -53,9 +53,11 @@ class RepromptInterceptor(ResponseInterceptor):
         self.config = RepromptConfig.from_yaml(reprompt_value)
 
         if self.prompt_debug:
-            print(f"   Parsed config: enabled={self.config.enabled}, "
-                  f"preset={self.config.preset}, "
-                  f"max_attempts={self.config.max_attempts}")
+            print(
+                f"   Parsed config: enabled={self.config.enabled}, "
+                f"preset={self.config.preset}, "
+                f"max_attempts={self.config.max_attempts}"
+            )
 
         # Get constraints from config
         constraints: List[Dict[str, Any]] = config.get("constraints", [])
@@ -119,8 +121,7 @@ class RepromptInterceptor(ResponseInterceptor):
         result = self.engine.process_response(response, context)
 
         if self.prompt_debug:
-            print(f"   Engine result: success={result.success}, "
-                  f"needs_retry={result.needs_retry}")
+            print(f"   Engine result: success={result.success}, needs_retry={result.needs_retry}")
             if result.error:
                 print(f"   Error: {result.error}")
             if result.repair_method:
@@ -157,9 +158,7 @@ class RepromptInterceptor(ResponseInterceptor):
                 continue_processing=False,
                 retry_context={
                     "prompt": result.improved_prompt,
-                    "original_prompt": context.get(
-                        "original_prompt", context.get("prompt")
-                    ),
+                    "original_prompt": context.get("original_prompt", context.get("prompt")),
                     "attempt": result.attempt,
                     "history": history,
                     "validation_error": result.error,

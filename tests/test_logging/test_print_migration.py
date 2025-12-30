@@ -17,55 +17,50 @@ class TestPrintStatementMigration:
     # Allowlist of files where print() is acceptable (user-facing CLI output)
     ALLOWED_PRINT_FILES = {
         # CLI modules with user-facing output
-        'agent_actions/cli/list_udfs.py',  # Table output, discovery messages
-        'agent_actions/cli/main.py',  # User error messages, version display
-        'agent_actions/validation/validate_udfs.py',  # Validation results output
-
+        "agent_actions/cli/list_udfs.py",  # Table output, discovery messages
+        "agent_actions/cli/main.py",  # User error messages, version display
+        "agent_actions/validation/validate_udfs.py",  # Validation results output
         # Orchestration modules with user-facing progress/status
-        'agent_actions/orchestration/agent_workflow.py',  # Real-time workflow progress
-        'agent_actions/orchestration/agent_executor.py',  # Agent execution status
-        'agent_actions/orchestration/skip_evaluator.py',  # Skip decision notifications
-        'agent_actions/orchestration/batch_manager.py',  # Batch status messages
-        'agent_actions/orchestration/output_manager.py',  # Loop correlation messages
-        'agent_actions/orchestration/action_level_executor.py',  # Action execution status
-
+        "agent_actions/orchestration/agent_workflow.py",  # Real-time workflow progress
+        "agent_actions/orchestration/agent_executor.py",  # Agent execution status
+        "agent_actions/orchestration/skip_evaluator.py",  # Skip decision notifications
+        "agent_actions/orchestration/batch_manager.py",  # Batch status messages
+        "agent_actions/orchestration/output_manager.py",  # Loop correlation messages
+        "agent_actions/orchestration/action_level_executor.py",  # Action execution status
         # Prompt generation with user notifications
-        'agent_actions/prompt_generation/directory_handler.py',  # Copy notifications
-
+        "agent_actions/prompt_generation/directory_handler.py",  # Copy notifications
         # LLM invocation with debug output
-        'agent_actions/llm_invocation/realtime/services/prompt_service.py',  # Debug mode output
-        'agent_actions/llm_invocation/realtime/services/interceptor_service.py',  # Interceptor status
-        'agent_actions/llm_invocation/providers/gemini/provider.py',  # Provider debug output
-
+        "agent_actions/llm_invocation/realtime/services/prompt_service.py",  # Debug mode output
+        "agent_actions/llm_invocation/realtime/services/interceptor_service.py",  # Interceptor status
+        "agent_actions/llm_invocation/providers/gemini/provider.py",  # Provider debug output
         # Response processing
-        'agent_actions/response_processing/schema_loader.py',  # Schema loading status
-
+        "agent_actions/response_processing/schema_loader.py",  # Schema loading status
         # UDF-related user output
-        'agent_actions/input_loading/udf_loader.py',  # UDF discovery count
+        "agent_actions/input_loading/udf_loader.py",  # UDF discovery count
     }
 
     # Patterns that indicate diagnostic (non-user-facing) prints that should use logging
     DIAGNOSTIC_PATTERNS = [
-        re.compile(r'print.*debug', re.IGNORECASE),
-        re.compile(r'print.*traceback', re.IGNORECASE),
-        re.compile(r'print.*exception', re.IGNORECASE),
-        re.compile(r'print.*\bif\s+debug\b', re.IGNORECASE),
-        re.compile(r'print.*\bif\s+verbose\b', re.IGNORECASE),
+        re.compile(r"print.*debug", re.IGNORECASE),
+        re.compile(r"print.*traceback", re.IGNORECASE),
+        re.compile(r"print.*exception", re.IGNORECASE),
+        re.compile(r"print.*\bif\s+debug\b", re.IGNORECASE),
+        re.compile(r"print.*\bif\s+verbose\b", re.IGNORECASE),
     ]
 
     @pytest.fixture
     def source_files(self):
         """Get all Python source files in agent_actions package."""
         project_root = Path(__file__).parent.parent.parent
-        agent_actions_dir = project_root / 'agent_actions'
+        agent_actions_dir = project_root / "agent_actions"
 
         if not agent_actions_dir.exists():
             pytest.skip(f"agent_actions directory not found at {agent_actions_dir}")
 
         source_files = []
-        for py_file in agent_actions_dir.rglob('*.py'):
+        for py_file in agent_actions_dir.rglob("*.py"):
             # Skip __pycache__ and test files
-            if '__pycache__' in str(py_file) or 'test_' in py_file.name:
+            if "__pycache__" in str(py_file) or "test_" in py_file.name:
                 continue
 
             # Get relative path from project root
@@ -92,25 +87,27 @@ class TestPrintStatementMigration:
             if rel_path in self.ALLOWED_PRINT_FILES:
                 continue
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
             for line_num, line in enumerate(lines, start=1):
                 # Skip comments
-                if line.strip().startswith('#'):
+                if line.strip().startswith("#"):
                     continue
 
                 # Check if line contains print()
-                if 'print(' in line or 'print (' in line:
+                if "print(" in line or "print (" in line:
                     # Check if it matches diagnostic patterns
                     for pattern in self.DIAGNOSTIC_PATTERNS:
                         if pattern.search(line):
-                            violations.append({
-                                'file': rel_path,
-                                'line': line_num,
-                                'content': line.strip(),
-                                'pattern': pattern.pattern
-                            })
+                            violations.append(
+                                {
+                                    "file": rel_path,
+                                    "line": line_num,
+                                    "content": line.strip(),
+                                    "pattern": pattern.pattern,
+                                }
+                            )
                             break
 
         if violations:
@@ -136,21 +133,21 @@ class TestPrintStatementMigration:
             if rel_path in self.ALLOWED_PRINT_FILES:
                 continue
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
 
             # Count print statements (simple regex, may have false positives)
             # This looks for print( or print ( but excludes comments and strings
-            lines = content.split('\n')
+            lines = content.split("\n")
             print_lines = []
 
             for line_num, line in enumerate(lines, start=1):
                 # Skip comments
-                if line.strip().startswith('#'):
+                if line.strip().startswith("#"):
                     continue
 
                 # Check for print statements
-                if re.search(r'\bprint\s*\(', line):
+                if re.search(r"\bprint\s*\(", line):
                     print_lines.append((line_num, line.strip()))
 
             if print_lines:
@@ -202,15 +199,15 @@ class TestPrintStatementMigration:
         """
         # List of modules that have been fully migrated (no prints allowed)
         FULLY_MIGRATED_MODULES = {
-            'agent_actions/orchestration/agent_runner.py',
-            'agent_actions/input_loading/extractors_source_data_loader.py',
-            'agent_actions/preprocessing/staging_loader.py',
-            'agent_actions/llm_invocation/batch/batch_service.py',
-            'agent_actions/llm_invocation/batch/batch_side_output_handler.py',
-            'agent_actions/response_processing/where_parser.py',
-            'agent_actions/utilities/processor_helpers.py',
-            'agent_actions/utilities/path_utils.py',
-            'agent_actions/preprocessing/operator_registry/registry.py',
+            "agent_actions/orchestration/agent_runner.py",
+            "agent_actions/input_loading/extractors_source_data_loader.py",
+            "agent_actions/preprocessing/staging_loader.py",
+            "agent_actions/llm_invocation/batch/batch_service.py",
+            "agent_actions/llm_invocation/batch/batch_side_output_handler.py",
+            "agent_actions/response_processing/where_parser.py",
+            "agent_actions/utilities/processor_helpers.py",
+            "agent_actions/utilities/path_utils.py",
+            "agent_actions/preprocessing/operator_registry/registry.py",
         }
 
         violations = []
@@ -220,21 +217,17 @@ class TestPrintStatementMigration:
             if rel_path not in FULLY_MIGRATED_MODULES:
                 continue
 
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
 
             for line_num, line in enumerate(lines, start=1):
                 # Skip comments
-                if line.strip().startswith('#'):
+                if line.strip().startswith("#"):
                     continue
 
                 # Check for print statements
-                if re.search(r'\bprint\s*\(', line):
-                    violations.append({
-                        'file': rel_path,
-                        'line': line_num,
-                        'content': line.strip()
-                    })
+                if re.search(r"\bprint\s*\(", line):
+                    violations.append({"file": rel_path, "line": line_num, "content": line.strip()})
 
         if violations:
             error_msg = "\n\nFound print() statements in fully migrated modules:\n\n"

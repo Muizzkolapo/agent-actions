@@ -1,4 +1,5 @@
 """Module for generating content using prompt processors and LLMs."""
+
 from typing import Any, Dict, List, Union, Optional, Tuple
 
 
@@ -17,18 +18,14 @@ class ContentGenerator:
         data_chunk = []
         src_text = []
         for item in items:
-            dynamic_agent, src_collection = (
-                self.prompt_processor.staging_dynamic_creator(
-                    item, source_path=source_path
-                )
+            dynamic_agent, src_collection = self.prompt_processor.staging_dynamic_creator(
+                item, source_path=source_path
             )
             data_chunk.extend(dynamic_agent)
             src_text.extend(src_collection)
         return data_chunk, src_text
 
-    def generate_from_text(
-        self, text: str
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def generate_from_text(self, text: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Generate agent content from a text input."""
         return self._generate_multiple([text])
 

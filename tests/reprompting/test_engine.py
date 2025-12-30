@@ -24,10 +24,12 @@ class TestRepromptEngineInit:
 
     def test_init_with_config_constraints(self):
         """Test initialization uses config constraints if no explicit ones."""
-        config = RepromptConfig.from_yaml({
-            "preset": "basic",
-            "constraints": [{"required_fields": ["name"]}],
-        })
+        config = RepromptConfig.from_yaml(
+            {
+                "preset": "basic",
+                "constraints": [{"required_fields": ["name"]}],
+            }
+        )
         engine = RepromptEngine(config)
         assert engine.constraints == [{"required_fields": ["name"]}]
 

@@ -31,7 +31,7 @@ class LoggerFactory:
 
     _initialized: bool = False
     _config: Optional[LoggingConfig] = None
-    _root_logger_name: str = 'agent_actions'
+    _root_logger_name: str = "agent_actions"
 
     @classmethod
     def initialize(
@@ -116,32 +116,32 @@ class LoggerFactory:
             Configured logging.Handler instance.
         """
         # Create the handler based on type
-        if config.type == 'console':
+        if config.type == "console":
             handler = logging.StreamHandler()
-        elif config.type == 'file':
+        elif config.type == "file":
             if config.file_path is None:
-                raise ValueError('file_path is required for file handler')
+                raise ValueError("file_path is required for file handler")
             handler = RotatingFileHandler(
                 config.file_path,
                 maxBytes=config.max_bytes,
                 backupCount=config.backup_count,
             )
-        elif config.type == 'json':
+        elif config.type == "json":
             handler = logging.StreamHandler()
         else:
-            raise ValueError(f'Unknown handler type: {config.type}')
+            raise ValueError(f"Unknown handler type: {config.type}")
 
         # Set handler level
         handler.setLevel(getattr(logging, config.level))
 
         # Set formatter based on format config
-        if config.format == 'json' or config.type == 'json':
+        if config.format == "json" or config.type == "json":
             formatter = JSONFormatter(
                 include_source_location=cls._config.include_source_location
                 if cls._config
                 else False,
             )
-        elif config.type == 'file':
+        elif config.type == "file":
             # Use simple formatter for file output (no colors)
             formatter = SimpleFormatter(
                 include_timestamp=cls._config.include_timestamps if cls._config else True,
@@ -192,7 +192,7 @@ class LoggerFactory:
 
         # Walk up the directory tree looking for agent_actions.yml
         for parent in [current] + list(current.parents):
-            if (parent / 'agent_actions.yml').exists():
+            if (parent / "agent_actions.yml").exists():
                 return parent
 
         return None
@@ -229,10 +229,10 @@ class LoggerFactory:
         # Try to use project root
         project_root = cls._get_project_root()
         if project_root:
-            return project_root / 'logs' / 'agent_actions.log'
+            return project_root / "logs" / "agent_actions.log"
 
         # Fallback to home directory
-        return Path.home() / '.agent-actions' / 'logs' / 'agent_actions.log'
+        return Path.home() / ".agent-actions" / "logs" / "agent_actions.log"
 
     @classmethod
     def _create_file_handler(cls) -> Optional[RotatingFileHandler]:
@@ -260,7 +260,7 @@ class LoggerFactory:
                 filename=str(log_file_path),
                 maxBytes=cls._config.file_max_bytes,
                 backupCount=cls._config.file_backup_count,
-                encoding='utf-8',
+                encoding="utf-8",
             )
 
             # Set handler level
@@ -268,7 +268,7 @@ class LoggerFactory:
 
             # Set formatter (no colors for file output)
             # Use config setting for source location
-            if cls._config.file_format == 'json':
+            if cls._config.file_format == "json":
                 formatter = JSONFormatter(
                     include_source_location=cls._config.include_source_location
                 )
@@ -282,16 +282,16 @@ class LoggerFactory:
 
             # Log success to stderr only in DEBUG mode
             # (not to the logging system to avoid recursion)
-            if cls._config and cls._config.default_level == 'DEBUG':
-                print(f'Logging to file: {log_file_path}', file=sys.stderr)
+            if cls._config and cls._config.default_level == "DEBUG":
+                print(f"Logging to file: {log_file_path}", file=sys.stderr)
 
             return handler
 
         except (OSError, IOError, ValueError) as e:
             # Log warning to stderr and continue without file handler
             print(
-                f'Warning: Failed to create file handler: {e}. '
-                'Continuing with console logging only.',
+                f"Warning: Failed to create file handler: {e}. "
+                "Continuing with console logging only.",
                 file=sys.stderr,
             )
             return None
@@ -330,7 +330,7 @@ class LoggerFactory:
 
         # Ensure logger is under agent_actions namespace
         if not name.startswith(cls._root_logger_name):
-            name = f'{cls._root_logger_name}.{name}'
+            name = f"{cls._root_logger_name}.{name}"
 
         return logging.getLogger(name)
 
@@ -347,7 +347,7 @@ class LoggerFactory:
 
         if logger_name:
             if not logger_name.startswith(cls._root_logger_name):
-                logger_name = f'{cls._root_logger_name}.{logger_name}'
+                logger_name = f"{cls._root_logger_name}.{logger_name}"
             logger = logging.getLogger(logger_name)
         else:
             logger = logging.getLogger(cls._root_logger_name)
@@ -361,7 +361,7 @@ class LoggerFactory:
         Args:
             debug: If True, set level to DEBUG. If False, set to INFO.
         """
-        level = 'DEBUG' if debug else 'INFO'
+        level = "DEBUG" if debug else "INFO"
         cls.set_level(level)
 
     @classmethod

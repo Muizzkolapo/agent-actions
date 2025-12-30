@@ -2,4 +2,4 @@
 
 from .field_manager import FieldManager
 
-__all__ = ['FieldManager']
+__all__ = ["FieldManager"]

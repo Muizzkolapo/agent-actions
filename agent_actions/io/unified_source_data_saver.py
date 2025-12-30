@@ -81,6 +81,7 @@ logger = logging.getLogger(__name__)
 # Conditional import for file locking (optional dependency)
 try:
     import portalocker
+
     PORTALOCKER_AVAILABLE = True
 except ImportError:
     PORTALOCKER_AVAILABLE = False
@@ -92,7 +93,8 @@ except ImportError:
 
 class SourceSaveMode(Enum):
     """Source data save modes."""
-    BATCH = "batch"    # Array format, file locking, deduplication
+
+    BATCH = "batch"  # Array format, file locking, deduplication
     ONLINE = "online"  # Optional locking/dedup for future parallel processing
 
 
@@ -107,10 +109,7 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
     """
 
     def __init__(
-        self,
-        base_directory: str,
-        enable_deduplication: bool = True,
-        enable_locking: bool = True
+        self, base_directory: str, enable_deduplication: bool = True, enable_locking: bool = True
     ):
         """
         Initialize unified source data saver.
@@ -134,11 +133,7 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
                 "locking disabled. Install: pip install portalocker"
             )
 
-    def save_source_items(
-        self,
-        items: Union[Dict, List[Dict]],
-        relative_path: str
-    ) -> None:
+    def save_source_items(self, items: Union[Dict, List[Dict]], relative_path: str) -> None:
         """
         Save source data with optional deduplication and locking.
 
@@ -173,16 +168,19 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
             items = [items]
 
         # Build source file path
-        source_dir = self.base_directory / 'agent_io' / 'source'
+        source_dir = self.base_directory / "agent_io" / "source"
         source_dir.mkdir(parents=True, exist_ok=True)
-        source_file = source_dir / f'{relative_path}.json'
+        source_file = source_dir / f"{relative_path}.json"
 
         # Ensure parent directories exist
         source_file.parent.mkdir(parents=True, exist_ok=True)
 
         logger.debug(
             "Saving %d source items to %s (dedup=%s, lock=%s)",
-            len(items), source_file, self.enable_deduplication, self.enable_locking
+            len(items),
+            source_file,
+            self.enable_deduplication,
+            self.enable_locking,
         )
 
         # Save with or without locking
@@ -213,7 +211,7 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
             return
 
         try:
-            with portalocker.Lock(source_file, 'a+', timeout=10) as fh:
+            with portalocker.Lock(source_file, "a+", timeout=10) as fh:
                 # Read existing items
                 fh.seek(0)
                 content = fh.read()
@@ -258,7 +256,7 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
         # Read existing items if file exists
         if source_file.exists():
             try:
-                with open(source_file, 'r', encoding='utf-8') as f:
+                with open(source_file, "r", encoding="utf-8") as f:
                     content = f.read()
                     existing = json.loads(content) if content else []
             except json.JSONDecodeError:
@@ -273,13 +271,11 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
             existing.extend(new_items)
 
         # Write back
-        with open(source_file, 'w', encoding='utf-8') as f:
+        with open(source_file, "w", encoding="utf-8") as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)
 
     def _deduplicate_by_source_guid(
-        self,
-        existing_items: List[Dict],
-        new_items: List[Dict]
+        self, existing_items: List[Dict], new_items: List[Dict]
     ) -> List[Dict]:
         """
         Deduplicate new items by source_guid.
@@ -305,22 +301,22 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
         """
         # Build set of existing source_guids
         existing_guids = {
-            item.get('source_guid')
-            for item in existing_items
-            if item.get('source_guid')
+            item.get("source_guid") for item in existing_items if item.get("source_guid")
         }
 
         # Filter new items
         deduplicated = [
-            item for item in new_items
-            if item.get('source_guid') and item.get('source_guid') not in existing_guids
+            item
+            for item in new_items
+            if item.get("source_guid") and item.get("source_guid") not in existing_guids
         ]
 
         if len(deduplicated) < len(new_items):
             duplicates_count = len(new_items) - len(deduplicated)
             logger.debug(
                 "Deduplicated %d items with duplicate source_guids (%d unique items remaining)",
-                duplicates_count, len(deduplicated)
+                duplicates_count,
+                len(deduplicated),
             )
 
         return deduplicated
@@ -328,8 +324,7 @@ class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
 
 # Convenience function for getting saver instance
 def get_source_data_saver(
-    base_directory: str,
-    mode: SourceSaveMode = SourceSaveMode.BATCH
+    base_directory: str, mode: SourceSaveMode = SourceSaveMode.BATCH
 ) -> UnifiedSourceDataSaver:
     """
     Get UnifiedSourceDataSaver instance with mode-specific defaults.
@@ -350,13 +345,11 @@ def get_source_data_saver(
     """
     if mode == SourceSaveMode.BATCH:
         return UnifiedSourceDataSaver(
-            base_directory=base_directory,
-            enable_deduplication=True,
-            enable_locking=True
+            base_directory=base_directory, enable_deduplication=True, enable_locking=True
         )
     # ONLINE mode
     return UnifiedSourceDataSaver(
         base_directory=base_directory,
         enable_deduplication=True,
-        enable_locking=False  # Online is single-threaded
+        enable_locking=False,  # Online is single-threaded
     )

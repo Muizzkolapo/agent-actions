@@ -14,10 +14,22 @@ import logging
 
 try:
     from pyparsing import (
-        Word, Literal, Regex, QuotedString, alphas, alphanums,
-        Forward, ZeroOrMore, Optional as PyOptional,
-        CaselessKeyword, ParserElement, ParseException,
-        infixNotation, opAssoc, pyparsing_common, Suppress
+        Word,
+        Literal,
+        Regex,
+        QuotedString,
+        alphas,
+        alphanums,
+        Forward,
+        ZeroOrMore,
+        Optional as PyOptional,
+        CaselessKeyword,
+        ParserElement,
+        ParseException,
+        infixNotation,
+        opAssoc,
+        pyparsing_common,
+        Suppress,
     )
 except ImportError as exc:
     raise ImportError(
@@ -26,8 +38,14 @@ except ImportError as exc:
     ) from exc
 
 from .ast_nodes import (
-    FieldNode, LiteralNode, ComparisonNode, LogicalNode, FunctionNode,
-    ComparisonOperator, LogicalOperator, WhereClauseAST
+    FieldNode,
+    LiteralNode,
+    ComparisonNode,
+    LogicalNode,
+    FunctionNode,
+    ComparisonOperator,
+    LogicalOperator,
+    WhereClauseAST,
 )
 from .operator_registry import get_global_registry, OperatorRegistry
 
@@ -42,6 +60,7 @@ def _get_lru_cache_info(cached_func):
 @dataclass
 class ParseError:
     """Information about a parsing error."""
+
     message: str
     line: int
     column: int
@@ -51,6 +70,7 @@ class ParseError:
 @dataclass
 class ParseResult:
     """Result of parsing a WHERE clause."""
+
     success: bool
     ast: Optional[WhereClauseAST] = None
     error: Optional[ParseError] = None
@@ -85,23 +105,22 @@ class WhereClauseParser:
     def _build_basic_tokens(self):
         """Build basic punctuation tokens."""
         return {
-            'lpar': Suppress("("),
-            'rpar': Suppress(")"),
-            'comma': Suppress(","),
-            'lbracket': Suppress("["),
-            'rbracket': Suppress("]")
+            "lpar": Suppress("("),
+            "rpar": Suppress(")"),
+            "comma": Suppress(","),
+            "lbracket": Suppress("["),
+            "rbracket": Suppress("]"),
         }
 
     def _build_literals(self):
         """Build literal parsers (string, number, boolean, null)."""
-        string_literal = (QuotedString('"', escChar='\\') |
-                         QuotedString("'", escChar='\\'))
+        string_literal = QuotedString('"', escChar="\\") | QuotedString("'", escChar="\\")
         string_literal.setParseAction(lambda t: LiteralNode(t[0]))
 
         number = pyparsing_common.number()
         number.setParseAction(lambda t: LiteralNode(t[0]))
 
-        boolean = (CaselessKeyword("TRUE") | CaselessKeyword("FALSE"))
+        boolean = CaselessKeyword("TRUE") | CaselessKeyword("FALSE")
         boolean.setParseAction(lambda t: LiteralNode(t[0].upper() == "TRUE"))
 
         null = CaselessKeyword("NULL")
@@ -115,7 +134,7 @@ class WhereClauseParser:
         tokens = self._build_basic_tokens()
 
         # Field identifier (with dot notation support)
-        field_name = Regex(r'[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*')
+        field_name = Regex(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
         field_name.setParseAction(lambda t: FieldNode(field_path=t[0]))
 
         # Literals
@@ -123,26 +142,31 @@ class WhereClauseParser:
 
         # Array literals
         array_element = Forward()
-        array_element <<= (string_literal | number | boolean | null)
+        array_element <<= string_literal | number | boolean | null
 
-        array_literal = (tokens['lbracket'] +
-                        PyOptional(array_element + ZeroOrMore(tokens['comma'] + array_element)) +
-                        tokens['rbracket'])
+        array_literal = (
+            tokens["lbracket"]
+            + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
+            + tokens["rbracket"]
+        )
         array_literal.setParseAction(self._parse_array)
 
         # Function calls
         function_name = Word(alphas.upper(), alphanums + "_")
         function_args = Forward()
-        function_args <<= (tokens['lpar'] +
-                          PyOptional(array_element + ZeroOrMore(tokens['comma'] + array_element)) +
-                          tokens['rpar'])
+        function_args <<= (
+            tokens["lpar"]
+            + PyOptional(array_element + ZeroOrMore(tokens["comma"] + array_element))
+            + tokens["rpar"]
+        )
 
         function_call = function_name + function_args
         function_call.setParseAction(self._parse_function)
 
         # Operands (field references, literals, function calls)
-        operand = (function_call | field_name | array_literal |
-                  string_literal | number | boolean | null)
+        operand = (
+            function_call | field_name | array_literal | string_literal | number | boolean | null
+        )
 
         # Comparison operators
         comparison_ops = self._build_comparison_operators()
@@ -153,14 +177,12 @@ class WhereClauseParser:
             [
                 # Unary operators (highest precedence)
                 (CaselessKeyword("NOT"), 1, opAssoc.RIGHT, self._parse_not),
-
                 # Comparison operators
                 (comparison_ops, 2, opAssoc.LEFT, self._parse_comparison),
-
                 # Logical operators (lower precedence)
                 (CaselessKeyword("AND"), 2, opAssoc.LEFT, self._parse_and),
                 (CaselessKeyword("OR"), 2, opAssoc.LEFT, self._parse_or),
-            ]
+            ],
         )
 
         # Complete grammar
@@ -255,10 +277,10 @@ class WhereClauseParser:
             except (ValueError, AttributeError) as e:
                 # Handle special cases or custom operators
                 logger.warning(
-                    "Failed to map operator '%s' from registry, "
-                    "using fallback mapping: %s",
-                    operator_name, e,
-                    extra={'operator_name': operator_name}
+                    "Failed to map operator '%s' from registry, using fallback mapping: %s",
+                    operator_name,
+                    e,
+                    extra={"operator_name": operator_name},
                 )
                 operator_enum = self._map_operator_name(operator_name)
 
@@ -342,25 +364,19 @@ class WhereClauseParser:
         """Validate input clause, return error ParseResult if invalid, None if valid."""
         if not where_clause or not where_clause.strip():
             return ParseResult(
-                success=False,
-                error=ParseError("Empty WHERE clause", 1, 1, "EmptyClause")
+                success=False, error=ParseError("Empty WHERE clause", 1, 1, "EmptyClause")
             )
 
         if len(where_clause) > 10000:
             return ParseResult(
                 success=False,
-                error=ParseError(
-                    "WHERE clause too long (max 10000 characters)",
-                    1, 1, "TooLong"
-                )
+                error=ParseError("WHERE clause too long (max 10000 characters)", 1, 1, "TooLong"),
             )
 
         if not self._validate_field_names(where_clause):
             return ParseResult(
                 success=False,
-                error=ParseError(
-                    "Invalid field names detected", 1, 1, "InvalidFields"
-                )
+                error=ParseError("Invalid field names detected", 1, 1, "InvalidFields"),
             )
 
         return None  # Valid
@@ -371,8 +387,7 @@ class WhereClauseParser:
 
         if not parsed:
             return ParseResult(
-                success=False,
-                error=ParseError("Failed to parse WHERE clause", 1, 1, "ParseFailed")
+                success=False, error=ParseError("Failed to parse WHERE clause", 1, 1, "ParseFailed")
             )
 
         root_node = parsed[0]
@@ -400,21 +415,13 @@ class WhereClauseParser:
         except ParseException as e:
             return ParseResult(
                 success=False,
-                error=ParseError(
-                    f"Parse error: {e.msg}",
-                    e.lineno,
-                    e.column,
-                    "ParseException"
-                )
+                error=ParseError(f"Parse error: {e.msg}", e.lineno, e.column, "ParseException"),
             )
         except (ValueError, TypeError, AttributeError, KeyError) as e:
             logger.debug("Unexpected error parsing WHERE clause: %s", e, exc_info=True)
             return ParseResult(
                 success=False,
-                error=ParseError(
-                    f"Unexpected error: {str(e)}",
-                    1, 1, "UnexpectedError"
-                )
+                error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
             )
 
     def _validate_field_names(self, where_clause: str) -> bool:
@@ -428,21 +435,21 @@ class WhereClauseParser:
             True if field names are valid, False otherwise
         """
         # Allow only alphanumeric characters, underscores, and dots for field paths
-        field_pattern = re.compile(r'[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*')
+        field_pattern = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
 
         # Extract potential field names (before operators)
         # This is a simple heuristic - the real validation happens during parsing
         tokens = re.split(
-            r'[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b',
+            r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
             where_clause,
-            flags=re.IGNORECASE
+            flags=re.IGNORECASE,
         )
 
         for token in tokens:
             token = token.strip()
             if token and not token.startswith('"') and not token.startswith("'"):
                 # Check if it could be a field name
-                if re.match(r'^[a-zA-Z_]', token):
+                if re.match(r"^[a-zA-Z_]", token):
                     if not field_pattern.fullmatch(token.split()[0]):
                         return False
 
@@ -462,8 +469,9 @@ class WhereClauseParser:
             "currsize": cache_info.currsize,
             "hit_ratio": (
                 cache_info.hits / (cache_info.hits + cache_info.misses)
-                if cache_info.hits + cache_info.misses > 0 else 0
-            )
+                if cache_info.hits + cache_info.misses > 0
+                else 0
+            ),
         }
 
 
@@ -479,21 +487,20 @@ class SafeExpressionEvaluator:
         """Initialize the safe evaluator."""
         self.allowed_names = {
             # Safe built-in functions
-            'len': len,
-            'str': str,
-            'int': int,
-            'float': float,
-            'bool': bool,
-            'abs': abs,
-            'min': min,
-            'max': max,
-            'sum': sum,
-            'round': round,
-
+            "len": len,
+            "str": str,
+            "int": int,
+            "float": float,
+            "bool": bool,
+            "abs": abs,
+            "min": min,
+            "max": max,
+            "sum": sum,
+            "round": round,
             # Safe constants
-            'True': True,
-            'False': False,
-            'None': None,
+            "True": True,
+            "False": False,
+            "None": None,
         }
 
     def __repr__(self):
@@ -541,17 +548,27 @@ class SafeExpressionEvaluator:
         """
         try:
             # Parse the expression into an AST
-            tree = ast.parse(expression, mode='eval')
+            tree = ast.parse(expression, mode="eval")
         except SyntaxError:
             return False
 
         # Check for unsafe node types
         for node in ast.walk(tree):
-            if isinstance(node, (
-                ast.Import, ast.ImportFrom, ast.FunctionDef, ast.ClassDef,
-                ast.AsyncFunctionDef, ast.Global, ast.Nonlocal, ast.Delete,
-                ast.Exec, ast.Print  # Python 2 compatibility
-            )):
+            if isinstance(
+                node,
+                (
+                    ast.Import,
+                    ast.ImportFrom,
+                    ast.FunctionDef,
+                    ast.ClassDef,
+                    ast.AsyncFunctionDef,
+                    ast.Global,
+                    ast.Nonlocal,
+                    ast.Delete,
+                    ast.Exec,
+                    ast.Print,  # Python 2 compatibility
+                ),
+            ):
                 return False
 
             # Allow only safe attribute access
@@ -582,16 +599,33 @@ class SafeExpressionEvaluator:
             True if the attribute access is safe
         """
         # Blocklist of dangerous attributes that could allow sandbox escape
-        UNSAFE_ATTRS = frozenset({  # pylint: disable=invalid-name
-            '__class__', '__dict__', '__code__', '__globals__',
-            '__bases__', '__subclasses__', '__mro__', '__new__',
-            '__init__', '__del__', '__reduce__', '__reduce_ex__',
-            '__getattribute__', '__setattr__', '__delattr__',
-            'mro', 'gi_frame', 'gi_code', 'f_globals', 'f_locals',
-        })
+        UNSAFE_ATTRS = frozenset(
+            {  # pylint: disable=invalid-name
+                "__class__",
+                "__dict__",
+                "__code__",
+                "__globals__",
+                "__bases__",
+                "__subclasses__",
+                "__mro__",
+                "__new__",
+                "__init__",
+                "__del__",
+                "__reduce__",
+                "__reduce_ex__",
+                "__getattribute__",
+                "__setattr__",
+                "__delattr__",
+                "mro",
+                "gi_frame",
+                "gi_code",
+                "f_globals",
+                "f_locals",
+            }
+        )
 
         # Block dangerous attributes and all underscore-prefixed attrs
-        if node.attr in UNSAFE_ATTRS or node.attr.startswith('_'):
+        if node.attr in UNSAFE_ATTRS or node.attr.startswith("_"):
             return False
 
         return True

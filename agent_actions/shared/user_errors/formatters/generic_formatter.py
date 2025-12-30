@@ -13,15 +13,11 @@ class GenericErrorFormatter(ErrorFormatter):
         return True
 
     def format(
-        self,
-        exc: Exception,
-        root: Exception,
-        message: str,
-        context: Dict[str, Any]
+        self, exc: Exception, root: Exception, message: str, context: Dict[str, Any]
     ) -> UserError:
         """Handle unknown/generic errors."""
-        operation = context.get('operation', 'operation')
-        agent = context.get('agent')
+        operation = context.get("operation", "operation")
+        agent = context.get("agent")
 
         title = f"Error during {operation.replace('_', ' ')}"
         if agent:
@@ -33,5 +29,5 @@ class GenericErrorFormatter(ErrorFormatter):
             details=message,
             fix="Check your configuration and try again",
             context=context,
-            docs_url="https://docs.agent-actions.com/troubleshooting"
+            docs_url="https://docs.agent-actions.com/troubleshooting",
         )

@@ -1,4 +1,5 @@
 """Schema definitions for the new workflow format."""
+
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
@@ -8,96 +9,97 @@ from agent_actions.errors import ConfigValidationError
 from agent_actions.response_processing.guard_parser import GuardParser
 from agent_actions.response_processing.consolidated_guard import parse_guard_config
 
+
 class ActionKind(str, Enum):
     """Types of actions in the workflow."""
-    LLM = 'llm'
-    TOOL = 'tool'
+
+    LLM = "llm"
+    TOOL = "tool"
+
 
 class Granularity(str, Enum):
     """Granularity levels for action execution."""
-    RECORD = 'record'
-    FILE = 'file'
+
+    RECORD = "record"
+    FILE = "file"
+
 
 class LoopMode(str, Enum):
     """Loop execution modes."""
-    PARALLEL = 'parallel'
-    SEQUENTIAL = 'sequential'
+
+    PARALLEL = "parallel"
+    SEQUENTIAL = "sequential"
+
 
 class LoopConfig(BaseModel):
     """Configuration for loop-based actions."""
-    param: str = Field(..., description='Parameter name for loop variable')
-    range: List[int] = Field(..., description='Range of values for loop parameter')
-    mode: LoopMode = Field(default=LoopMode.PARALLEL, description='Execution mode')
+
+    param: str = Field(..., description="Parameter name for loop variable")
+    range: List[int] = Field(..., description="Range of values for loop parameter")
+    mode: LoopMode = Field(default=LoopMode.PARALLEL, description="Execution mode")
+
 
 class MergePattern(str, Enum):
     """Patterns for merging loop outputs."""
-    MERGE = 'merge'
+
+    MERGE = "merge"
+
 
 class LoopConsumptionConfig(BaseModel):
     """Configuration for consuming loop outputs."""
-    source: str = Field(..., description='Base name of the loop action to consume')
+
+    source: str = Field(..., description="Base name of the loop action to consume")
     pattern: MergePattern = Field(
-        default=MergePattern.MERGE,
-        description='Pattern for merging loop outputs'
+        default=MergePattern.MERGE, description="Pattern for merging loop outputs"
     )
+
 
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
-    name: str = Field(..., description='Unique action name')
-    intent: str = Field(..., description='Clear description of action purpose')
-    kind: ActionKind = Field(default=ActionKind.LLM, description='Type of action')
-    impl: Optional[str] = Field(
-        default=None, description='Implementation path for tool actions'
-    )
+
+    name: str = Field(..., description="Unique action name")
+    intent: str = Field(..., description="Clear description of action purpose")
+    kind: ActionKind = Field(default=ActionKind.LLM, description="Type of action")
+    impl: Optional[str] = Field(default=None, description="Implementation path for tool actions")
     model_vendor: Optional[str] = Field(
-        default=None, description='Model vendor (openai, anthropic, etc.)'
+        default=None, description="Model vendor (openai, anthropic, etc.)"
     )
-    model_name: Optional[str] = Field(default=None, description='Model name')
+    model_name: Optional[str] = Field(default=None, description="Model name")
     output_schema: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None, description='Output schema', alias='schema'
+        default=None, description="Output schema", alias="schema"
     )
     drops: List[str] = Field(
-        default_factory=list,
-        description='Fields to exclude from LLM prompt and final output'
+        default_factory=list, description="Fields to exclude from LLM prompt and final output"
     )
     observe: List[str] = Field(
         default_factory=list,
-        description='Fields to pass-through from input to output without LLM '
-                   'generation (visible to LLM but not regenerated)'
+        description="Fields to pass-through from input to output without LLM "
+        "generation (visible to LLM but not regenerated)",
     )
-    granularity: Optional[Granularity] = Field(
-        default=None, description='Execution granularity'
-    )
+    granularity: Optional[Granularity] = Field(default=None, description="Execution granularity")
     guard: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None, description='Condition for action execution'
+        default=None, description="Condition for action execution"
     )
-    policy: Optional[str] = Field(default=None, description='Execution policy')
-    few_shot: Optional[int] = Field(
-        default=None, description='Number of few-shot examples'
-    )
-    loop: Optional[LoopConfig] = Field(default=None, description='Loop configuration')
+    policy: Optional[str] = Field(default=None, description="Execution policy")
+    few_shot: Optional[int] = Field(default=None, description="Number of few-shot examples")
+    loop: Optional[LoopConfig] = Field(default=None, description="Loop configuration")
     loop_consumption: Optional[LoopConsumptionConfig] = Field(
-        default=None, description='Loop output consumption configuration'
+        default=None, description="Loop output consumption configuration"
     )
-    idempotency_key: Optional[str] = Field(
-        default=None, description='Idempotency key template'
-    )
-    prompt: Optional[str] = Field(
-        default=None, description='Prompt template or reference'
-    )
+    idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
+    prompt: Optional[str] = Field(default=None, description="Prompt template or reference")
     dependencies: List[str] = Field(
-        default_factory=list, description='List of upstream dependencies'
+        default_factory=list, description="List of upstream dependencies"
     )
     reprompt: Optional[Union[bool, str, Dict[str, Any]]] = Field(
         default=None,
-        description='Reprompt configuration: true, "smart", "thorough", or detailed config'
+        description='Reprompt configuration: true, "smart", "thorough", or detailed config',
     )
     constraints: Optional[List[Dict[str, Any]]] = Field(
-        default=None,
-        description='List of constraint configurations for response validation'
+        default=None, description="List of constraint configurations for response validation"
     )
 
-    @field_validator('guard')
+    @field_validator("guard")
     @classmethod
     def validate_guard(cls, v):
         """Validate guard expressions for safety."""
@@ -109,64 +111,59 @@ class ActionConfig(BaseModel):
                     parse_guard_config(v)
                 else:
                     raise ConfigValidationError(
-                        'guard_type',
-                        f'Guard must be string or dict, got {type(v)}',
-                        context={'guard_type': str(type(v)), 'operation': 'validate_guard'}
+                        "guard_type",
+                        f"Guard must be string or dict, got {type(v)}",
+                        context={"guard_type": str(type(v)), "operation": "validate_guard"},
                     )
             except ValueError as e:
                 raise ConfigValidationError(
-                    'guard_expression',
-                    f'Invalid guard: {e}',
-                    context={'guard': v, 'operation': 'validate_guard'},
-                    cause=e
+                    "guard_expression",
+                    f"Invalid guard: {e}",
+                    context={"guard": v, "operation": "validate_guard"},
+                    cause=e,
                 ) from e
         return v
 
 
 class DefaultsConfig(BaseModel):
     """Default configuration applied to all actions."""
-    model_vendor: Optional[str] = Field(
-        default=None, description='Default model vendor'
-    )
-    model_name: Optional[str] = Field(default=None, description='Default model name')
-    json_mode: Optional[bool] = Field(
-        default=None, description='Default JSON mode setting'
-    )
-    granularity: Optional[Granularity] = Field(
-        default=None, description='Default granularity'
-    )
-    run_mode: Optional[str] = Field(default=None, description='Default run mode')
+
+    model_vendor: Optional[str] = Field(default=None, description="Default model vendor")
+    model_name: Optional[str] = Field(default=None, description="Default model name")
+    json_mode: Optional[bool] = Field(default=None, description="Default JSON mode setting")
+    granularity: Optional[Granularity] = Field(default=None, description="Default granularity")
+    run_mode: Optional[str] = Field(default=None, description="Default run mode")
     drops: Optional[List[str]] = Field(
-        default=None, description='Default fields to exclude from LLM prompt and output'
+        default=None, description="Default fields to exclude from LLM prompt and output"
     )
     observe: Optional[List[str]] = Field(
         default=None,
-        description='Default fields to pass-through from input to output '
-                   '(visible to LLM but not regenerated)'
+        description="Default fields to pass-through from input to output "
+        "(visible to LLM but not regenerated)",
     )
     reprompt: Optional[Union[bool, str, Dict[str, Any]]] = Field(
-        default=None,
-        description='Default reprompt configuration for all actions'
+        default=None, description="Default reprompt configuration for all actions"
     )
     constraints: Optional[List[Dict[str, Any]]] = Field(
-        default=None,
-        description='Default constraints applied to all actions'
+        default=None, description="Default constraints applied to all actions"
     )
+
 
 class DependencyEdge(BaseModel):
     """Represents a dependency relationship in the execution plan."""
-    action: str = Field(..., description='Action name')
-    depends_on: List[str] = Field(
-        default_factory=list, description='Actions this depends on'
-    )
+
+    action: str = Field(..., description="Action name")
+    depends_on: List[str] = Field(default_factory=list, description="Actions this depends on")
+
 
 class WorkflowConfigV2(BaseModel):
     """New workflow configuration format."""
-    name: str = Field(..., description='Workflow name')
-    description: str = Field(..., description='Workflow description')
-    version: str = Field(..., description='Workflow version')
-    defaults: Optional[DefaultsConfig] = Field(default=None, description='Default settings')
-    actions: List[ActionConfig] = Field(..., description='Workflow actions')
+
+    name: str = Field(..., description="Workflow name")
+    description: str = Field(..., description="Workflow description")
+    version: str = Field(..., description="Workflow version")
+    defaults: Optional[DefaultsConfig] = Field(default=None, description="Default settings")
+    actions: List[ActionConfig] = Field(..., description="Workflow actions")
 
     def get_action(self, name: str) -> Optional[ActionConfig]:
         """Get an action by name."""
@@ -179,12 +176,13 @@ class WorkflowConfigV2(BaseModel):
             dependencies[action.name] = action.dependencies
         return dependencies
 
+
 __all__ = [
-    'ActionKind',
-    'Granularity',
-    'LoopConfig',
-    'ActionConfig',
-    'DefaultsConfig',
-    'DependencyEdge',
-    'WorkflowConfigV2'
+    "ActionKind",
+    "Granularity",
+    "LoopConfig",
+    "ActionConfig",
+    "DefaultsConfig",
+    "DependencyEdge",
+    "WorkflowConfigV2",
 ]

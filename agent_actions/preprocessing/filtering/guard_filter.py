@@ -27,6 +27,7 @@ def _get_lru_cache_info(cached_func):
 @dataclass
 class FilterResult:
     """Result of filtering operation."""
+
     success: bool
     matched: bool = False
     error: Optional[str] = None
@@ -37,6 +38,7 @@ class FilterResult:
 @dataclass
 class FilterMetrics:
     """Metrics for filter operations."""
+
     total_evaluations: int = 0
     successful_evaluations: int = 0
     failed_evaluations: int = 0
@@ -49,6 +51,7 @@ class FilterMetrics:
 @dataclass
 class FilterItemRequest:
     """Request parameters for filtering a single item."""
+
     data: Dict[str, Any]
     condition: str
     timeout: Optional[int] = None
@@ -58,6 +61,7 @@ class FilterItemRequest:
 @dataclass
 class FilterBatchRequest:
     """Request parameters for filtering a batch of items."""
+
     data_items: List[Dict[str, Any]]
     condition: str
     timeout: Optional[int] = None
@@ -78,10 +82,9 @@ class GuardFilter:
     - Thread-safe operations
     """
 
-    def __init__(self,
-                 cache_size: int = 1000,
-                 default_timeout: int = 5,
-                 enable_metrics: bool = True):
+    def __init__(
+        self, cache_size: int = 1000, default_timeout: int = 5, enable_metrics: bool = True
+    ):
         """
         Initialize the guard filter.
 
@@ -118,8 +121,7 @@ class GuardFilter:
         try:
             # Submit evaluation to thread pool with timeout
             future = self.executor.submit(
-                self._evaluate_guard_condition,
-                request.data, request.condition, request.functions
+                self._evaluate_guard_condition, request.data, request.condition, request.functions
             )
 
             matched = future.result(timeout=timeout)
@@ -129,27 +131,17 @@ class GuardFilter:
                 # Cache hit will be determined in _evaluate_where_clause
                 self._update_metrics(True, execution_time, False)
 
-            return FilterResult(
-                success=True,
-                matched=matched,
-                execution_time=execution_time
-            )
+            return FilterResult(success=True, matched=matched, execution_time=execution_time)
 
         except FutureTimeoutError:
             execution_time = time.time() - start_time
-            error_msg = (
-                f"Guard condition evaluation timed out after {timeout} seconds"
-            )
+            error_msg = f"Guard condition evaluation timed out after {timeout} seconds"
             logger.warning(error_msg)
 
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
 
-            return FilterResult(
-                success=False,
-                error=error_msg,
-                execution_time=execution_time
-            )
+            return FilterResult(success=False, error=error_msg, execution_time=execution_time)
 
         except ValueError as e:
             execution_time = time.time() - start_time
@@ -159,11 +151,7 @@ class GuardFilter:
             if self.enable_metrics:
                 self._update_metrics(False, execution_time, False)
 
-            return FilterResult(
-                success=False,
-                error=error_msg,
-                execution_time=execution_time
-            )
+            return FilterResult(success=False, error=error_msg, execution_time=execution_time)
 
     def filter_batch(self, request: FilterBatchRequest) -> List[Dict[str, Any]]:
         """
@@ -182,7 +170,7 @@ class GuardFilter:
                 data=item,
                 condition=request.condition,
                 timeout=request.timeout,
-                functions=request.functions
+                functions=request.functions,
             )
             result = self.filter_item(item_request)
 
@@ -203,10 +191,9 @@ class GuardFilter:
         """Internal cached parse method."""
         return self.parser.parse(condition)
 
-    def _evaluate_guard_condition(self,
-                                  data: Dict[str, Any],
-                                  condition: str,
-                                  functions: Optional[Dict[str, Any]]) -> bool:
+    def _evaluate_guard_condition(
+        self, data: Dict[str, Any], condition: str, functions: Optional[Dict[str, Any]]
+    ) -> bool:
         """
         Internal method to evaluate a guard condition against data.
 
@@ -256,11 +243,11 @@ class GuardFilter:
         self, condition_config: Dict[str, Any], context: Dict[str, Any]
     ) -> bool:
         """Evaluate 'previous_outputs_empty' condition."""
-        agent_name = condition_config.get('agent_name')
+        agent_name = condition_config.get("agent_name")
         if not agent_name:
             return False
 
-        previous_outputs = context.get('previous_outputs', {})
+        previous_outputs = context.get("previous_outputs", {})
         agent_outputs = previous_outputs.get(agent_name, [])
         return len(agent_outputs) == 0
 
@@ -268,24 +255,24 @@ class GuardFilter:
         self, condition_config: Dict[str, Any], context: Dict[str, Any]
     ) -> bool:
         """Evaluate 'previous_outputs_count' condition."""
-        agent_name = condition_config.get('agent_name')
-        threshold = condition_config.get('threshold', 0)
-        comparison = condition_config.get('comparison', '==')
+        agent_name = condition_config.get("agent_name")
+        threshold = condition_config.get("threshold", 0)
+        comparison = condition_config.get("comparison", "==")
 
         if not agent_name:
             return False
 
-        previous_outputs = context.get('previous_outputs', {})
+        previous_outputs = context.get("previous_outputs", {})
         agent_outputs = previous_outputs.get(agent_name, [])
         count = len(agent_outputs)
 
         comparisons = {
-            '==': count == threshold,
-            '!=': count != threshold,
-            '<': count < threshold,
-            '<=': count <= threshold,
-            '>': count > threshold,
-            '>=': count >= threshold
+            "==": count == threshold,
+            "!=": count != threshold,
+            "<": count < threshold,
+            "<=": count <= threshold,
+            ">": count > threshold,
+            ">=": count >= threshold,
         }
 
         if comparison in comparisons:
@@ -298,8 +285,8 @@ class GuardFilter:
         self, condition_config: Dict[str, Any], context: Dict[str, Any]
     ) -> bool:
         """Evaluate 'field_condition' type."""
-        field_path = condition_config.get('field_path')
-        expected_value = condition_config.get('expected_value')
+        field_path = condition_config.get("field_path")
+        expected_value = condition_config.get("expected_value")
 
         if not field_path:
             return False
@@ -311,7 +298,7 @@ class GuardFilter:
         self, condition_config: Dict[str, Any], context: Dict[str, Any]
     ) -> bool:
         """Evaluate 'custom' condition type."""
-        expression = condition_config.get('expression')
+        expression = condition_config.get("expression")
         if not expression:
             return False
 
@@ -330,14 +317,14 @@ class GuardFilter:
         Returns:
             True if the agent should be skipped, False otherwise
         """
-        condition_type = condition_config.get('condition_type')
+        condition_type = condition_config.get("condition_type")
 
         try:
             condition_handlers = {
-                'previous_outputs_empty': self._evaluate_previous_outputs_empty,
-                'previous_outputs_count': self._evaluate_previous_outputs_count,
-                'field_condition': self._evaluate_field_condition,
-                'custom': self._evaluate_custom_condition
+                "previous_outputs_empty": self._evaluate_previous_outputs_empty,
+                "previous_outputs_count": self._evaluate_previous_outputs_count,
+                "field_condition": self._evaluate_field_condition,
+                "custom": self._evaluate_custom_condition,
             }
 
             handler = condition_handlers.get(condition_type)
@@ -379,8 +366,8 @@ class GuardFilter:
                 "misses": filter_cache.misses,
                 "maxsize": filter_cache.maxsize,
                 "currsize": filter_cache.currsize,
-                "hit_ratio": hit_ratio
-            }
+                "hit_ratio": hit_ratio,
+            },
         }
 
     def clear_cache(self):
@@ -405,8 +392,7 @@ def get_global_guard_filter() -> GuardFilter:
     return _GLOBAL_GUARD_FILTER
 
 
-def evaluate_safe_skip_condition(condition_config: Dict[str, Any],
-                                context: Dict[str, Any]) -> bool:
+def evaluate_safe_skip_condition(condition_config: Dict[str, Any], context: Dict[str, Any]) -> bool:
     """
     Safely evaluate a skip condition.
 

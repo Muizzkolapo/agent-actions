@@ -111,9 +111,7 @@ from agent_actions.preprocessing.filtering.guard_filter import (
     get_global_guard_filter,
     FilterItemRequest,
 )
-from agent_actions.utilities.udf_management.tooling import (
-    execute_user_defined_function
-)
+from agent_actions.utilities.udf_management.tooling import execute_user_defined_function
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +119,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class FilterStatus:
     """Result of filtering a single item."""
+
     should_include: bool  # Whether item should be processed
     status: str  # 'included', 'filtered', or 'skipped'
     error: Optional[str] = None
@@ -140,106 +139,86 @@ class FilterService:
         self.guard_filter = get_global_guard_filter()
 
     def _handle_filter_result_object(
-        self,
-        filter_result,
-        behavior: str,
-        passthrough_on_error: bool
+        self, filter_result, behavior: str, passthrough_on_error: bool
     ) -> FilterStatus:
         """Handle FilterResult object from where_filter."""
         logger.info(
-            'Filter result - success: %s, matched: %s',
-            filter_result.success,
-            filter_result.matched
+            "Filter result - success: %s, matched: %s", filter_result.success, filter_result.matched
         )
 
         # Evaluation failed
         if not filter_result.success:
             if filter_result.error:
-                logger.warning('Filter error: %s', filter_result.error)
+                logger.warning("Filter error: %s", filter_result.error)
             return self._handle_evaluation_error(
                 filter_result.error, behavior, passthrough_on_error
             )
 
         # Evaluation succeeded but didn't match
         if not filter_result.matched:
-            logger.info('WHERE clause not matched')
-            status = 'filtered' if behavior == 'filter' else 'skipped'
+            logger.info("WHERE clause not matched")
+            status = "filtered" if behavior == "filter" else "skipped"
             return FilterStatus(should_include=False, status=status)
 
         # Evaluation succeeded and matched
-        return FilterStatus(should_include=True, status='included')
+        return FilterStatus(should_include=True, status="included")
 
     def _handle_evaluation_error(
-        self,
-        error: Optional[str],
-        behavior: str,
-        passthrough_on_error: bool
+        self, error: Optional[str], behavior: str, passthrough_on_error: bool
     ) -> FilterStatus:
         """Handle evaluation errors with passthrough logic."""
         if not passthrough_on_error:
-            status = 'filtered' if behavior == 'filter' else 'skipped'
+            status = "filtered" if behavior == "filter" else "skipped"
             return FilterStatus(should_include=False, status=status, error=error)
         # Error + passthrough_on_error=True: include item
-        return FilterStatus(should_include=True, status='included', error=error)
+        return FilterStatus(should_include=True, status="included", error=error)
 
     def _evaluate_guard(
-        self,
-        item_content: Dict[str, Any],
-        guard_config: Dict[str, Any]
+        self, item_content: Dict[str, Any], guard_config: Dict[str, Any]
     ) -> FilterStatus:
         """Evaluate guard condition for item."""
-        scope = guard_config.get('scope', 'item')
-        if scope != 'item':
-            return FilterStatus(should_include=True, status='included')
+        scope = guard_config.get("scope", "item")
+        if scope != "item":
+            return FilterStatus(should_include=True, status="included")
 
-        behavior = guard_config.get('behavior', 'filter')
-        clause = guard_config.get('clause')
-        passthrough_on_error = guard_config.get('passthrough_on_error', True)
+        behavior = guard_config.get("behavior", "filter")
+        clause = guard_config.get("clause")
+        passthrough_on_error = guard_config.get("passthrough_on_error", True)
 
         try:
-            logger.info(
-                "Guard condition evaluation: '%s' (behavior: %s)",
-                clause,
-                behavior
-            )
+            logger.info("Guard condition evaluation: '%s' (behavior: %s)", clause, behavior)
             request = FilterItemRequest(data=item_content, condition=clause)
             filter_result = self.guard_filter.filter_item(request)
 
             # Modern GuardFilter always returns FilterResult object
-            return self._handle_filter_result_object(
-                filter_result, behavior, passthrough_on_error
-            )
+            return self._handle_filter_result_object(filter_result, behavior, passthrough_on_error)
 
         except ValueError as e:
-            logger.warning('Error in guard condition evaluation: %s', e)
-            return self._handle_evaluation_error(
-                str(e), behavior, passthrough_on_error
-            )
+            logger.warning("Error in guard condition evaluation: %s", e)
+            return self._handle_evaluation_error(str(e), behavior, passthrough_on_error)
 
     def _evaluate_conditional_clause(
-        self,
-        item_content: Dict[str, Any],
-        conditional_clause: str
+        self, item_content: Dict[str, Any], conditional_clause: str
     ) -> FilterStatus:
         """Evaluate conditional clause for item."""
         try:
             result = execute_user_defined_function(conditional_clause, item_content)
 
             if not result:
-                logger.info('Conditional clause failed: %s', conditional_clause)
-                return FilterStatus(should_include=False, status='skipped')
-            return FilterStatus(should_include=True, status='included')
+                logger.info("Conditional clause failed: %s", conditional_clause)
+                return FilterStatus(should_include=False, status="skipped")
+            return FilterStatus(should_include=True, status="included")
 
         except ValueError as e:
-            logger.warning('Error in conditional clause evaluation: %s', e)
+            logger.warning("Error in conditional clause evaluation: %s", e)
             # Conditional clauses always passthrough on error (legacy behavior)
-            return FilterStatus(should_include=True, status='included', error=str(e))
+            return FilterStatus(should_include=True, status="included", error=str(e))
 
     def filter_single_item(
         self,
         item_content: Dict[str, Any],
         guard_config: Optional[Dict[str, Any]] = None,
-        conditional_clause: Optional[str] = None
+        conditional_clause: Optional[str] = None,
     ) -> FilterStatus:
         """
         Filter a single item using guard condition or conditional clause.
@@ -283,14 +262,14 @@ class FilterService:
             return self._evaluate_conditional_clause(item_content, conditional_clause)
 
         # No filtering configured
-        return FilterStatus(should_include=True, status='included')
+        return FilterStatus(should_include=True, status="included")
 
     def apply_guard_filtering(
         self,
         data: List[Dict[str, Any]],
         guard_config: Optional[Dict[str, Any]] = None,
         conditional_clause: Optional[str] = None,
-        content_key: str = 'content'
+        content_key: str = "content",
     ) -> Tuple[List[Dict[str, Any]], Dict[str, str]]:
         """
         Apply guard filtering to a list of data items (realtime mode).
@@ -316,14 +295,10 @@ class FilterService:
         status_map = {}
 
         for item in data:
-            target_id = item.get('target_id', 'unknown')
+            target_id = item.get("target_id", "unknown")
             item_content = item.get(content_key, item)
 
-            filter_status = self.filter_single_item(
-                item_content,
-                guard_config,
-                conditional_clause
-            )
+            filter_status = self.filter_single_item(item_content, guard_config, conditional_clause)
 
             status_map[target_id] = filter_status.status
 

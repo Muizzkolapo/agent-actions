@@ -4,6 +4,7 @@ Documentation HTTP server.
 Serves static files from the docs_site package directory and data files
 from the user's project artefact directory without modifying the package.
 """
+
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from functools import partial
 from pathlib import Path
@@ -33,12 +34,12 @@ class DocsRequestHandler(SimpleHTTPRequestHandler):
         """
         # Decode URL and remove query string
         path = urllib.parse.unquote(path)
-        path = path.split('?')[0].split('#')[0]
-        path = path.lstrip('/')
+        path = path.split("?")[0].split("#")[0]
+        path = path.lstrip("/")
 
         # Route artefact requests to user's directory
-        if path.startswith('artefact/') or path == 'artefact':
-            relative = path[len('artefact'):].lstrip('/')
+        if path.startswith("artefact/") or path == "artefact":
+            relative = path[len("artefact") :].lstrip("/")
             if relative:
                 return str(self.artefact_dir / relative)
             return str(self.artefact_dir)
@@ -65,7 +66,7 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
         True if started successfully
     """
     # Find docs_site directory (in package)
-    docs_site_dir = Path(__file__).parent / 'docs_site'
+    docs_site_dir = Path(__file__).parent / "docs_site"
 
     if not docs_site_dir.exists():
         print("Error: docs_site directory not found!")
@@ -80,7 +81,7 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
         else:
             artefact_dir = artefact_dir.resolve()
     else:
-        artefact_dir = Path.cwd() / 'artefact'
+        artefact_dir = Path.cwd() / "artefact"
 
     if not artefact_dir.exists():
         print("Error: artefact/ directory not found!")
@@ -88,8 +89,8 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
         return False
 
     # Check for required data files
-    catalog_path = artefact_dir / 'catalog.json'
-    runs_path = artefact_dir / 'runs.json'
+    catalog_path = artefact_dir / "catalog.json"
+    runs_path = artefact_dir / "runs.json"
 
     if not catalog_path.exists() or not runs_path.exists():
         print("Error: Data files not found in artefact/")
@@ -97,17 +98,13 @@ def serve_docs(port: int = 8000, artefact_path: Optional[str] = None) -> bool:
         return False
 
     # Create handler class with bound directories
-    handler = partial(
-        DocsRequestHandler,
-        docs_site_dir=docs_site_dir,
-        artefact_dir=artefact_dir
-    )
+    handler = partial(DocsRequestHandler, docs_site_dir=docs_site_dir, artefact_dir=artefact_dir)
 
     print(f"\nServing docs at http://localhost:{port}")
     print("Press Ctrl+C to exit\n")
 
     try:
-        with HTTPServer(('', port), handler) as httpd:
+        with HTTPServer(("", port), handler) as httpd:
             httpd.serve_forever()
     except KeyboardInterrupt:
         print("\nShutting down server...")

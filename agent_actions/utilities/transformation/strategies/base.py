@@ -4,6 +4,7 @@ Base Strategy Interface for Passthrough Transformation.
 This module defines the interface that all passthrough transformation
 strategies must implement.
 """
+
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional
 
@@ -17,7 +18,7 @@ class IPassthroughTransformStrategy(ABC):
         data: List,
         passthrough_fields: Optional[Dict],
         agent_config: Dict,
-        already_structured: bool
+        already_structured: bool,
     ) -> bool:
         """
         Check if this strategy can handle the given inputs.
@@ -39,7 +40,7 @@ class IPassthroughTransformStrategy(ABC):
         context_data: Dict,
         source_guid: str,
         agent_config: Dict,
-        passthrough_fields: Optional[Dict] = None
+        passthrough_fields: Optional[Dict] = None,
     ) -> List:
         """
         Execute the transformation.

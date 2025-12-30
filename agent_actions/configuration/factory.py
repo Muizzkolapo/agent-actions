@@ -32,7 +32,7 @@ def application_container_context(config: Optional[Dict[str, Any]] = None):
             agent_runner = container.get_agent_runner()
     """
     if config is None:
-        container = ApplicationContainer.create_for_environment('development')
+        container = ApplicationContainer.create_for_environment("development")
     else:
         container = ApplicationContainer(config)
 
@@ -47,7 +47,7 @@ def create_agent_runner(
     config: Optional[Dict[str, Any]] = None,
     use_tools: bool = True,
     constructor_path: Optional[str] = None,  # pylint: disable=unused-argument
-    default_path: Optional[str] = None  # pylint: disable=unused-argument
+    default_path: Optional[str] = None,  # pylint: disable=unused-argument
 ) -> AgentRunner:
     """
     Create an AgentRunner with proper dependency injection.
@@ -70,7 +70,7 @@ def create_target_content_processor(
     agent_config: Dict = None,
     agent_name: str = None,
     idx: int = None,
-    agent_configs: Optional[Dict[str, Dict]] = None
+    agent_configs: Optional[Dict[str, Dict]] = None,
 ):
     """
     Create a TargetContentProcessor with proper dependency injection.
