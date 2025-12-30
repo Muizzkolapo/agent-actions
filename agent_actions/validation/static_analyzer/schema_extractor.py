@@ -6,7 +6,10 @@ Handles schema extraction from:
 - Non-JSON agents: fallback to content field
 """
 
+from pathlib import Path
 from typing import Any, Dict, Optional, Set
+
+import yaml
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -26,13 +29,19 @@ class SchemaExtractor:
         print(schema.available_fields)  # {'summary', 'facts'}
     """
 
-    def __init__(self, udf_registry: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        udf_registry: Optional[Dict[str, Any]] = None,
+        schema_dir: Optional[Path] = None,
+    ) -> None:
         """Initialize the schema extractor.
 
         Args:
             udf_registry: UDF_REGISTRY from udf_management module for tool schemas
+            schema_dir: Path to schema directory (defaults to cwd/schema)
         """
         self.udf_registry = udf_registry or {}
+        self.schema_dir = schema_dir or Path.cwd() / "schema"
 
     def extract_schema(
         self,
@@ -154,15 +163,23 @@ class SchemaExtractor:
         schema_name = config.get("schema_name")
 
         # If no inline schema but has schema_name, try to load external schema
-        if not schema_def and schema_name and schema_loader:
-            try:
-                loaded = schema_loader.load_schema(schema_name)
+        if not schema_def and schema_name:
+            # Try direct loading from schema directory first (most reliable)
+            loaded = self._load_schema_from_dir(schema_name)
+            if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self._extract_fields_from_json_schema(loaded)
                 return
-            except Exception:  # pylint: disable=broad-exception-caught
-                # Schema loading failed - will fall through to schemaless
-                pass
+
+            # Fall back to schema_loader if provided
+            if schema_loader:
+                try:
+                    loaded = schema_loader.load_schema(schema_name)
+                    output.json_schema = loaded
+                    output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                    return
+                except Exception:  # pylint: disable=broad-exception-caught
+                    pass  # Schema loading failed - will fall through to schemaless
 
         if not schema_def:
             # Check json_mode - if enabled, agent should have schema
@@ -181,14 +198,18 @@ class SchemaExtractor:
 
         # Handle different schema formats
         if isinstance(schema_def, str):
-            # Schema reference (external file) - try to load
-            if schema_loader:
+            # Schema reference (external file) - try direct loading first
+            loaded = self._load_schema_from_dir(schema_def)
+            if loaded:
+                output.json_schema = loaded
+                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+            elif schema_loader:
+                # Fall back to schema_loader
                 try:
                     loaded = schema_loader.load_schema(schema_def)
                     output.json_schema = loaded
                     output.schema_fields = self._extract_fields_from_json_schema(loaded)
                 except Exception:  # pylint: disable=broad-exception-caught
-                    # Schema loading failed - mark as dynamic
                     output.is_dynamic = True
             else:
                 output.is_dynamic = True
@@ -285,7 +306,9 @@ class SchemaExtractor:
         if config.get("return_collection"):
             output.schema_fields.add("input_data")
 
-    def _extract_fields_from_json_schema(self, schema: Dict[str, Any]) -> Set[str]:
+    def _extract_fields_from_json_schema(  # pylint: disable=too-many-branches
+        self, schema: Dict[str, Any]
+    ) -> Set[str]:
         """Extract top-level field names from JSON schema.
 
         Handles:
@@ -366,7 +389,39 @@ class SchemaExtractor:
                     if field_id:
                         fields.add(field_id)
 
+        # Handle array schema with items.properties (extract nested fields)
+        if schema_type == "array" and "items" in schema:
+            items = schema["items"]
+            if isinstance(items, dict) and "properties" in items:
+                fields.update(items["properties"].keys())
+
         return fields
+
+    def _load_schema_from_dir(self, schema_name: str) -> Optional[Dict[str, Any]]:
+        """Load a schema from the schema directory.
+
+        Uses the same approach as the docs parser for reliable schema loading.
+
+        Args:
+            schema_name: Name of the schema file (without extension)
+
+        Returns:
+            Loaded schema dict or None if not found
+        """
+        if not self.schema_dir or not self.schema_dir.exists():
+            return None
+
+        # Try .yml first, then .yaml
+        for ext in ["yml", "yaml"]:
+            schema_file = self.schema_dir / f"{schema_name}.{ext}"
+            if schema_file.exists():
+                try:
+                    with open(schema_file, "r", encoding="utf-8") as f:
+                        return yaml.safe_load(f)
+                except (yaml.YAMLError, OSError):
+                    return None
+
+        return None
 
     def _extract_field_name(self, reference: str) -> Optional[str]:
         """Extract field name from a reference.

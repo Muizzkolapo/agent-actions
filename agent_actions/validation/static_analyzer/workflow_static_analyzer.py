@@ -46,12 +46,13 @@ class WorkflowStaticAnalyzer:
         4. Fields haven't been dropped from output
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         workflow_config: Dict[str, Any],
         udf_registry: Optional[Dict[str, Any]] = None,
         schema_loader: Optional[Any] = None,
         source_schema: Optional[Dict[str, Any]] = None,
+        schema_dir: Optional[Any] = None,
     ) -> None:
         """Initialize the analyzer.
 
@@ -60,9 +61,10 @@ class WorkflowStaticAnalyzer:
             udf_registry: UDF_REGISTRY for tool schema lookup
             schema_loader: SchemaLoader for external schema loading
             source_schema: Schema for source/input data (optional)
+            schema_dir: Path to schema directory (defaults to cwd/schema)
         """
         self.workflow_config = workflow_config
-        self.schema_extractor = SchemaExtractor(udf_registry)
+        self.schema_extractor = SchemaExtractor(udf_registry, schema_dir=schema_dir)
         self.reference_extractor = ReferenceExtractor()
         self.schema_loader = schema_loader
         self.source_schema = source_schema

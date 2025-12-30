@@ -109,9 +109,12 @@ class SchemaCommand:  # pylint: disable=too-few-public-methods
         # Create schema loader for external schemas
         schema_loader = SchemaLoader()
 
-        # Create analyzer and get schemas
+        # Create analyzer and get schemas (paths.schema_dir is the standard location)
         analyzer = WorkflowStaticAnalyzer(
-            workflow_config, udf_registry=udf_registry, schema_loader=schema_loader
+            workflow_config,
+            udf_registry=udf_registry,
+            schema_loader=schema_loader,
+            schema_dir=paths.schema_dir,
         )
         schemas = analyzer.get_action_schemas()
 
