@@ -19,6 +19,7 @@ from agent_actions.cli.cli_decorators import requires_project, handles_user_erro
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
+from agent_actions.response_processing.schema_loader import SchemaLoader
 from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
 from agent_actions.errors import FileLoadError
 
@@ -95,17 +96,23 @@ class SchemaCommand:  # pylint: disable=too-few-public-methods
             "actions": [{**config, "name": name} for name, config in workflow.agent_configs.items()]
         }
 
-        # Get UDF registry if user code provided
+        # Get UDF registry (always try to load for tool schemas)
         udf_registry: Dict[str, Any] = {}
-        if self.user_code:
-            from agent_actions.utilities.udf_management.udf_registry import (  # pylint: disable=import-outside-toplevel
-                UDF_REGISTRY,
-            )
+        try:
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY
+        except ImportError:
+            pass  # UDF registry not available
+
+        # Create schema loader for external schemas
+        schema_loader = SchemaLoader()
 
         # Create analyzer and get schemas
-        analyzer = WorkflowStaticAnalyzer(workflow_config, udf_registry=udf_registry)
+        analyzer = WorkflowStaticAnalyzer(
+            workflow_config, udf_registry=udf_registry, schema_loader=schema_loader
+        )
         schemas = analyzer.get_action_schemas()
 
         if self.json_output:

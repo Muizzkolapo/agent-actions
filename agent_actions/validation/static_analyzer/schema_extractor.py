@@ -142,15 +142,27 @@ class SchemaExtractor:
             else:
                 input_schema.optional_fields.add(field_name)
 
-    def _extract_llm_schema(
+    def _extract_llm_schema(  # pylint: disable=too-many-branches
         self,
         config: Dict[str, Any],
         output: OutputSchema,
         schema_loader: Optional[Any],
     ) -> None:
         """Extract schema from LLM agent."""
-        # Get schema definition (supports both 'schema' and 'output_schema' aliases)
+        # Get schema definition (supports 'schema', 'output_schema', and 'schema_name')
         schema_def = config.get("schema") or config.get("output_schema")
+        schema_name = config.get("schema_name")
+
+        # If no inline schema but has schema_name, try to load external schema
+        if not schema_def and schema_name and schema_loader:
+            try:
+                loaded = schema_loader.load_schema(schema_name)
+                output.json_schema = loaded
+                output.schema_fields = self._extract_fields_from_json_schema(loaded)
+                return
+            except Exception:  # pylint: disable=broad-exception-caught
+                # Schema loading failed - will fall through to schemaless
+                pass
 
         if not schema_def:
             # Check json_mode - if enabled, agent should have schema
