@@ -15,6 +15,8 @@ from agent_actions.preprocessing.filtering.guard_handler import GuardHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
+from agent_actions.errors.preflight import ContextStructureError
+from agent_actions.validation.preflight import PreFlightValidator
 from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats,
@@ -96,18 +98,27 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         """
         # 0. Validate agent_config is not None
         if agent_config is None:
-            raise ConfigurationError(
-                "agent_config is None in batch task preparation. "
-                "This usually means the agent is not defined in the workflow configuration or "
-                "the configuration failed to load properly. Please check your workflow YAML file.",
-                context={"batch_name": batch_name, "output_directory": output_directory},
+            raise ContextStructureError(
+                "agent_config is None in batch task preparation",
+                expected_fields=["agent_config"],
+                actual_fields=[],
+                mode="batch",
+                context={
+                    "batch_name": batch_name,
+                    "output_directory": output_directory,
+                    "hint": "Check that the agent is defined in the workflow configuration "
+                    "and the configuration loaded properly.",
+                },
             )
 
         # 1. Validate configuration
         self._validate_config(agent_config, provider)
 
         # 2. Setup context
-        _ = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
+        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
+
+        # 2.1 Pre-flight validation: check template variables against first data row
+        self._run_preflight_validation(agent_config, raw_prompt, data)
         # pylint: disable=import-outside-toplevel
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
@@ -344,3 +355,53 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
         return get_filter_service()
+
+    def _run_preflight_validation(
+        self,
+        agent_config: Dict[str, Any],
+        raw_prompt: Optional[str],
+        data: List[Dict[str, Any]],
+    ) -> None:
+        """Run pre-flight validation on template and first data row.
+
+        Validates template variables are available in context before processing
+        any rows. This catches configuration errors early with unified error
+        messages across batch and online modes.
+
+        Args:
+            agent_config: Agent configuration
+            raw_prompt: The raw prompt template
+            data: List of data items (uses first row for validation)
+
+        Raises:
+            PreFlightValidationError: If validation fails
+        """
+        if not raw_prompt or not data:
+            return  # Nothing to validate
+
+        # Use first row as sample context for validation
+        first_row = data[0]
+
+        # Extract content from row (same logic as _process_single_item)
+        if "source_guid" in first_row and "content" in first_row:
+            sample_context = first_row["content"]
+        else:
+            sample_context = first_row
+
+        # Ensure context is a dict for validation
+        if not isinstance(sample_context, dict):
+            sample_context = {"content": sample_context}
+
+        agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+
+        # Run pre-flight validation
+        validator = PreFlightValidator()
+        result = validator.validate_for_batch(
+            template=raw_prompt,
+            context=sample_context,
+            agent_name=agent_name,
+            agent_config=agent_config,
+        )
+
+        # Raise unified error if validation fails
+        result.raise_if_invalid()

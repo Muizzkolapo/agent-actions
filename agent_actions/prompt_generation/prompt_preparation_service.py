@@ -107,6 +107,8 @@ from agent_actions.utilities.context_scope.static_data_loader import (
     StaticDataLoader,
     StaticDataLoadError,
 )
+from agent_actions.validation.preflight import PreFlightValidator
+from agent_actions.errors.preflight import TemplateVariableError
 
 logger = logging.getLogger(__name__)
 
@@ -265,10 +267,15 @@ class PromptPreparationService:
         """
         # Validate required parameters
         if request.agent_config is None:
-            raise ValueError(
-                "agent_config is required and cannot be None. "
-                "Ensure agent configuration is properly loaded before calling "
-                "prepare_prompt_with_context()."
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.errors.preflight import ContextStructureError
+
+            raise ContextStructureError(
+                "agent_config is required and cannot be None",
+                expected_fields=["agent_config"],
+                actual_fields=[],
+                agent_name=request.agent_name,
+                mode=request.mode,
             )
 
         logger.debug("Preparing prompt for agent '%s' in %s mode", request.agent_name, request.mode)
@@ -333,6 +340,15 @@ class PromptPreparationService:
         )
         logger.debug("Built LLM context for %s mode with %d keys", request.mode, len(llm_context))
 
+        # Step 4.5: Pre-flight validation - check template variables before rendering
+        PromptPreparationService._run_preflight_validation(
+            raw_prompt=raw_prompt,
+            prompt_context=prompt_context,
+            agent_name=request.agent_name,
+            mode=request.mode,
+            agent_config=request.agent_config,
+        )
+
         # Step 5: Render template with Jinja2 ({{ action.field }})
         formatted_prompt = PromptPreparationService._render_prompt_template(
             raw_prompt, prompt_context
@@ -393,7 +409,7 @@ class PromptPreparationService:
             Rendered prompt string
 
         Raises:
-            ValueError: If template syntax is invalid or rendering fails
+            TemplateVariableError: If template syntax is invalid or rendering fails
         """
         if not prompt_context:
             logger.debug("No prompt_context, using raw prompt")
@@ -416,15 +432,29 @@ class PromptPreparationService:
 
         except TemplateSyntaxError as e:
             logger.error("Jinja2 template syntax error: %s", e)
-            raise ValueError(
-                f"Invalid Jinja2 syntax in prompt template: {e}\nLine {e.lineno}: {e.message}"
+            raise TemplateVariableError(
+                missing_variables=[],
+                available_variables=list(prompt_context.keys()),
+                template_line=e.lineno,
+                cause=e,
             ) from e
         except Exception as e:
             logger.error("Error rendering prompt template: %s", e)
             available_refs = list(prompt_context.keys())
-            raise ValueError(
-                f"Error rendering prompt template: {e}\n"
-                f"Available context references: {', '.join(available_refs)}"
+            # Extract missing variable from error message if possible
+            error_str = str(e)
+            missing = []
+            if "has no attribute" in error_str or "is undefined" in error_str:
+                # Try to extract the missing variable name
+                import re  # pylint: disable=import-outside-toplevel
+
+                match = re.search(r"'(\w+)'", error_str)
+                if match:
+                    missing.append(match.group(1))
+            raise TemplateVariableError(
+                missing_variables=missing,
+                available_variables=available_refs,
+                cause=e,
             ) from e
 
     @staticmethod
@@ -523,6 +553,46 @@ class PromptPreparationService:
             # Ensure result is always a dict (DataTransformer might return non-dict)
             return result if isinstance(result, dict) else {}
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
+
+    @staticmethod
+    def _run_preflight_validation(
+        raw_prompt: str,
+        prompt_context: Dict[str, Any],
+        agent_name: str,
+        mode: str,
+        agent_config: Dict[str, Any],
+    ) -> None:
+        """
+        Run pre-flight validation on template and context before rendering.
+
+        Validates template variables are available in context before rendering.
+        This catches configuration errors early with unified error messages
+        across batch and online modes.
+
+        Args:
+            raw_prompt: The raw prompt template
+            prompt_context: The context dictionary for template rendering
+            agent_name: Name of the agent being processed
+            mode: Processing mode ('batch' or 'realtime')
+            agent_config: Agent configuration dictionary
+
+        Raises:
+            PreFlightValidationError: If validation fails
+        """
+        if not raw_prompt or not prompt_context:
+            return  # Nothing to validate
+
+        validator = PreFlightValidator()
+        result = validator.validate(
+            template=raw_prompt,
+            context=prompt_context,
+            agent_name=agent_name,
+            mode=mode,
+            agent_config=agent_config,
+        )
+
+        # Raise unified error if validation fails
+        result.raise_if_invalid()
 
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:

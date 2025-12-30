@@ -76,6 +76,16 @@ from agent_actions.errors.operations import (
     TemplateRenderingError,
 )
 
+# Pre-flight validation errors
+from agent_actions.errors.preflight import (
+    PreFlightValidationError,
+    TemplateVariableError,
+    ContextStructureError,
+    DependencyValidationError,
+    VendorConfigError,
+    PathValidationError,
+)
+
 # Backward compatibility aliases
 AgentActionsException = AgentActionsError
 ProcessorError = ProcessingError
@@ -130,6 +140,13 @@ __all__ = [
     "OperationalError",
     "AgentExecutionError",
     "TemplateRenderingError",
+    # Pre-flight validation
+    "PreFlightValidationError",
+    "TemplateVariableError",
+    "ContextStructureError",
+    "DependencyValidationError",
+    "VendorConfigError",
+    "PathValidationError",
     # Backward compatibility aliases
     "ProcessorError",
     "LoaderError",

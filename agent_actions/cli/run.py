@@ -20,6 +20,10 @@ from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowCo
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
+from agent_actions.validation.preflight import (
+    VendorCompatibilityValidator,
+    DependencyValidator,
+)
 
 
 class RunCommand:  # pylint: disable=too-few-public-methods
@@ -94,6 +98,102 @@ class RunCommand:  # pylint: disable=too-few-public-methods
             asyncio.run(workflow.async_run(concurrency_limit=self.args.concurrency_limit))
         else:
             workflow.run()
+
+    # pylint: disable=too-many-branches
+    def execute_validation_only(self) -> None:
+        """
+        Execute pre-flight validation only, without running the workflow.
+
+        This validates:
+        - Workflow configuration
+        - Agent configurations (vendor compatibility)
+        - Dependencies (circular detection)
+        - Template variables (if possible without data)
+
+        Exits with code 0 if valid, 1 if errors found.
+        """
+        import sys  # pylint: disable=import-outside-toplevel
+
+        click.echo(f"Running pre-flight validation for: {self.args.agent}")
+        click.echo("Setting up project paths...")
+
+        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
+        PromptValidator().validate(paths.prompt_dir)
+
+        filename = f"{self.agent_name}.yml"
+        full_path = self._find_config_file(paths.agent_config_dir, filename)
+
+        click.echo("Rendering and loading configuration...")
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+        )
+
+        click.echo("Loading workflow configuration...")
+        workflow = AgentWorkflow(
+            WorkflowConfig(
+                paths=WorkflowPaths(
+                    constructor_path=str(full_path),
+                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
+                    default_path=str(paths.default_config_path),
+                ),
+                use_tools=self.args.use_tools,
+                run_upstream=self.args.upstream,
+                run_downstream=self.args.downstream,
+            )
+        )
+
+        click.echo("\nRunning pre-flight validation...")
+        click.echo("-" * 50)
+
+        errors = []
+        warnings = []
+
+        # 1. Validate vendor compatibility for each agent
+        vendor_validator = VendorCompatibilityValidator()
+        for agent_name, agent_config in workflow.agent_configs.items():
+            if not vendor_validator.validate_vendor_config(agent_config, agent_name):
+                for issue in vendor_validator.get_issues():
+                    if issue.issue_type == "error":
+                        errors.append(f"[{agent_name}] {issue.message}")
+                    else:
+                        warnings.append(f"[{agent_name}] {issue.message}")
+
+        # 2. Validate dependencies
+        dep_validator = DependencyValidator()
+        if not dep_validator.validate_workflow(
+            {"agents": workflow.agent_configs},
+            workflow.agent_configs,
+        ):
+            for issue in dep_validator.get_issues():
+                if issue.issue_type == "error":
+                    errors.append(f"[dependency] {issue.message}")
+                else:
+                    warnings.append(f"[dependency] {issue.message}")
+
+        # 3. Report results
+        click.echo("")
+        if errors:
+            click.echo(click.style("VALIDATION FAILED", fg="red", bold=True))
+            click.echo(f"\n{len(errors)} error(s) found:\n")
+            for error in errors:
+                click.echo(click.style(f"  ERROR: {error}", fg="red"))
+        else:
+            click.echo(click.style("VALIDATION PASSED", fg="green", bold=True))
+
+        if warnings:
+            click.echo(f"\n{len(warnings)} warning(s):\n")
+            for warning in warnings:
+                click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
+
+        click.echo("")
+        click.echo("-" * 50)
+
+        if errors:
+            click.echo("Pre-flight validation failed. Fix errors before running workflow.")
+            sys.exit(1)
+        else:
+            click.echo("Pre-flight validation passed. Workflow is ready to run.")
+            sys.exit(0)
 
     def execute(self) -> None:
         """
@@ -210,6 +310,12 @@ class RunCommand:  # pylint: disable=too-few-public-methods
     is_flag=True,
     help="Execute all downstream workflows that depend on this workflow",
 )
+@click.option(
+    "--validate-only",
+    "-v",
+    is_flag=True,
+    help="Run pre-flight validation only, without executing the workflow",
+)
 @handles_user_errors("run")
 @requires_project
 # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -223,6 +329,7 @@ def run(
     concurrency_limit: int = 5,
     upstream: bool = False,
     downstream: bool = False,
+    validate_only: bool = False,
 ) -> None:
     """
     Run agents with a specified agent configuration.
@@ -250,4 +357,9 @@ def run(
         downstream=downstream,
     )
     command = RunCommand(args)
-    command.execute()
+
+    # Handle validate-only mode
+    if validate_only:
+        command.execute_validation_only()
+    else:
+        command.execute()
