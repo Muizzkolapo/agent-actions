@@ -1,3 +1,0 @@
-{"key": "1", "request": {"contents": [{"parts": [{"text": "You are helpful\n\n{\"question\": \"Question 1\"}"}]}], "generation_config": {"temperature": 0.7, "max_tokens": 100}}}
-{"key": "2", "request": {"contents": [{"parts": [{"text": "You are helpful\n\n{\"question\": \"Question 2\"}"}]}], "generation_config": {"temperature": 0.7, "max_tokens": 100}}}
-{"key": "3", "request": {"contents": [{"parts": [{"text": "You are helpful\n\n{\"question\": \"Question 3\"}"}]}], "generation_config": {"temperature": 0.7, "max_tokens": 100}}}
