@@ -21,6 +21,8 @@ from agent_actions.llm_invocation.batch.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats,
 )
+from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.batch_constants import ContextMetaKeys, FilterStatus
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +205,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # 2. Store row in context map with initial status
         row_with_meta = row.copy()
-        row_with_meta["_batch_filter_status"] = "included"
+        BatchContextMetadata.set_filter_status(row_with_meta, FilterStatus.INCLUDED)
         context_map_builder[custom_id] = row_with_meta
 
         # 3. Extract row content for filtering
@@ -220,7 +222,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         )
 
         # 5. Update context map with filter status
-        context_map_builder[custom_id]["_batch_filter_status"] = status
+        context_map_builder[custom_id][ContextMetaKeys.FILTER_STATUS] = status
 
         # 6. Update stats based on filter result
         if status == "filtered":
@@ -284,7 +286,9 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # Store passthrough_fields for later merging
         if prep_result.passthrough_fields and custom_id in context_map_builder:
-            context_map_builder[custom_id]["_passthrough_fields"] = prep_result.passthrough_fields
+            BatchContextMetadata.set_passthrough_fields(
+                context_map_builder[custom_id], prep_result.passthrough_fields
+            )
 
         # Create and return task
         cleaned_row = prep_result.llm_context

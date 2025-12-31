@@ -16,7 +16,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchReconciliationResult
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.batch_constants import BatchStatus, ContextMetaKeys
+from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -247,8 +248,8 @@ class BatchRetryOrchestrator:
             # Extract the original content, preserving all fields
             record_copy = record_data.copy()
             # Remove internal tracking fields that shouldn't affect task preparation
-            record_copy.pop("_batch_filter_status", None)
-            record_copy.pop("_passthrough_fields", None)
+            record_copy.pop(ContextMetaKeys.FILTER_STATUS, None)
+            record_copy.pop(ContextMetaKeys.PASSTHROUGH_FIELDS, None)
             retry_data.append(record_copy)
 
         # Use task preparator to create tasks
@@ -564,5 +565,5 @@ class BatchRetryOrchestrator:
             original_batch_id=original_batch_id,
             final_batch_id=final_batch_id,
         )
-        record["_retry_metadata"] = metadata.to_dict()
+        BatchContextMetadata.set_retry_metadata(record, metadata.to_dict())
         return record
