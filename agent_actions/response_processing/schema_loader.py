@@ -56,7 +56,10 @@ class SchemaLoader:
     @staticmethod
     def load_schema(schema_name: str, schema_dir: Path = None) -> dict:
         """
-        Load a schema using WorkflowParser.
+        Load a schema from YAML file.
+
+        Returns the raw YAML data for runtime schema compilation.
+        This preserves all fields including 'items' for arrays.
 
         Parameters:
             schema_name (str): The name of the schema to load.
@@ -65,22 +68,19 @@ class SchemaLoader:
         Returns:
             dict: The loaded schema as a dictionary.
         """
-        # Import here to avoid circular imports
-        from agent_actions.docs.parser import (  # pylint: disable=import-outside-toplevel
-            WorkflowParser,
-        )
-
         if schema_dir is None:
             schema_dir = Path.cwd() / "schema"
 
-        result = WorkflowParser.load_schema(schema_name, schema_dir)
-        if result:
-            return result
+        schema_file = schema_dir / f"{schema_name}.yml"
 
-        raise FileNotFoundError(
-            f"Schema file '{schema_name}.yml' not found in {schema_dir}. "
-            f"Ensure the schema file exists in the schema/ directory."
-        )
+        if not schema_file.exists():
+            raise FileNotFoundError(
+                f"Schema file '{schema_name}.yml' not found in {schema_dir}. "
+                f"Ensure the schema file exists in the schema/ directory."
+            )
+
+        with open(schema_file, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f)
 
     @staticmethod
     def validate_schemas_exist(
