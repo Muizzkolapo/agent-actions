@@ -114,9 +114,9 @@ class TestMultiBatchCorrelationConsistency:
             source_guid = record["source_guid"]
             batch_1_2_id = original_results[source_guid]
             batch_3_id = batch_3_results[source_guid]
-            assert (
-                batch_1_2_id == batch_3_id
-            ), f"Correlation ID mismatch for {source_guid}: Batch 1&2: {batch_1_2_id}, Batch 3: {batch_3_id}"
+            assert batch_1_2_id == batch_3_id, (
+                f"Correlation ID mismatch for {source_guid}: Batch 1&2: {batch_1_2_id}, Batch 3: {batch_3_id}"
+            )
         print(f"✅ All batches produced consistent correlation IDs:")
         for record in source_records:
             source_guid = record["source_guid"]
@@ -145,9 +145,9 @@ class TestMultiBatchCorrelationConsistency:
         for position in positions:
             batch_1_id = batch_1_results[position]
             batch_2_id = batch_2_results[position]
-            assert (
-                batch_1_id == batch_2_id
-            ), f"Position-based correlation ID mismatch for position {position}: Batch 1: {batch_1_id}, Batch 2: {batch_2_id}"
+            assert batch_1_id == batch_2_id, (
+                f"Position-based correlation ID mismatch for position {position}: Batch 1: {batch_1_id}, Batch 2: {batch_2_id}"
+            )
 
     def test_concurrent_multi_batch_scenario(self):
         """Test concurrent batches with shared session ID."""
@@ -183,9 +183,9 @@ class TestMultiBatchCorrelationConsistency:
             for source_guid in source_records:
                 reference_id = reference_results[source_guid]
                 batch_id_result = batch_results[source_guid]
-                assert (
-                    reference_id == batch_id_result
-                ), f"Correlation ID mismatch between batch 0 and batch {batch_id} for {source_guid}: {reference_id} vs {batch_id_result}"
+                assert reference_id == batch_id_result, (
+                    f"Correlation ID mismatch between batch 0 and batch {batch_id} for {source_guid}: {reference_id} vs {batch_id_result}"
+                )
         print(f"✅ All {num_batches} concurrent batches produced identical correlation IDs")
 
     def test_workflow_session_id_isolation(self):

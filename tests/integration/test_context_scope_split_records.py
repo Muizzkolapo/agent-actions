@@ -157,17 +157,17 @@ class TestContextScopeWithSplitRecords:
         )
 
         # Assert: Should have loaded split_operation data
-        assert (
-            "split_operation" in field_context
-        ), "Should have loaded split_operation from historical data"
+        assert "split_operation" in field_context, (
+            "Should have loaded split_operation from historical data"
+        )
 
         # Assert: Should have Branch A record (1 tag)
-        assert (
-            field_context["split_operation"]["status"] == "active"
-        ), "Branch A record should have status='active'"
-        assert field_context["split_operation"]["tags"] == [
-            "tag-a"
-        ], "Branch A record should have tags=['tag-a']"
+        assert field_context["split_operation"]["status"] == "active", (
+            "Branch A record should have status='active'"
+        )
+        assert field_context["split_operation"]["tags"] == ["tag-a"], (
+            "Branch A record should have tags=['tag-a']"
+        )
 
     def test_build_field_context_loads_branch_b(
         self,
@@ -208,18 +208,18 @@ class TestContextScopeWithSplitRecords:
         )
 
         # Assert: Should have loaded split_operation data
-        assert (
-            "split_operation" in field_context
-        ), "Should have loaded split_operation from historical data"
+        assert "split_operation" in field_context, (
+            "Should have loaded split_operation from historical data"
+        )
 
         # THE KEY ASSERTIONS - These will FAIL without the fix
-        assert (
-            field_context["split_operation"]["status"] == "pending"
-        ), "Branch B record should have status='pending', not 'active' (BUG!)"
+        assert field_context["split_operation"]["status"] == "pending", (
+            "Branch B record should have status='pending', not 'active' (BUG!)"
+        )
 
-        assert (
-            len(field_context["split_operation"]["tags"]) == 2
-        ), "Branch B record should have 2 tags, not 1 (THE BUG!)"
+        assert len(field_context["split_operation"]["tags"]) == 2, (
+            "Branch B record should have 2 tags, not 1 (THE BUG!)"
+        )
 
         assert field_context["split_operation"]["tags"] == [
             "tag-b",
@@ -262,17 +262,17 @@ class TestContextScopeWithSplitRecords:
         )
 
         # Assert: Should have loaded split_operation data
-        assert (
-            "split_operation" in field_context
-        ), "Should have loaded split_operation from historical data"
+        assert "split_operation" in field_context, (
+            "Should have loaded split_operation from historical data"
+        )
 
         # Assert: Should have Branch C record (1 tag)
-        assert (
-            field_context["split_operation"]["status"] == "completed"
-        ), "Branch C record should have status='completed'"
-        assert field_context["split_operation"]["tags"] == [
-            "tag-c"
-        ], "Branch C record should have tags=['tag-c']"
+        assert field_context["split_operation"]["status"] == "completed", (
+            "Branch C record should have status='completed'"
+        )
+        assert field_context["split_operation"]["tags"] == ["tag-c"], (
+            "Branch C record should have tags=['tag-c']"
+        )
 
     def test_all_branches_load_unique_data(
         self,
@@ -308,18 +308,18 @@ class TestContextScopeWithSplitRecords:
                 file_path=file_path,
             )
 
-            assert (
-                "split_operation" in field_context
-            ), f"Caller {i + 1} should have loaded split_operation data"
+            assert "split_operation" in field_context, (
+                f"Caller {i + 1} should have loaded split_operation data"
+            )
 
             loaded_statuses.append(field_context["split_operation"]["status"])
             loaded_tags.append(tuple(field_context["split_operation"]["tags"]))
 
         # Assert: All 3 branches should have DIFFERENT data
         # Without the fix, all would have the same status/tags (from first record)
-        assert (
-            len(set(loaded_statuses)) == 3
-        ), f"All 3 branches should have unique statuses, got: {loaded_statuses}"
+        assert len(set(loaded_statuses)) == 3, (
+            f"All 3 branches should have unique statuses, got: {loaded_statuses}"
+        )
 
         # Assert: Specific expected values
         assert "active" in loaded_statuses, "Branch A status should be present"

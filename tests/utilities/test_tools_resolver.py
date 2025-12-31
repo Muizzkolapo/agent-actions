@@ -57,9 +57,9 @@ class TestToolsResolver:
         }
 
         resolved = resolve_tools_path(agent_config)
-        assert resolved == str(
-            tmp_path / "priority"
-        ), f"Expected tool_path to take priority, got {resolved}"
+        assert resolved == str(tmp_path / "priority"), (
+            f"Expected tool_path to take priority, got {resolved}"
+        )
 
     def test_empty_tool_path_list(self):
         """Test empty tool_path list returns None."""

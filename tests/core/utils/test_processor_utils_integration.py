@@ -66,9 +66,9 @@ class TestProcessorUtilsIntegration:
         all_correlation_ids = set()
         for correlation_ids in results.values():
             correlation_id = correlation_ids[0]
-            assert (
-                correlation_id not in all_correlation_ids
-            ), f"Duplicate correlation ID: {correlation_id}"
+            assert correlation_id not in all_correlation_ids, (
+                f"Duplicate correlation ID: {correlation_id}"
+            )
             all_correlation_ids.add(correlation_id)
 
     def test_position_based_batch_processing_simulation(self):
@@ -107,9 +107,9 @@ class TestProcessorUtilsIntegration:
         all_position_ids = set()
         for correlation_ids in results.values():
             correlation_id = correlation_ids[0]
-            assert (
-                correlation_id not in all_position_ids
-            ), f"Duplicate correlation ID: {correlation_id}"
+            assert correlation_id not in all_position_ids, (
+                f"Duplicate correlation ID: {correlation_id}"
+            )
             all_position_ids.add(correlation_id)
 
     def test_mixed_correlation_strategies_simulation(self):
@@ -156,9 +156,9 @@ class TestProcessorUtilsIntegration:
             thread.join()
         for source_guid, correlation_ids in guid_results.items():
             unique_ids = set(correlation_ids)
-            assert (
-                len(unique_ids) == 1
-            ), f"Source GUID {source_guid} has inconsistent IDs: {unique_ids}"
+            assert len(unique_ids) == 1, (
+                f"Source GUID {source_guid} has inconsistent IDs: {unique_ids}"
+            )
         for position, correlation_ids in position_results.items():
             unique_ids = set(correlation_ids)
             assert len(unique_ids) == 1, f"Position {position} has inconsistent IDs: {unique_ids}"
@@ -226,9 +226,9 @@ class TestProcessorUtilsIntegration:
             end_idx = start_idx + chunk_size if agent_id < 3 - 1 else len(input_data)
             chunk_len = end_idx - start_idx
             expected_positions.update(range(chunk_len))
-        assert len(correlation_ids) == len(
-            expected_positions
-        ), f"Expected {len(expected_positions)} unique correlation IDs, got {len(correlation_ids)}"
+        assert len(correlation_ids) == len(expected_positions), (
+            f"Expected {len(expected_positions)} unique correlation IDs, got {len(correlation_ids)}"
+        )
 
 
 if __name__ == "__main__":

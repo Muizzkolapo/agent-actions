@@ -83,9 +83,9 @@ class TestArraySchemaConversion:
         assert result[0]["input_schema"]["properties"], "Should have properties"
 
         # Check warning was logged
-        assert any(
-            "empty or invalid 'items'" in record.message for record in caplog.records
-        ), "Should log warning about invalid items"
+        assert any("empty or invalid 'items'" in record.message for record in caplog.records), (
+            "Should log warning about invalid items"
+        )
 
     def test_array_schema_without_items(self):
         """Array without items key doesn't trigger conversion (no 'items' in schema check)."""
@@ -114,12 +114,12 @@ class TestArraySchemaConversion:
         result = compile_unified_schema(schema, "anthropic")
 
         # Should have 'field1' not 'standard'
-        assert (
-            "field1" in result[0]["input_schema"]["properties"]
-        ), "Should have field1 from fields array"
-        assert (
-            "standard" not in result[0]["input_schema"]["properties"]
-        ), "Should not wrap in schema name for unified format"
+        assert "field1" in result[0]["input_schema"]["properties"], (
+            "Should have field1 from fields array"
+        )
+        assert "standard" not in result[0]["input_schema"]["properties"], (
+            "Should not wrap in schema name for unified format"
+        )
 
     def test_array_schema_with_description(self):
         """Array schema description should be preserved."""
@@ -155,12 +155,12 @@ class TestArraySchemaConversion:
         result = compile_unified_schema(schema, "openai")
 
         users_prop = result["schema"]["properties"]["users"]
-        assert (
-            "address" in users_prop["items"]["properties"]
-        ), "Nested properties should be preserved"
-        assert (
-            users_prop["items"]["properties"]["address"]["type"] == "object"
-        ), "Nested object type should be preserved"
+        assert "address" in users_prop["items"]["properties"], (
+            "Nested properties should be preserved"
+        )
+        assert users_prop["items"]["properties"]["address"]["type"] == "object", (
+            "Nested object type should be preserved"
+        )
 
     def test_array_schema_all_vendors(self):
         """Array schema should compile for all vendors."""
@@ -201,9 +201,9 @@ class TestArraySchemaConversion:
         result = compile_unified_schema(schema_optional, "openai")
 
         # Check that array is not in required list
-        assert "optional_array" not in result["schema"].get(
-            "required", []
-        ), "Optional array should not be in required list"
+        assert "optional_array" not in result["schema"].get("required", []), (
+            "Optional array should not be in required list"
+        )
 
     def test_array_schema_with_item_constraints(self):
         """Array schema with item-level constraints should preserve them."""
@@ -285,9 +285,9 @@ class TestConversionFunction:
             result = _convert_json_schema_to_unified(schema)
 
         assert result is not None, "Should return fallback structure"
-        assert any(
-            "empty or invalid 'items'" in record.message for record in caplog.records
-        ), "Should log warning"
+        assert any("empty or invalid 'items'" in record.message for record in caplog.records), (
+            "Should log warning"
+        )
 
 
 class TestEdgeCases:
@@ -306,9 +306,9 @@ class TestEdgeCases:
 
         # Should use fields, not convert array
         assert "field1" in result[0]["input_schema"]["properties"], "Should use fields array"
-        assert (
-            "mixed" not in result[0]["input_schema"]["properties"]
-        ), "Should not wrap in schema name"
+        assert "mixed" not in result[0]["input_schema"]["properties"], (
+            "Should not wrap in schema name"
+        )
 
     def test_array_schema_with_minItems_maxItems(self):
         """Array schema with minItems/maxItems should preserve them if supported."""
