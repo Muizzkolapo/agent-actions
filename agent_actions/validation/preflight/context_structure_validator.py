@@ -119,8 +119,7 @@ class ContextStructureValidator(BaseValidator):
         type_errors = self._check_field_types(context, field_types, allow_none)
         for field_name, expected_type, actual_type in type_errors:
             self.add_error(
-                f"Field '{field_name}' has wrong type: expected {expected_type}, "
-                f"got {actual_type}"
+                f"Field '{field_name}' has wrong type: expected {expected_type}, got {actual_type}"
             )
             self.issues.append(
                 ValidationIssue(

@@ -184,9 +184,9 @@ class TestSchemaFieldValidator:
             )
 
             assert result.exists
-            assert (
-                result.field_type == expected_type
-            ), f"Expected {expected_type}, got {result.field_type}"
+            assert result.field_type == expected_type, (
+                f"Expected {expected_type}, got {result.field_type}"
+            )
 
     def test_empty_field_path(self):
         """Test handling of empty field path."""

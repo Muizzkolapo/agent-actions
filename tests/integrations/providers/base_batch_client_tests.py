@@ -350,9 +350,9 @@ class BaseBatchClientTests(ABC):
             results = provider.retrieve_results(batch_id, str(tmp_path))
             assert isinstance(results, list), "Results must be a list"
             assert len(results) > 0, "Should have at least some results"
-            assert all(
-                (isinstance(r, BatchResult) for r in results)
-            ), "All results must be BatchResult objects"
+            assert all((isinstance(r, BatchResult) for r in results)), (
+                "All results must be BatchResult objects"
+            )
             result_ids = [r.custom_id for r in results]
             assert len(result_ids) > 0, "Results must have custom_ids"
 
@@ -368,6 +368,6 @@ class BaseBatchClientTests(ABC):
         with pytest.raises(Exception) as exc_info:
             provider.retrieve_results("nonexistent-batch-id-12345", str(tmp_path))
         error_str = str(exc_info.value).lower()
-        assert (
-            "batch" in error_str or "not found" in error_str or "file" in error_str
-        ), "Error message should indicate batch/file not found"
+        assert "batch" in error_str or "not found" in error_str or "file" in error_str, (
+            "Error message should indicate batch/file not found"
+        )

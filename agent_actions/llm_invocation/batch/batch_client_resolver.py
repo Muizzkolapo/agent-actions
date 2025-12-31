@@ -55,7 +55,13 @@ class BatchClientResolver:
         Raises:
             ConfigurationError: If config is invalid or client creation fails
         """
-        required_fields = ["model_vendor", "model_name", "api_key"]
+        # Mock client doesn't require api_key
+        vendor = agent_config.get("model_vendor", "").lower()
+        if vendor == "mock":
+            required_fields = ["model_vendor", "model_name"]
+        else:
+            required_fields = ["model_vendor", "model_name", "api_key"]
+
         missing = [f for f in required_fields if not agent_config.get(f)]
         if missing:
             raise ConfigurationError(

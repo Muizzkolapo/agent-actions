@@ -25,6 +25,8 @@ from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPr
 from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
 from agent_actions.llm_invocation.batch.batch_side_output_handler import BatchSideOutputHandler
 from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
+from agent_actions.llm_invocation.batch.batch_retry_orchestrator import BatchRetryOrchestrator
+from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,8 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         client_resolver: Optional[BatchClientResolver] = None,
         job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
         source_handler: Optional[Any] = None,  # BatchSourceHandler
+        retry_orchestrator: Optional[BatchRetryOrchestrator] = None,
+        default_retry_config: Optional[RetryConfig] = None,
     ):
         """Initialize batch service (pure orchestrator with dependency injection)."""
         # pylint: disable=import-outside-toplevel
@@ -73,6 +77,22 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         )
         self._job_manager = job_manager or BatchJobManager(client_resolver=self._client_resolver)
         self._source_handler = source_handler or BatchSourceHandler()
+        self._default_retry_config = default_retry_config or RetryConfig.default()
+        # Retry orchestrator is lazily initialized when registry_manager is available
+        self._retry_orchestrator = retry_orchestrator
+
+    def _get_retry_orchestrator(self, output_directory: str) -> BatchRetryOrchestrator:
+        """Get or create retry orchestrator for output directory."""
+        if self._retry_orchestrator is None:
+            manager = self._get_registry_manager(output_directory)
+            self._retry_orchestrator = BatchRetryOrchestrator(
+                registry_manager=manager,
+                client_resolver=self._client_resolver,
+                task_preparator=self._task_preparator,
+                context_manager=self._context_manager,
+                retry_config=self._default_retry_config,
+            )
+        return self._retry_orchestrator
 
     def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager:
         """Get or create registry manager for output directory."""
@@ -470,7 +490,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         return self._job_manager.are_all_jobs_completed(output_directory)
 
     def get_batch_registry_status(self, output_directory: str) -> str:
-        """Get the overall status of all batch jobs in the registry (delegates to BatchJobManager)."""
+        """Get overall status of all batch jobs in the registry."""
         return self._job_manager.get_registry_status(output_directory)
 
     def _retrieve_results(
@@ -501,3 +521,108 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         )
 
         return batch_results
+
+    def retry_batch_job(
+        self,
+        batch_id: str,
+        output_directory: str,
+        agent_config: Optional[Dict[str, Any]] = None,
+        max_attempts: Optional[int] = None,
+    ) -> Optional[str]:
+        """
+        Manually retry a batch job.
+
+        Triggers the retry orchestration for a completed batch that has missing records.
+
+        Args:
+            batch_id: ID of the batch to retry
+            output_directory: Output directory containing batch registry
+            agent_config: Agent configuration (loaded from registry if not provided)
+            max_attempts: Override max retry attempts
+
+        Returns:
+            Retry batch ID if retry was triggered, None otherwise
+        """
+        manager = self._get_registry_manager(output_directory)
+        entry = manager.get_batch_job_by_id(batch_id)
+
+        if not entry:
+            raise ProcessingError(
+                f"Batch job {batch_id} not found in registry",
+                context={"batch_id": batch_id, "output_directory": output_directory},
+            )
+
+        if entry.status != "completed":
+            raise ProcessingError(
+                f"Batch job {batch_id} is not completed (status: {entry.status})",
+                context={"batch_id": batch_id, "status": entry.status},
+            )
+
+        # Find file_name for this batch
+        file_name = None
+        for fname, e in manager.get_all_jobs().items():
+            if e.batch_id == batch_id:
+                file_name = fname
+                break
+
+        if not file_name:
+            file_name = "default"
+
+        # Load context map
+        context_map = self._context_manager.load_batch_context_map(output_directory, file_name)
+
+        # Get provider
+        provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+
+        # Retrieve results and reconcile
+        batch_results = self._retrieve_results(
+            provider,
+            batch_id,
+            output_directory,
+            context_map=context_map,
+            record_count=entry.record_count,
+            file_name=file_name,
+        )
+
+        # Create reconciler to find missing records
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.llm_invocation.batch.batch_result_reconciler import (
+            BatchResultReconciler,
+        )
+
+        reconciler = BatchResultReconciler(context_map)
+        for result in batch_results:
+            reconciler.mark_processed(result.custom_id)
+        reconciliation = reconciler.reconcile()
+
+        if not reconciliation.missing_ids:
+            logger.info("No missing records in batch %s, retry not needed", batch_id)
+            return None
+
+        # Build retry config
+        retry_config = get_retry_config(agent_config, self._default_retry_config)
+        if max_attempts is not None:
+            retry_config = RetryConfig(enabled=True, max_attempts=max_attempts)
+
+        # Get orchestrator and run retry chain
+        orchestrator = self._get_retry_orchestrator(output_directory)
+
+        result = orchestrator.orchestrate_retry_chain(
+            original_batch_id=batch_id,
+            initial_reconciliation=reconciliation,
+            context_map=context_map,
+            agent_config=agent_config or {},
+            output_directory=output_directory,
+            original_file_name=file_name,
+            retry_config=retry_config,
+        )
+
+        logger.info(
+            "Retry chain completed for %s: %d attempts, %d success, %d still missing",
+            batch_id,
+            result.total_attempts,
+            result.final_success_count,
+            result.final_missing_count,
+        )
+
+        return result.retry_batch_ids[-1] if result.retry_batch_ids else None

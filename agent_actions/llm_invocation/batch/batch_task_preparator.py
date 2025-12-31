@@ -368,6 +368,11 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         any rows. This catches configuration errors early with unified error
         messages across batch and online modes.
 
+        IMPORTANT: This builds the full prompt_context including:
+        - Source data under 'source' namespace
+        - Static/seed data under 'seed' namespace
+        - Historical data from dependencies
+
         Args:
             agent_config: Agent configuration
             raw_prompt: The raw prompt template
@@ -384,24 +389,165 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # Extract content from row (same logic as _process_single_item)
         if "source_guid" in first_row and "content" in first_row:
-            sample_context = first_row["content"]
+            sample_content = first_row["content"]
         else:
-            sample_context = first_row
+            sample_content = first_row
 
-        # Ensure context is a dict for validation
-        if not isinstance(sample_context, dict):
-            sample_context = {"content": sample_context}
+        # Ensure content is a dict
+        if not isinstance(sample_content, dict):
+            sample_content = {"content": sample_content}
 
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
+
+        # Build full prompt_context with source namespace and seed data
+        # This mirrors the context building in _prepare_single_task via PromptPreparationService
+        prompt_context = self._build_preflight_context(
+            agent_config=agent_config,
+            sample_content=sample_content,
+        )
 
         # Run pre-flight validation
         validator = PreFlightValidator()
         result = validator.validate_for_batch(
             template=raw_prompt,
-            context=sample_context,
+            context=prompt_context,
             agent_name=agent_name,
             agent_config=agent_config,
         )
 
         # Raise unified error if validation fails
         result.raise_if_invalid()
+
+    def _build_preflight_context(
+        self,
+        agent_config: Dict[str, Any],
+        sample_content: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Build prompt context for preflight validation.
+
+        Creates the same context structure that PromptPreparationService builds,
+        including source namespace, seed data, and historical data namespaces.
+
+        Args:
+            agent_config: Agent configuration
+            sample_content: Sample data content for validation
+
+        Returns:
+            Full prompt context with all namespaces
+        """
+        # pylint: disable=import-outside-toplevel,broad-exception-caught
+        from agent_actions.utilities.context_scope.context_scope_processor import (
+            ContextScopeProcessor,
+        )
+        from agent_actions.utilities.context_scope.static_data_loader import (
+            StaticDataLoadError,
+        )
+
+        # Start with source namespace (same as build_field_context_with_history)
+        field_context = {"source": sample_content}
+
+        # Get context_scope from agent_config
+        context_scope = agent_config.get("context_scope", {})
+
+        # Load seed data if configured
+        static_data = {}
+        if context_scope.get("seed_data"):
+            try:
+                static_data = self._load_seed_data_for_preflight(agent_config, context_scope)
+            except (StaticDataLoadError, Exception) as e:
+                # Log warning but continue - seed data errors will be caught later
+                logger.warning("Failed to load seed data for preflight: %s", e)
+
+        # Apply context_scope transformations (adds seed namespace)
+        if context_scope or static_data:
+            prompt_context, _, _ = ContextScopeProcessor.apply_context_scope(
+                field_context,
+                context_scope,
+                static_data=static_data,
+            )
+        else:
+            prompt_context = field_context
+
+        return prompt_context
+
+    def _load_seed_data_for_preflight(
+        self,
+        agent_config: Dict[str, Any],
+        context_scope: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Load seed data files for preflight validation.
+
+        Args:
+            agent_config: Agent configuration dict
+            context_scope: Context scope configuration
+
+        Returns:
+            Dictionary of loaded static data, or empty dict if not configured
+        """
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.utilities.context_scope.static_data_loader import (
+            StaticDataLoader,
+        )
+
+        seed_data_config = context_scope.get("seed_data", {})
+        if not seed_data_config:
+            return {}
+
+        # Determine seed_data directory from workflow config path
+        workflow_config_path = agent_config.get("workflow_config_path")
+        static_data_dir = self._determine_static_data_dir(workflow_config_path)
+
+        # Load seed data
+        static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
+        return static_data_loader.load_static_data(seed_data_config)
+
+    def _determine_static_data_dir(self, workflow_config_path: Optional[str]) -> Path:
+        """Determine seed_data/ directory for loading static data files.
+
+        Args:
+            workflow_config_path: Path to workflow config file
+
+        Returns:
+            Path to seed_data/ directory
+
+        Raises:
+            StaticDataLoadError: If seed_data/ folder doesn't exist
+        """
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.utilities.context_scope.static_data_loader import (
+            StaticDataLoadError,
+        )
+
+        # Determine workflow root directory
+        if not workflow_config_path:
+            base_dir = Path.cwd()
+        else:
+            file_path_obj = Path(workflow_config_path).resolve()
+
+            # Traverse up to find the directory containing agent_config/
+            current = file_path_obj.parent
+            while current != current.parent:
+                if (current / "agent_config").exists():
+                    base_dir = current
+                    break
+                if current.name == "agent_config" and current.parent != current:
+                    base_dir = current.parent
+                    break
+                current = current.parent
+            else:
+                base_dir = file_path_obj.parent
+
+        # Check for seed_data/ folder at workflow root
+        seed_data_dir = base_dir / "seed_data"
+        if seed_data_dir.exists() and seed_data_dir.is_dir():
+            return seed_data_dir
+
+        # Not found - raise error
+        raise StaticDataLoadError(
+            f"Seed data directory not found at '{seed_data_dir}'",
+            context={
+                "workflow_dir": str(base_dir),
+                "checked_path": str(seed_data_dir),
+                "error_type": "missing_seed_data_directory",
+            },
+        )

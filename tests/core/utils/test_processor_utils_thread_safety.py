@@ -120,13 +120,13 @@ class TestProcessorUtilsThreadSafety:
         all_unique_ids = set()
         for source_guid, ids in all_results.items():
             unique_ids_for_guid = set(ids)
-            assert (
-                len(unique_ids_for_guid) == 1
-            ), f"Source {source_guid} has inconsistent IDs: {unique_ids_for_guid}"
+            assert len(unique_ids_for_guid) == 1, (
+                f"Source {source_guid} has inconsistent IDs: {unique_ids_for_guid}"
+            )
             correlation_id = list(unique_ids_for_guid)[0]
-            assert (
-                correlation_id not in all_unique_ids
-            ), f"Duplicate correlation ID {correlation_id}"
+            assert correlation_id not in all_unique_ids, (
+                f"Duplicate correlation ID {correlation_id}"
+            )
             all_unique_ids.add(correlation_id)
         assert len(all_unique_ids) == num_different_guids
 
@@ -165,9 +165,9 @@ class TestProcessorUtilsThreadSafety:
         new_id = LoopIdGenerator.get_or_create_loop_correlation_id(
             source_guid, loop_base_name, self.get_test_session_id()
         )
-        assert (
-            new_id == original_id
-        ), f"Deterministic generation should produce same ID after clearing: {original_id} vs {new_id}"
+        assert new_id == original_id, (
+            f"Deterministic generation should produce same ID after clearing: {original_id} vs {new_id}"
+        )
 
     def test_stress_test_many_concurrent_operations(self):
         """Stress test with many concurrent operations of different types."""
