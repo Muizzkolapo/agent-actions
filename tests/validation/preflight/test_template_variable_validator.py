@@ -105,3 +105,41 @@ class TestTemplateVariableValidator:
         )
         # range is a builtin, should not be flagged as missing
         assert result is True
+
+    def test_loop_variables_not_flagged_as_missing(self):
+        """Test that loop variables are not flagged as undefined."""
+        validator = TemplateVariableValidator()
+        result = validator.validate(
+            {
+                "template": """
+                {% for ref in source.referenced_in %}
+                Section: {{ ref.section_name }}
+                Objective: {{ ref.objective }}
+                {% endfor %}
+                """,
+                "context": {"source": {"referenced_in": []}},
+            },
+            {"agent_name": "test"},
+        )
+        # 'ref' is a loop variable, should not be flagged as missing
+        assert result is True
+        assert not validator.has_errors()
+
+    def test_nested_loop_variables(self):
+        """Test that nested loop variables are handled correctly."""
+        validator = TemplateVariableValidator()
+        result = validator.validate(
+            {
+                "template": """
+                {% for item in items %}
+                    {% for subitem in item.subitems %}
+                        {{ subitem.value }}
+                    {% endfor %}
+                {% endfor %}
+                """,
+                "context": {"items": []},
+            },
+            {"agent_name": "test"},
+        )
+        # 'item' and 'subitem' are loop variables
+        assert result is True

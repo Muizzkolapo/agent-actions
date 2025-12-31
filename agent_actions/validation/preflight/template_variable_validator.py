@@ -5,7 +5,6 @@ without actually rendering the template. This catches missing variable errors
 early, before any LLM calls are made.
 """
 
-import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from jinja2 import Environment, meta, TemplateSyntaxError
@@ -154,6 +153,8 @@ class TemplateVariableValidator(BaseValidator):
         """Extract all variable references from a Jinja2 template.
 
         Uses Jinja2's AST parser to find all undeclared variables.
+        This properly handles loop variables ({% for ref in items %})
+        by only returning variables that are actually undefined.
 
         Args:
             template: The Jinja2 template string
@@ -167,14 +168,11 @@ class TemplateVariableValidator(BaseValidator):
         # Parse the template into an AST
         ast = self._env.parse(template)
 
-        # Find all undeclared variables
+        # Find all undeclared variables - this properly excludes:
+        # - Loop variables ({% for ref in items %} - 'ref' is not returned)
+        # - Set variables ({% set x = 1 %} - 'x' is not returned)
+        # - Macro parameters
         variables = meta.find_undeclared_variables(ast)
-
-        # Also find attribute access patterns like {{ action.field }}
-        # The meta module only gets top-level names, so we need to extract
-        # nested attribute patterns manually
-        nested_vars = self._extract_nested_variable_patterns(template)
-        variables = variables.union(nested_vars)
 
         if ignore_builtins:
             # Filter out common Jinja2 builtins
@@ -195,27 +193,6 @@ class TemplateVariableValidator(BaseValidator):
             variables = variables - builtins
 
         return variables, warnings
-
-    def _extract_nested_variable_patterns(self, template: str) -> Set[str]:
-        """Extract nested variable patterns like action.field from template.
-
-        This catches patterns that Jinja2's meta module might not fully capture.
-
-        Args:
-            template: The template string
-
-        Returns:
-            Set of top-level variable names from nested patterns
-        """
-        # Match patterns like {{ action.field }} or {{ action.field.subfield }}
-        pattern = r"\{\{[^}]*?(\w+)\.[^}]*?\}\}"
-        matches = re.findall(pattern, template)
-
-        # Also match {{ action['field'] }} style
-        bracket_pattern = r"\{\{[^}]*?(\w+)\[['\"][^}]*?\}\}"
-        bracket_matches = re.findall(bracket_pattern, template)
-
-        return set(matches + bracket_matches)
 
     def _get_available_variables(self, context: Dict[str, Any]) -> Set[str]:
         """Get all available variable names from context.
