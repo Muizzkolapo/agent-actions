@@ -27,6 +27,7 @@ from agent_actions.llm_invocation.batch.batch_side_output_handler import BatchSi
 from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
 from agent_actions.llm_invocation.batch.batch_retry_orchestrator import BatchRetryOrchestrator
 from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
+from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -286,7 +287,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             manager = self._get_registry_manager(output_directory)
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
 
-            if provider.check_status(batch_id) != "completed":
+            if provider.check_status(batch_id) != BatchStatus.COMPLETED:
                 raise ProcessingError("Batch job is not completed", context={"batch_id": batch_id})
 
             # Get entry and load context
@@ -369,7 +370,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
 
             # Check status
             try:
-                if self.check_status(batch_id, output_directory) != "completed":
+                if self.check_status(batch_id, output_directory) != BatchStatus.COMPLETED:
                     continue
             except Exception as e:  # pylint: disable=broad-exception-caught
                 # Catch all exceptions to prevent one status check from breaking entire batch
@@ -552,7 +553,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
                 context={"batch_id": batch_id, "output_directory": output_directory},
             )
 
-        if entry.status != "completed":
+        if entry.status != BatchStatus.COMPLETED:
             raise ProcessingError(
                 f"Batch job {batch_id} is not completed (status: {entry.status})",
                 context={"batch_id": batch_id, "status": entry.status},

@@ -5,6 +5,8 @@ Orchestrates automatic retry of failed/missing batch records.
 Handles the full retry chain lifecycle from detection to result merging.
 """
 
+# pylint: disable=duplicate-code
+
 import logging
 import time
 from dataclasses import dataclass, field
@@ -14,6 +16,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchReconciliationResult
+from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -373,7 +376,7 @@ class BatchRetryOrchestrator:
         for attempt in range(self.MAX_POLL_ATTEMPTS):
             status = provider.check_status(batch_id)
 
-            if status in ["completed", "failed", "cancelled"]:
+            if status in BatchStatus.terminal_states():
                 logger.info("Batch %s reached terminal state: %s", batch_id, status)
                 # Update registry
                 self._registry_manager.update_status(batch_id, status)
@@ -484,7 +487,7 @@ class BatchRetryOrchestrator:
                 retry_batch_id, provider, output_directory
             )
 
-            if final_status != "completed":
+            if final_status != BatchStatus.COMPLETED:
                 logger.error(
                     "Retry batch %s ended with status %s, stopping retry chain",
                     retry_batch_id,

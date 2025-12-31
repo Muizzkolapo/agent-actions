@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, Optional, Callable
 from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry, BatchRegistryStats
 from agent_actions.utilities.path_utils import ensure_directory_exists
+from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -173,13 +174,13 @@ class BatchRegistryManager:
             )
 
             for entry in self._cache.values():
-                if entry.status == "completed":
+                if entry.status == BatchStatus.COMPLETED:
                     stats.completed += 1
-                elif entry.status in ["failed"]:
+                elif entry.status == BatchStatus.FAILED:
                     stats.failed += 1
-                elif entry.status in ["validating", "in_progress", "finalizing"]:
+                elif entry.status in BatchStatus.in_flight_states():
                     stats.in_progress += 1
-                elif entry.status == "cancelled":
+                elif entry.status == BatchStatus.CANCELLED:
                     stats.cancelled += 1
 
             return stats
@@ -237,7 +238,7 @@ class BatchRegistryManager:
                             cache_modified = True
                             entry = updated_entry
                     except Exception as e:  # pylint: disable=broad-exception-caught
-                        # Catch all exceptions to avoid one status check failure from breaking workflow
+                        # Avoid one status check failure from breaking workflow
                         logger.warning("Failed to check status for %s: %s", entry.batch_id, e)
                         # Assume not complete on error
                         return False

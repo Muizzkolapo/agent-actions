@@ -7,9 +7,11 @@ Defines structured types for batch registry entries and related data.
 from dataclasses import dataclass, asdict, field
 from typing import Optional, List, Dict, Any
 
+from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+
 
 @dataclass
-class BatchJobEntry:
+class BatchJobEntry:  # pylint: disable=too-many-instance-attributes
     """
     Represents a single batch job entry in the registry.
 
@@ -48,12 +50,12 @@ class BatchJobEntry:
     @property
     def is_terminal(self) -> bool:
         """Check if batch is in terminal state (completed/failed/cancelled)."""
-        return self.status in ["completed", "failed", "cancelled"]
+        return self.status in BatchStatus.terminal_states()
 
     @property
     def is_in_flight(self) -> bool:
         """Check if batch is still in progress."""
-        return self.status in ["validating", "in_progress", "finalizing"]
+        return self.status in BatchStatus.in_flight_states()
 
 
 @dataclass
