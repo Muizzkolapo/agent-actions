@@ -596,8 +596,8 @@ class TestComplexWorkflows:
             "actions": [
                 {
                     "name": f"agent_{i}",
-                    "depends_on": [f"agent_{i-1}"] if i > 0 else [],
-                    "prompt": f"{{{{ action.agent_{i-1}.output }}}}" if i > 0 else "Start",
+                    "depends_on": [f"agent_{i - 1}"] if i > 0 else [],
+                    "prompt": f"{{{{ action.agent_{i - 1}.output }}}}" if i > 0 else "Start",
                     "schema": {
                         "type": "object",
                         "properties": {"output": {"type": "string"}},
