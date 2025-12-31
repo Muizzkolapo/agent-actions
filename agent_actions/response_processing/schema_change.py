@@ -125,8 +125,14 @@ def compile_field(field: Dict[str, Any], target_system: str) -> Tuple[str, Dict]
     """
     Convert a single unified field into the shape required by the target system.
     If custom name-mappings exist for that system, apply them.
+
+    Supports both unified format (id) and docs format (name) for field identifier.
     """
-    target_field = field.get("mappings", {}).get(target_system.lower(), field["id"])
+    # Support both 'id' (unified format) and 'name' (docs format) for field identifier
+    field_id = field.get("id") or field.get("name")
+    if not field_id:
+        raise KeyError(f"Field missing both 'id' and 'name' keys: {field}")
+    target_field = field.get("mappings", {}).get(target_system.lower(), field_id)
     prop: Dict[str, Any] = {"type": field["type"]}
     for k in ("title", "description", "pattern", "minItems", "maxItems"):
         if k in field:

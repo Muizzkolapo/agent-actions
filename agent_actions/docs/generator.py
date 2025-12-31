@@ -7,7 +7,9 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from .parser import WorkflowParser
+from agent_actions.response_processing.schema_loader import SchemaLoader
+
+from .parser import WorkflowParser, extract_fields_for_docs
 from .scanner import ProjectScanner
 
 
@@ -59,13 +61,15 @@ class CatalogGenerator:  # pylint: disable=too-few-public-methods
             # 2. Inline schema dict (e.g., {"summary_title": "string", ...})
 
             if isinstance(schema_value, str) and self.schema_dir:
-                # Referenced schema - load from YAML file
-                schema = self.parser.load_schema(schema_value, self.schema_dir)
-                if schema and schema.get("fields"):
-                    # Add output fields (field names only for lineage view)
-                    enriched["outputs"] = [field["name"] for field in schema["fields"]]
-                    # Optionally add field details for tooltips/documentation
-                    enriched["output_fields"] = schema["fields"]
+                # Referenced schema - load raw YAML and extract fields
+                try:
+                    raw_schema = SchemaLoader.load_schema(schema_value, self.schema_dir)
+                    fields = extract_fields_for_docs(raw_schema)
+                    if fields:
+                        enriched["outputs"] = [field["name"] for field in fields]
+                        enriched["output_fields"] = fields
+                except FileNotFoundError:
+                    pass  # Schema file not found, skip
 
             elif isinstance(schema_value, dict):
                 # Inline schema - extract field names directly

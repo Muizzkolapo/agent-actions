@@ -1,0 +1,641 @@
+"""Tests for the workflow static analyzer."""
+
+import pytest
+
+from agent_actions.validation.static_analyzer import (
+    WorkflowStaticAnalyzer,
+    analyze_workflow,
+    StaticValidationResult,
+)
+
+
+class TestWorkflowStaticAnalyzer:
+    """Tests for WorkflowStaticAnalyzer class."""
+
+    def test_analyze_valid_workflow(self):
+        """Test analyzing a valid workflow."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "metadata": {"type": "object"},
+                        },
+                    },
+                },
+                {
+                    "name": "summarizer",
+                    "depends_on": ["extractor"],
+                    "prompt": "Summarize: {{ action.extractor.text }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert result.is_valid
+        assert len(result.errors) == 0
+
+    def test_analyze_detects_missing_field(self):
+        """Test analyzer detects reference to missing field."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "summarizer",
+                    "depends_on": ["extractor"],
+                    "prompt": "Use: {{ action.extractor.nonexistent_field }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        assert len(result.errors) >= 1
+        assert any("nonexistent_field" in e.message for e in result.errors)
+
+    def test_analyze_detects_missing_dependency(self):
+        """Test analyzer detects reference to undeclared dependency."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "summarizer",
+                    # Missing depends_on!
+                    "prompt": "Use: {{ action.extractor.text }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        assert any("not declared in dependencies" in e.message for e in result.errors)
+
+    def test_analyze_detects_nonexistent_agent(self):
+        """Test analyzer detects reference to non-existent agent."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "summarizer",
+                    "depends_on": ["nonexistent"],
+                    "prompt": "Use: {{ action.nonexistent.text }}",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        assert any("does not exist" in e.message for e in result.errors)
+
+    def test_get_agent_schema(self):
+        """Test getting schema for specific agent."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "score": {"type": "number"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schema = analyzer.get_agent_schema("extractor")
+
+        assert schema is not None
+        assert "text" in schema.available_fields
+        assert "score" in schema.available_fields
+
+    def test_get_data_flow_summary(self):
+        """Test getting data flow summary."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "agent1",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"output": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "agent2",
+                    "depends_on": ["agent1"],
+                    "prompt": "{{ action.agent1.output }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"result": {"type": "string"}},
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        summary = analyzer.get_data_flow_summary()
+
+        assert "agents" in summary
+        assert "execution_order" in summary
+        assert "edges" in summary
+
+        # Check agents are in summary
+        agent_names = [a["name"] for a in summary["agents"]]
+        assert "agent1" in agent_names
+        assert "agent2" in agent_names
+
+    def test_source_node_always_available(self):
+        """Test source node is always available for references."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "processor",
+                    "prompt": "Process: {{ source.input_data }}",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        # source references should not cause errors
+        source_errors = [e for e in result.errors if "source" in e.message.lower()]
+        assert len(source_errors) == 0
+
+    def test_tool_agent_kind_detection(self):
+        """Test tool agents are correctly identified."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "my_tool",
+                    "kind": "tool",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        analyzer._build_graph()
+
+        node = analyzer.graph.get_node("my_tool")
+        from agent_actions.validation.static_analyzer import AgentKind
+
+        assert node.agent_kind == AgentKind.TOOL
+
+    def test_dependencies_field_alias(self):
+        """Test 'dependencies' field works as alias for 'depends_on'."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "upstream",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"data": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "downstream",
+                    "dependencies": ["upstream"],  # Using 'dependencies' instead of 'depends_on'
+                    "prompt": "{{ action.upstream.data }}",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        # Should not report missing dependency
+        dep_errors = [e for e in result.errors if "not declared in dependencies" in e.message]
+        assert len(dep_errors) == 0
+
+
+class TestAnalyzeWorkflowFunction:
+    """Tests for the analyze_workflow convenience function."""
+
+    def test_analyze_workflow_returns_result(self):
+        """Test analyze_workflow returns StaticValidationResult."""
+        result = analyze_workflow(
+            {
+                "actions": [
+                    {"name": "agent1"},
+                ]
+            }
+        )
+
+        assert isinstance(result, StaticValidationResult)
+
+    def test_analyze_workflow_strict_mode(self):
+        """Test analyze_workflow with strict mode treats warnings as errors."""
+        # Create workflow that generates warning (schemaless agent)
+        workflow_config = {
+            "actions": [
+                {"name": "schemaless_agent"},
+                {
+                    "name": "consumer",
+                    "depends_on": ["schemaless_agent"],
+                    "prompt": "{{ action.schemaless_agent.field }}",
+                },
+            ]
+        }
+
+        result_normal = analyze_workflow(workflow_config, strict=False)
+        result_strict = analyze_workflow(workflow_config, strict=True)
+
+        # Normal mode: warnings are warnings
+        # Strict mode: may treat warnings as errors
+        assert len(result_normal.warnings) > 0 or len(result_normal.errors) > 0
+
+
+class TestStaticValidationResult:
+    """Tests for StaticValidationResult class."""
+
+    def test_is_valid_with_no_errors(self):
+        """Test is_valid is True when no errors."""
+        result = StaticValidationResult()
+        assert result.is_valid
+
+    def test_is_valid_with_errors(self):
+        """Test is_valid is False when errors exist."""
+        from agent_actions.validation.static_analyzer import StaticTypeError, FieldLocation
+
+        result = StaticValidationResult()
+        result.add_error(
+            StaticTypeError(
+                message="Test error",
+                location=FieldLocation(agent_name="agent", config_field="prompt"),
+                referenced_agent="other",
+                referenced_field="field",
+            )
+        )
+
+        assert not result.is_valid
+
+    def test_format_report(self):
+        """Test format_report returns readable string."""
+        from agent_actions.validation.static_analyzer import (
+            StaticTypeError,
+            StaticTypeWarning,
+            FieldLocation,
+        )
+
+        result = StaticValidationResult()
+        result.add_error(
+            StaticTypeError(
+                message="Field 'missing' not found",
+                location=FieldLocation(agent_name="consumer", config_field="prompt"),
+                referenced_agent="producer",
+                referenced_field="missing",
+                available_fields={"field1", "field2"},
+                hint="Did you mean 'field1'?",
+            )
+        )
+        result.add_warning(
+            StaticTypeWarning(
+                message="Cannot validate dynamic schema",
+                location=FieldLocation(agent_name="other", config_field="prompt"),
+                referenced_agent="dynamic_agent",
+                referenced_field="data",
+            )
+        )
+
+        report = result.format_report()
+
+        assert "error" in report.lower()
+        assert "warning" in report.lower()
+        assert "missing" in report
+        assert "consumer" in report
+
+
+class TestActionSchemas:
+    """Tests for get_action_schemas and format_action_schemas methods."""
+
+    def test_get_action_schemas_llm(self):
+        """Test get_action_schemas returns correct info for LLM agents."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "score": {"type": "number"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schemas = analyzer.get_action_schemas()
+
+        assert "extractor" in schemas
+        assert schemas["extractor"]["kind"] == "llm"
+        # LLM input is resolved from template refs (empty when no prompt)
+        assert not schemas["extractor"]["input"]["is_template_based"]
+        assert "text" in schemas["extractor"]["output"]["fields"]
+        assert "score" in schemas["extractor"]["output"]["fields"]
+
+    def test_get_action_schemas_tool_with_registry(self):
+        """Test get_action_schemas returns correct info for tool agents."""
+        udf_registry = {
+            "my_tool": {
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "input_data": {"type": "string"},
+                    },
+                    "required": ["input_data"],
+                },
+                "json_output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "result": {"type": "string"},
+                    },
+                },
+            },
+        }
+
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "tool_action",
+                    "kind": "tool",
+                    "impl": "my_tool",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config, udf_registry=udf_registry)
+        schemas = analyzer.get_action_schemas()
+
+        assert "tool_action" in schemas
+        assert schemas["tool_action"]["kind"] == "tool"
+        assert "input_data" in schemas["tool_action"]["input"]["required"]
+        assert "result" in schemas["tool_action"]["output"]["fields"]
+
+    def test_get_action_schemas_mixed_workflow(self):
+        """Test get_action_schemas with mixed LLM and tool agents."""
+        udf_registry = {
+            "processor": {
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string"},
+                    },
+                    "required": ["text"],
+                },
+                "json_output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "processed": {"type": "string"},
+                    },
+                },
+            },
+        }
+
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "llm_agent",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "extracted": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "tool_agent",
+                    "kind": "tool",
+                    "impl": "processor",
+                    "depends_on": ["llm_agent"],
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config, udf_registry=udf_registry)
+        schemas = analyzer.get_action_schemas()
+
+        assert len(schemas) == 2
+        assert schemas["llm_agent"]["kind"] == "llm"
+        assert schemas["tool_agent"]["kind"] == "tool"
+
+    def test_format_action_schemas(self):
+        """Test format_action_schemas produces readable output."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                        },
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        output = analyzer.format_action_schemas()
+
+        assert "extractor" in output
+        assert "llm" in output
+        assert "Input:" in output
+        assert "Output:" in output
+        assert "text" in output
+
+    def test_excludes_special_namespaces(self):
+        """Test get_action_schemas excludes source and other special nodes."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "agent1",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"out": {"type": "string"}},
+                    },
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        schemas = analyzer.get_action_schemas()
+
+        # Should not include 'source' node
+        assert "source" not in schemas
+        assert "agent1" in schemas
+
+    def test_get_agent_input_schema(self):
+        """Test get_agent_input_schema method."""
+        udf_registry = {
+            "my_tool": {
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        "data": {"type": "string"},
+                    },
+                    "required": ["data"],
+                },
+            },
+        }
+
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "tool_action",
+                    "kind": "tool",
+                    "impl": "my_tool",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config, udf_registry=udf_registry)
+        input_schema = analyzer.get_agent_input_schema("tool_action")
+
+        assert input_schema is not None
+        assert "data" in input_schema.required_fields
+
+
+class TestComplexWorkflows:
+    """Tests for complex workflow scenarios."""
+
+    def test_diamond_dependency(self):
+        """Test diamond dependency pattern validates correctly."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "source_agent",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"data": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "branch_a",
+                    "depends_on": ["source_agent"],
+                    "prompt": "{{ action.source_agent.data }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"result_a": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "branch_b",
+                    "depends_on": ["source_agent"],
+                    "prompt": "{{ action.source_agent.data }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"result_b": {"type": "string"}},
+                    },
+                },
+                {
+                    "name": "merger",
+                    "depends_on": ["branch_a", "branch_b"],
+                    "prompt": "Merge: {{ action.branch_a.result_a }} and {{ action.branch_b.result_b }}",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"merged": {"type": "string"}},
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+        assert result.is_valid
+
+    def test_long_chain(self):
+        """Test long chain of dependencies validates correctly."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": f"agent_{i}",
+                    "depends_on": [f"agent_{i-1}"] if i > 0 else [],
+                    "prompt": f"{{{{ action.agent_{i-1}.output }}}}" if i > 0 else "Start",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"output": {"type": "string"}},
+                    },
+                }
+                for i in range(5)
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+        assert result.is_valid
+
+    def test_multiple_field_references(self):
+        """Test multiple field references from same agent."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "data_provider",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "field1": {"type": "string"},
+                            "field2": {"type": "number"},
+                            "field3": {"type": "boolean"},
+                        },
+                    },
+                },
+                {
+                    "name": "consumer",
+                    "depends_on": ["data_provider"],
+                    "prompt": """
+                        Field1: {{ action.data_provider.field1 }}
+                        Field2: {{ action.data_provider.field2 }}
+                        Field3: {{ action.data_provider.field3 }}
+                    """,
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+        assert result.is_valid

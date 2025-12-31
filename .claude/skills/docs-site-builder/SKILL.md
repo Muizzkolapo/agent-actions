@@ -108,14 +108,15 @@ The parser supports 3 schema formats and correctly counts fields:
 }
 ```
 
-**Critical:** Always use `WorkflowParser.load_schema()` which handles all 3 formats. Never reimplement schema loading logic.
+**Critical:** Use `SchemaLoader.load_schema()` + `extract_fields_for_docs()` which handles all 3 formats.
 
 ```python
-from agent_actions.docs.parser import WorkflowParser
+from agent_actions.response_processing.schema_loader import SchemaLoader
+from agent_actions.docs.parser import extract_fields_for_docs
 
-parser = WorkflowParser()
-schema = parser.load_schema('schema_name', schema_dir)
-field_count = len(schema['fields'])  # Correctly normalized
+raw_schema = SchemaLoader.load_schema('schema_name', schema_dir)
+fields = extract_fields_for_docs(raw_schema)
+field_count = len(fields)  # Correctly normalized
 ```
 
 ### 2. Action Breakdown Display
@@ -201,7 +202,7 @@ python generate_sample_prompts.py  # After modifying schemas/prompts
 **Problem:** Schema cards display "Fields: 0" or "undefined" preview text
 
 **Solution:**
-1. Use `WorkflowParser.load_schema()` which handles all 3 formats
+1. Use `SchemaLoader.load_schema()` + `extract_fields_for_docs()` which handles all 3 formats
 2. Generate dynamic descriptions from field data:
 
 ```javascript

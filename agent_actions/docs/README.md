@@ -356,7 +356,7 @@ agac docs serve
 
 1. **Always regenerate after changes**: Run `agac docs generate` after modifying workflows, prompts, or schemas
 
-2. **Use existing parsers**: Don't duplicate schema/prompt parsing logic - use `WorkflowParser.load_schema()` and `ProjectScanner.scan_prompts()`
+2. **Use existing parsers**: Don't duplicate schema/prompt parsing logic - use `SchemaLoader.load_schema()` + `extract_fields_for_docs()` and `ProjectScanner.scan_prompts()`
 
 3. **Make data inspectable**: Expose data via `window.catalog` and `window.runs` for debugging
 

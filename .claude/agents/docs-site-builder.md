@@ -116,7 +116,7 @@ node test-run-details.js       # Run details page testing
 
 ### Schema Fields Showing "0"
 **Problem:** Schemas display "Fields: 0" in detail view
-**Solution:** Use `WorkflowParser.load_schema()` which handles 3 formats:
+**Solution:** Use `SchemaLoader.load_schema()` + `extract_fields_for_docs()` which handles 3 formats:
 1. Custom fields array: `{fields: [{id, type, description}]}`
 2. Standard array: `{type: 'array', items: {properties: {...}}}`
 3. Standard object: `{type: 'object', properties: {...}}`
