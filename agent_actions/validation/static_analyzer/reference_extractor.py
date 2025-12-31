@@ -2,10 +2,15 @@
 
 Parses templates, guards, and context_scope directives to extract
 all field references that an agent requires from upstream agents.
+
+Uses Jinja2's AST parser for robust template analysis.
 """
 
 import re
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Optional, Set
+
+from jinja2 import Environment, nodes
+from jinja2.exceptions import TemplateSyntaxError
 
 from .data_flow_graph import InputRequirement
 
@@ -13,9 +18,13 @@ from .data_flow_graph import InputRequirement
 class ReferenceExtractor:
     """Extracts field references from agent prompts, guards, and directives.
 
-    Recognizes multiple reference styles:
-    - Jinja2 style: {{ action.field }} or {{ action.extractor.summary }}
-    - Simple style: {action.field} or {extractor.summary}
+    Uses Jinja2's AST parser to properly handle:
+    - Variable references: {{ agent.field }}
+    - Loop variables: {% for item in items %} - automatically excluded
+    - Nested expressions and filters
+
+    Also supports:
+    - Simple brace style: {agent.field}
     - Guard expressions: agent.field > 5
     - Context scope directives: agent.field
 
@@ -36,14 +45,7 @@ class ReferenceExtractor:
         # extractor.facts
     """
 
-    # Patterns for different reference styles
-    # Matches {{ action.agent.field }} or {{ agent.field }}
-    JINJA_ACTION_PATTERN = re.compile(
-        r"\{\{\s*action\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\s*\}\}"
-    )
-    JINJA_DIRECT_PATTERN = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\s*\}\}")
-
-    # Matches {action.agent.field} or {agent.field}
+    # Matches {action.agent.field} or {agent.field} (simple brace style)
     SIMPLE_ACTION_PATTERN = re.compile(r"\{action\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
     SIMPLE_DIRECT_PATTERN = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)\}")
 
@@ -53,13 +55,24 @@ class ReferenceExtractor:
     # Special namespaces that don't require dependency declaration
     SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "action"})
 
-    # Jinja2 control keywords to skip
-    JINJA_KEYWORDS = frozenset(
-        {"if", "else", "elif", "endif", "for", "endfor", "set", "block", "endblock", "macro"}
+    # Jinja2 builtins to skip
+    JINJA_BUILTINS = frozenset(
+        {
+            "range",
+            "dict",
+            "lipsum",
+            "cycler",
+            "joiner",
+            "namespace",
+            "true",
+            "false",
+            "none",
+        }
     )
 
-    # Pattern to extract loop variables from {% for VAR in ... %}
-    JINJA_FOR_LOOP_PATTERN = re.compile(r"\{%\s*for\s+(\w+)\s+in\s+")
+    def __init__(self) -> None:
+        """Initialize with a Jinja2 environment for AST parsing."""
+        self._env = Environment()
 
     def extract_from_agent(self, agent_config: Dict[str, Any]) -> List[InputRequirement]:
         """Extract all field references from an agent configuration.
@@ -108,80 +121,41 @@ class ReferenceExtractor:
 
         return requirements
 
-    def _extract_loop_variables(self, template: str) -> Set[str]:
-        """Extract loop variable names from Jinja for-loops.
-
-        Finds variables defined in {% for VAR in ... %} statements.
-        These are local variables, not external references.
-        """
-        loop_vars: Set[str] = set()
-        for match in self.JINJA_FOR_LOOP_PATTERN.finditer(template):
-            loop_vars.add(match.group(1))
-        return loop_vars
-
     def _extract_from_template(
         self,
         template: str,
         _agent_name: str,
         location: str,
     ) -> List[InputRequirement]:
-        """Extract references from Jinja2/simple template."""
+        """Extract references from Jinja2 template using AST parsing.
+
+        Uses Jinja2's AST to properly handle loop variables and nested expressions.
+        Falls back to simple brace pattern matching for non-Jinja syntax.
+        """
         requirements: List[InputRequirement] = []
         seen: Set[str] = set()
 
-        # Extract loop variables - these are local, not external references
-        loop_variables = self._extract_loop_variables(template)
-
-        # Try Jinja2 action pattern: {{ action.agent.field }}
-        for match in self.JINJA_ACTION_PATTERN.finditer(template):
-            source = match.group(1)
-            field = match.group(2)
+        # Parse with Jinja2 AST to extract references properly
+        jinja_refs = self._extract_jinja_references(template)
+        for source, field, raw_ref in jinja_refs:
             ref_key = f"{source}.{field}"
-            # Skip loop variables and Jinja keywords
-            if (
-                ref_key not in seen
-                and source not in self.JINJA_KEYWORDS
-                and source not in loop_variables
-            ):
+            if ref_key not in seen:
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
                         source_agent=source,
                         field_path=field,
-                        raw_reference=match.group(0),
+                        raw_reference=raw_ref,
                         location=location,
                     )
                 )
 
-        # Try Jinja2 direct pattern: {{ agent.field }}
-        for match in self.JINJA_DIRECT_PATTERN.finditer(template):
-            source = match.group(1)
-            field = match.group(2)
-            ref_key = f"{source}.{field}"
-            # Skip loop variables, Jinja keywords, and 'action' (handled above)
-            if (
-                ref_key not in seen
-                and source not in self.JINJA_KEYWORDS
-                and source not in loop_variables
-            ):
-                if source != "action":
-                    seen.add(ref_key)
-                    requirements.append(
-                        InputRequirement(
-                            source_agent=source,
-                            field_path=field,
-                            raw_reference=match.group(0),
-                            location=location,
-                        )
-                    )
-
-        # Try simple action pattern: {action.agent.field}
+        # Also check simple brace patterns: {action.agent.field} or {agent.field}
         for match in self.SIMPLE_ACTION_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            # Skip loop variables
-            if ref_key not in seen and source not in loop_variables:
+            if ref_key not in seen:
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
@@ -192,13 +166,11 @@ class ReferenceExtractor:
                     )
                 )
 
-        # Try simple direct pattern: {agent.field}
         for match in self.SIMPLE_DIRECT_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            # Skip loop variables and 'action'
-            if ref_key not in seen and source != "action" and source not in loop_variables:
+            if ref_key not in seen and source != "action":
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
@@ -210,6 +182,103 @@ class ReferenceExtractor:
                 )
 
         return requirements
+
+    def _extract_jinja_references(self, template: str) -> List[tuple]:
+        """Extract variable references from Jinja2 template using AST.
+
+        Walks the AST to find all Getattr nodes (dot notation access)
+        and properly excludes loop variables defined in for-loops.
+
+        Returns:
+            List of (source, field, raw_reference) tuples
+        """
+        references: List[tuple] = []
+
+        try:
+            ast = self._env.parse(template)
+        except TemplateSyntaxError:
+            # If template has syntax errors, fall back to empty (simple patterns will catch it)
+            return references
+
+        # Walk AST to find variable references
+        self._walk_ast(ast, references, local_vars=set())
+        return references
+
+    def _walk_ast(
+        self,
+        node: nodes.Node,
+        references: List[tuple],
+        local_vars: Set[str],
+    ) -> None:
+        """Recursively walk AST to extract variable references.
+
+        Args:
+            node: Current AST node
+            references: List to append (source, field, raw_ref) tuples
+            local_vars: Set of locally-defined variable names (loop vars, etc.)
+        """
+        # Handle For loops - add loop variable to local_vars
+        if isinstance(node, nodes.For):
+            new_locals = local_vars.copy()
+            # Extract loop variable name(s)
+            target = node.target
+            if isinstance(target, nodes.Name):
+                new_locals.add(target.name)
+            elif isinstance(target, nodes.Tuple):
+                for item in target.items:
+                    if isinstance(item, nodes.Name):
+                        new_locals.add(item.name)
+
+            # Walk child nodes with updated local_vars
+            for child in node.iter_child_nodes():
+                self._walk_ast(child, references, new_locals)
+            return
+
+        # Handle Getattr (dot notation): {{ agent.field }}
+        if isinstance(node, nodes.Getattr):
+            ref = self._extract_getattr_chain(node)
+            if ref:
+                source, field_path = ref
+                # Skip if source is a local variable, builtin, or "action" prefix
+                if source not in local_vars and source not in self.JINJA_BUILTINS:
+                    # Handle action.agent.field -> (agent, field)
+                    if source == "action" and "." in field_path:
+                        parts = field_path.split(".", 1)
+                        source = parts[0]
+                        field_path = parts[1]
+                    raw_ref = f"{{{{ {source}.{field_path} }}}}"
+                    references.append((source, field_path, raw_ref))
+            # Don't recurse into Getattr children - we already extracted the full chain
+            return
+
+        # Recurse into child nodes
+        for child in node.iter_child_nodes():
+            self._walk_ast(child, references, local_vars)
+
+    def _extract_getattr_chain(self, node: nodes.Getattr) -> Optional[tuple]:
+        """Extract the full attribute chain from a Getattr node.
+
+        Handles chains like: agent.field.subfield -> ('agent', 'field.subfield')
+
+        Returns:
+            (root_name, attribute_path) tuple or None if not a simple chain
+        """
+        attrs = [node.attr]
+        current = node.node
+
+        # Walk up the chain collecting attributes
+        while isinstance(current, nodes.Getattr):
+            attrs.append(current.attr)
+            current = current.node
+
+        # Root should be a Name node
+        if isinstance(current, nodes.Name):
+            root = current.name
+            # Reverse attrs to get correct order (we collected bottom-up)
+            attrs.reverse()
+            return (root, ".".join(attrs))
+
+        return None
 
     def _extract_from_guard(
         self,
