@@ -1,7 +1,7 @@
 """Unit tests for batch retry configuration."""
 
 import pytest
-from agent_actions.llm_invocation.batch.batch_retry_config import (
+from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
     RetryConfig,
     RETRY_PRESETS,
     get_retry_config,

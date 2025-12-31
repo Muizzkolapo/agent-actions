@@ -136,7 +136,7 @@ class ActionConfig(BaseModel):
             try:
                 # Import here to avoid circular dependency
                 # pylint: disable=import-outside-toplevel
-                from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
+                from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 
                 if isinstance(v, bool):
                     pass  # Valid

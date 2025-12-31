@@ -25,7 +25,7 @@ class MockBatchService:
 
     def _is_batch_ready_for_processing(self, batch_id: str, output_directory: str) -> bool:
         """Check if batch is ready for processing (completed status)."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         try:
             status = self.check_status(batch_id, output_directory)
@@ -54,7 +54,7 @@ class MockBatchService:
             create_side_output_directory,
         )
         from agent_actions.io.file_writer import FileWriter
-        from agent_actions.llm_invocation.batch.batch_side_output_handler import (
+        from agent_actions.llm_invocation.batch.processing.batch_side_output_handler import (
             BatchSideOutputHandler,
         )
 
@@ -72,7 +72,7 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_true_when_completed(self):
         """Should return True when batch status is completed."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         service = MockBatchService()
         service.check_status = MagicMock(return_value=BatchStatus.COMPLETED)
@@ -86,7 +86,7 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_false_when_in_progress(self):
         """Should return False when batch is still in progress."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         service = MockBatchService()
         service.check_status = MagicMock(return_value=BatchStatus.IN_PROGRESS)
@@ -100,7 +100,7 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_false_when_failed(self):
         """Should return False when batch failed."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         service = MockBatchService()
         service.check_status = MagicMock(return_value=BatchStatus.FAILED)
@@ -235,14 +235,14 @@ class TestBatchStatusEnumComparison:
 
     def test_string_comparison_works(self):
         """BatchStatus should compare equal to string values."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         assert BatchStatus.COMPLETED == "completed"
         assert "completed" == BatchStatus.COMPLETED
 
     def test_terminal_states_check(self):
         """Terminal states should be correctly identified."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         terminal = BatchStatus.terminal_states()
         assert BatchStatus.COMPLETED in terminal
@@ -284,7 +284,7 @@ class TestBatchServiceFacade:
 
     def test_facade_delegates_check_status(self):
         """Should delegate check_status to submission service."""
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         submission_service = MagicMock()
         submission_service.check_status.return_value = BatchStatus.COMPLETED

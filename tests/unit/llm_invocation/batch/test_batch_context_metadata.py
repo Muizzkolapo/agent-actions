@@ -13,10 +13,10 @@ class TestSetFilterStatus:
 
     def test_set_filter_status_included(self):
         """Should set filter status to included."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import FilterStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
 
         record: Dict[str, Any] = {"id": "test"}
         BatchContextMetadata.set_filter_status(record, FilterStatus.INCLUDED)
@@ -25,10 +25,10 @@ class TestSetFilterStatus:
 
     def test_set_filter_status_skipped(self):
         """Should set filter status to skipped."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import FilterStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
 
         record: Dict[str, Any] = {"id": "test"}
         BatchContextMetadata.set_filter_status(record, FilterStatus.SKIPPED)
@@ -37,10 +37,10 @@ class TestSetFilterStatus:
 
     def test_set_filter_status_filtered(self):
         """Should set filter status to filtered."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import FilterStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
 
         record: Dict[str, Any] = {"id": "test"}
         BatchContextMetadata.set_filter_status(record, FilterStatus.FILTERED)
@@ -53,10 +53,10 @@ class TestGetFilterStatus:
 
     def test_get_filter_status_returns_status(self):
         """Should return the filter status when present."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import FilterStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
 
         record = {"id": "test", "_batch_filter_status": "included"}
         status = BatchContextMetadata.get_filter_status(record)
@@ -65,7 +65,7 @@ class TestGetFilterStatus:
 
     def test_get_filter_status_returns_none_when_missing(self):
         """Should return None when no filter status is set."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -76,7 +76,7 @@ class TestGetFilterStatus:
 
     def test_get_filter_status_handles_unknown_status(self):
         """Should return None for unknown status values."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -91,7 +91,7 @@ class TestFilterStatusCheckers:
 
     def test_is_included_true(self):
         """Should return True when status is included."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -100,7 +100,7 @@ class TestFilterStatusCheckers:
 
     def test_is_included_false(self):
         """Should return False when status is not included."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -109,7 +109,7 @@ class TestFilterStatusCheckers:
 
     def test_is_included_false_when_missing(self):
         """Should return False when no status is set."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -118,7 +118,7 @@ class TestFilterStatusCheckers:
 
     def test_is_skipped_true(self):
         """Should return True when status is skipped."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -127,7 +127,7 @@ class TestFilterStatusCheckers:
 
     def test_is_skipped_false(self):
         """Should return False when status is not skipped."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -136,7 +136,7 @@ class TestFilterStatusCheckers:
 
     def test_is_filtered_true(self):
         """Should return True when status is filtered."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -145,7 +145,7 @@ class TestFilterStatusCheckers:
 
     def test_is_filtered_false(self):
         """Should return False when status is not filtered."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -158,7 +158,7 @@ class TestPassthroughFields:
 
     def test_set_passthrough_fields(self):
         """Should set passthrough fields on record."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -170,7 +170,7 @@ class TestPassthroughFields:
 
     def test_get_passthrough_fields_returns_fields(self):
         """Should return passthrough fields when present."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -182,7 +182,7 @@ class TestPassthroughFields:
 
     def test_get_passthrough_fields_returns_empty_when_missing(self):
         """Should return empty dict when no passthrough fields."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -193,7 +193,7 @@ class TestPassthroughFields:
 
     def test_pop_passthrough_fields_removes_and_returns(self):
         """Should remove and return passthrough fields."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -206,7 +206,7 @@ class TestPassthroughFields:
 
     def test_pop_passthrough_fields_returns_empty_when_missing(self):
         """Should return empty dict when no passthrough fields to pop."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -221,7 +221,7 @@ class TestRetryMetadata:
 
     def test_set_retry_metadata(self):
         """Should set retry metadata on record."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -233,7 +233,7 @@ class TestRetryMetadata:
 
     def test_get_retry_metadata_returns_metadata(self):
         """Should return retry metadata when present."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -245,7 +245,7 @@ class TestRetryMetadata:
 
     def test_get_retry_metadata_returns_empty_when_missing(self):
         """Should return empty dict when no retry metadata."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -260,7 +260,7 @@ class TestStripInternalFields:
 
     def test_strip_all_internal_fields(self):
         """Should remove all internal metadata fields."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -278,7 +278,7 @@ class TestStripInternalFields:
 
     def test_strip_preserves_non_internal_fields(self):
         """Should preserve regular fields."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -290,7 +290,7 @@ class TestStripInternalFields:
 
     def test_strip_returns_new_dict(self):
         """Should return a new dict, not modify in place."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -306,7 +306,7 @@ class TestStripInternalFields:
 
     def test_strip_handles_empty_record(self):
         """Should handle empty record gracefully."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -321,7 +321,7 @@ class TestHasInternalFields:
 
     def test_has_internal_fields_true(self):
         """Should return True when internal fields present."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -330,7 +330,7 @@ class TestHasInternalFields:
 
     def test_has_internal_fields_false(self):
         """Should return False when no internal fields."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 
@@ -339,7 +339,7 @@ class TestHasInternalFields:
 
     def test_has_internal_fields_empty(self):
         """Should return False for empty record."""
-        from agent_actions.llm_invocation.batch.batch_context_metadata import (
+        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
             BatchContextMetadata,
         )
 

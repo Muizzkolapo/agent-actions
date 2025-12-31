@@ -14,7 +14,7 @@ class TestBatchSubmissionServiceInit:
 
     def test_init_with_all_dependencies(self):
         """Should initialize with all required dependencies."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -36,7 +36,7 @@ class TestBatchSubmissionServiceInit:
 
     def test_init_with_force_batch_flag(self):
         """Should accept force_batch flag."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -56,7 +56,7 @@ class TestPrepareTasksBatch:
 
     def test_prepares_tasks_with_provider(self):
         """Should prepare tasks using task preparator."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -97,10 +97,10 @@ class TestCheckStatus:
 
     def test_returns_status_from_provider(self):
         """Should return status from provider."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.COMPLETED
@@ -121,7 +121,7 @@ class TestCheckStatus:
 
     def test_raises_external_error_on_failure(self):
         """Should raise ExternalServiceError when check fails."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
         from agent_actions.errors import ExternalServiceError
@@ -146,7 +146,7 @@ class TestSubmitBatchJob:
 
     def test_returns_existing_batch_id_if_in_flight(self):
         """Should return existing batch ID if in-flight batch exists."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -176,7 +176,7 @@ class TestSubmitBatchJob:
 
     def test_force_bypasses_in_flight_check(self):
         """Should submit new batch when force=True even if in-flight exists."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -226,7 +226,7 @@ class TestSubmitBatchJob:
 
     def test_returns_passthrough_when_no_tasks(self):
         """Should return passthrough dict when no tasks after filtering."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -264,7 +264,7 @@ class TestSubmitBatchJob:
 
     def test_submits_batch_and_saves_to_registry(self):
         """Should submit batch and save entry to registry."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
 
@@ -312,7 +312,7 @@ class TestSubmitBatchJob:
 
     def test_raises_config_error_when_no_vendor(self):
         """Should raise ConfigValidationError when model_vendor missing."""
-        from agent_actions.llm_invocation.batch.batch_submission_service import (
+        from agent_actions.llm_invocation.batch.services.batch_submission_service import (
             BatchSubmissionService,
         )
         from agent_actions.errors import ConfigValidationError

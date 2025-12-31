@@ -9,13 +9,21 @@ from datetime import datetime
 from typing import Optional, Dict, Any, Tuple, List, Callable, Union
 
 from agent_actions.logging.context import CorrelationContext
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
-from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPreparator
-from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
-from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
+    BatchContextManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.batch.processing.batch_task_preparator import BatchTaskPreparator
+from agent_actions.llm_invocation.batch.processing.batch_passthrough_builder import (
+    BatchPassthroughBuilder,
+)
+from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
 from agent_actions.errors import ConfigValidationError, ExternalServiceError
 
 logger = logging.getLogger(__name__)

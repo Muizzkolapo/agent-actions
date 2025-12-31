@@ -6,10 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 

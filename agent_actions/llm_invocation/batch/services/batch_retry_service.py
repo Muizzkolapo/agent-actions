@@ -7,13 +7,22 @@ BatchService to follow Single Responsibility Principle.
 import logging
 from typing import Optional, Dict, Any, List, Callable
 
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
-from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_retry_orchestrator import BatchRetryOrchestrator
-from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
-from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPreparator
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
+    BatchContextManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import BatchRetryOrchestrator
+from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
+    RetryConfig,
+    get_retry_config,
+)
+from agent_actions.llm_invocation.batch.processing.batch_task_preparator import BatchTaskPreparator
 from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient, BatchResult
 from agent_actions.errors import ProcessingError
 
@@ -111,7 +120,7 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
 
         # Create reconciler to find missing records
         # pylint: disable=import-outside-toplevel
-        from agent_actions.llm_invocation.batch.batch_result_reconciler import (
+        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )
 
@@ -214,7 +223,7 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
             List of batch results
         """
         # pylint: disable=import-outside-toplevel
-        from agent_actions.llm_invocation.batch.batch_result_reconciler import (
+        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )
 

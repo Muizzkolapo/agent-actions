@@ -7,15 +7,23 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Union, Callable
 
-from agent_actions.llm_invocation.batch.loaders_batch_data_loader import BatchDataLoader
+from agent_actions.llm_invocation.batch.infrastructure.batch_data_loader import BatchDataLoader
 from agent_actions.orchestration.dependency_injection import registry
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_result_processor import BatchResultProcessor
-from agent_actions.llm_invocation.batch.batch_task_preparator import BatchTaskPreparator
-from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.batch.processing.batch_result_processor import (
+    BatchResultProcessor,
+)
+from agent_actions.llm_invocation.batch.processing.batch_task_preparator import BatchTaskPreparator
+from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
+    BatchContextManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient
 
 logger = logging.getLogger(__name__)
@@ -67,8 +75,12 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
     ):
         """Initialize batch service facade with optional pre-built services."""
         # pylint: disable=import-outside-toplevel
-        from agent_actions.llm_invocation.batch.batch_job_manager import BatchJobManager
-        from agent_actions.llm_invocation.batch.batch_source_handler import BatchSourceHandler
+        from agent_actions.llm_invocation.batch.infrastructure.batch_job_manager import (
+            BatchJobManager,
+        )
+        from agent_actions.llm_invocation.batch.infrastructure.batch_source_handler import (
+            BatchSourceHandler,
+        )
 
         # Store pre-built services
         self._submission_service = submission_service
@@ -118,7 +130,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         """Lazy-initialize submission service."""
         if self._submission_service is None:
             # pylint: disable=import-outside-toplevel
-            from agent_actions.llm_invocation.batch.batch_submission_service import (
+            from agent_actions.llm_invocation.batch.services.batch_submission_service import (
                 BatchSubmissionService,
             )
 
@@ -135,7 +147,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         """Lazy-initialize retrieval service."""
         if self._retrieval_service is None:
             # pylint: disable=import-outside-toplevel
-            from agent_actions.llm_invocation.batch.batch_retrieval_service import (
+            from agent_actions.llm_invocation.batch.services.batch_retrieval_service import (
                 BatchRetrievalService,
             )
 
@@ -150,7 +162,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         """Lazy-initialize processing service."""
         if self._processing_service is None:
             # pylint: disable=import-outside-toplevel
-            from agent_actions.llm_invocation.batch.batch_processing_service import (
+            from agent_actions.llm_invocation.batch.services.batch_processing_service import (
                 BatchProcessingService,
             )
 
@@ -167,7 +179,7 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
         """Lazy-initialize retry service."""
         if self._retry_service is None:
             # pylint: disable=import-outside-toplevel
-            from agent_actions.llm_invocation.batch.batch_retry_service import (
+            from agent_actions.llm_invocation.batch.services.batch_retry_service import (
                 BatchRetryService,
             )
 

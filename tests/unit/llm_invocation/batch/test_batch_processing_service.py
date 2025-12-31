@@ -15,7 +15,7 @@ class TestBatchProcessingServiceInit:
 
     def test_init_with_all_dependencies(self):
         """Should initialize with all required dependencies."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -37,7 +37,7 @@ class TestBatchProcessingServiceInit:
 
     def test_init_with_optional_source_handler(self):
         """Should accept optional source handler."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -59,10 +59,10 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_true_when_completed(self):
         """Should return True when batch status is completed."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.COMPLETED
@@ -85,10 +85,10 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_false_when_in_progress(self):
         """Should return False when batch is still in progress."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         provider = MagicMock()
         provider.check_status.return_value = BatchStatus.IN_PROGRESS
@@ -111,7 +111,7 @@ class TestIsBatchReadyForProcessing:
 
     def test_returns_false_on_exception(self):
         """Should return False when status check fails."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -135,7 +135,7 @@ class TestDetermineOutputPath:
 
     def test_uses_file_name_when_provided(self, tmp_path):
         """Should use file_name stem for output path."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -156,7 +156,7 @@ class TestDetermineOutputPath:
 
     def test_uses_batch_id_when_no_file_name(self, tmp_path):
         """Should use batch_id for output path when file_name is None."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -181,7 +181,7 @@ class TestWriteBatchOutput:
 
     def test_writes_main_output_file(self, tmp_path):
         """Should write main output to JSON file."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
 
@@ -213,7 +213,7 @@ class TestProcessAllBatchResults:
 
     def test_raises_when_no_registry(self):
         """Should raise ProcessingError when no registry found."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
         from agent_actions.errors import ProcessingError
@@ -235,10 +235,10 @@ class TestProcessAllBatchResults:
 
     def test_skips_batches_not_completed(self, tmp_path):
         """Should skip batches that are not completed."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
         from agent_actions.errors import ProcessingError
 
         # Setup entry that is not completed
@@ -270,10 +270,10 @@ class TestProcessAllBatchResults:
 
     def test_processes_completed_batches(self, tmp_path):
         """Should process completed batches and return file paths."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         # Setup completed entry
         entry = MagicMock()
@@ -318,10 +318,10 @@ class TestProcessBatchResults:
 
     def test_raises_when_not_completed(self):
         """Should raise ProcessingError when batch not completed."""
-        from agent_actions.llm_invocation.batch.batch_processing_service import (
+        from agent_actions.llm_invocation.batch.services.batch_processing_service import (
             BatchProcessingService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
         from agent_actions.errors import ProcessingError
 
         provider = MagicMock()

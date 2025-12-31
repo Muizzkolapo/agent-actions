@@ -13,11 +13,16 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig, get_retry_config
-from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
-from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchReconciliationResult
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus, ContextMetaKeys
-from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
+    RetryConfig,
+    get_retry_config,
+)
+from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+    BatchReconciliationResult,
+)
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus, ContextMetaKeys
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -501,7 +506,7 @@ class BatchRetryOrchestrator:
 
             # Import here to avoid circular dependency
             # pylint: disable=import-outside-toplevel
-            from agent_actions.llm_invocation.batch.batch_result_reconciler import (
+            from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
                 BatchResultReconciler,
             )
 

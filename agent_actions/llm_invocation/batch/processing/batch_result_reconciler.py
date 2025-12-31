@@ -9,8 +9,8 @@ import logging
 from typing import Dict, Set, List, Any, Tuple, Optional
 from dataclasses import dataclass
 
-from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm_invocation.batch.batch_constants import FilterStatus
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
 
 logger = logging.getLogger(__name__)
 

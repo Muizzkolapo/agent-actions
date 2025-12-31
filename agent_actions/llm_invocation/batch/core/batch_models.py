@@ -7,7 +7,7 @@ Defines structured types for batch registry entries and related data.
 from dataclasses import dataclass, asdict, field
 from typing import Optional, List, Dict, Any
 
-from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
 
 @dataclass

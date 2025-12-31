@@ -15,7 +15,7 @@ class TestBatchRetryServiceInit:
 
     def test_init_with_all_dependencies(self):
         """Should initialize with all required dependencies."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
 
@@ -35,10 +35,10 @@ class TestBatchRetryServiceInit:
 
     def test_init_with_optional_retry_config(self):
         """Should accept optional default retry config."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
+        from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 
         retry_config = RetryConfig(enabled=True, max_attempts=5)
 
@@ -57,7 +57,7 @@ class TestRetryBatchJobValidation:
 
     def test_raises_when_batch_not_found(self):
         """Should raise ProcessingError when batch not in registry."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
         from agent_actions.errors import ProcessingError
@@ -78,10 +78,10 @@ class TestRetryBatchJobValidation:
 
     def test_raises_when_batch_not_completed(self):
         """Should raise ProcessingError when batch status is not COMPLETED."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
         from agent_actions.errors import ProcessingError
 
         entry = MagicMock()
@@ -108,10 +108,10 @@ class TestRetryBatchJobNoMissingRecords:
 
     def test_returns_none_when_no_missing_records(self):
         """Should return None when all records are present."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         # Setup entry
         entry = MagicMock()
@@ -160,11 +160,11 @@ class TestRetryBatchJobWithMissingRecords:
 
     def test_returns_retry_batch_id_on_success(self):
         """Should return new batch ID when retry is triggered."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
-        from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 
         # Setup entry
         entry = MagicMock()
@@ -219,11 +219,11 @@ class TestRetryBatchJobWithMissingRecords:
 
     def test_uses_max_attempts_override(self):
         """Should use max_attempts parameter when provided."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
-        from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 
         # Setup entry
         entry = MagicMock()
@@ -283,10 +283,10 @@ class TestRetryBatchJobFileNameResolution:
 
     def test_finds_file_name_from_registry(self):
         """Should find correct file_name from registry."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         entry = MagicMock()
         entry.status = BatchStatus.COMPLETED
@@ -322,10 +322,10 @@ class TestRetryBatchJobFileNameResolution:
 
     def test_defaults_to_default_when_file_not_found(self):
         """Should use 'default' when file_name not found in registry."""
-        from agent_actions.llm_invocation.batch.batch_retry_service import (
+        from agent_actions.llm_invocation.batch.services.batch_retry_service import (
             BatchRetryService,
         )
-        from agent_actions.llm_invocation.batch.batch_constants import BatchStatus
+        from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
         entry = MagicMock()
         entry.status = BatchStatus.COMPLETED

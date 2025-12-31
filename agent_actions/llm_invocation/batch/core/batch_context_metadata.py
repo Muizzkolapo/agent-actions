@@ -7,7 +7,7 @@ type-safe methods for getting/setting metadata.
 
 from typing import Any, Dict, Optional
 
-from agent_actions.llm_invocation.batch.batch_constants import (
+from agent_actions.llm_invocation.batch.core.batch_constants import (
     ContextMetaKeys,
     FilterStatus,
 )

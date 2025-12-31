@@ -16,7 +16,6 @@ from agent_actions.errors import AgentActionsException
 from agent_actions.input_loading.file_reader import FileReader
 from agent_actions.io.file_writer import FileWriter
 from agent_actions.io.unified_source_data_saver import UnifiedSourceDataSaver
-from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
 
@@ -506,6 +505,10 @@ def _process_batch_mode(ctx: BatchProcessingContext):
     Returns:
         None (writes output files as side effect)
     """
+    # Import here to avoid circular dependency
+    # pylint: disable=import-outside-toplevel
+    from agent_actions.llm_invocation.batch.batch_service import BatchService
+
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)
     batch_service = BatchService()
     file_name = Path(ctx.file_path).name

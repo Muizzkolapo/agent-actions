@@ -17,12 +17,12 @@ from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.errors.preflight import ContextStructureError
 from agent_actions.validation.preflight import PreFlightValidator
-from agent_actions.llm_invocation.batch.batch_models import (
+from agent_actions.llm_invocation.batch.core.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats,
 )
-from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm_invocation.batch.batch_constants import ContextMetaKeys, FilterStatus
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 
 logger = logging.getLogger(__name__)
 

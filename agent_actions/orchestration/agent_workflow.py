@@ -22,7 +22,6 @@ from rich.console import Console
 
 from agent_actions.configuration.factory import create_agent_runner
 from agent_actions.input_loading.udf_loader import discover_udfs
-from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.llm_invocation.realtime.config_handler import ConfigManager
 from agent_actions.logging import CorrelationContext
 from agent_actions.orchestration.action_level_executor import (
@@ -168,6 +167,10 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
         output_processor = OutputProcessor(
             self.config.paths.parent_output, self.config.paths.constructor_path
         )
+        # Import here to avoid circular dependency
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
+
         batch_service = BatchService(
             agent_indices=self.agent_indices, dependency_configs=self.agent_configs
         )

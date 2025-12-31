@@ -19,7 +19,6 @@ from agent_actions.configuration.interfaces import (
 from agent_actions.errors import ConfigValidationError, DependencyError
 from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
 from agent_actions.state_management.path_manager import PathManager
-from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import (
     DependencyContainer,
     ProcessorFactory,
@@ -183,6 +182,10 @@ class ApplicationContainer:
         data_processor = self._get_data_processor(agent_config)
 
         dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
+        # Import here to avoid circular dependency
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.llm_invocation.batch.batch_service import BatchService
+
         batch_service = BatchService(
             agent_indices=agent_indices, dependency_configs=dependency_configs or agent_configs
         )
@@ -262,6 +265,10 @@ class ApplicationContainer:
             self.container.get(IGenerator)
             results["services"]["generator"] = "healthy"
             # BatchService not registered, create instance for health check
+            # Import here to avoid circular dependency
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.llm_invocation.batch.batch_service import BatchService
+
             BatchService()
             results["services"]["batch_service"] = "healthy"
         except (KeyError, ValueError, AttributeError, TypeError, RuntimeError, ImportError) as e:

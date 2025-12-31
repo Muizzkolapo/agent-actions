@@ -14,12 +14,16 @@ from agent_actions.preprocessing.transformation.data_transformer import DataTran
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopIdGenerator
-from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
-from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
+from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+    BatchResultReconciler,
+)
+from agent_actions.llm_invocation.batch.processing.batch_passthrough_builder import (
+    BatchPassthroughBuilder,
+)
 from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
-from agent_actions.llm_invocation.batch.batch_retry_orchestrator import RetryMetadata
-from agent_actions.llm_invocation.batch.batch_context_metadata import BatchContextMetadata
-from agent_actions.llm_invocation.batch.batch_constants import ContextMetaKeys
+from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import RetryMetadata
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
 
 logger = logging.getLogger(__name__)
 

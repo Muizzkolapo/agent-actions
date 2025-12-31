@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 """Batch retrieval service for downloading batch job results.
 
 This service encapsulates all result retrieval functionality, extracted from
@@ -9,9 +10,15 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 
-from agent_actions.llm_invocation.batch.batch_context_manager import BatchContextManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
+from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (
+    BatchContextManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
 from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient, BatchResult
 from agent_actions.utilities.path_utils import ensure_directory_exists
 from agent_actions.errors import ExternalServiceError
@@ -152,7 +159,7 @@ class BatchRetrievalService:  # pylint: disable=too-few-public-methods
             List of batch results
         """
         # pylint: disable=import-outside-toplevel
-        from agent_actions.llm_invocation.batch.batch_result_reconciler import (
+        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )
 
