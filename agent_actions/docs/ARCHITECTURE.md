@@ -276,10 +276,10 @@ Browser loads index.html
 
 **Purpose:** Parse YAML files into structured data
 
-**Key Innovation:** Handles 3 different schema formats:
+**Key Innovation:** Handles 3 different schema formats via `extract_fields_for_docs()`:
 
 ```python
-def load_schema(schema_name, schema_dir):
+def extract_fields_for_docs(raw_schema):
     # Format 1: {fields: [{id, type, description}]}
     if 'fields' in schema_data:
         process_custom_format()

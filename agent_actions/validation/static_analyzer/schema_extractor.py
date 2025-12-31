@@ -9,8 +9,8 @@ Handles schema extraction from:
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from agent_actions.docs.parser import WorkflowParser
 from agent_actions.docs.scanner import ProjectScanner
+from agent_actions.response_processing.schema_loader import SchemaLoader
 
 from .data_flow_graph import InputSchema, OutputSchema
 
@@ -259,7 +259,7 @@ class SchemaExtractor:
             else:
                 input_schema.optional_fields.add(field_name)
 
-    def _extract_llm_schema(  # pylint: disable=too-many-branches
+    def _extract_llm_schema(  # pylint: disable=too-many-branches,too-many-statements
         self,
         config: Dict[str, Any],
         output: OutputSchema,
@@ -272,8 +272,11 @@ class SchemaExtractor:
 
         # If no inline schema but has schema_name, try to load external schema
         if not schema_def and schema_name:
-            # Use WorkflowParser for reliable schema loading from schema/ directory
-            loaded = WorkflowParser.load_schema(schema_name, self.schema_dir)
+            # Use SchemaLoader to get raw YAML with full schema structure preserved
+            try:
+                loaded = SchemaLoader.load_schema(schema_name, self.schema_dir)
+            except FileNotFoundError:
+                loaded = None
             if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self._extract_fields_from_json_schema(loaded)
@@ -306,8 +309,11 @@ class SchemaExtractor:
 
         # Handle different schema formats
         if isinstance(schema_def, str):
-            # Schema reference (external file) - use WorkflowParser
-            loaded = WorkflowParser.load_schema(schema_def, self.schema_dir)
+            # Schema reference (external file) - use SchemaLoader for raw YAML
+            try:
+                loaded = SchemaLoader.load_schema(schema_def, self.schema_dir)
+            except FileNotFoundError:
+                loaded = None
             if loaded:
                 output.json_schema = loaded
                 output.schema_fields = self._extract_fields_from_json_schema(loaded)

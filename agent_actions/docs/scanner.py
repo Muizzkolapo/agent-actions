@@ -7,6 +7,9 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 
+from agent_actions.response_processing.schema_loader import SchemaLoader
+from .parser import extract_fields_for_docs
+
 
 class ProjectScanner:
     """Scan project directory for agent workflows and prompts."""
@@ -120,39 +123,38 @@ class ProjectScanner:
 
     def scan_schemas(self) -> Dict[str, Any]:
         """
-        Scan project directory for schema files using the parser's load_schema method.
+        Scan project directory for schema files.
 
         Returns:
             Dict mapping schema names to schema data
         """
-        # Import here to avoid circular import
-        from .parser import WorkflowParser  # pylint: disable=import-outside-toplevel
-
         schemas = {}
         schema_dir = self.project_root / "schema"
 
         if not schema_dir.exists():
             return schemas
 
-        parser = WorkflowParser()
-
         for yml_file in schema_dir.glob("*.yml"):
             schema_name = yml_file.stem
 
-            # Use the parser's load_schema method which handles all formats
-            schema_data = parser.load_schema(schema_name, schema_dir)
-
-            if not schema_data:
+            try:
+                raw_schema = SchemaLoader.load_schema(schema_name, schema_dir)
+            except FileNotFoundError:
                 continue
+
+            fields = extract_fields_for_docs(raw_schema)
+            schema_type = raw_schema.get("type", "object")
+            if "fields" in raw_schema:
+                schema_type = "object"  # Unified format
 
             schemas[schema_name] = {
                 "id": schema_name,
-                "name": schema_data["name"],
-                "type": schema_data["type"],
+                "name": raw_schema.get("name", schema_name),
+                "type": schema_type,
                 "source_file": str(yml_file),
                 "source_file_name": yml_file.name,
-                "fields": schema_data.get("fields", []),
-                "field_count": len(schema_data.get("fields", [])),
+                "fields": fields,
+                "field_count": len(fields),
             }
 
         return schemas
