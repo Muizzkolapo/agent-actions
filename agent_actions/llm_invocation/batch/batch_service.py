@@ -353,6 +353,130 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             agent_config=agent_config,
         )
 
+    def _is_batch_ready_for_processing(self, batch_id: str, output_directory: str) -> bool:
+        """Check if batch is ready for processing (completed status).
+
+        Args:
+            batch_id: The batch job ID to check
+            output_directory: Directory containing batch registry
+
+        Returns:
+            True if batch status is COMPLETED, False otherwise
+        """
+        try:
+            status = self.check_status(batch_id, output_directory)
+            return status == BatchStatus.COMPLETED
+        except Exception:  # pylint: disable=broad-exception-caught
+            return False
+
+    def _determine_output_path(
+        self, output_directory: str, file_name: Optional[str], batch_id: str
+    ) -> Path:
+        """Determine the output file path for batch results.
+
+        Args:
+            output_directory: Base output directory
+            file_name: Original file name (may be None or "default")
+            batch_id: Batch job ID for fallback naming
+
+        Returns:
+            Path object for the output file
+        """
+        if file_name and file_name != "default":
+            return Path(output_directory) / f"{Path(file_name).stem}.json"
+        return Path(output_directory) / f"{batch_id}_processed_output.json"
+
+    def _write_batch_output(
+        self,
+        output_file: Path,
+        main_output: List[Dict[str, Any]],
+        side_output_data: Optional[List[Dict[str, Any]]],
+        output_directory: str,
+    ) -> None:
+        """Write main and side output files.
+
+        Args:
+            output_file: Path to write main output
+            main_output: Main output data to write
+            side_output_data: Optional side output data
+            output_directory: Directory for side output
+        """
+        ensure_directory_exists(output_file, is_file=True)
+        FileWriter(str(output_file)).write_target(main_output)
+
+        if side_output_data:
+            side_output_dir = create_side_output_directory(output_directory)
+            side_output_file = side_output_dir / output_file.name
+            BatchSideOutputHandler.save(side_output_data, side_output_file)
+
+    def _process_single_batch_file(
+        self,
+        batch_id: str,
+        file_name: str,
+        entry: BatchJobEntry,
+        output_directory: str,
+        agent_config: Optional[Dict[str, Any]],
+        manager: BatchRegistryManager,
+    ) -> Optional[str]:
+        """Process a single batch file and return output path.
+
+        Args:
+            batch_id: The batch job ID
+            file_name: Original file name
+            entry: Batch job registry entry
+            output_directory: Output directory path
+            agent_config: Agent configuration
+            manager: Registry manager instance
+
+        Returns:
+            Output file path if successful, None if no results
+        """
+        context_map = self._context_manager.load_batch_context_map(
+            output_directory, file_name or "default"
+        )
+        provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
+        batch_results = self._retrieve_results(
+            provider,
+            batch_id,
+            output_directory,
+            context_map=context_map,
+            _agent_config=agent_config,
+            record_count=entry.record_count,
+            file_name=file_name,
+        )
+
+        if not batch_results:
+            return None
+
+        # Convert results to workflow format
+        processed_data = self._convert_batch_results_to_workflow_format(
+            batch_results,
+            context_map=context_map,
+            output_directory=output_directory,
+            agent_config=agent_config,
+        )
+        main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
+
+        # Determine output path and write files
+        output_file = self._determine_output_path(output_directory, file_name, batch_id)
+        self._write_batch_output(output_file, main_output, side_output_data, output_directory)
+
+        # Log completion
+        logger.info(
+            "Batch job completed and processed",
+            extra={
+                "operation": "process_batch_results",
+                "batch_id": batch_id,
+                "file_name": file_name,
+                "results_count": len(batch_results),
+                "main_output_count": len(main_output) if isinstance(main_output, list) else 1,
+                "side_output_count": len(side_output_data) if side_output_data else 0,
+                "output_file": str(output_file),
+            },
+        )
+
+        return str(output_file)
+
     def process_all_batch_results(self, output_directory: str, agent_config: Dict[str, Any] = None):
         """Process all completed batch jobs in the registry to workflow output."""
         manager = self._get_registry_manager(output_directory)
@@ -368,91 +492,23 @@ class BatchService:  # pylint: disable=too-many-instance-attributes
             if not batch_id:
                 continue
 
-            # Check status
-            try:
-                if self.check_status(batch_id, output_directory) != BatchStatus.COMPLETED:
-                    continue
-            except Exception as e:  # pylint: disable=broad-exception-caught
-                # Catch all exceptions to prevent one status check from breaking entire batch
-                logger.exception(
-                    "Failed to check batch status for %s (%s): %s",
-                    batch_id,
-                    file_name,
-                    e,
-                    extra={
-                        "batch_id": batch_id,
-                        "file_name": file_name,
-                        "operation": "batch_status_check",
-                    },
-                )
+            # Check status using helper method
+            if not self._is_batch_ready_for_processing(batch_id, output_directory):
                 continue
 
             # Process batch
             try:
-                context_map = self._context_manager.load_batch_context_map(
-                    output_directory, file_name or "default"
-                )
-                provider = self._client_resolver.get_for_batch_id(
-                    batch_id, manager, output_directory
-                )
-                batch_results = self._retrieve_results(
-                    provider,
-                    batch_id,
-                    output_directory,
-                    context_map=context_map,
-                    _agent_config=agent_config,
-                    record_count=entry.record_count,
+                output_file = self._process_single_batch_file(
+                    batch_id=batch_id,
                     file_name=file_name,
-                )
-
-                if not batch_results:
-                    continue
-
-                # Convert and write output
-                processed_data = self._convert_batch_results_to_workflow_format(
-                    batch_results,
-                    context_map=context_map,
+                    entry=entry,
                     output_directory=output_directory,
                     agent_config=agent_config,
+                    manager=manager,
                 )
-                main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
-
-                output_file = (
-                    Path(output_directory) / f"{Path(file_name).stem}.json"
-                    if file_name and file_name != "default"
-                    else Path(output_directory) / f"{batch_id}_processed_output.json"
-                )
-                ensure_directory_exists(output_file, is_file=True)
-                FileWriter(str(output_file)).write_target(main_output)
-
-                if side_output_data:
-                    side_output_dir = create_side_output_directory(output_directory)
-                    side_output_file = side_output_dir / (
-                        f"{Path(file_name).stem}.json"
-                        if file_name and file_name != "default"
-                        else f"{batch_id}_processed_output.json"
-                    )
-                    BatchSideOutputHandler.save(side_output_data, side_output_file)
-
-                # Log batch completion with throughput metrics
-                logger.info(
-                    "Batch job completed and processed",
-                    extra={
-                        "operation": "process_batch_results",
-                        "batch_id": batch_id,
-                        "file_name": file_name,
-                        "results_count": len(batch_results),
-                        "main_output_count": (
-                            len(main_output) if isinstance(main_output, list) else 1
-                        ),
-                        "side_output_count": len(side_output_data) if side_output_data else 0,
-                        "output_file": str(output_file),
-                    },
-                )
-
-                processed_files.append(str(output_file))
+                if output_file:
+                    processed_files.append(output_file)
             except Exception as e:  # pylint: disable=broad-exception-caught
-                # Catch all exceptions to prevent one batch from breaking entire processing
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,
