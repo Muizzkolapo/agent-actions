@@ -30,6 +30,9 @@ try:
 except ImportError:
     MISTRAL_AVAILABLE = False
 
+# Mock client is always available (for testing)
+from .mock_batch_client import MockBatchClient
+
 
 class BatchClientFactory:
     """
@@ -40,7 +43,7 @@ class BatchClientFactory:
     """
 
     @staticmethod
-    def create_client(
+    def create_client(  # pylint: disable=too-many-return-statements
         client_type: str = "openai", config: Optional[Dict[str, Any]] = None
     ) -> BaseBatchClient:
         """
@@ -66,9 +69,8 @@ class BatchClientFactory:
             try:
                 return GeminiBatchClient(api_key=api_key)
             except ImportError as e:
-                from agent_actions.errors import (
-                    DependencyError,
-                )  # pylint: disable=import-outside-toplevel
+                # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import DependencyError
 
                 raise DependencyError(
                     "GeminiBatchClient requires google-genai package",
@@ -104,9 +106,8 @@ class BatchClientFactory:
                     enable_prompt_caching=enable_prompt_caching,
                 )
             except ImportError as e:
-                from agent_actions.errors import (
-                    DependencyError,
-                )  # pylint: disable=import-outside-toplevel
+                # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import DependencyError
 
                 raise DependencyError(
                     "AnthropicBatchClient requires anthropic package",
@@ -148,9 +149,19 @@ class BatchClientFactory:
             api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
             return MistralBatchClient(api_key=api_key)
 
-        from agent_actions.errors import (
-            ConfigurationError,
-        )  # pylint: disable=import-outside-toplevel
+        if client_type == "mock":
+            # Mock client for testing retry logic without hitting real APIs
+            failure_rate = config.get("failure_rate")
+            failure_ids = config.get("failure_ids")
+            polls_until_complete = config.get("polls_until_complete")
+            return MockBatchClient(
+                failure_rate=failure_rate,
+                failure_ids=failure_ids,
+                polls_until_complete=polls_until_complete,
+            )
+
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import ConfigurationError
 
         supported = BatchClientFactory.get_supported_clients()
         raise ConfigurationError(
@@ -168,7 +179,7 @@ class BatchClientFactory:
     @staticmethod
     def get_supported_clients() -> list[str]:
         """Get list of supported client types."""
-        clients = ["openai", "gemini", "ollama"]
+        clients = ["openai", "gemini", "ollama", "mock"]
         if ANTHROPIC_AVAILABLE:
             clients.append("anthropic")
         if GROQ_AVAILABLE:

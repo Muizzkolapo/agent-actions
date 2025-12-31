@@ -17,6 +17,7 @@ from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
 from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
 from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
+from agent_actions.llm_invocation.batch.batch_retry_orchestrator import RetryMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +53,13 @@ class BatchProcessingContext:  # pylint: disable=too-many-instance-attributes
     error_count: int = 0
     passthrough_count: int = 0
 
+    # Retry tracking
+    batch_id: Optional[str] = None
+    retry_attempt: int = 0  # 0 = original batch
+    original_batch_id: Optional[str] = None  # Set if this is a retry batch
 
-class BatchResultProcessor:  # pylint: disable=too-few-public-methods
+
+class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-arguments,too-many-positional-arguments
     """
     Pipeline-based processor for batch results.
 
@@ -91,6 +97,9 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
+        batch_id: Optional[str] = None,
+        retry_attempt: int = 0,
+        original_batch_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Process batch results through the pipeline.
@@ -100,13 +109,22 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
             context_map: Map of custom_id -> original row data
             output_directory: Output directory path (for node extraction)
             agent_config: Agent configuration
+            batch_id: ID of the batch being processed
+            retry_attempt: Retry attempt number (0 = original batch)
+            original_batch_id: ID of original batch (if this is a retry)
 
         Returns:
             List of processed data in workflow format
         """
         # Stage 1: Initialize context
         ctx = self._stage_1_initialize_context(
-            batch_results, context_map, output_directory, agent_config
+            batch_results,
+            context_map,
+            output_directory,
+            agent_config,
+            batch_id=batch_id,
+            retry_attempt=retry_attempt,
+            original_batch_id=original_batch_id,
         )
 
         # Stage 2: Reconcile requests with responses
@@ -133,6 +151,9 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         agent_config: Optional[Dict[str, Any]],
+        batch_id: Optional[str] = None,
+        retry_attempt: int = 0,
+        original_batch_id: Optional[str] = None,
     ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
@@ -161,6 +182,9 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
             node_idx=node_idx,
             json_mode=json_mode,
             output_field=output_field,
+            batch_id=batch_id,
+            retry_attempt=retry_attempt,
+            original_batch_id=original_batch_id or batch_id,
         )
 
         logger.debug(
@@ -323,7 +347,27 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
                         item, ctx.agent_config, record_index=record_index
                     )
 
+            # Add retry metadata
+            item["_retry_metadata"] = self._build_retry_metadata(ctx)
+
         return structured_items
+
+    def _build_retry_metadata(self, ctx: BatchProcessingContext) -> Dict[str, Any]:
+        """
+        Build retry metadata dict for a processed record.
+
+        Args:
+            ctx: Processing context with retry tracking info
+
+        Returns:
+            Retry metadata dictionary
+        """
+        return RetryMetadata(
+            was_retried=ctx.retry_attempt > 0,
+            retry_attempts=ctx.retry_attempt,
+            original_batch_id=ctx.original_batch_id,
+            final_batch_id=ctx.batch_id,
+        ).to_dict()
 
     def _apply_context_passthrough(
         self,
@@ -414,6 +458,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods
             "source_guid": source_guid,
             "error": error_message,
             "metadata": metadata or {},
+            "_retry_metadata": self._build_retry_metadata(ctx),
         }
 
         # Include raw_content for processing errors (helps debugging)

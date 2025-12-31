@@ -2,13 +2,38 @@
 
 import json
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
 from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
+from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RetryChainStatus:
+    """Status summary for a batch retry chain."""
+
+    original_batch_id: str
+    total_attempts: int  # Number of retry batches (0 = no retries)
+    current_status: str  # Status of the most recent batch in chain
+    all_batch_ids: List[str] = field(default_factory=list)
+    total_records: int = 0
+    completed_records: int = 0
+    missing_records: int = 0
+
+    @property
+    def is_complete(self) -> bool:
+        """Check if the retry chain is fully complete."""
+        return self.current_status in ["completed", "failed", "cancelled"]
+
+    @property
+    def has_retries(self) -> bool:
+        """Check if any retries were performed."""
+        return self.total_attempts > 0
 
 
 class BatchJobManager:
@@ -170,3 +195,116 @@ class BatchJobManager:
 
         except (json.JSONDecodeError, KeyError):
             return "error"
+
+    def get_batch_children(self, batch_id: str, output_directory: str) -> List[BatchJobEntry]:
+        """
+        Get all retry batches for a parent batch.
+
+        Args:
+            batch_id: Parent batch ID
+            output_directory: Directory containing batch registry
+
+        Returns:
+            List of BatchJobEntry for retry batches
+        """
+        if not self._registry_manager:
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if not registry_file.exists():
+                return []
+            self._registry_manager = BatchRegistryManager(registry_file)
+
+        all_jobs = self._registry_manager.get_all_jobs()
+        children = []
+
+        for entry in all_jobs.values():
+            if entry.parent_batch_id == batch_id:
+                children.append(entry)
+
+        # Sort by retry_attempt
+        children.sort(key=lambda e: e.retry_attempt)
+        return children
+
+    def get_batch_lineage(self, batch_id: str, output_directory: str) -> List[BatchJobEntry]:
+        """
+        Get full chain from original batch to all retries.
+
+        Walks up to find root, then collects all descendants.
+
+        Args:
+            batch_id: Any batch ID in the chain
+            output_directory: Directory containing batch registry
+
+        Returns:
+            List of BatchJobEntry from original through all retries, in order
+        """
+        if not self._registry_manager:
+            registry_file = Path(output_directory) / "batch" / ".batch_registry.json"
+            if not registry_file.exists():
+                return []
+            self._registry_manager = BatchRegistryManager(registry_file)
+
+        all_jobs = self._registry_manager.get_all_jobs()
+
+        # Build lookup by batch_id
+        batch_lookup = {entry.batch_id: entry for entry in all_jobs.values()}
+
+        if batch_id not in batch_lookup:
+            return []
+
+        # Walk up to find root
+        current = batch_lookup[batch_id]
+        while current.parent_batch_id and current.parent_batch_id in batch_lookup:
+            current = batch_lookup[current.parent_batch_id]
+
+        root_id = current.batch_id
+
+        # Now collect all batches in the chain
+        lineage = [current]
+        to_process = [root_id]
+        processed = {root_id}
+
+        while to_process:
+            parent_id = to_process.pop(0)
+            for entry in all_jobs.values():
+                if entry.parent_batch_id == parent_id and entry.batch_id not in processed:
+                    lineage.append(entry)
+                    processed.add(entry.batch_id)
+                    to_process.append(entry.batch_id)
+
+        # Sort by retry_attempt
+        lineage.sort(key=lambda e: e.retry_attempt)
+        return lineage
+
+    def get_retry_chain_status(self, batch_id: str, output_directory: str) -> RetryChainStatus:
+        """
+        Get aggregated status for a batch retry chain.
+
+        Args:
+            batch_id: Any batch ID in the chain
+            output_directory: Directory containing batch registry
+
+        Returns:
+            RetryChainStatus with chain summary
+        """
+        lineage = self.get_batch_lineage(batch_id, output_directory)
+
+        if not lineage:
+            return RetryChainStatus(
+                original_batch_id=batch_id,
+                total_attempts=0,
+                current_status="unknown",
+            )
+
+        original = lineage[0]
+        latest = lineage[-1]
+
+        total_records = original.record_count or 0
+        retry_count = len(lineage) - 1  # Exclude original
+
+        return RetryChainStatus(
+            original_batch_id=original.batch_id,
+            total_attempts=retry_count,
+            current_status=latest.status,
+            all_batch_ids=[e.batch_id for e in lineage],
+            total_records=total_records,
+        )

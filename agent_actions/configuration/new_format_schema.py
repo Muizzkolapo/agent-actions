@@ -98,6 +98,10 @@ class ActionConfig(BaseModel):
     constraints: Optional[List[Dict[str, Any]]] = Field(
         default=None, description="List of constraint configurations for response validation"
     )
+    retry: Optional[Union[bool, str, Dict[str, Any]]] = Field(
+        default=None,
+        description="Batch retry config: true, 'aggressive', 'conservative', or dict",
+    )
 
     @field_validator("guard")
     @classmethod
@@ -124,6 +128,39 @@ class ActionConfig(BaseModel):
                 ) from e
         return v
 
+    @field_validator("retry")
+    @classmethod
+    def validate_retry(cls, v):
+        """Validate retry configuration."""
+        if v is not None:
+            try:
+                # Import here to avoid circular dependency
+                # pylint: disable=import-outside-toplevel
+                from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
+
+                if isinstance(v, bool):
+                    pass  # Valid
+                elif isinstance(v, str):
+                    # Validate preset name
+                    RetryConfig.from_yaml(v)
+                elif isinstance(v, dict):
+                    # Validate dict config
+                    RetryConfig.from_yaml(v)
+                else:
+                    raise ConfigValidationError(
+                        "retry_type",
+                        f"Retry must be bool, string, or dict, got {type(v).__name__}",
+                        context={"retry_type": str(type(v)), "operation": "validate_retry"},
+                    )
+            except ValueError as e:
+                raise ConfigValidationError(
+                    "retry_config",
+                    f"Invalid retry configuration: {e}",
+                    context={"retry": v, "operation": "validate_retry"},
+                    cause=e,
+                ) from e
+        return v
+
 
 class DefaultsConfig(BaseModel):
     """Default configuration applied to all actions."""
@@ -146,6 +183,10 @@ class DefaultsConfig(BaseModel):
     )
     constraints: Optional[List[Dict[str, Any]]] = Field(
         default=None, description="Default constraints applied to all actions"
+    )
+    retry: Optional[Union[bool, str, Dict[str, Any]]] = Field(
+        default=None,
+        description='Default batch retry configuration: true, "aggressive", or detailed config',
     )
 
 
