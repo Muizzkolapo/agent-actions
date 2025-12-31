@@ -58,6 +58,9 @@ class ReferenceExtractor:
         {"if", "else", "elif", "endif", "for", "endfor", "set", "block", "endblock", "macro"}
     )
 
+    # Pattern to extract loop variables from {% for VAR in ... %}
+    JINJA_FOR_LOOP_PATTERN = re.compile(r"\{%\s*for\s+(\w+)\s+in\s+")
+
     def extract_from_agent(self, agent_config: Dict[str, Any]) -> List[InputRequirement]:
         """Extract all field references from an agent configuration.
 
@@ -105,6 +108,17 @@ class ReferenceExtractor:
 
         return requirements
 
+    def _extract_loop_variables(self, template: str) -> Set[str]:
+        """Extract loop variable names from Jinja for-loops.
+
+        Finds variables defined in {% for VAR in ... %} statements.
+        These are local variables, not external references.
+        """
+        loop_vars: Set[str] = set()
+        for match in self.JINJA_FOR_LOOP_PATTERN.finditer(template):
+            loop_vars.add(match.group(1))
+        return loop_vars
+
     def _extract_from_template(
         self,
         template: str,
@@ -115,12 +129,20 @@ class ReferenceExtractor:
         requirements: List[InputRequirement] = []
         seen: Set[str] = set()
 
+        # Extract loop variables - these are local, not external references
+        loop_variables = self._extract_loop_variables(template)
+
         # Try Jinja2 action pattern: {{ action.agent.field }}
         for match in self.JINJA_ACTION_PATTERN.finditer(template):
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            if ref_key not in seen and source not in self.JINJA_KEYWORDS:
+            # Skip loop variables and Jinja keywords
+            if (
+                ref_key not in seen
+                and source not in self.JINJA_KEYWORDS
+                and source not in loop_variables
+            ):
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
@@ -136,8 +158,12 @@ class ReferenceExtractor:
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            if ref_key not in seen and source not in self.JINJA_KEYWORDS:
-                # Skip if source is 'action' (handled above)
+            # Skip loop variables, Jinja keywords, and 'action' (handled above)
+            if (
+                ref_key not in seen
+                and source not in self.JINJA_KEYWORDS
+                and source not in loop_variables
+            ):
                 if source != "action":
                     seen.add(ref_key)
                     requirements.append(
@@ -154,7 +180,8 @@ class ReferenceExtractor:
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            if ref_key not in seen:
+            # Skip loop variables
+            if ref_key not in seen and source not in loop_variables:
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(
@@ -170,7 +197,8 @@ class ReferenceExtractor:
             source = match.group(1)
             field = match.group(2)
             ref_key = f"{source}.{field}"
-            if ref_key not in seen and source != "action":
+            # Skip loop variables and 'action'
+            if ref_key not in seen and source != "action" and source not in loop_variables:
                 seen.add(ref_key)
                 requirements.append(
                     InputRequirement(

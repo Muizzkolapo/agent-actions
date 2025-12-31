@@ -64,10 +64,10 @@ VENDOR_CAPABILITIES = {
         "optional_fields": ["base_url", "temperature", "max_tokens"],
     },
     "tool": {
-        "supports_json_mode": False,
-        "supports_batch": False,
-        "supports_tools": False,
-        "supports_vision": False,
+        "supports_json_mode": True,  # N/A for tools, but set True to avoid false positives
+        "supports_batch": True,  # Tools run in any mode
+        "supports_tools": False,  # Tools don't call other tools
+        "supports_vision": False,  # Tools don't process images directly
         "required_fields": [],
         "optional_fields": ["tool_name"],
     },

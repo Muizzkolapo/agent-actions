@@ -283,3 +283,47 @@ class TestReferenceExtractor:
         agent_names = {r.source_agent for r in refs}
         assert "if" not in agent_names
         assert "real_agent" in agent_names
+
+    def test_jinja_loop_variables_skipped(self):
+        """Test Jinja2 for-loop variables are not treated as external references."""
+        config = {
+            "name": "agent",
+            "prompt": """
+            {% for ref in source.referenced_in %}
+            Section: {{ ref.section_name }}
+            Objective: {{ ref.objective }}
+            {% endfor %}
+
+            External: {{ action.extractor.data }}
+            """,
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        # Should not include 'ref' as it's a loop variable
+        agent_names = {r.source_agent for r in refs}
+        assert "ref" not in agent_names
+        # Should include 'extractor' (external reference)
+        assert "extractor" in agent_names
+
+    def test_multiple_loop_variables_skipped(self):
+        """Test multiple for-loop variables are all skipped."""
+        config = {
+            "name": "agent",
+            "prompt": """
+            {% for item in items_list %}
+            Item: {{ item.name }}
+            {% endfor %}
+            {% for resp in responsibilities %}
+            Resp: {{ resp.description }}
+            {% endfor %}
+            Real ref: {{ action.extractor.summary }}
+            """,
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        agent_names = {r.source_agent for r in refs}
+        # Loop variables should not be treated as external references
+        assert "item" not in agent_names
+        assert "resp" not in agent_names
+        # Real external references should be present
+        assert "extractor" in agent_names
