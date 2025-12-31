@@ -9,6 +9,9 @@ import logging
 from typing import Dict, Set, List, Any, Tuple, Optional
 from dataclasses import dataclass
 
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import FilterStatus
+
 logger = logging.getLogger(__name__)
 
 
@@ -90,7 +93,8 @@ class BatchResultReconciler:
         expected_ids = {
             str(custom_id)
             for custom_id, original_row in self.context_map.items()
-            if original_row.get("_batch_filter_status", "included") == "included"
+            if BatchContextMetadata.is_included(original_row)
+            or BatchContextMetadata.get_filter_status(original_row) is None
         }
         return expected_ids
 
@@ -127,14 +131,14 @@ class BatchResultReconciler:
             if custom_id in self._processed_ids:
                 continue
 
-            filter_status = original_row.get("_batch_filter_status", "included")
+            filter_status = BatchContextMetadata.get_filter_status(original_row)
 
             # Skip filtered records (they should not appear in output)
-            if filter_status == "filtered":
+            if filter_status == FilterStatus.FILTERED:
                 continue
 
             # Include skipped and included (but missing) records
-            if filter_status in ["skipped", "included"]:
+            if filter_status in (FilterStatus.SKIPPED, FilterStatus.INCLUDED, None):
                 passthrough_records.append((custom_id, original_row))
 
         return passthrough_records
@@ -228,7 +232,8 @@ class BatchResultReconciler:
         return {
             str(custom_id)
             for custom_id, original_row in (context_map or {}).items()
-            if original_row.get("_batch_filter_status", "included") == "included"
+            if BatchContextMetadata.is_included(original_row)
+            or BatchContextMetadata.get_filter_status(original_row) is None
         }
 
     @staticmethod

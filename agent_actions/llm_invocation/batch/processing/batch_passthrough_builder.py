@@ -11,6 +11,8 @@ providing a high-level interface for batch mode passthrough operations.
 import re
 from typing import Dict, List, Optional, Any
 from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
 
 # Import the constant from batch_service (or define here if needed)
 NODE_DIRECTORY_PATTERN = r"node_(\d+)_(\w+)"
@@ -105,12 +107,11 @@ class BatchPassthroughBuilder:
         """
         processed_data = []
         for custom_id, original_row in context_map.items():
-            filter_status = original_row.get("_batch_filter_status", "included")
-            if filter_status == "skipped":
+            if BatchContextMetadata.is_skipped(original_row):
                 # Use custom_id as fallback for target_id
                 item = self._build_item(original_row, reason, custom_id)
                 # Remove internal tracking field
-                item.pop("_batch_filter_status", None)
+                item.pop(ContextMetaKeys.FILTER_STATUS, None)
                 processed_data.append(item)
 
         return {

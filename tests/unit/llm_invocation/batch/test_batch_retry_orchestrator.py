@@ -2,14 +2,16 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from agent_actions.llm_invocation.batch.batch_retry_orchestrator import (
+from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import (
     RetryMetadata,
     RetryBatchResult,
     RetryChainResult,
     BatchRetryOrchestrator,
 )
-from agent_actions.llm_invocation.batch.batch_retry_config import RetryConfig
-from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchReconciliationResult
+from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
+from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+    BatchReconciliationResult,
+)
 
 
 class TestRetryMetadata:

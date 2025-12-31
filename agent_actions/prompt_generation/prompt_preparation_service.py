@@ -170,12 +170,15 @@ class PromptPreparationResult:
                  - drop_fields: Fields removed from context_scope.drop
                  - passthrough_fields: Fields marked for passthrough
                  - mode: Processing mode used (batch or realtime)
+        prompt_context: Full context dict used for template rendering (includes all
+                       upstream action data, source, seed, etc.)
     """
 
     formatted_prompt: str
     llm_context: Dict[str, Any]
     passthrough_fields: Dict[str, Any]
     metadata: Dict[str, Any]
+    prompt_context: Dict[str, Any] = None  # Optional for backward compat
 
 
 class PromptPreparationService:
@@ -394,6 +397,7 @@ class PromptPreparationService:
             llm_context=llm_context,
             passthrough_fields=passthrough_fields,
             metadata=metadata,
+            prompt_context=prompt_context,
         )
 
     @staticmethod

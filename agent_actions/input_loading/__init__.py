@@ -8,7 +8,7 @@ backward compatibility after the repository restructuring.
 from agent_actions.orchestration.dependency_injection import registry as _registry
 
 # Re-export from new locations
-from agent_actions.llm_invocation.batch.loaders_batch_data_loader import *
+from agent_actions.llm_invocation.batch.infrastructure.batch_data_loader import *
 from .base_base_loader import *
 from .extractors_source_data_loader import *
 from .json_loader import *

@@ -6,9 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from agent_actions.llm_invocation.batch.batch_registry_manager import BatchRegistryManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
-from agent_actions.llm_invocation.batch.batch_models import BatchJobEntry
+from agent_actions.llm_invocation.batch.infrastructure.batch_registry_manager import (
+    BatchRegistryManager,
+)
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
+from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
+from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +33,7 @@ class RetryChainStatus:
     @property
     def is_complete(self) -> bool:
         """Check if the retry chain is fully complete."""
-        return self.current_status in ["completed", "failed", "cancelled"]
+        return self.current_status in BatchStatus.terminal_states()
 
     @property
     def has_retries(self) -> bool:
@@ -101,7 +106,7 @@ class BatchJobManager:
                     if actual_status != entry.get("status"):
                         entry["status"] = actual_status
 
-                    if actual_status not in ["completed", "failed", "cancelled"]:
+                    if actual_status not in BatchStatus.terminal_states():
                         return False
 
                 except Exception as e:  # pylint: disable=broad-exception-caught
@@ -164,9 +169,9 @@ class BatchJobManager:
 
                 try:
                     actual_status = self._check_status(batch_id, str(output_directory))
-                    if actual_status == "completed":
+                    if actual_status == BatchStatus.COMPLETED:
                         completed_count += 1
-                    elif actual_status in ["failed", "cancelled"]:
+                    elif actual_status in (BatchStatus.FAILED, BatchStatus.CANCELLED):
                         failed_count += 1
                     else:
                         in_progress_count += 1

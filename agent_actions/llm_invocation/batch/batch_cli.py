@@ -4,8 +4,10 @@ import click
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.llm_invocation.batch.batch_service import BatchService
-from agent_actions.llm_invocation.batch.batch_job_manager import BatchJobManager
-from agent_actions.llm_invocation.batch.batch_client_resolver import BatchClientResolver
+from agent_actions.llm_invocation.batch.infrastructure.batch_job_manager import BatchJobManager
+from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
+    BatchClientResolver,
+)
 from agent_actions.validation.batch_validator import BatchCommandArgs
 
 

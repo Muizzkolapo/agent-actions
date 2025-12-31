@@ -14,10 +14,16 @@ from agent_actions.preprocessing.transformation.data_transformer import DataTran
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
 from agent_actions.utilities.correlation import LoopIdGenerator
-from agent_actions.llm_invocation.batch.batch_result_reconciler import BatchResultReconciler
-from agent_actions.llm_invocation.batch.batch_passthrough_builder import BatchPassthroughBuilder
+from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+    BatchResultReconciler,
+)
+from agent_actions.llm_invocation.batch.processing.batch_passthrough_builder import (
+    BatchPassthroughBuilder,
+)
 from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
-from agent_actions.llm_invocation.batch.batch_retry_orchestrator import RetryMetadata
+from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import RetryMetadata
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
 
 logger = logging.getLogger(__name__)
 
@@ -348,7 +354,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
                     )
 
             # Add retry metadata
-            item["_retry_metadata"] = self._build_retry_metadata(ctx)
+            BatchContextMetadata.set_retry_metadata(item, self._build_retry_metadata(ctx))
 
         return structured_items
 
@@ -382,7 +388,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
         Handles both pre-computed passthrough fields and fallback behavior.
         """
         # Check for pre-computed passthrough fields
-        stored_passthrough = ctx.context_map[custom_id].get("_passthrough_fields", {})
+        stored_passthrough = BatchContextMetadata.get_passthrough_fields(ctx.context_map[custom_id])
 
         if stored_passthrough:
             # Use pre-computed passthrough
@@ -454,12 +460,12 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
         """
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
-        error_item = {
+        error_item: Dict[str, Any] = {
             "source_guid": source_guid,
             "error": error_message,
             "metadata": metadata or {},
-            "_retry_metadata": self._build_retry_metadata(ctx),
         }
+        BatchContextMetadata.set_retry_metadata(error_item, self._build_retry_metadata(ctx))
 
         # Include raw_content for processing errors (helps debugging)
         if raw_content is not None:
@@ -491,7 +497,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
                     original_row, reason, custom_id
                 )
                 # Remove internal tracking field
-                passthrough_item.pop("_batch_filter_status", None)
+                passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
 
                 ctx.processed_data.append(passthrough_item)
                 ctx.passthrough_count += 1

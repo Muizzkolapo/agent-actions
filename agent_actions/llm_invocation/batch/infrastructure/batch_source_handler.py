@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Union
 
 
-class BatchSourceHandler:
+class BatchSourceHandler:  # pylint: disable=too-few-public-methods
     """
     Handles batch source data persistence.
 

@@ -17,10 +17,12 @@ from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
 from agent_actions.errors.preflight import ContextStructureError
 from agent_actions.validation.preflight import PreFlightValidator
-from agent_actions.llm_invocation.batch.batch_models import (
+from agent_actions.llm_invocation.batch.core.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats,
 )
+from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys, FilterStatus
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +120,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 
         # 2.1 Pre-flight validation: check template variables against first data row
-        self._run_preflight_validation(agent_config, raw_prompt, data)
+        self._run_preflight_validation(agent_config, raw_prompt, data, output_directory, batch_name)
         # pylint: disable=import-outside-toplevel
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
@@ -203,7 +205,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # 2. Store row in context map with initial status
         row_with_meta = row.copy()
-        row_with_meta["_batch_filter_status"] = "included"
+        BatchContextMetadata.set_filter_status(row_with_meta, FilterStatus.INCLUDED)
         context_map_builder[custom_id] = row_with_meta
 
         # 3. Extract row content for filtering
@@ -220,7 +222,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         )
 
         # 5. Update context map with filter status
-        context_map_builder[custom_id]["_batch_filter_status"] = status
+        context_map_builder[custom_id][ContextMetaKeys.FILTER_STATUS] = status
 
         # 6. Update stats based on filter result
         if status == "filtered":
@@ -284,7 +286,9 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # Store passthrough_fields for later merging
         if prep_result.passthrough_fields and custom_id in context_map_builder:
-            context_map_builder[custom_id]["_passthrough_fields"] = prep_result.passthrough_fields
+            BatchContextMetadata.set_passthrough_fields(
+                context_map_builder[custom_id], prep_result.passthrough_fields
+            )
 
         # Create and return task
         cleaned_row = prep_result.llm_context
@@ -361,26 +365,30 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         agent_config: Dict[str, Any],
         raw_prompt: Optional[str],
         data: List[Dict[str, Any]],
+        output_directory: Optional[str] = None,
+        batch_name: Optional[str] = None,
     ) -> None:
         """Run pre-flight validation on template and first data row.
 
-        Validates template variables are available in context before processing
-        any rows. This catches configuration errors early with unified error
-        messages across batch and online modes.
-
-        IMPORTANT: This builds the full prompt_context including:
-        - Source data under 'source' namespace
-        - Static/seed data under 'seed' namespace
-        - Historical data from dependencies
+        Uses the SAME PromptPreparationService as actual task preparation to ensure
+        context is built identically. This guarantees preflight validation catches
+        exactly the errors that would occur during actual processing.
 
         Args:
             agent_config: Agent configuration
             raw_prompt: The raw prompt template
             data: List of data items (uses first row for validation)
+            output_directory: Output directory for constructing file paths
+            batch_name: Batch file name for constructing file paths
 
         Raises:
             PreFlightValidationError: If validation fails
         """
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.prompt_generation.prompt_preparation_service import (
+            PromptPreparationService,
+        )
+
         if not raw_prompt or not data:
             return  # Nothing to validate
 
@@ -389,165 +397,37 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # Extract content from row (same logic as _process_single_item)
         if "source_guid" in first_row and "content" in first_row:
-            sample_content = first_row["content"]
+            row_content = first_row["content"]
         else:
-            sample_content = first_row
-
-        # Ensure content is a dict
-        if not isinstance(sample_content, dict):
-            sample_content = {"content": sample_content}
+            row_content = first_row
 
         agent_name = agent_config.get("agent_type", agent_config.get("name", "unknown"))
 
-        # Build full prompt_context with source namespace and seed data
-        # This mirrors the context building in _prepare_single_task via PromptPreparationService
-        prompt_context = self._build_preflight_context(
+        # Construct file path for history (same as _prepare_single_task)
+        file_path_for_history = None
+        if output_directory and batch_name:
+            file_path_for_history = str(Path(output_directory) / batch_name)
+
+        # Use the SAME service as actual task preparation - single source of truth
+        prep_result = PromptPreparationService.prepare_prompt_with_context(
             agent_config=agent_config,
-            sample_content=sample_content,
+            agent_name=agent_name,
+            contents=row_content if isinstance(row_content, dict) else {},
+            mode="batch",
+            agent_indices=self.agent_indices,
+            dependency_configs=self.dependency_configs,
+            current_item=first_row,
+            file_path=file_path_for_history,
         )
 
-        # Run pre-flight validation
+        # Run pre-flight validation with the actual context that will be used
         validator = PreFlightValidator()
         result = validator.validate_for_batch(
             template=raw_prompt,
-            context=prompt_context,
+            context=prep_result.prompt_context,
             agent_name=agent_name,
             agent_config=agent_config,
         )
 
         # Raise unified error if validation fails
         result.raise_if_invalid()
-
-    def _build_preflight_context(
-        self,
-        agent_config: Dict[str, Any],
-        sample_content: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Build prompt context for preflight validation.
-
-        Creates the same context structure that PromptPreparationService builds,
-        including source namespace, seed data, and historical data namespaces.
-
-        Args:
-            agent_config: Agent configuration
-            sample_content: Sample data content for validation
-
-        Returns:
-            Full prompt context with all namespaces
-        """
-        # pylint: disable=import-outside-toplevel,broad-exception-caught
-        from agent_actions.utilities.context_scope.context_scope_processor import (
-            ContextScopeProcessor,
-        )
-        from agent_actions.utilities.context_scope.static_data_loader import (
-            StaticDataLoadError,
-        )
-
-        # Start with source namespace (same as build_field_context_with_history)
-        field_context = {"source": sample_content}
-
-        # Get context_scope from agent_config
-        context_scope = agent_config.get("context_scope", {})
-
-        # Load seed data if configured
-        static_data = {}
-        if context_scope.get("seed_data"):
-            try:
-                static_data = self._load_seed_data_for_preflight(agent_config, context_scope)
-            except (StaticDataLoadError, Exception) as e:
-                # Log warning but continue - seed data errors will be caught later
-                logger.warning("Failed to load seed data for preflight: %s", e)
-
-        # Apply context_scope transformations (adds seed namespace)
-        if context_scope or static_data:
-            prompt_context, _, _ = ContextScopeProcessor.apply_context_scope(
-                field_context,
-                context_scope,
-                static_data=static_data,
-            )
-        else:
-            prompt_context = field_context
-
-        return prompt_context
-
-    def _load_seed_data_for_preflight(
-        self,
-        agent_config: Dict[str, Any],
-        context_scope: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        """Load seed data files for preflight validation.
-
-        Args:
-            agent_config: Agent configuration dict
-            context_scope: Context scope configuration
-
-        Returns:
-            Dictionary of loaded static data, or empty dict if not configured
-        """
-        # pylint: disable=import-outside-toplevel
-        from agent_actions.utilities.context_scope.static_data_loader import (
-            StaticDataLoader,
-        )
-
-        seed_data_config = context_scope.get("seed_data", {})
-        if not seed_data_config:
-            return {}
-
-        # Determine seed_data directory from workflow config path
-        workflow_config_path = agent_config.get("workflow_config_path")
-        static_data_dir = self._determine_static_data_dir(workflow_config_path)
-
-        # Load seed data
-        static_data_loader = StaticDataLoader(static_data_dir=static_data_dir)
-        return static_data_loader.load_static_data(seed_data_config)
-
-    def _determine_static_data_dir(self, workflow_config_path: Optional[str]) -> Path:
-        """Determine seed_data/ directory for loading static data files.
-
-        Args:
-            workflow_config_path: Path to workflow config file
-
-        Returns:
-            Path to seed_data/ directory
-
-        Raises:
-            StaticDataLoadError: If seed_data/ folder doesn't exist
-        """
-        # pylint: disable=import-outside-toplevel
-        from agent_actions.utilities.context_scope.static_data_loader import (
-            StaticDataLoadError,
-        )
-
-        # Determine workflow root directory
-        if not workflow_config_path:
-            base_dir = Path.cwd()
-        else:
-            file_path_obj = Path(workflow_config_path).resolve()
-
-            # Traverse up to find the directory containing agent_config/
-            current = file_path_obj.parent
-            while current != current.parent:
-                if (current / "agent_config").exists():
-                    base_dir = current
-                    break
-                if current.name == "agent_config" and current.parent != current:
-                    base_dir = current.parent
-                    break
-                current = current.parent
-            else:
-                base_dir = file_path_obj.parent
-
-        # Check for seed_data/ folder at workflow root
-        seed_data_dir = base_dir / "seed_data"
-        if seed_data_dir.exists() and seed_data_dir.is_dir():
-            return seed_data_dir
-
-        # Not found - raise error
-        raise StaticDataLoadError(
-            f"Seed data directory not found at '{seed_data_dir}'",
-            context={
-                "workflow_dir": str(base_dir),
-                "checked_path": str(seed_data_dir),
-                "error_type": "missing_seed_data_directory",
-            },
-        )
