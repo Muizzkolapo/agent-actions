@@ -508,10 +508,7 @@ function renderRecentRunsTable(runsToShow) {
 
     runsToShow.forEach(run => {
         const row = document.createElement('tr');
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
-            showRunDetails(run);
-        });
+        // Removed row click listener in favor of explicit links
 
         const startedDate = new Date(run.started_at);
         const now = new Date();
@@ -530,7 +527,7 @@ function renderRecentRunsTable(runsToShow) {
         const actionsText = `${run.successful_actions}/${run.total_actions}`;
 
         row.innerHTML = `
-            <td><strong>${run.workflow_name}</strong></td>
+            <td><a href="#/workflows/${run.workflow_id}/runs" style="color: inherit; text-decoration: none; font-weight: bold; display: block;">${run.workflow_name}</a></td>
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
             <td>${durationText}</td>
@@ -617,8 +614,8 @@ function renderRunActionDetails(run) {
         // Action ran - show its details
         const actionData = runActionData;
         const statusClass = actionData.status === 'success' ? 'SUCCESS' :
-                          actionData.status === 'failed' ? 'FAILED' :
-                          actionData.status === 'skipped' ? 'PAUSED' : '';
+            actionData.status === 'failed' ? 'FAILED' :
+                actionData.status === 'skipped' ? 'PAUSED' : '';
 
         const tokens = actionData.tokens && actionData.tokens.total_tokens
             ? `${(actionData.tokens.total_tokens / 1000).toFixed(1)}K`
@@ -873,7 +870,7 @@ function renderWorkflowTimeline(workflow) {
 
         const barsHTML = runsOnDate.map(run => {
             const statusClass = run.status === 'completed' ? 'success' :
-                              run.status === 'failed' ? 'failed' : 'running';
+                run.status === 'failed' ? 'failed' : 'running';
             const runTime = new Date(run.started_at).toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit'
@@ -1075,9 +1072,12 @@ function createWorkflowTableRow(workflow) {
 }
 
 function createWorkflowCard(workflow) {
-    const card = document.createElement('div');
+    const card = document.createElement('a');
     card.className = 'workflow-card';
-    card.addEventListener('click', () => showWorkflow(workflow.id));
+    card.href = `#/workflows/${workflow.id}`;
+    card.style.textDecoration = 'none';
+    card.style.color = 'inherit';
+    card.style.display = 'block';
 
     const actionCount = Object.keys(workflow.actions).length;
     const llmCount = Object.values(workflow.actions).filter(a => a.type === 'llm').length;
@@ -1102,9 +1102,12 @@ function createWorkflowCard(workflow) {
 }
 
 function createActionCard(action, workflowName, workflowId) {
-    const card = document.createElement('div');
+    const card = document.createElement('a');
     card.className = 'workflow-card';
-    card.addEventListener('click', () => showAction(action.name));
+    card.href = `#/workflows/${workflowId}/actions/${action.name}`;
+    card.style.textDecoration = 'none';
+    card.style.color = 'inherit';
+    card.style.display = 'block';
 
     const depsCount = action.dependencies.length;
     const depsText = depsCount === 0 ? 'No dependencies' : `${depsCount} ${depsCount === 1 ? 'dependency' : 'dependencies'}`;
@@ -1306,10 +1309,12 @@ function showAllPrompts() {
 }
 
 function createPromptCard(prompt) {
-    const card = document.createElement('div');
+    const card = document.createElement('a');
     card.className = 'workflow-card';
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', () => showPrompt(prompt.id));
+    card.href = `#/prompts/${prompt.id}`;
+    card.style.textDecoration = 'none';
+    card.style.color = 'inherit';
+    card.style.display = 'block';
 
     // Create preview from first 150 characters of content
     const preview = prompt.content ? prompt.content.substring(0, 150) + '...' : 'No content available';
@@ -1410,10 +1415,12 @@ function showAllSchemas() {
 }
 
 function createSchemaCard(schema) {
-    const card = document.createElement('div');
+    const card = document.createElement('a');
     card.className = 'workflow-card';
-    card.style.cursor = 'pointer';
-    card.addEventListener('click', () => showSchema(schema.id));
+    card.href = `#/schemas/${schema.id}`;
+    card.style.textDecoration = 'none';
+    card.style.color = 'inherit';
+    card.style.display = 'block';
 
     // Create description from field count and names
     const fieldCount = schema.field_count || 0;
@@ -1546,14 +1553,7 @@ function renderRunsListTable(runsToShow) {
 
     runsToShow.forEach(run => {
         const row = document.createElement('tr');
-        row.style.cursor = 'pointer';
-        row.addEventListener('click', () => {
-            showWorkflow(run.workflow_id);
-            setTimeout(() => {
-                const runsTab = document.querySelector('[data-tab="runs"]');
-                if (runsTab) runsTab.click();
-            }, 100);
-        });
+        // Removed row click listener
 
         const startedDate = new Date(run.started_at);
         const now = new Date();
@@ -1578,7 +1578,7 @@ function renderRunsListTable(runsToShow) {
                     <span id="expand-icon-${run.id}">▶</span>
                 </button>
             </td>
-            <td><strong>${run.workflow_name}</strong></td>
+            <td><a href="#/workflows/${run.workflow_id}/runs" style="color: inherit; text-decoration: none; font-weight: bold;">${run.workflow_name}</a></td>
             <td><span class="status-badge ${run.status}">${run.status}</span></td>
             <td class="timestamp">${timeAgo}</td>
             <td>${durationText}</td>
@@ -1622,7 +1622,7 @@ function showFilteredActions(filterType, pushHistory = true) {
     let title, subtitle;
     const initialFilters = {};
 
-    switch(filterType) {
+    switch (filterType) {
         case 'all-actions':
             title = 'All Actions';
             subtitle = `Browse all ${allActions.length} actions across workflows`;
@@ -2318,7 +2318,7 @@ function renderRunTimeline(workflowRuns) {
                  title="${dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}: ${totalRuns} run${totalRuns !== 1 ? 's' : ''}${hasRuns ? ` (${successCount} success, ${failedCount} failed)` : ''}">
                 ${isToday ? '<div style="position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 0.65rem; color: var(--primary); font-weight: 600;">Today</div>' : ''}
                 ${totalRuns > 0 && (dayDate.getDate() === 1 || dayDate.getDay() === 0) ?
-                    `<div style="position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap;">
+                `<div style="position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: 0.65rem; color: var(--text-muted); white-space: nowrap;">
                         ${dayDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </div>` : ''}
             </div>
@@ -2354,7 +2354,7 @@ function renderRunsTable(workflowRuns) {
 
         // Format status badge
         const statusClass = run.status === 'success' ? 'success' :
-                           run.status === 'failed' ? 'failed' : 'running';
+            run.status === 'failed' ? 'failed' : 'running';
         const statusBadge = `<span class="status-badge ${statusClass}">${run.status}</span>`;
 
         // Format actions summary
@@ -2511,6 +2511,9 @@ function showAction(actionNameOrWorkflowId, actionName, navigationContext = null
     state.currentWorkflow = fromWorkflowId;
     state.navigationContext = navigationContext;
 
+    // Update URL to include action name
+    pushHistoryState('action', { actionId: action.name, workflowId: fromWorkflowId }, action.name);
+
     // Update navigation
     updateNavigation();
     switchView('action-view');
@@ -2537,25 +2540,18 @@ function updateActionBreadcrumb(context, workflowId) {
         // User came from a workflow
         const workflow = catalog.workflows[workflowId];
         breadcrumbContainer.innerHTML = `
-            <a href="#" data-breadcrumb="workflows">Workflows</a>
+            <a href="#/workflows">Workflows</a>
             <span>/</span>
-            <a href="#" data-workflow="${workflowId}">${workflow.name}</a>
+            <a href="#/workflows/${workflowId}">${workflow.name}</a>
             <span>/</span>
             <span id="action-name"></span>
         `;
-
-        // Add click handler for workflow link
-        const workflowLink = breadcrumbContainer.querySelector('[data-workflow]');
-        workflowLink.addEventListener('click', (e) => {
-            e.preventDefault();
-            showWorkflow(workflowId);
-        });
     } else {
-        // User came from actions list or sidebar
+        // Default / fallback
         breadcrumbContainer.innerHTML = `
-            <a href="#" data-view="overview">Overview</a>
+            <a href="#/overview">Overview</a>
             <span>/</span>
-            <a href="#" data-breadcrumb="actions">All Actions</a>
+            <a href="#/actions">All Actions</a>
             <span>/</span>
             <span id="action-name"></span>
         `;
@@ -3061,13 +3057,13 @@ function renderSimpleDAG(workflow, container) {
             </div>
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 ${actions.map((action, index) => {
-                    const isLLM = action.type === 'llm';
-                    const bgColor = isLLM ? '#ede9fe' : '#d1fae5';
-                    const textColor = isLLM ? '#7c3aed' : '#059669';
-                    const icon = isLLM ? '🤖' : '🔧';
-                    const deps = action.dependencies || [];
+        const isLLM = action.type === 'llm';
+        const bgColor = isLLM ? '#ede9fe' : '#d1fae5';
+        const textColor = isLLM ? '#7c3aed' : '#059669';
+        const icon = isLLM ? '🤖' : '🔧';
+        const deps = action.dependencies || [];
 
-                    return `
+        return `
                         <div style="background: ${bgColor}; border: 2px solid ${textColor}40; border-radius: 8px; padding: 16px; position: relative;">
                             ${deps.length > 0 ? `
                                 <div style="position: absolute; left: 16px; top: -12px; background: #fff; padding: 0 8px; font-size: 11px; color: #999; font-weight: 500;">
@@ -3095,7 +3091,7 @@ function renderSimpleDAG(workflow, container) {
                             </div>
                         </div>
                     `;
-                }).join('')}
+    }).join('')}
             </div>
             <div style="margin-top: 20px; padding: 12px; background: #f5f5f5; border-radius: 6px; font-size: 12px; color: #666; text-align: center;">
                 💡 Interactive DAG visualization will load when ReactFlow library is available
@@ -3135,6 +3131,15 @@ function pushHistoryState(viewType, data, title) {
             url = `#/workflows/${data.workflowId}`;
             if (data.tab) url += `/${data.tab}`;
             break;
+        case 'action':
+            // If we have workflow context, include it
+            if (state.currentWorkflow) {
+                url = `#/workflows/${state.currentWorkflow}/actions/${state.currentAction}`;
+            } else {
+                // Fallback or standalone action view if supported
+                url = `#/actions`;
+            }
+            break;
         case 'workflows-list':
             url = '#/workflows';
             break;
@@ -3144,9 +3149,24 @@ function pushHistoryState(viewType, data, title) {
         case 'actions-list':
             url = '#/actions';
             break;
+        case 'prompts-list':
+            url = '#/prompts';
+            break;
+        case 'prompt':
+            url = `#/prompts/${data.promptId}`;
+            break;
+        case 'schemas-list':
+            url = '#/schemas';
+            break;
+        case 'schema':
+            url = `#/schemas/${data.schemaId}`;
+            break;
     }
 
-    history.pushState(stateObj, title, url);
+    // Only push if different from current
+    if (window.location.hash !== url) {
+        history.pushState(stateObj, title, url);
+    }
 }
 
 function restoreHistoryState(stateObj) {
@@ -3183,47 +3203,88 @@ function restoreHistoryState(stateObj) {
     }
 }
 
-window.addEventListener('popstate', (event) => {
-    restoreHistoryState(event.state);
+window.addEventListener('hashchange', () => {
+    parseInitialHash();
 });
 
 function parseInitialHash() {
     const hash = window.location.hash;
     if (!hash || hash === '#' || hash === '#/') {
-        pushHistoryState('overview', {}, 'Overview');
+        if (state.currentView !== 'overview') {
+            document.querySelector('[data-view="overview"]')?.click();
+        }
         return;
     }
 
-    const match = hash.match(/#\/([^\/]+)(?:\/([^\/]+))?(?:\/([^\/]+))?/);
-    if (!match) return;
+    // Match routes:
+    // #/workflows/ID/actions/ACTION_NAME
+    // #/workflows/ID/TAB
+    // #/workflows/ID
+    // #/workflows
+    // #/actions
+    // #/runs
+    // #/prompts
+    // #/schemas/ID
+    // #/schemas
 
-    const [, section, id, tab] = match;
+    // Check for Action route: #/workflows/:wid/actions/:aid
+    const actionMatch = hash.match(/#\/workflows\/([^\/]+)\/actions\/([^\/]+)/);
+    if (actionMatch) {
+        const [, workflowId, actionName] = actionMatch;
+        showAction(decodeURIComponent(workflowId), decodeURIComponent(actionName), 'workflow');
+        return;
+    }
 
-    state.isNavigatingHistory = true;
-    try {
-        switch (section) {
-            case 'workflows':
-                if (id) {
-                    showWorkflow(id, false);
-                    if (tab) {
-                        setTimeout(() => {
-                            const tabButton = document.querySelector(`[data-tab="${tab}"]`);
-                            if (tabButton) tabButton.click();
-                        }, 100);
-                    }
-                } else {
-                    showAllWorkflows(false);
-                }
-                break;
-            case 'runs':
-                showAllRuns(false);
-                break;
-            case 'actions':
-                showFilteredActions('all-actions', false);
-                break;
+    // Check for Workflow route: #/workflows/:id[/tab]
+    const workflowMatch = hash.match(/#\/workflows\/([^\/]+)(?:\/([^\/]+))?/);
+    if (workflowMatch && !hash.includes('/actions/')) { // Ensure it's not an action route
+        const [, id, tab] = workflowMatch;
+        if (id) {
+            showWorkflow(decodeURIComponent(id), false);
+            if (tab) {
+                setTimeout(() => {
+                    const tabButton = document.querySelector(`[data-tab="${tab}"]`);
+                    if (tabButton) tabButton.click();
+                }, 100);
+            }
         }
-    } finally {
-        state.isNavigatingHistory = false;
+        return;
+    }
+
+    // Check for simple routes
+    if (hash === '#/workflows') {
+        showAllWorkflows(false);
+        return;
+    }
+    if (hash === '#/runs') {
+        showAllRuns(false);
+        return;
+    }
+    if (hash === '#/actions') {
+        // Check if there's a specific filter? For now just all actions
+        showFilteredActions('all-actions', false);
+        return;
+    }
+    if (hash === '#/prompts') {
+        showAllPrompts();
+        return;
+    }
+    // Check for Prompt detail: #/prompts/:id
+    const promptMatch = hash.match(/#\/prompts\/([^\/]+)/);
+    if (promptMatch) {
+        showPrompt(decodeURIComponent(promptMatch[1]));
+        return;
+    }
+
+    if (hash === '#/schemas') {
+        showAllSchemas();
+        return;
+    }
+    // Check for Schema detail: #/schemas/:id
+    const schemaMatch = hash.match(/#\/schemas\/([^\/]+)/);
+    if (schemaMatch) {
+        showSchema(decodeURIComponent(schemaMatch[1]));
+        return;
     }
 }
 
@@ -3241,190 +3302,6 @@ function updateNavigation() {
 }
 
 function setupEventListeners() {
-    // Overview link
-    document.querySelectorAll('[data-view="overview"]').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            state.currentView = 'overview';
-            updateNavigation();
-            switchView('overview-view');
-        });
-    });
-
-    // View all runs link
-    document.querySelectorAll('.view-all-link').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            showAllRuns();
-        });
-    });
-
-    // Breadcrumb navigation
-    document.querySelectorAll('[data-breadcrumb]').forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const breadcrumb = link.dataset.breadcrumb;
-
-            switch(breadcrumb) {
-                case 'workflows':
-                    showAllWorkflows();
-                    break;
-                case 'actions':
-                    showFilteredActions('all-actions');
-                    break;
-                case 'prompts':
-                    showAllPrompts();
-                    break;
-                case 'schemas':
-                    showAllSchemas();
-                    break;
-            }
-        });
-    });
-
-    // Tab switching
-    document.querySelectorAll('.tab-button').forEach(button => {
-        button.addEventListener('click', () => {
-            const tab = button.dataset.tab;
-            state.currentTab = tab;
-
-            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
-            button.classList.add('active');
-
-            document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
-            document.getElementById(`${tab}-tab`).classList.add('active');
-        });
-    });
-
-    // View toggle (Grid/List)
-    document.querySelectorAll('.view-btn').forEach(button => {
-        button.addEventListener('click', () => {
-            const view = button.dataset.view;
-            const target = button.dataset.target || 'workflows';
-
-            // Determine which container to update and what data to render
-            let containerId;
-            let storageKey;
-            let workflows;
-
-            if (target === 'actions') {
-                containerId = 'actions-filtered-grid';
-                storageKey = 'actionsView';
-
-                // Update active button
-                const parentSection = button.closest('.section-header');
-                if (parentSection) {
-                    parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                }
-                button.classList.add('active');
-
-                // Save preference BEFORE applying filters (so renderActionsView reads the correct view)
-                localStorage.setItem(storageKey, view);
-
-                // Use the same pattern as workflows
-                if (actionsFilterManager) {
-                    actionsFilterManager.applyFilters();
-                }
-
-                return;
-            } else if (target === 'prompts') {
-                containerId = 'prompts-list-grid';
-                storageKey = 'promptsView';
-
-                // Update active button
-                const parentSection = button.closest('.section-header');
-                if (parentSection) {
-                    parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                }
-                button.classList.add('active');
-
-                // Save preference BEFORE applying filters
-                localStorage.setItem(storageKey, view);
-
-                // Use FilterManager pattern
-                if (promptsFilterManager) {
-                    promptsFilterManager.applyFilters();
-                }
-
-                return;
-            } else if (target === 'schemas') {
-                containerId = 'schemas-list-grid';
-                storageKey = 'schemasView';
-
-                // Update active button
-                const parentSection = button.closest('.section-header');
-                if (parentSection) {
-                    parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-                }
-                button.classList.add('active');
-
-                // Save preference BEFORE applying filters
-                localStorage.setItem(storageKey, view);
-
-                // Use FilterManager pattern
-                if (schemasFilterManager) {
-                    schemasFilterManager.applyFilters();
-                }
-
-                return;
-            } else if (target === 'workflows-list') {
-                containerId = 'workflows-list-grid';
-                storageKey = 'workflowsListView';
-                workflows = Object.values(catalog.workflows);
-            } else {
-                containerId = 'workflows-grid';
-                storageKey = 'workflowView';
-                workflows = Object.values(catalog.workflows);
-            }
-
-            // Update active button
-            const parentSection = button.closest('.section-header');
-            if (parentSection) {
-                parentSection.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
-            }
-            button.classList.add('active');
-
-            // Re-render workflows with the new view
-            renderWorkflowsView(workflows, containerId, view);
-
-            // Store preference
-            localStorage.setItem(storageKey, view);
-        });
-    });
-
-    // Stat card clicks
-    document.querySelectorAll('.stat-card').forEach(card => {
-        card.addEventListener('click', () => {
-            const filter = card.dataset.filter;
-
-            if (!filter) return;
-
-            switch(filter) {
-                case 'workflows':
-                    // Show all workflows list view
-                    showAllWorkflows();
-                    break;
-
-                case 'all-actions':
-                case 'llm':
-                case 'tool':
-                    // Show filtered actions list view
-                    showFilteredActions(filter);
-                    break;
-
-                case 'prompts':
-                    // Show all prompts list view
-                    showAllPrompts();
-                    break;
-
-                case 'schemas':
-                    // Show all schemas list view
-                    showAllSchemas();
-                    break;
-            }
-        });
-    });
-
     // Sidebar toggle
     const sidebar = document.querySelector('.sidebar');
     const sidebarToggle = document.getElementById('sidebar-toggle');
