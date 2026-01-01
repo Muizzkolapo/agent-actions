@@ -222,11 +222,44 @@ class PromptPreparationService:
         tools_path: Optional[str] = None,
     ) -> PromptPreparationResult:
         """
-        Public wrapper that maintains backward compatibility.
+        Unified entry point for prompt preparation (batch AND realtime).
 
-        This method accepts multiple arguments to maintain the original API.
-        Internally, parameters are grouped into a PromptPreparationRequest
-        to reduce complexity in the implementation.
+        ARCHITECTURE INVARIANT: This is the SINGLE SOURCE OF TRUTH for context
+        building. Both batch (via BatchTaskPreparator) and realtime (via
+        DataGenerator) MUST use this method to ensure context parity.
+
+        Mode-specific behavior is limited to LLMContextBuilder, which has
+        legitimate differences in dict manipulation strategies. The resulting
+        prompt_context, formatted_prompt, and passthrough_fields are identical
+        across modes.
+
+        DO NOT add mode-specific context building logic here or in callers.
+        If you need different context for batch vs realtime, you're likely
+        breaking the invariant that templates work identically in both modes.
+
+        See: https://github.com/Muizzkolapo/agent-actions/issues/640
+
+        Args:
+            agent_config: Agent configuration dict with prompt, context_scope, etc.
+            agent_name: Name of the agent being prepared.
+            contents: Content dict to process (row content in batch, processed in realtime).
+            mode: Processing mode - 'batch' or 'realtime'.
+            agent_indices: Optional dict mapping agent names to node indices.
+            dependency_configs: Optional dict mapping dependency names to configs.
+            source_content: Optional source content for references.
+            loop_context: Optional loop context for references.
+            workflow_metadata: Optional workflow metadata for references.
+            current_item: Optional current item dict with source_guid, lineage, etc.
+            file_path: Optional file path for historical data loading.
+            tools_path: Optional path to tools directory for UDF injection.
+
+        Returns:
+            PromptPreparationResult containing:
+            - formatted_prompt: Fully rendered prompt (identical across modes)
+            - llm_context: Context for LLM (mode-specific implementation)
+            - passthrough_fields: Fields to merge into output (identical across modes)
+            - prompt_context: Full context for template rendering (identical across modes)
+            - metadata: Debug information including mode used
         """
         request = PromptPreparationRequest(
             agent_config=agent_config,
