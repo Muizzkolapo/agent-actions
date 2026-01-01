@@ -1,0 +1,108 @@
+"""
+Shared fixtures for integration tests.
+
+This module provides fixtures used across integration tests, including
+batch vs realtime parity testing.
+"""
+
+import pytest
+from typing import Dict, Any
+
+
+# =============================================================================
+# Parity Test Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def parity_agent_config() -> Dict[str, Any]:
+    """
+    Agent configuration for batch vs realtime parity testing.
+
+    Includes context_scope with observe/drop/passthrough to exercise
+    all context transformation paths.
+    """
+    return {
+        "name": "parity_test_agent",
+        "agent_type": "llm_agent",
+        "model_vendor": "mock",
+        "model_name": "mock-model",
+        "json_mode": True,
+        "prompt": "Process the following: {{ source.text }}",
+        "context_scope": {
+            "observe": ["source.metadata"],
+            "drop": ["source.internal_id"],
+            "passthrough": ["source.record_id"],
+        },
+    }
+
+
+@pytest.fixture
+def parity_agent_config_no_context_scope() -> Dict[str, Any]:
+    """
+    Agent configuration without context_scope for baseline parity testing.
+    """
+    return {
+        "name": "parity_test_agent_simple",
+        "agent_type": "llm_agent",
+        "model_vendor": "mock",
+        "model_name": "mock-model",
+        "json_mode": True,
+        "prompt": "Process: {{ source.text }}",
+    }
+
+
+@pytest.fixture
+def parity_contents() -> Dict[str, Any]:
+    """
+    Sample contents for parity testing.
+
+    Includes various field types to test context building.
+    """
+    return {
+        "text": "Sample text for processing",
+        "metadata": {"source": "test", "priority": "high"},
+        "internal_id": "secret-123",
+        "record_id": "rec-001",
+    }
+
+
+@pytest.fixture
+def parity_current_item() -> Dict[str, Any]:
+    """
+    Current item context for parity testing.
+
+    Mimics a typical batch/realtime item with source_guid and lineage.
+    """
+    return {
+        "source_guid": "test-guid-001",
+        "node_id": "node_1_parity_test_agent",
+        "lineage": ["node_0_source"],
+        "content": {
+            "text": "Sample text for processing",
+            "metadata": {"source": "test", "priority": "high"},
+            "internal_id": "secret-123",
+            "record_id": "rec-001",
+        },
+    }
+
+
+@pytest.fixture
+def parity_agent_indices() -> Dict[str, int]:
+    """Agent indices mapping for parity testing."""
+    return {
+        "source": 0,
+        "parity_test_agent": 1,
+        "parity_test_agent_simple": 1,
+    }
+
+
+@pytest.fixture
+def parity_dependency_configs() -> Dict[str, Dict[str, Any]]:
+    """Dependency configurations for parity testing."""
+    return {
+        "source": {
+            "idx": 0,
+            "output": ["text", "metadata", "internal_id", "record_id"],
+        }
+    }
