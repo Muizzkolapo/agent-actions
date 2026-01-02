@@ -30,7 +30,7 @@ class BatchSourceHandler:  # pylint: disable=too-few-public-methods
             _output_directory: Output directory for processed files (unused)
         """
         # pylint: disable=import-outside-toplevel
-        from agent_actions.io.unified_source_data_saver import UnifiedSourceDataSaver
+        from agent_actions.file_io.unified_source_data_saver import UnifiedSourceDataSaver
 
         # Calculate paths for source saving
         # Find workflow root by looking for 'agent_io' in the path and going up one level

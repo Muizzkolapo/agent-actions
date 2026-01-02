@@ -8,7 +8,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 
-from agent_actions.io.file_writer import FileWriter
+from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
 from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager import (

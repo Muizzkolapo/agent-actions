@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from pathlib import Path
 from typing import Any, List
-from agent_actions.io.file_handler import FileHandler
+from agent_actions.file_io.file_handler import FileHandler
 
 logger = logging.getLogger(__name__)
 
