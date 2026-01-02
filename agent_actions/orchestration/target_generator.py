@@ -6,7 +6,7 @@ import json
 from typing import Optional, Dict, Any
 
 from agent_actions.input_loading.file_reader import FileReader
-from agent_actions.io.file_writer import FileWriter
+from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.llm_invocation.realtime.output_handler import OutputHandler
 from agent_actions.errors import AgentActionsException, ConfigurationError, DependencyError
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY

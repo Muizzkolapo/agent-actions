@@ -12,7 +12,7 @@ from pathlib import Path
 
 import yaml
 
-from agent_actions.io.file_handler import FileHandler
+from agent_actions.file_io.file_handler import FileHandler
 from agent_actions.prompt_generation.render_workflow import render_pipeline_with_templates
 
 

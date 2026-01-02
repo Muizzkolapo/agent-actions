@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from agent_actions.io.file_writer import FileWriter
+from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.errors import AgentActionsException  # New modular pattern!
 
 

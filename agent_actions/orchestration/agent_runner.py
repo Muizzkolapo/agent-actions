@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Dict, Optional, List
 from agent_actions.errors import FileSystemError
-from agent_actions.io.file_handler import FileHandler
+from agent_actions.file_io.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import (
     InitialStrategy,
     StandardStrategy,

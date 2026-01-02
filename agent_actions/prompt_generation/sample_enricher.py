@@ -3,7 +3,7 @@
 import json
 import logging
 from agent_actions.errors import ProcessingError
-from agent_actions.io.file_handler import FileHandler
+from agent_actions.file_io.file_handler import FileHandler
 from agent_actions.prompt_generation.prompt_handler import PromptLoader
 
 logger = logging.getLogger(__name__)
