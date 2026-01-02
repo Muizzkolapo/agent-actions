@@ -143,8 +143,13 @@ def safe_get_exception_message(exc: Exception) -> str:
     return safe_format_error(exc)
 
 
-def format_exception_context(context: Any) -> str:
-    """Safely format exception context (usually a dict)."""
+def format_exception_context(context: Any, max_list_items: int = 10) -> str:
+    """Safely format exception context (usually a dict).
+
+    Args:
+        context: The context to format (usually a dict)
+        max_list_items: Maximum items to show for lists (default 10)
+    """
     if context is None:
         return ""
 
@@ -156,7 +161,13 @@ def format_exception_context(context: Any) -> str:
             for key, value in context.items():
                 # Safely format each key-value pair
                 safe_key = safe_format_error(key)
-                safe_value = safe_format_error(value)
+                # Truncate long lists for readability
+                if isinstance(value, (list, tuple)) and len(value) > max_list_items:
+                    shown = list(value[:max_list_items])
+                    remaining = len(value) - max_list_items
+                    safe_value = f"{shown} (+{remaining} more)"
+                else:
+                    safe_value = safe_format_error(value)
                 items.append(f"{safe_key}={safe_value}")
             return ", ".join(items)
         except Exception:

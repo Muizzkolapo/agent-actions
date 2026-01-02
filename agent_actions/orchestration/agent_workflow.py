@@ -674,9 +674,26 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
         self.console.print("Done.")
 
     def _handle_workflow_error(self, error: Exception):
-        """Handle workflow execution error."""
-        self.console.print(f"\n❌ [bold red]Workflow failed with error:[/bold red] {error}")
+        """Handle workflow execution error with structured output."""
+        # pylint: disable=import-outside-toplevel
+        from agent_actions.errors.preflight import PreFlightValidationError
+
         self.state.failed = True
+
+        # Print structured error header
+        self.console.print("\n❌ [bold red]Workflow failed[/bold red]")
+        self.console.print("")
+
+        # Use PreFlightValidationError's format_user_message if available
+        if isinstance(error, PreFlightValidationError):
+            formatted = error.format_user_message()
+        else:
+            # Use str() which now produces cleaner output
+            formatted = str(error)
+
+        # Print with indentation for readability
+        for line in formatted.split("\n"):
+            self.console.print(f"  {line}")
 
         # Mark running agent as failed
         self.services.core.state_manager.mark_running_as_failed()
