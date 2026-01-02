@@ -7,9 +7,10 @@ by both batch and realtime modes, as well as response processing.
 Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 """
 
-from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional, List, Literal, Union
 from enum import Enum
+from typing import Any, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field
 
 
 class VendorType(str, Enum):
@@ -68,7 +69,7 @@ class AnthropicConfig(BaseVendorConfig):
     """Configuration specific to Anthropic Claude."""
 
     vendor_type: Literal[VendorType.ANTHROPIC] = VendorType.ANTHROPIC
-    api_key_env_name: str = "CLAUDE_API_KEY"
+    api_key_env_name: str = "ANTHROPIC_API_KEY"
     anthropic_version: str = Field(default="2023-06-01", description="API version header")
     enable_prompt_caching: bool = Field(default=False, description="Enable prompt caching")
     tools_mode: bool = Field(default=True, description="Use tools for JSON responses")
@@ -78,7 +79,7 @@ class GoogleConfig(BaseVendorConfig):
     """Configuration specific to Google Gemini."""
 
     vendor_type: Literal[VendorType.GOOGLE] = VendorType.GOOGLE
-    api_key_env_name: str = "GOOGLE_API_KEY"
+    api_key_env_name: str = "GEMINI_API_KEY"
     safety_settings: Optional[Dict[str, Any]] = Field(default=None)
     generation_config: Optional[Dict[str, Any]] = Field(default=None)
 
@@ -147,11 +148,11 @@ class VendorRegistry(BaseModel):
 
     def get_vendor_config(self, vendor_name: str) -> Optional[VendorConfig]:
         """Get configuration for a specific vendor."""
-        return self.vendors.get(vendor_name)
+        return self.vendors.get(vendor_name)  # pylint: disable=no-member
 
     def get_default_vendor_config(self) -> Optional[VendorConfig]:
         """Get the default vendor configuration."""
-        return self.vendors.get(self.default_vendor)
+        return self.vendors.get(self.default_vendor)  # pylint: disable=no-member
 
     def register_vendor(self, name: str, config: VendorConfig):
         """Register a new vendor configuration."""
@@ -159,7 +160,7 @@ class VendorRegistry(BaseModel):
 
     def list_vendor_types(self) -> List[VendorType]:
         """Get list of all registered vendor types."""
-        return [config.vendor_type for config in self.vendors.values()]
+        return [config.vendor_type for config in self.vendors.values()]  # pylint: disable=no-member
 
     @classmethod
     def create_default_registry(cls) -> "VendorRegistry":

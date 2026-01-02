@@ -65,7 +65,7 @@ class BatchClientFactory:
             api_key = config.get("api_key") or os.getenv("OPENAI_API_KEY")
             return OpenAIBatchClient(api_key=api_key)
         if client_type == "gemini":
-            api_key = config.get("api_key") or os.getenv("GOOGLE_API_KEY")
+            api_key = config.get("api_key") or os.getenv("GEMINI_API_KEY")
             try:
                 return GeminiBatchClient(api_key=api_key)
             except ImportError as e:
@@ -96,7 +96,7 @@ class BatchClientFactory:
                         "install_command": "pip install anthropic",
                     },
                 )
-            api_key = config.get("api_key") or os.getenv("CLAUDE_API_KEY")
+            api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
             anthropic_version = config.get("anthropic_version")
             enable_prompt_caching = config.get("enable_prompt_caching", False)
             try:

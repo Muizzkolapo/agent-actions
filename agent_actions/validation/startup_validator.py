@@ -59,26 +59,25 @@ class StartupValidator:
         if not any(key for key in available_keys if key):
             self.errors.append(
                 "Production environment requires at least one API key "
-                "(OPENAI_API_KEY, CLAUDE_API_KEY/ANTHROPIC_API_KEY, "
-                "or GOOGLE_API_KEY)"
+                "(OPENAI_API_KEY, ANTHROPIC_API_KEY, "
+                "or GEMINI_API_KEY)"
             )
 
     def _check_development_all_vendors(self) -> None:
         """Check all vendor API keys in development (legacy behavior)."""
         if not self.environment_config.openai_api_key:
             self.warnings.append("OPENAI_API_KEY not set - OpenAI models will not be available")
-        if not self.environment_config.get_effective_claude_key():
-            self.warnings.append(
-                "CLAUDE_API_KEY/ANTHROPIC_API_KEY not set - Claude models will not be available"
-            )
-        if not self.environment_config.google_api_key:
-            self.warnings.append("GOOGLE_API_KEY not set - Gemini models will not be available")
+        if not self.environment_config.anthropic_api_key:
+            self.warnings.append("ANTHROPIC_API_KEY not set - Claude models will not be available")
+        if not self.environment_config.gemini_api_key:
+            self.warnings.append("GEMINI_API_KEY not set - Gemini models will not be available")
 
     def _get_vendor_key_value(self, key_attr: str) -> Optional[str]:
         """Get vendor key value from environment config."""
-        if key_attr == "get_effective_claude_key":
-            return self.environment_config.get_effective_claude_key()
-        return getattr(self.environment_config, key_attr)
+        value = getattr(self.environment_config, key_attr, None)
+        if value and hasattr(value, "get_secret_value"):
+            return value.get_secret_value()
+        return value
 
     def _check_development_required_vendors(
         self, required_vendors: set, vendor_key_mapping: Dict[str, tuple]
@@ -104,18 +103,14 @@ class StartupValidator:
             return
         vendor_key_mapping = {
             "openai": ("openai_api_key", "OPENAI_API_KEY", "OpenAI models"),
-            "anthropic": (
-                "get_effective_claude_key",
-                "CLAUDE_API_KEY/ANTHROPIC_API_KEY",
-                "Claude models",
-            ),
-            "google": ("google_api_key", "GOOGLE_API_KEY", "Gemini models"),
-            "gemini": ("google_api_key", "GOOGLE_API_KEY", "Gemini models"),
+            "anthropic": ("anthropic_api_key", "ANTHROPIC_API_KEY", "Claude models"),
+            "google": ("gemini_api_key", "GEMINI_API_KEY", "Gemini models"),
+            "gemini": ("gemini_api_key", "GEMINI_API_KEY", "Gemini models"),
         }
         available_keys = [
             self.environment_config.openai_api_key,
-            self.environment_config.get_effective_claude_key(),
-            self.environment_config.google_api_key,
+            self.environment_config.anthropic_api_key,
+            self.environment_config.gemini_api_key,
         ]
         if self.environment_config.is_production():
             self._check_production_api_keys(available_keys)

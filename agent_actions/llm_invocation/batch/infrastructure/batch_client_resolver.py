@@ -102,8 +102,8 @@ class BatchClientResolver:
         # Create new client
         try:
             client_config = {}
-            if client_type == "gemini" and agent_config.get("google_api_key"):
-                client_config["api_key"] = agent_config["google_api_key"]
+            if client_type == "gemini" and agent_config.get("gemini_api_key"):
+                client_config["api_key"] = agent_config["gemini_api_key"]
             elif client_type == "openai" and agent_config.get("openai_api_key"):
                 client_config["api_key"] = agent_config["openai_api_key"]
 
