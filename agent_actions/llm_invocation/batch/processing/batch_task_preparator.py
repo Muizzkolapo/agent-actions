@@ -279,6 +279,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             mode="batch",
             agent_indices=self.agent_indices,
             dependency_configs=self.dependency_configs,
+            source_content=row_content,  # Pass source for batch/online parity
             current_item=context_map_builder.get(custom_id),
             file_path=file_path_for_history,
             tools_path=tools_path,
@@ -416,6 +417,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             mode="batch",
             agent_indices=self.agent_indices,
             dependency_configs=self.dependency_configs,
+            source_content=row_content,  # Pass source for batch/online parity
             current_item=first_row,
             file_path=file_path_for_history,
         )

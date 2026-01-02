@@ -62,15 +62,25 @@ class PreFlightValidationError(AgentActionsError):
         self.mode = mode
         self.agent_name = agent_name
 
+    def __str__(self) -> str:
+        """Return user-friendly string representation instead of raw context dump."""
+        return self.format_user_message()
+
     def format_user_message(self) -> str:
         """Format a user-friendly error message with all details."""
-        lines = [f"PreFlightValidationError: {self.args[0]}"]
+        lines = [self.args[0]]  # Just the message, no class name prefix
         lines.append("")
 
         if self.missing_references:
             lines.append(f"  Missing: {', '.join(self.missing_references)}")
         if self.available_references:
-            lines.append(f"  Available: {', '.join(self.available_references)}")
+            # Truncate available references for readability
+            refs = self.available_references
+            if len(refs) > 10:
+                display_refs = refs[:10] + [f"(+{len(refs) - 10} more)"]
+            else:
+                display_refs = refs
+            lines.append(f"  Available: {', '.join(display_refs)}")
 
         if self.hint:
             lines.append("")
@@ -78,11 +88,10 @@ class PreFlightValidationError(AgentActionsError):
 
         if self.mode or self.agent_name:
             lines.append("")
-            lines.append("  Context:")
-            if self.mode:
-                lines.append(f"    mode: {self.mode}")
             if self.agent_name:
-                lines.append(f"    agent: {self.agent_name}")
+                lines.append(f"  Agent: {self.agent_name}")
+            if self.mode:
+                lines.append(f"  Mode: {self.mode}")
 
         return "\n".join(lines)
 
