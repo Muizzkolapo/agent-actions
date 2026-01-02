@@ -565,8 +565,6 @@ class SafeExpressionEvaluator:
                     ast.Global,
                     ast.Nonlocal,
                     ast.Delete,
-                    ast.Exec,
-                    ast.Print,  # Python 2 compatibility
                 ),
             ):
                 return False
@@ -599,8 +597,8 @@ class SafeExpressionEvaluator:
             True if the attribute access is safe
         """
         # Blocklist of dangerous attributes that could allow sandbox escape
-        UNSAFE_ATTRS = frozenset(
-            {  # pylint: disable=invalid-name
+        unsafe_attrs = frozenset(
+            {
                 "__class__",
                 "__dict__",
                 "__code__",
@@ -625,7 +623,7 @@ class SafeExpressionEvaluator:
         )
 
         # Block dangerous attributes and all underscore-prefixed attrs
-        if node.attr in UNSAFE_ATTRS or node.attr.startswith("_"):
+        if node.attr in unsafe_attrs or node.attr.startswith("_"):
             return False
 
         return True
