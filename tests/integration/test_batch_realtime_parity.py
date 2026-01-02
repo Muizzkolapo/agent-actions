@@ -261,14 +261,14 @@ class TestPromptPreparationParityWithContextScope:
         )
 
         # Assert: prompt_context must be identical
-        assert (
-            batch_result.prompt_context == realtime_result.prompt_context
-        ), f"Prompt contexts diverged with {description}!"
+        assert batch_result.prompt_context == realtime_result.prompt_context, (
+            f"Prompt contexts diverged with {description}!"
+        )
 
         # Assert: passthrough_fields must be identical
-        assert (
-            batch_result.passthrough_fields == realtime_result.passthrough_fields
-        ), f"Passthrough fields diverged with {description}!"
+        assert batch_result.passthrough_fields == realtime_result.passthrough_fields, (
+            f"Passthrough fields diverged with {description}!"
+        )
 
 
 class TestLLMContextDifferences:
