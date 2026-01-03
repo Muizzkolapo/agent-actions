@@ -35,7 +35,14 @@ _SKIP_FIELDS = {
 }
 
 # Fields useful for debugging context
-_USEFUL_DEBUG_FIELDS = {"agent_name", "workflow", "batch_name", "template_line"}
+_USEFUL_DEBUG_FIELDS = {
+    "agent_name",
+    "workflow",
+    "batch_name",
+    "template_line",
+    "staged_fields",
+    "validation_phase",  # Staging validation context
+}
 
 
 def _truncate_list(items: List[Any], max_items: int = 10) -> List[Any]:

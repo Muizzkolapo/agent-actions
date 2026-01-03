@@ -18,6 +18,9 @@ from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.file_io.unified_source_data_saver import UnifiedSourceDataSaver
 from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
+from agent_actions.errors.preflight import PreFlightValidationError
+from agent_actions.validation.preflight.preflight_validator import PreFlightValidator
+from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 
 from .staging_content import StagingContentLoader
 
@@ -111,6 +114,119 @@ def _save_source_items_helper(source_items, file_path, base_directory, output_di
     saver.save_source_items(items=source_items, relative_path=str(relative_path.with_suffix("")))
 
 
+def _extract_staged_fields(data_chunk: list) -> list:
+    """
+    Extract all available field names from staged data.
+
+    Args:
+        data_chunk: List of data items (dicts)
+
+    Returns:
+        Sorted list of unique field names available in the staged data
+    """
+    if not data_chunk:
+        return []
+
+    all_fields = set()
+    for item in data_chunk[:5]:  # Sample first 5 items for efficiency
+        if isinstance(item, dict):
+            # Add top-level keys
+            all_fields.update(item.keys())
+            # Add nested keys from 'content' if it's a dict
+            content = item.get("content")
+            if isinstance(content, dict):
+                for key in content.keys():
+                    all_fields.add(f"content.{key}")
+                    all_fields.add(key)  # Also available without prefix
+
+    # Filter out internal batch metadata fields
+    internal_fields = {"batch_id", "batch_uuid", "source_guid", "target_id", "node_id"}
+    user_fields = sorted(f for f in all_fields if f not in internal_fields)
+
+    return user_fields
+
+
+def _validate_staged_data(data_chunk: list, agent_config: dict, agent_name: str, mode: str):
+    """
+    Validate staged data against template requirements BEFORE processing.
+
+    This early validation catches missing fields before:
+    - Source saving (batch mode)
+    - Agent execution (realtime mode)
+
+    Args:
+        data_chunk: List of prepared data items
+        agent_config: Agent configuration with prompt template
+        agent_name: Name of agent (for error context)
+        mode: Execution mode ('batch' or 'online')
+
+    Raises:
+        PreFlightValidationError: If template references fields not in staged data
+    """
+    if not data_chunk:
+        return  # Nothing to validate
+
+    # Get raw prompt template
+    try:
+        raw_prompt = PromptFormatter.get_raw_prompt(agent_config)
+    except (ValueError, KeyError):
+        return  # No template to validate
+
+    if not raw_prompt:
+        return
+
+    # Use first item as validation sample
+    first_item = data_chunk[0]
+
+    # Build sample context from staged data
+    # This mirrors what PromptPreparationService will do
+    if isinstance(first_item, dict):
+        content = first_item.get("content", first_item)
+        if isinstance(content, dict):
+            sample_context = {**content}
+        else:
+            sample_context = {"content": content}
+        # Also add source if it's a common pattern
+        sample_context["source"] = content if isinstance(content, dict) else first_item
+    else:
+        sample_context = {"content": first_item}
+
+    # Get staged fields for better error messaging
+    staged_fields = _extract_staged_fields(data_chunk)
+
+    # Run preflight validation
+    validator = PreFlightValidator()
+    result = validator.validate(
+        template=raw_prompt,
+        context=sample_context,
+        agent_name=agent_name,
+        mode=mode,
+    )
+
+    # If validation failed, enhance error with staged fields info
+    if not result.is_valid and result.errors:
+        first_error = result.errors[0]
+        # Build hint showing what was staged
+        staged_preview = ", ".join(staged_fields[:10])
+        if len(staged_fields) > 10:
+            staged_preview += "..."
+        base_hint = first_error.hint or "Check your input data has the required fields."
+        enhanced_hint = f"Staged data contains: {staged_preview}. {base_hint}"
+
+        raise PreFlightValidationError(
+            first_error.message,
+            available_references=staged_fields,  # Show what was actually staged
+            missing_references=first_error.missing_refs,
+            hint=enhanced_hint,
+            mode=mode,
+            agent_name=agent_name,
+            context={
+                "staged_fields": staged_fields,
+                "validation_phase": "staging",
+            },
+        )
+
+
 def generate_staging(ctx: StagingContext):
     """
     Processes a file by splitting its content into chunks or looping through its objects/rows,
@@ -169,6 +285,18 @@ def generate_staging(ctx: StagingContext):
         data_chunk, src_text = _prepare_batch_data(prep_ctx)
     else:
         data_chunk, src_text = _prepare_realtime_data(prep_ctx)
+
+    # ============================================================================
+    # STEP 1.5: PREFLIGHT VALIDATION ON STAGED DATA (catch issues early)
+    # ============================================================================
+    # Validate that staged data has fields required by the template
+    # This catches missing field errors BEFORE expensive processing/saving
+    _validate_staged_data(
+        data_chunk=data_chunk,
+        agent_config=ctx.agent_config,
+        agent_name=ctx.agent_name,
+        mode=run_mode or "online",
+    )
 
     # ============================================================================
     # STEP 2: UNIFIED SOURCE SAVING (happens for BOTH modes)

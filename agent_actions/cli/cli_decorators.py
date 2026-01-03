@@ -69,6 +69,13 @@ def handles_user_errors(command_name: str, **extra_context: Any) -> Callable:
                 # Don't double-wrap ClickExceptions - pass through unchanged
                 raise
             except Exception as e:
+                # Check if error was already displayed by workflow handler
+                # pylint: disable=protected-access
+                if getattr(e, "_already_displayed", False):
+                    # Error was already printed with structured format
+                    # Just exit with error code, no duplicate message
+                    raise SystemExit(1) from None
+
                 # pylint: disable=import-outside-toplevel
                 from agent_actions.shared.user_errors import format_user_error
 
