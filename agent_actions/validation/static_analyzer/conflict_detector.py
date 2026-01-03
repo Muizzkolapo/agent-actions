@@ -1,0 +1,431 @@
+"""Conflict detector for workflow field name collisions.
+
+Detects field name conflicts that can cause ambiguous references:
+- Shadowing conflicts: Multiple actions produce same field name
+- Ambiguous references: Unqualified field reference matches multiple sources
+- Drop-recreate conflicts: Field dropped then recreated with same name
+
+Example:
+    from agent_actions.validation.static_analyzer import (
+        WorkflowStaticAnalyzer,
+        ConflictDetector,
+    )
+
+    analyzer = WorkflowStaticAnalyzer(workflow_config)
+    graph = analyzer.get_graph()
+
+    detector = ConflictDetector(graph)
+    conflicts = detector.detect_all()
+
+    for conflict in conflicts:
+        print(f"{conflict.severity}: {conflict.message}")
+"""
+
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any, Dict, List
+
+from .data_flow_graph import DataFlowGraph
+
+
+class ConflictSeverity(Enum):
+    """Severity level of a conflict."""
+
+    WARNING = "warning"
+    ERROR = "error"
+    INFO = "info"
+
+
+class ConflictType(Enum):
+    """Type of conflict detected."""
+
+    SHADOWING = "shadowing"
+    AMBIGUOUS_REFERENCE = "ambiguous_reference"
+    DROP_RECREATE = "drop_recreate"
+    RESERVED_NAME = "reserved_name"
+
+
+@dataclass
+class FieldProducer:
+    """Information about an action that produces a field."""
+
+    action: str
+    field_source: str  # 'schema', 'observe', 'passthrough'
+
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "action": self.action,
+            "field_source": self.field_source,
+        }
+
+
+@dataclass
+class AffectedReference:
+    """A reference affected by a conflict."""
+
+    action: str
+    location: str
+    raw_reference: str
+
+    def to_dict(self) -> Dict[str, str]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "action": self.action,
+            "location": self.location,
+            "raw_reference": self.raw_reference,
+        }
+
+
+@dataclass
+class Conflict:
+    """Base class for all conflict types."""
+
+    conflict_type: ConflictType
+    severity: ConflictSeverity
+    field_name: str
+    message: str
+    resolution: str
+    producers: List[FieldProducer] = field(default_factory=list)
+    affected_references: List[AffectedReference] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "type": self.conflict_type.value,
+            "severity": self.severity.value,
+            "field_name": self.field_name,
+            "message": self.message,
+            "resolution": self.resolution,
+            "producers": [p.to_dict() for p in self.producers],
+            "affected_references": [r.to_dict() for r in self.affected_references],
+        }
+
+
+@dataclass
+class ConflictAnalysisResult:
+    """Result of conflict analysis."""
+
+    workflow_name: str
+    conflicts: List[Conflict] = field(default_factory=list)
+    actions_analyzed: int = 0
+    unique_fields: int = 0
+    shadowed_fields: int = 0
+
+    @property
+    def has_conflicts(self) -> bool:
+        """Check if any conflicts were detected."""
+        return len(self.conflicts) > 0
+
+    @property
+    def error_count(self) -> int:
+        """Count of error-level conflicts."""
+        return sum(1 for c in self.conflicts if c.severity == ConflictSeverity.ERROR)
+
+    @property
+    def warning_count(self) -> int:
+        """Count of warning-level conflicts."""
+        return sum(1 for c in self.conflicts if c.severity == ConflictSeverity.WARNING)
+
+    def filter_by_action(self, action_name: str) -> "ConflictAnalysisResult":
+        """Filter conflicts to those affecting a specific action.
+
+        Args:
+            action_name: Name of the action to filter by
+
+        Returns:
+            New ConflictAnalysisResult with filtered conflicts
+        """
+        filtered = []
+        for conflict in self.conflicts:
+            # Include if action is a producer
+            if any(p.action == action_name for p in conflict.producers):
+                filtered.append(conflict)
+                continue
+            # Include if action has affected reference
+            if any(r.action == action_name for r in conflict.affected_references):
+                filtered.append(conflict)
+
+        return ConflictAnalysisResult(
+            workflow_name=self.workflow_name,
+            conflicts=filtered,
+            actions_analyzed=self.actions_analyzed,
+            unique_fields=self.unique_fields,
+            shadowed_fields=self.shadowed_fields,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "workflow_name": self.workflow_name,
+            "has_conflicts": self.has_conflicts,
+            "error_count": self.error_count,
+            "warning_count": self.warning_count,
+            "conflicts": [c.to_dict() for c in self.conflicts],
+            "summary": {
+                "actions_analyzed": self.actions_analyzed,
+                "unique_fields": self.unique_fields,
+                "shadowed_fields": self.shadowed_fields,
+            },
+        }
+
+
+# Reserved names that shouldn't be used as field names
+RESERVED_NAMES = frozenset({"source", "seed", "loop", "workflow", "action"})
+
+
+class ConflictDetector:
+    """Detects field name conflicts in workflows.
+
+    Analyzes a DataFlowGraph to find:
+    - Shadowing: Multiple actions produce same field name
+    - Ambiguous references: Unqualified references to shadowed fields
+    - Drop-recreate: Field dropped then recreated
+    - Reserved names: Fields using reserved namespace names
+    """
+
+    def __init__(self, graph: DataFlowGraph, workflow_name: str = ""):
+        """Initialize the conflict detector.
+
+        Args:
+            graph: DataFlowGraph from WorkflowStaticAnalyzer
+            workflow_name: Name of the workflow being analyzed
+        """
+        self.graph = graph
+        self.workflow_name = workflow_name
+
+        # Build field → producers mapping
+        self._field_producers: Dict[str, List[FieldProducer]] = {}
+        self._build_field_mapping()
+
+    def _build_field_mapping(self) -> None:
+        """Build mapping of field names to their producers."""
+        for node in self.graph.nodes.values():
+            if self.graph.is_special_namespace(node.name):
+                continue
+
+            output = node.output_schema
+
+            # Track schema fields
+            for field_name in output.schema_fields:
+                if field_name not in output.dropped_fields:
+                    self._add_producer(field_name, node.name, "schema")
+
+            # Track observe fields
+            for field_name in output.observe_fields:
+                if field_name not in output.dropped_fields:
+                    self._add_producer(field_name, node.name, "observe")
+
+            # Track passthrough fields
+            for field_name in output.passthrough_fields:
+                if field_name not in output.dropped_fields:
+                    self._add_producer(field_name, node.name, "passthrough")
+
+    def _add_producer(self, field_name: str, action: str, source: str) -> None:
+        """Add a producer for a field."""
+        if field_name not in self._field_producers:
+            self._field_producers[field_name] = []
+        self._field_producers[field_name].append(FieldProducer(action, source))
+
+    def detect_all(self) -> ConflictAnalysisResult:
+        """Detect all conflicts in the workflow.
+
+        Returns:
+            ConflictAnalysisResult with all detected conflicts
+        """
+        conflicts: List[Conflict] = []
+
+        # Detect shadowing conflicts
+        conflicts.extend(self._detect_shadowing())
+
+        # Detect ambiguous references
+        conflicts.extend(self._detect_ambiguous_references())
+
+        # Detect reserved name conflicts
+        conflicts.extend(self._detect_reserved_names())
+
+        # Detect drop-recreate conflicts
+        conflicts.extend(self._detect_drop_recreate())
+
+        # Calculate stats
+        actions = [n for n in self.graph.nodes if not self.graph.is_special_namespace(n)]
+        shadowed = [f for f, p in self._field_producers.items() if len(p) > 1]
+
+        return ConflictAnalysisResult(
+            workflow_name=self.workflow_name,
+            conflicts=conflicts,
+            actions_analyzed=len(actions),
+            unique_fields=len(self._field_producers),
+            shadowed_fields=len(shadowed),
+        )
+
+    def _detect_shadowing(self) -> List[Conflict]:
+        """Detect fields produced by multiple actions."""
+        conflicts = []
+
+        for field_name, producers in self._field_producers.items():
+            if len(producers) > 1:
+                # Find which actions reference this field
+                affected = self._find_field_references(field_name)
+
+                producer_names = [p.action for p in producers]
+                qualified_refs = " or ".join(
+                    f"{{{{ action.{p}.{field_name} }}}}" for p in producer_names
+                )
+
+                conflicts.append(
+                    Conflict(
+                        conflict_type=ConflictType.SHADOWING,
+                        severity=ConflictSeverity.WARNING,
+                        field_name=field_name,
+                        message=(
+                            f"Field '{field_name}' is produced by multiple actions: "
+                            f"{', '.join(producer_names)}"
+                        ),
+                        resolution=f"Use qualified reference: {qualified_refs}",
+                        producers=producers,
+                        affected_references=affected,
+                    )
+                )
+
+        return conflicts
+
+    def _detect_ambiguous_references(self) -> List[Conflict]:
+        """Detect unqualified references to shadowed fields."""
+        conflicts = []
+        shadowed_fields = {f for f, p in self._field_producers.items() if len(p) > 1}
+
+        for node in self.graph.nodes.values():
+            if self.graph.is_special_namespace(node.name):
+                continue
+
+            for req in node.input_requirements:
+                # Check if this is an unqualified reference to a shadowed field
+                # Unqualified means source_agent is a special namespace or doesn't match
+                # a specific producer
+                if req.field_path in shadowed_fields:
+                    producers = self._field_producers[req.field_path]
+                    producer_names = [p.action for p in producers]
+
+                    # Check if reference is unqualified (using special namespace)
+                    if req.source_agent in ("source", "seed", "loop"):
+                        qualified_refs = " or ".join(
+                            f"{{{{ action.{p}.{req.field_path} }}}}" for p in producer_names
+                        )
+
+                        conflicts.append(
+                            Conflict(
+                                conflict_type=ConflictType.AMBIGUOUS_REFERENCE,
+                                severity=ConflictSeverity.ERROR,
+                                field_name=req.field_path,
+                                message=(
+                                    f"Ambiguous reference '{req.raw_reference}' in "
+                                    f"action '{node.name}' could match multiple sources"
+                                ),
+                                resolution=f"Use qualified reference: {qualified_refs}",
+                                producers=producers,
+                                affected_references=[
+                                    AffectedReference(
+                                        action=node.name,
+                                        location=req.location,
+                                        raw_reference=req.raw_reference,
+                                    )
+                                ],
+                            )
+                        )
+
+        return conflicts
+
+    def _detect_reserved_names(self) -> List[Conflict]:
+        """Detect fields using reserved namespace names."""
+        conflicts = []
+
+        for field_name, producers in self._field_producers.items():
+            if field_name in RESERVED_NAMES:
+                conflicts.append(
+                    Conflict(
+                        conflict_type=ConflictType.RESERVED_NAME,
+                        severity=ConflictSeverity.WARNING,
+                        field_name=field_name,
+                        message=(
+                            f"Field '{field_name}' uses a reserved name that may "
+                            f"conflict with system namespaces"
+                        ),
+                        resolution="Consider renaming the field to avoid confusion",
+                        producers=producers,
+                        affected_references=[],
+                    )
+                )
+
+        return conflicts
+
+    def _detect_drop_recreate(self) -> List[Conflict]:
+        """Detect fields that are dropped then recreated."""
+        conflicts = []
+
+        # Track dropped fields and their sources
+        dropped_by: Dict[str, str] = {}
+
+        for node in self.graph.nodes.values():
+            if self.graph.is_special_namespace(node.name):
+                continue
+
+            # Record dropped fields
+            for field_name in node.output_schema.dropped_fields:
+                dropped_by[field_name] = node.name
+
+        # Check if any dropped field is recreated
+        for node in self.graph.nodes.values():
+            if self.graph.is_special_namespace(node.name):
+                continue
+
+            for field_name in node.output_schema.schema_fields:
+                if field_name in dropped_by and dropped_by[field_name] != node.name:
+                    conflicts.append(
+                        Conflict(
+                            conflict_type=ConflictType.DROP_RECREATE,
+                            severity=ConflictSeverity.INFO,
+                            field_name=field_name,
+                            message=(
+                                f"Field '{field_name}' was dropped by "
+                                f"'{dropped_by[field_name]}' and recreated by '{node.name}'"
+                            ),
+                            resolution="This may be intentional. Verify the workflow logic.",
+                            producers=[FieldProducer(node.name, "schema")],
+                            affected_references=[],
+                        )
+                    )
+
+        return conflicts
+
+    def _find_field_references(self, field_name: str) -> List[AffectedReference]:
+        """Find all references to a field name."""
+        references = []
+
+        for node in self.graph.nodes.values():
+            if self.graph.is_special_namespace(node.name):
+                continue
+
+            for req in node.input_requirements:
+                if req.field_path == field_name:
+                    references.append(
+                        AffectedReference(
+                            action=node.name,
+                            location=req.location,
+                            raw_reference=req.raw_reference,
+                        )
+                    )
+
+        return references
+
+    def get_shadowed_fields(self) -> Dict[str, List[str]]:
+        """Get mapping of shadowed fields to their producers.
+
+        Returns:
+            Dict mapping field names to list of producer action names
+        """
+        return {
+            field_name: [p.action for p in producers]
+            for field_name, producers in self._field_producers.items()
+            if len(producers) > 1
+        }

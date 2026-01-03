@@ -23,7 +23,12 @@ from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowCo
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.response_processing.schema_loader import SchemaLoader
 from agent_actions.services import WorkflowSchemaService
-from agent_actions.validation.static_analyzer import FieldFlowAnalyzer
+from agent_actions.validation.static_analyzer import (
+    ConflictDetector,
+    ConflictSeverity,
+    ConflictType,
+    FieldFlowAnalyzer,
+)
 
 
 class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
@@ -452,5 +457,299 @@ def field_flow(  # pylint: disable=too-many-arguments,too-many-positional-argume
         verbose=verbose,
         errors_only=errors_only,
         field_filter=field_filter,
+    )
+    command.execute()
+
+
+class ConflictsCommand:  # pylint: disable=too-few-public-methods
+    """Implementation of the conflicts inspection command."""
+
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self,
+        agent: str,
+        user_code: Optional[str],
+        json_output: bool,
+        filter_action: Optional[str],
+        include_info: bool,
+    ):
+        """
+        Initialize the conflicts command.
+
+        Args:
+            agent: Agent/workflow configuration name
+            user_code: Optional path to user code directory containing UDFs
+            json_output: Whether to output as JSON
+            filter_action: Optional action name to filter conflicts
+            include_info: Whether to include INFO-level conflicts (drop-recreate)
+        """
+        self.agent = agent
+        self.agent_name = Path(agent).stem
+        self.user_code = user_code
+        self.json_output = json_output
+        self.filter_action = filter_action
+        self.include_info = include_info
+        self.console = Console()
+
+    def _find_config_file(self, config_dir: Path, filename: str) -> Path:
+        """Find the configuration file."""
+        full_path = config_dir / filename
+        if not full_path.exists():
+            raise FileLoadError(
+                "Configuration file not found",
+                context={
+                    "file_path": str(full_path),
+                    "agent_name": self.agent_name,
+                    "suggestion": f"Check if '{filename}' exists in {config_dir}",
+                },
+            )
+        return full_path
+
+    def execute(self) -> None:
+        """Execute the conflicts command."""
+        if not self.json_output:
+            self.console.print(f"[cyan]Conflict Analysis: {self.agent_name}[/cyan]\n")
+
+        # Set up paths and load workflow
+        paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.agent)
+        filename = f"{self.agent_name}.yml"
+        full_path = self._find_config_file(paths.agent_config_dir, filename)
+
+        # Render configuration
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+        )
+
+        # Load workflow to get agent configs
+        workflow = AgentWorkflow(
+            WorkflowConfig(
+                paths=WorkflowPaths(
+                    constructor_path=str(full_path),
+                    user_code_path=str(self.user_code) if self.user_code else None,
+                    default_path=str(paths.default_config_path),
+                ),
+                use_tools=False,
+            )
+        )
+
+        # Build workflow config for service
+        workflow_config = {
+            "name": self.agent_name,
+            "actions": [
+                {**config, "name": name} for name, config in workflow.agent_configs.items()
+            ],
+        }
+
+        # Get UDF registry
+        udf_registry: Dict[str, Any] = {}
+        try:
+            # pylint: disable=import-outside-toplevel
+            from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
+
+            udf_registry = UDF_REGISTRY
+        except ImportError:
+            pass
+
+        # Create schema loader
+        schema_loader = SchemaLoader()
+
+        # Create service
+        service = WorkflowSchemaService(
+            workflow_config,
+            udf_registry=udf_registry,
+            schema_loader=schema_loader,
+            project_root=paths.current_dir,
+            schema_dir=paths.schema_dir,
+        )
+
+        # Run conflict detection
+        detector = ConflictDetector(service.graph, self.agent_name)
+        result = detector.detect_all()
+
+        # Filter by action if specified
+        if self.filter_action:
+            result = result.filter_by_action(self.filter_action)
+
+        # Output based on format
+        if self.json_output:
+            self._output_json(result)
+        else:
+            self._output_rich(result)
+
+    def _output_json(self, result) -> None:
+        """Output conflicts as JSON."""
+        click.echo(json_lib.dumps(result.to_dict(), indent=2))
+
+    def _output_rich(self, result) -> None:
+        """Output conflicts using rich formatting."""
+        # Summary
+        if not result.has_conflicts:
+            self.console.print("[green]No conflicts detected[/green]\n")
+            self._print_summary(result)
+            return
+
+        # Filter out INFO-level conflicts unless include_info is set
+        conflicts_to_show = result.conflicts
+        if not self.include_info:
+            conflicts_to_show = [c for c in result.conflicts if c.severity != ConflictSeverity.INFO]
+
+        if not conflicts_to_show:
+            self.console.print("[green]No significant conflicts detected[/green]")
+            self.console.print(
+                f"[dim]({len(result.conflicts)} INFO-level conflicts hidden, "
+                f"use --include-info to show)[/dim]\n"
+            )
+            self._print_summary(result)
+            return
+
+        # Show error count
+        error_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.ERROR)
+        warning_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.WARNING)
+        info_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.INFO)
+
+        parts = []
+        if error_count:
+            parts.append(f"[red]{error_count} error(s)[/red]")
+        if warning_count:
+            parts.append(f"[yellow]{warning_count} warning(s)[/yellow]")
+        if info_count:
+            parts.append(f"[dim]{info_count} info[/dim]")
+        self.console.print(", ".join(parts) + "\n")
+
+        # Group by type
+        by_type: Dict[ConflictType, list] = {}
+        for conflict in conflicts_to_show:
+            if conflict.conflict_type not in by_type:
+                by_type[conflict.conflict_type] = []
+            by_type[conflict.conflict_type].append(conflict)
+
+        # Render each type
+        for conflict_type, conflict_list in by_type.items():
+            self._render_conflict_group(conflict_type, conflict_list)
+
+        self._print_summary(result)
+
+    def _render_conflict_group(self, conflict_type, conflict_list) -> None:
+        """Render a group of conflicts of the same type."""
+        # Type header
+        type_labels = {
+            ConflictType.SHADOWING: "Shadowing Conflicts",
+            ConflictType.AMBIGUOUS_REFERENCE: "Ambiguous References",
+            ConflictType.DROP_RECREATE: "Drop-Recreate Patterns",
+            ConflictType.RESERVED_NAME: "Reserved Name Usage",
+        }
+        label = type_labels.get(conflict_type, conflict_type.value)
+        self.console.print(f"[bold]{label}[/bold]")
+
+        # Table for this group
+        table = Table(show_lines=True)
+        table.add_column("Field", style="cyan", no_wrap=True)
+        table.add_column("Severity", width=8)
+        table.add_column("Details", style="white")
+        table.add_column("Resolution", style="green")
+
+        for conflict in conflict_list:
+            severity_style = {
+                ConflictSeverity.ERROR: "[red]ERROR[/red]",
+                ConflictSeverity.WARNING: "[yellow]WARN[/yellow]",
+                ConflictSeverity.INFO: "[dim]INFO[/dim]",
+            }
+            severity_str = severity_style.get(conflict.severity, conflict.severity.value)
+
+            # Build details
+            details_parts = [conflict.message]
+            if conflict.producers:
+                producers_str = ", ".join(p.action for p in conflict.producers)
+                details_parts.append(f"Producers: {producers_str}")
+            if conflict.affected_references:
+                refs_str = ", ".join(
+                    f"{r.action}:{r.location}" for r in conflict.affected_references
+                )
+                details_parts.append(f"Affected: {refs_str}")
+
+            table.add_row(
+                conflict.field_name,
+                severity_str,
+                "\n".join(details_parts),
+                conflict.resolution,
+            )
+
+        self.console.print(table)
+        self.console.print()
+
+    def _print_summary(self, result) -> None:
+        """Print analysis summary."""
+        self.console.print("[dim]Summary:[/dim]")
+        self.console.print(f"  Actions analyzed: {result.actions_analyzed}")
+        self.console.print(f"  Unique fields: {result.unique_fields}")
+        self.console.print(f"  Shadowed fields: {result.shadowed_fields}")
+
+
+@inspect.command(name="conflicts")
+@click.option(
+    "-a",
+    "--agent",
+    required=True,
+    help="Agent/workflow configuration name",
+)
+@click.option(
+    "-u",
+    "--user-code",
+    required=False,
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Path to user code directory containing UDFs",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    help="Output as JSON for programmatic use",
+)
+@click.option(
+    "--filter-action",
+    required=False,
+    help="Filter conflicts to those affecting a specific action",
+)
+@click.option(
+    "--include-info",
+    is_flag=True,
+    help="Include INFO-level conflicts (drop-recreate patterns)",
+)
+@handles_user_errors("inspect conflicts")
+@requires_project
+def conflicts(
+    agent: str,
+    user_code: Optional[str],
+    json_output: bool,
+    filter_action: Optional[str],
+    include_info: bool,
+) -> None:
+    """
+    Detect field name conflicts in a workflow.
+
+    Identifies potential issues with field naming:
+    - Shadowing: Multiple actions produce the same field name
+    - Ambiguous references: Unqualified references to shadowed fields
+    - Reserved names: Fields using system namespace names
+    - Drop-recreate: Fields dropped then recreated (INFO level)
+
+    Examples:
+        # Analyze entire workflow
+        agac inspect conflicts -a my_workflow
+
+        # JSON output
+        agac inspect conflicts -a my_workflow --json
+
+        # Filter to specific action
+        agac inspect conflicts -a my_workflow --filter-action extractor
+
+        # Include INFO-level conflicts
+        agac inspect conflicts -a my_workflow --include-info
+    """
+    command = ConflictsCommand(
+        agent=agent,
+        user_code=user_code,
+        json_output=json_output,
+        filter_action=filter_action,
+        include_info=include_info,
     )
     command.execute()

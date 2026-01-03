@@ -59,6 +59,15 @@ from .field_flow_analyzer import (
     OutputFieldInfo,
     WorkflowFlow,
 )
+from .conflict_detector import (
+    ConflictDetector,
+    ConflictAnalysisResult,
+    Conflict,
+    ConflictType,
+    ConflictSeverity,
+    FieldProducer,
+    AffectedReference,
+)
 
 __all__ = [
     # Main entry points
@@ -93,4 +102,12 @@ __all__ = [
     "StaticTypeIssue",
     "FieldLocation",
     "ErrorSeverity",
+    # Conflict detector
+    "ConflictDetector",
+    "ConflictAnalysisResult",
+    "Conflict",
+    "ConflictType",
+    "ConflictSeverity",
+    "FieldProducer",
+    "AffectedReference",
 ]
