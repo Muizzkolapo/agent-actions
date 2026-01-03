@@ -468,7 +468,7 @@ class PromptPreparationService:
             return formatted_prompt
 
         except TemplateSyntaxError as e:
-            logger.error("Jinja2 template syntax error: %s", e)
+            logger.debug("Jinja2 template syntax error: %s", e)
             raise TemplateVariableError(
                 missing_variables=[],
                 available_variables=list(prompt_context.keys()),
@@ -476,7 +476,7 @@ class PromptPreparationService:
                 cause=e,
             ) from e
         except Exception as e:
-            logger.error("Error rendering prompt template: %s", e)
+            logger.debug("Error rendering prompt template: %s", e)
             available_refs = list(prompt_context.keys())
             # Extract missing variable from error message if possible
             error_str = str(e)

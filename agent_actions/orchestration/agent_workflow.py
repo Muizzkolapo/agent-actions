@@ -697,3 +697,7 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
 
         # Mark running agent as failed
         self.services.core.state_manager.mark_running_as_failed()
+
+        # Mark exception as already displayed to prevent duplicate output
+        # The CLI decorator will check for this attribute
+        error._already_displayed = True  # pylint: disable=protected-access
