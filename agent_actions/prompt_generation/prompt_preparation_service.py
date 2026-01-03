@@ -477,7 +477,19 @@ class PromptPreparationService:
             ) from e
         except Exception as e:
             logger.debug("Error rendering prompt template: %s", e)
+            # Build available refs including nested fields from source/seed
             available_refs = list(prompt_context.keys())
+            # Add nested fields from 'source' to show what's in staged data
+            source_data = prompt_context.get("source")
+            if isinstance(source_data, dict):
+                for key in source_data.keys():
+                    available_refs.append(f"source.{key}")
+            # Add nested fields from 'seed' if present
+            seed_data = prompt_context.get("seed")
+            if isinstance(seed_data, dict):
+                for key in seed_data.keys():
+                    available_refs.append(f"seed.{key}")
+
             # Extract missing variable from error message if possible
             error_str = str(e)
             missing = []
