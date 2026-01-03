@@ -126,19 +126,11 @@ class StaticTypeChecker:
             )
             return
 
-        # Check 2: Source agent is in dependencies
-        if source_agent not in node.dependencies:
-            result.add_error(
-                StaticTypeError(
-                    message=f"Agent '{source_agent}' not declared in dependencies",
-                    location=location,
-                    referenced_agent=source_agent,
-                    referenced_field=field_path,
-                    available_fields=source_node.output_schema.available_fields,
-                    hint=f"Add '{source_agent}' to the depends_on list for agent '{node.name}'",
-                )
-            )
-            return
+        # Check 2: Source agent is in dependencies (or implicitly via reference)
+        # Note: References like {{ action.agent.field }} create implicit dependencies
+        # at runtime, so we don't require explicit depends_on declarations.
+        # This is intentional - the runtime resolves dependencies automatically.
+        # We only proceed to field validation if the source agent exists.
 
         # Check 3: Field exists in output schema
         output_schema = source_node.output_schema
@@ -271,16 +263,17 @@ class StaticTypeChecker:
 
         return warnings
 
-    def check_missing_dependencies(self) -> List[StaticTypeError]:
+    def check_missing_dependencies(self) -> List[StaticTypeWarning]:
         """Find agents that are referenced but not declared in dependencies.
 
-        This is called automatically by check_requirement, but can be
-        called separately for a quick scan.
+        Note: This returns WARNINGS, not errors, because the runtime automatically
+        infers dependencies from references. Explicit depends_on is optional but
+        recommended for clarity.
 
         Returns:
-            List of errors for missing dependencies
+            List of warnings for implicit (undeclared) dependencies
         """
-        errors: List[StaticTypeError] = []
+        warnings: List[StaticTypeWarning] = []
 
         for node_name, node in self.graph.nodes.items():
             if self.graph.is_special_namespace(node_name):
@@ -292,16 +285,16 @@ class StaticTypeChecker:
                 if req.source_agent not in self.SPECIAL_NAMESPACES:
                     referenced.add(req.source_agent)
 
-            # Find referenced but undeclared
-            missing = referenced - node.dependencies
+            # Find referenced but undeclared (implicit dependencies)
+            implicit = referenced - node.dependencies
 
-            for agent in missing:
+            for agent in implicit:
                 # Find the first requirement referencing this agent
                 for req in node.input_requirements:
                     if req.source_agent == agent:
-                        errors.append(
-                            StaticTypeError(
-                                message=f"Agent '{agent}' is referenced but not in dependencies",
+                        warnings.append(
+                            StaticTypeWarning(
+                                message=f"Implicit dependency on '{agent}' (not in depends_on)",
                                 location=FieldLocation(
                                     agent_name=node_name,
                                     config_field=req.location,
@@ -309,9 +302,9 @@ class StaticTypeChecker:
                                 ),
                                 referenced_agent=agent,
                                 referenced_field=req.field_path,
-                                hint=f"Add '{agent}' to the depends_on list for '{node_name}'",
+                                hint=f"Consider adding '{agent}' to depends_on for clarity",
                             )
                         )
                         break
 
-        return errors
+        return warnings

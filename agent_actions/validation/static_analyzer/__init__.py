@@ -49,6 +49,16 @@ from .workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
 )
+from .field_flow_analyzer import (
+    FieldFlowAnalyzer,
+    FieldLineage,
+    FieldConsumer,
+    FieldReference,
+    ActionFlowInfo,
+    InputSchemaInfo,
+    OutputFieldInfo,
+    WorkflowFlow,
+)
 
 __all__ = [
     # Main entry points
@@ -67,6 +77,15 @@ __all__ = [
     "ReferenceExtractor",
     # Type checker
     "StaticTypeChecker",
+    # Field flow analyzer
+    "FieldFlowAnalyzer",
+    "FieldLineage",
+    "FieldConsumer",
+    "FieldReference",
+    "ActionFlowInfo",
+    "InputSchemaInfo",
+    "OutputFieldInfo",
+    "WorkflowFlow",
     # Errors
     "StaticValidationResult",
     "StaticTypeError",
