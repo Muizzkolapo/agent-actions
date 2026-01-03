@@ -17,14 +17,13 @@ from rich.tree import Tree
 
 from agent_actions.cli.cli_decorators import handles_user_errors, requires_project
 from agent_actions.cli.project_paths_factory import ProjectPathsFactory
+from agent_actions.cli.renderers import SchemaRenderer
 from agent_actions.errors import FileLoadError
 from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowConfig, WorkflowPaths
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.response_processing.schema_loader import SchemaLoader
-from agent_actions.validation.static_analyzer import (
-    FieldFlowAnalyzer,
-    WorkflowStaticAnalyzer,
-)
+from agent_actions.services import WorkflowSchemaService
+from agent_actions.validation.static_analyzer import FieldFlowAnalyzer
 
 
 class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
@@ -67,6 +66,7 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
         self.errors_only = errors_only
         self.field_filter = field_filter
         self.console = Console()
+        self.renderer = SchemaRenderer(self.console)
 
     def _find_config_file(self, config_dir: Path, filename: str) -> Path:
         """Find the configuration file."""
@@ -114,9 +114,12 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
             )
         )
 
-        # Build workflow config for static analyzer
+        # Build workflow config for service
         workflow_config = {
-            "actions": [{**config, "name": name} for name, config in workflow.agent_configs.items()]
+            "name": self.agent_name,
+            "actions": [
+                {**config, "name": name} for name, config in workflow.agent_configs.items()
+            ],
         }
 
         # Get UDF registry
@@ -132,42 +135,43 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
         # Create schema loader
         schema_loader = SchemaLoader()
 
-        # Create analyzer
-        analyzer = WorkflowStaticAnalyzer(
+        # Create service using unified approach
+        service = WorkflowSchemaService(
             workflow_config,
             udf_registry=udf_registry,
             schema_loader=schema_loader,
-            schema_dir=paths.schema_dir,
             project_root=paths.current_dir,
+            schema_dir=paths.schema_dir,
         )
 
-        # Run analysis
-        graph = analyzer.get_graph()
-        result = analyzer.analyze()
+        # Run validation
+        result = service.validate()
 
-        # Create field flow analyzer
-        flow_analyzer = FieldFlowAnalyzer(graph, result, self.agent_name)
+        # Create field flow analyzer for lineage tracking
+        flow_analyzer = FieldFlowAnalyzer(service.graph, result, self.agent_name)
 
         # Output based on format
         if self.json_output:
-            self._output_json(flow_analyzer)
+            self._output_json(flow_analyzer, service)
         else:
-            self._output_rich(flow_analyzer, result, workflow.execution_order)
+            self._output_rich(flow_analyzer, service, result, workflow.execution_order)
 
-    def _output_json(self, flow_analyzer: FieldFlowAnalyzer) -> None:
+    def _output_json(
+        self, flow_analyzer: FieldFlowAnalyzer, service: WorkflowSchemaService
+    ) -> None:
         """Output as JSON."""
         if self.action_filter:
-            action_info = flow_analyzer.get_action_flow_info(self.action_filter)
-            if action_info:
+            schema = service.get_action_schema(self.action_filter)
+            if schema:
                 output = {
                     "workflow": self.agent_name,
                     "action": self.action_filter,
-                    "action_info": action_info.to_dict(),
+                    "action_info": schema.to_dict(),
                     "validation": flow_analyzer.validation_result.to_dict(),
                 }
             else:
-                flow = flow_analyzer.get_full_flow()
-                available = [a.name for a in flow.actions if a.kind != "source"]
+                schemas = service.get_all_schemas()
+                available = list(schemas.keys())
                 output = {
                     "workflow": self.agent_name,
                     "action": self.action_filter,
@@ -192,13 +196,14 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
                     "validation": flow_analyzer.validation_result.to_dict(),
                 }
         else:
-            output = flow_analyzer.to_dict()
+            output = service.to_dict()
 
         click.echo(json_lib.dumps(output, indent=2))
 
     def _output_rich(
         self,
         flow_analyzer: FieldFlowAnalyzer,
+        service: WorkflowSchemaService,
         result,
         execution_order: list,
     ) -> None:
@@ -215,7 +220,7 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
 
         # If filtering to a specific action
         if self.action_filter:
-            self._render_action_detail(flow_analyzer, result)
+            self._render_action_detail(service, result)
             return
 
         # If filtering to a specific field
@@ -228,8 +233,10 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
             self._render_errors(result)
             return
 
-        # Render flow visualization
-        self._render_flow_tree(flow_analyzer, execution_order)
+        # Render flow visualization using service and renderer
+        schemas = service.get_all_schemas()
+        tree = self.renderer.render_flow_tree(schemas, execution_order, verbose=self.verbose)
+        self.console.print(Panel(tree, title="Workflow Data Flow"))
 
         # Show field lineages if verbose
         if self.verbose:
@@ -239,159 +246,22 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
         if not result.is_valid:
             self._render_errors(result)
 
-    def _render_flow_tree(  # pylint: disable=too-many-branches
-        self, flow_analyzer: FieldFlowAnalyzer, execution_order: list
-    ) -> None:
-        """Render the flow visualization tree."""
-        tree = Tree("[bold]Flow Visualization[/bold]")
-
-        flow = flow_analyzer.get_full_flow()
-        action_map = {a.name: a for a in flow.actions}
-
-        for action_name in execution_order:
-            action = action_map.get(action_name)
-            if not action:
-                continue
-
-            # Action node with kind
-            action_branch = tree.add(f"[cyan]{action_name}[/cyan] ({action.kind})")
-
-            # Inputs - show template references or input schema for tools
-            if action.inputs:
-                inputs_branch = action_branch.add("[green]uses:[/green]")
-                for inp in action.inputs:
-                    inputs_branch.add(f"{inp.source_agent}.{inp.field}")
-            elif action.kind == "tool" and (
-                action.input_schema.required_fields or action.input_schema.optional_fields
-            ):
-                # Show input schema for tools (from TypedDict)
-                inputs_branch = action_branch.add("[green]expects:[/green]")
-                for f in action.input_schema.required_fields:
-                    inputs_branch.add(f"[bold]{f}[/bold]")
-                for f in action.input_schema.optional_fields:
-                    inputs_branch.add(f"{f} [dim](optional)[/dim]")
-            elif action.kind == "source":
-                action_branch.add("[dim](workflow input)[/dim]")
-
-            # Outputs
-            if action.outputs.available_fields:
-                outputs_branch = action_branch.add("[yellow]produces:[/yellow]")
-
-                # Group by type
-                if action.outputs.schema_fields:
-                    for f in action.outputs.schema_fields:
-                        if f not in action.outputs.dropped_fields:
-                            outputs_branch.add(f"[bold]{f}[/bold]")
-
-                if action.outputs.observe_fields:
-                    for f in action.outputs.observe_fields:
-                        if f not in action.outputs.dropped_fields:
-                            outputs_branch.add(f"{f} [dim](observe)[/dim]")
-
-                if action.outputs.passthrough_fields:
-                    for f in action.outputs.passthrough_fields:
-                        if f not in action.outputs.dropped_fields:
-                            outputs_branch.add(f"{f} [dim](passthrough)[/dim]")
-
-            elif action.outputs.is_dynamic:
-                action_branch.add("[dim](dynamic output)[/dim]")
-            elif action.outputs.is_schemaless:
-                action_branch.add("[dim](schemaless)[/dim]")
-
-            # Downstream
-            if action.downstream:
-                downstream_branch = action_branch.add("[magenta]downstream:[/magenta]")
-                for d in action.downstream:
-                    downstream_branch.add(d)
-
-        self.console.print(Panel(tree, title="Workflow Data Flow"))
-
-    def _render_action_detail(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-        self, flow_analyzer: FieldFlowAnalyzer, result
-    ) -> None:
+    def _render_action_detail(self, service: WorkflowSchemaService, result) -> None:
         """Render detailed view for a specific action."""
-        action_info = flow_analyzer.get_action_flow_info(self.action_filter)
+        schema = service.get_action_schema(self.action_filter)
 
-        if not action_info:
+        if not schema:
             self.console.print(f"[red]Action '{self.action_filter}' not found[/red]")
             # Show available actions
-            flow = flow_analyzer.get_full_flow()
-            available = [a.name for a in flow.actions if a.kind != "source"]
+            schemas = service.get_all_schemas()
+            available = list(schemas.keys())
             if available:
                 self.console.print(f"[dim]Available actions: {', '.join(available)}[/dim]")
             return
 
-        # Build the action detail tree
-        tree = Tree(f"[bold cyan]{action_info.name}[/bold cyan] ({action_info.kind})")
-
-        # Dependencies (what this action waits for)
-        if action_info.dependencies:
-            deps_branch = tree.add("[blue]depends_on:[/blue]")
-            for dep in action_info.dependencies:
-                deps_branch.add(dep)
-
-        # Inputs - template references (uses)
-        if action_info.inputs:
-            inputs_branch = tree.add("[green]uses (from templates):[/green]")
-            # Group by source agent
-            by_source: Dict[str, list] = {}
-            for inp in action_info.inputs:
-                if inp.source_agent not in by_source:
-                    by_source[inp.source_agent] = []
-                by_source[inp.source_agent].append(inp)
-
-            for source, refs in sorted(by_source.items()):
-                source_branch = inputs_branch.add(f"[bold]{source}[/bold]")
-                for ref in refs:
-                    source_branch.add(f"{ref.field} [dim]({ref.location})[/dim]")
-
-        # Input schema (for tools)
-        if action_info.kind == "tool" and (
-            action_info.input_schema.required_fields or action_info.input_schema.optional_fields
-        ):
-            schema_branch = tree.add("[green]expects (input schema):[/green]")
-            for f in action_info.input_schema.required_fields:
-                schema_branch.add(f"[bold]{f}[/bold] [dim](required)[/dim]")
-            for f in action_info.input_schema.optional_fields:
-                schema_branch.add(f"{f} [dim](optional)[/dim]")
-
-        # Outputs
-        if action_info.outputs.available_fields:
-            outputs_branch = tree.add("[yellow]produces:[/yellow]")
-
-            # Schema fields (generated by action)
-            for f in action_info.outputs.schema_fields:
-                if f not in action_info.outputs.dropped_fields:
-                    outputs_branch.add(f"[bold]{f}[/bold]")
-
-            # Observe fields
-            for f in action_info.outputs.observe_fields:
-                if f not in action_info.outputs.dropped_fields:
-                    outputs_branch.add(f"{f} [dim](observe)[/dim]")
-
-            # Passthrough fields
-            for f in action_info.outputs.passthrough_fields:
-                if f not in action_info.outputs.dropped_fields:
-                    outputs_branch.add(f"{f} [dim](passthrough)[/dim]")
-
-            # Dropped fields
-            if action_info.outputs.dropped_fields:
-                dropped_branch = outputs_branch.add("[red]dropped:[/red]")
-                for f in action_info.outputs.dropped_fields:
-                    dropped_branch.add(f"[dim]{f}[/dim]")
-
-        elif action_info.outputs.is_dynamic:
-            tree.add("[dim](dynamic output)[/dim]")
-        elif action_info.outputs.is_schemaless:
-            tree.add("[dim](schemaless output)[/dim]")
-
-        # Downstream (who uses this action's output)
-        if action_info.downstream:
-            downstream_branch = tree.add("[magenta]downstream (used by):[/magenta]")
-            for d in action_info.downstream:
-                downstream_branch.add(d)
-
-        self.console.print(Panel(tree, title=f"Action: {self.action_filter}"))
+        # Use the unified renderer for action detail
+        panel = self.renderer.render_action_detail(schema)
+        self.console.print(panel)
 
         # Show any errors/warnings specific to this action
         action_errors = [e for e in result.errors if e.location.agent_name == self.action_filter]
