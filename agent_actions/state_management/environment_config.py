@@ -40,15 +40,10 @@ class EnvironmentConfig(BaseSettings):
     openai_api_key: Optional[SecretStr] = Field(
         default=None, description="OpenAI API Key for GPT models"
     )
-    claude_api_key: Optional[SecretStr] = Field(
-        default=None, alias="ANTHROPIC_API_KEY", description="Anthropic Claude API Key"
-    )
     anthropic_api_key: Optional[SecretStr] = Field(
-        default=None, description="Alternative Anthropic API Key (alias for claude_api_key)"
+        default=None, description="Anthropic API Key for Claude models"
     )
-    google_api_key: Optional[SecretStr] = Field(
-        default=None, description="Google API Key for Gemini models"
-    )
+    gemini_api_key: Optional[SecretStr] = Field(default=None, description="Google Gemini API Key")
     agent_actions_env: Environment = Field(
         default=Environment.DEVELOPMENT, description="Application environment setting"
     )
@@ -69,9 +64,7 @@ class EnvironmentConfig(BaseSettings):
     )
     database_url: Optional[str] = Field(default=None, description="Database connection URL")
 
-    @field_validator(
-        "openai_api_key", "claude_api_key", "anthropic_api_key", "google_api_key", mode="before"
-    )
+    @field_validator("openai_api_key", "anthropic_api_key", "gemini_api_key", mode="before")
     @classmethod
     def validate_api_keys(cls, v):
         """Validate API key format if provided."""
@@ -103,11 +96,6 @@ class EnvironmentConfig(BaseSettings):
                 )
         return v
 
-    def get_effective_claude_key(self) -> Optional[str]:
-        """Get the effective Claude API key, preferring claude_api_key over anthropic_api_key."""
-        key = self.claude_api_key or self.anthropic_api_key
-        return key.get_secret_value() if key else None
-
     def is_development(self) -> bool:
         """Check if running in development environment."""
         return self.agent_actions_env == Environment.DEVELOPMENT
@@ -129,20 +117,18 @@ class APIConfig(BaseModel):
     """API-specific configuration extracted from environment config."""
 
     openai_api_key: Optional[SecretStr] = None
-    claude_api_key: Optional[SecretStr] = None
-    google_api_key: Optional[SecretStr] = None
+    anthropic_api_key: Optional[SecretStr] = None
+    gemini_api_key: Optional[SecretStr] = None
     default_timeout: int = 120
     max_retries: int = 3
 
     @classmethod
     def from_environment(cls, env_config: EnvironmentConfig) -> "APIConfig":
         """Create API config from environment configuration."""
-        # Get claude key as string, then wrap in SecretStr if present
-        claude_key_str = env_config.get_effective_claude_key()
         return cls(
             openai_api_key=env_config.openai_api_key,
-            claude_api_key=SecretStr(claude_key_str) if claude_key_str else None,
-            google_api_key=env_config.google_api_key,
+            anthropic_api_key=env_config.anthropic_api_key,
+            gemini_api_key=env_config.gemini_api_key,
             default_timeout=env_config.default_api_timeout,
             max_retries=env_config.default_max_retries,
         )
