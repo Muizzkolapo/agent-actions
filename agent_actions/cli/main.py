@@ -19,6 +19,7 @@ from agent_actions.cli.inspect import inspect  # Workflow inspection commands
 from agent_actions.cli.list_udfs import list_udfs_cmd
 from agent_actions.cli.run import run
 from agent_actions.cli.schema import schema
+from agent_actions.cli.skills import skills  # Skills installation for Claude/Codex
 from agent_actions.cli.status import status
 from agent_actions.cli.test import clean_cli as clean
 from agent_actions.errors import ProjectNotFoundError  # New modular pattern!
@@ -75,6 +76,7 @@ class CLI:  # pylint: disable=too-few-public-methods
         self.click_group.add_command(list_udfs_cmd)
         self.click_group.add_command(validate_udfs_cmd)
         self.click_group.add_command(docs)
+        self.click_group.add_command(skills)
 
     def _register_signal_handlers(self) -> None:
         """Register signal handlers for graceful shutdown."""

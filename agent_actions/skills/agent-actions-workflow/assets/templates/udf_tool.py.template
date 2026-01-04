@@ -1,0 +1,66 @@
+"""
+{{TOOL_TITLE}}
+
+{{Brief description of what this tool does.}}
+"""
+
+from typing import Any, Dict, List, TypedDict
+from agent_actions import udf_tool
+
+
+class {{ToolName}}Input(TypedDict, total=False):
+    """Input schema for {{tool_function_name}} function.
+
+    Source: node_{{N}}_{{previous_action}} output
+    Destination: node_{{M}}_{{this_action}} output
+
+    This function {{brief description of transformation}}.
+    """
+    # ─────────────────────────────────────────────────────────────────────────
+    # Core fields (used in processing)
+    # ─────────────────────────────────────────────────────────────────────────
+    input_field_1: str
+    input_field_2: List[str]
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Metadata fields (passthrough)
+    # ─────────────────────────────────────────────────────────────────────────
+    batch_name: str
+    record_type: str
+
+
+@udf_tool(input_type={{ToolName}}Input)
+def {{tool_function_name}}(data: dict) -> dict:
+    """
+    {{Brief description of what this tool does.}}
+
+    Args:
+        data: Input data dict from previous action
+
+    Returns:
+        Modified data dict with new/updated fields
+    """
+    # Handle content wrapper if present (common pattern)
+    if 'content' in data:
+        content = data['content']
+    else:
+        content = data
+
+    # Create result dict (don't mutate input)
+    result = content.copy()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Your processing logic here
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Example: Extract and transform data
+    input_value = content.get('input_field_1', '')
+
+    # Example: Add new computed field
+    result['output_field'] = input_value.upper()
+
+    # Example: Validate and clean data
+    if not result.get('input_field_2'):
+        result['input_field_2'] = []
+
+    return result
