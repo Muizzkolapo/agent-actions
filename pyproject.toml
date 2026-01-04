@@ -87,6 +87,7 @@ packages = ["agent_actions"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "agent_actions/docs/docs_site" = "agent_actions/docs/docs_site"
+"agent_actions/skills" = "agent_actions/skills"
 
 [tool.uv]
 dev-dependencies = [
