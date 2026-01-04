@@ -1,0 +1,43 @@
+{
+  "name": "agent-actions-lsp",
+  "displayName": "Agent Actions LSP",
+  "description": "Language support for agent-actions workflows",
+  "version": "0.2.0",
+  "publisher": "agent-actions",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:yaml",
+    "onLanguage:markdown",
+    "workspaceContains:**/agent_actions.yml",
+    "workspaceContains:**/prompt_store/*.md"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "markdown.prompt-blocks.injection",
+        "path": "./syntaxes/prompt-blocks.tmLanguage.json",
+        "injectTo": ["text.html.markdown"],
+        "embeddedLanguages": {
+          "meta.embedded.block.prompt": "markdown"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}
