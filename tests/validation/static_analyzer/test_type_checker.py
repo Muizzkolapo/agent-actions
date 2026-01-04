@@ -108,15 +108,19 @@ class TestStaticTypeChecker:
         assert "nonexistent" in result.errors[0].message
         assert "does not exist" in result.errors[0].message
 
-    def test_missing_dependency_error(self):
-        """Test error when agent not declared in dependencies."""
+    def test_implicit_dependency_is_valid(self):
+        """Test that implicit dependencies (via reference) are valid.
+
+        When an agent references another agent's field, it creates an implicit
+        dependency at runtime. Explicit depends_on is optional but recommended.
+        """
         graph = self._create_graph_with_agents(
             [
                 {"name": "upstream", "fields": {"data"}},
                 {
                     "name": "downstream",
                     "fields": {"result"},
-                    "deps": set(),  # Missing dependency on 'upstream'
+                    "deps": set(),  # No explicit dependency, but references upstream
                     "refs": [("upstream", "data")],
                 },
             ]
@@ -125,10 +129,9 @@ class TestStaticTypeChecker:
         checker = StaticTypeChecker(graph)
         result = checker.check_all()
 
-        assert not result.is_valid
-        assert len(result.errors) == 1
-        assert "not declared in dependencies" in result.errors[0].message
-        assert "depends_on" in result.errors[0].hint
+        # Should be valid - implicit dependency is resolved at runtime
+        assert result.is_valid
+        assert len(result.errors) == 0
 
     def test_missing_field_error(self):
         """Test error when referencing non-existent field."""

@@ -1,0 +1,279 @@
+"""Unified Rich rendering for schema display.
+
+Provides consistent rendering of action schemas across CLI commands,
+eliminating duplicate display logic in schema.py and inspect.py.
+
+Example:
+    from agent_actions.cli.renderers import SchemaRenderer
+    from agent_actions.services import WorkflowSchemaService
+
+    service = WorkflowSchemaService(config)
+    renderer = SchemaRenderer(console)
+
+    # Render summary table
+    table = renderer.render_summary_table(service.get_all_schemas(), execution_order)
+    console.print(table)
+
+    # Render action detail
+    panel = renderer.render_action_detail(service.get_action_schema("extractor"))
+    console.print(panel)
+"""
+
+from typing import Dict, List, Optional
+
+from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
+from rich.tree import Tree
+
+from agent_actions.models.action_schema import ActionSchema, FieldSource
+
+
+class SchemaRenderer:
+    """Unified Rich rendering for schema display.
+
+    Provides consistent rendering components used by both
+    the `schema` and `inspect` CLI commands.
+    """
+
+    def __init__(self, console: Console):
+        """Initialize the renderer.
+
+        Args:
+            console: Rich Console instance for output
+        """
+        self.console = console
+
+    def render_summary_table(
+        self,
+        schemas: Dict[str, ActionSchema],
+        execution_order: List[str],
+        title: Optional[str] = None,
+    ) -> Table:
+        """Render a summary table of all actions.
+
+        Args:
+            schemas: Dictionary mapping action names to schemas
+            execution_order: Order to display actions
+            title: Optional table title
+
+        Returns:
+            Rich Table with action summaries
+        """
+        table = Table(title=title, show_lines=True)
+        table.add_column("Action", style="cyan", no_wrap=True)
+        table.add_column("Type", style="magenta", width=6)
+        table.add_column("Input", style="green")
+        table.add_column("Output", style="yellow")
+
+        for action_name in execution_order:
+            schema = schemas.get(action_name)
+            if not schema:
+                continue
+
+            input_str = self._format_input_summary(schema)
+            output_str = self._format_output_summary(schema)
+            table.add_row(action_name, schema.kind, input_str, output_str)
+
+        return table
+
+    def render_flow_tree(
+        self,
+        schemas: Dict[str, ActionSchema],
+        execution_order: List[str],
+        verbose: bool = False,
+    ) -> Tree:
+        """Render workflow flow as a tree.
+
+        Args:
+            schemas: Dictionary mapping action names to schemas
+            execution_order: Order to display actions
+            verbose: Whether to show detailed information
+
+        Returns:
+            Rich Tree with flow visualization
+        """
+        tree = Tree("[bold]Flow Visualization[/bold]")
+
+        for action_name in execution_order:
+            schema = schemas.get(action_name)
+            if not schema:
+                continue
+
+            self._add_action_to_tree(tree, schema, verbose)
+
+        return tree
+
+    def render_action_detail(  # pylint: disable=too-many-branches
+        self, schema: ActionSchema
+    ) -> Panel:
+        """Render detailed view of a single action.
+
+        Args:
+            schema: ActionSchema to render
+
+        Returns:
+            Rich Panel with action details
+        """
+        tree = Tree(f"[bold cyan]{schema.name}[/bold cyan] ({schema.kind})")
+
+        # Dependencies
+        if schema.dependencies:
+            deps_branch = tree.add("[blue]depends_on:[/blue]")
+            for dep in schema.dependencies:
+                deps_branch.add(dep)
+
+        # Upstream references (template uses)
+        if schema.upstream_refs:
+            inputs_branch = tree.add("[green]uses (from templates):[/green]")
+            by_source: Dict[str, list] = {}
+            for ref in schema.upstream_refs:
+                if ref.source_agent not in by_source:
+                    by_source[ref.source_agent] = []
+                by_source[ref.source_agent].append(ref)
+
+            for source, refs in sorted(by_source.items()):
+                source_branch = inputs_branch.add(f"[bold]{source}[/bold]")
+                for ref in refs:
+                    source_branch.add(f"{ref.field_name} [dim]({ref.location})[/dim]")
+
+        # Input schema (for tools)
+        if schema.kind == "tool" and schema.input_fields:
+            schema_branch = tree.add("[green]expects (input schema):[/green]")
+            for field in schema.input_fields:
+                if field.is_required:
+                    schema_branch.add(f"[bold]{field.name}[/bold] [dim](required)[/dim]")
+                else:
+                    schema_branch.add(f"{field.name} [dim](optional)[/dim]")
+
+        # Output fields
+        self._add_outputs_to_tree(tree, schema)
+
+        # Downstream
+        if schema.downstream:
+            downstream_branch = tree.add("[magenta]downstream (used by):[/magenta]")
+            for d in schema.downstream:
+                downstream_branch.add(d)
+
+        return Panel(tree, title=f"Action: {schema.name}")
+
+    def render_data_flow_panel(
+        self,
+        schemas: Dict[str, ActionSchema],
+        execution_order: List[str],
+    ) -> Panel:
+        """Render a data flow panel (verbose tree view).
+
+        Args:
+            schemas: Dictionary mapping action names to schemas
+            execution_order: Order to display actions
+
+        Returns:
+            Rich Panel with data flow tree
+        """
+        tree = self.render_flow_tree(schemas, execution_order, verbose=True)
+        return Panel(tree, title="Workflow Data Flow")
+
+    def _format_input_summary(self, schema: ActionSchema) -> str:
+        """Format input schema for summary display."""
+        if schema.is_template_based:
+            return "[dim](template-based)[/dim]"
+        if schema.is_dynamic:
+            return "[dim](dynamic)[/dim]"
+
+        parts = []
+        if schema.required_inputs:
+            parts.append(f"[bold]required:[/bold] {', '.join(schema.required_inputs)}")
+        if schema.optional_inputs:
+            parts.append(f"[dim]optional:[/dim] {', '.join(schema.optional_inputs)}")
+
+        return "\n".join(parts) if parts else "[dim](none)[/dim]"
+
+    def _format_output_summary(self, schema: ActionSchema) -> str:
+        """Format output schema for summary display."""
+        if schema.is_schemaless:
+            return "[dim](schemaless)[/dim]"
+        if schema.is_dynamic:
+            return "[dim](dynamic)[/dim]"
+
+        fields = schema.available_outputs
+        return ", ".join(fields) if fields else "[dim](none)[/dim]"
+
+    def _add_action_to_tree(
+        self,
+        tree: Tree,
+        schema: ActionSchema,
+        verbose: bool = False,
+    ) -> None:
+        """Add an action to the flow tree.
+
+        Args:
+            tree: Tree to add action to
+            schema: ActionSchema to add
+            verbose: Whether to show detailed information
+        """
+        action_branch = tree.add(f"[cyan]{schema.name}[/cyan] ({schema.kind})")
+
+        # Inputs - show template references or input schema for tools
+        if schema.upstream_refs:
+            inputs_branch = action_branch.add("[green]uses:[/green]")
+            for ref in schema.upstream_refs:
+                inputs_branch.add(f"{ref.source_agent}.{ref.field_name}")
+        elif schema.kind == "tool" and schema.input_fields:
+            inputs_branch = action_branch.add("[green]expects:[/green]")
+            for field in schema.input_fields:
+                if field.is_required:
+                    inputs_branch.add(f"[bold]{field.name}[/bold]")
+                else:
+                    inputs_branch.add(f"{field.name} [dim](optional)[/dim]")
+        elif schema.kind == "source":
+            action_branch.add("[dim](workflow input)[/dim]")
+
+        # Outputs
+        self._add_outputs_to_tree(action_branch, schema, show_dropped=verbose)
+
+        # Downstream (only in verbose mode)
+        if verbose and schema.downstream:
+            downstream_branch = action_branch.add("[magenta]downstream:[/magenta]")
+            for d in schema.downstream:
+                downstream_branch.add(d)
+
+    def _add_outputs_to_tree(
+        self,
+        parent: Tree,
+        schema: ActionSchema,
+        show_dropped: bool = True,
+    ) -> None:
+        """Add output fields to a tree node.
+
+        Args:
+            parent: Parent tree node
+            schema: ActionSchema with outputs
+            show_dropped: Whether to show dropped fields
+        """
+        if schema.available_outputs:
+            outputs_branch = parent.add("[yellow]produces:[/yellow]")
+
+            for field in schema.output_fields:
+                if field.is_dropped:
+                    continue
+
+                if field.source == FieldSource.SCHEMA:
+                    outputs_branch.add(f"[bold]{field.name}[/bold]")
+                elif field.source == FieldSource.OBSERVE:
+                    outputs_branch.add(f"{field.name} [dim](observe)[/dim]")
+                elif field.source == FieldSource.PASSTHROUGH:
+                    outputs_branch.add(f"{field.name} [dim](passthrough)[/dim]")
+                else:
+                    outputs_branch.add(field.name)
+
+            # Show dropped fields if requested
+            if show_dropped and schema.dropped_outputs:
+                dropped_branch = outputs_branch.add("[red]dropped:[/red]")
+                for name in schema.dropped_outputs:
+                    dropped_branch.add(f"[dim]{name}[/dim]")
+
+        elif schema.is_dynamic:
+            parent.add("[dim](dynamic output)[/dim]")
+        elif schema.is_schemaless:
+            parent.add("[dim](schemaless)[/dim]")

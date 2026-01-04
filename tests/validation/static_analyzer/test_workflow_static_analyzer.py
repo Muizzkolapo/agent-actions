@@ -80,8 +80,12 @@ class TestWorkflowStaticAnalyzer:
         assert len(result.errors) >= 1
         assert any("nonexistent_field" in e.message for e in result.errors)
 
-    def test_analyze_detects_missing_dependency(self):
-        """Test analyzer detects reference to undeclared dependency."""
+    def test_analyze_accepts_implicit_dependency(self):
+        """Test analyzer accepts implicit dependencies via field references.
+
+        When an agent references another agent's field, it creates an implicit
+        dependency at runtime. Explicit depends_on is optional but recommended.
+        """
         workflow_config = {
             "actions": [
                 {
@@ -95,7 +99,7 @@ class TestWorkflowStaticAnalyzer:
                 },
                 {
                     "name": "summarizer",
-                    # Missing depends_on!
+                    # No explicit depends_on - implicit via reference
                     "prompt": "Use: {{ action.extractor.text }}",
                     "schema": {
                         "type": "object",
@@ -110,8 +114,9 @@ class TestWorkflowStaticAnalyzer:
         analyzer = WorkflowStaticAnalyzer(workflow_config)
         result = analyzer.analyze()
 
-        assert not result.is_valid
-        assert any("not declared in dependencies" in e.message for e in result.errors)
+        # Should be valid - implicit dependencies work at runtime
+        assert result.is_valid
+        assert len(result.errors) == 0
 
     def test_analyze_detects_nonexistent_agent(self):
         """Test analyzer detects reference to non-existent agent."""

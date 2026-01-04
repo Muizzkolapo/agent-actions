@@ -49,6 +49,25 @@ from .workflow_static_analyzer import (
     WorkflowStaticAnalyzer,
     analyze_workflow,
 )
+from .field_flow_analyzer import (
+    FieldFlowAnalyzer,
+    FieldLineage,
+    FieldConsumer,
+    FieldReference,
+    ActionFlowInfo,
+    InputSchemaInfo,
+    OutputFieldInfo,
+    WorkflowFlow,
+)
+from .conflict_detector import (
+    ConflictDetector,
+    ConflictAnalysisResult,
+    Conflict,
+    ConflictType,
+    ConflictSeverity,
+    FieldProducer,
+    AffectedReference,
+)
 
 __all__ = [
     # Main entry points
@@ -67,6 +86,15 @@ __all__ = [
     "ReferenceExtractor",
     # Type checker
     "StaticTypeChecker",
+    # Field flow analyzer
+    "FieldFlowAnalyzer",
+    "FieldLineage",
+    "FieldConsumer",
+    "FieldReference",
+    "ActionFlowInfo",
+    "InputSchemaInfo",
+    "OutputFieldInfo",
+    "WorkflowFlow",
     # Errors
     "StaticValidationResult",
     "StaticTypeError",
@@ -74,4 +102,12 @@ __all__ = [
     "StaticTypeIssue",
     "FieldLocation",
     "ErrorSeverity",
+    # Conflict detector
+    "ConflictDetector",
+    "ConflictAnalysisResult",
+    "Conflict",
+    "ConflictType",
+    "ConflictSeverity",
+    "FieldProducer",
+    "AffectedReference",
 ]
