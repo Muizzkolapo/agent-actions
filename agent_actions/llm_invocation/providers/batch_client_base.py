@@ -182,7 +182,7 @@ class BaseBatchClient(ABC):
             - initial_status: Initial status from provider
               (e.g., 'in_progress', 'completed', 'submitted')
         """
-        import logging  # pylint: disable=import-outside-toplevel
+        import logging
 
         logger = logging.getLogger(__name__)
 
@@ -204,7 +204,7 @@ class BaseBatchClient(ABC):
         Returns:
             Normalized status string (e.g., 'validating', 'in_progress', 'completed', 'failed')
         """
-        import logging  # pylint: disable=import-outside-toplevel
+        import logging
 
         logger = logging.getLogger(__name__)
 
@@ -266,7 +266,7 @@ class BaseBatchClient(ABC):
         Returns:
             List of BatchResult objects containing the processed results
         """
-        import logging  # pylint: disable=import-outside-toplevel
+        import logging
 
         logger = logging.getLogger(__name__)
 
@@ -509,7 +509,7 @@ class BaseBatchClient(ABC):
         Returns:
             Path to batch directory
         """
-        from agent_actions.utilities.path_utils import ensure_directory_exists  # pylint: disable=import-outside-toplevel
+        from agent_actions.utilities.path_utils import ensure_directory_exists
 
         if output_directory:
             batch_dir = Path(output_directory) / "batch"
@@ -558,7 +558,7 @@ class BaseBatchClient(ABC):
         if not file_path.exists():
             from agent_actions.errors import (
                 VendorAPIError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise VendorAPIError(
                 vendor=self.__class__.__name__,

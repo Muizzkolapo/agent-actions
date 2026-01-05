@@ -29,13 +29,12 @@ from agent_actions.errors import ConfigValidationError, ExternalServiceError
 logger = logging.getLogger(__name__)
 
 
-class BatchSubmissionService:  # pylint: disable=too-few-public-methods
+class BatchSubmissionService:
     """Service for submitting batch jobs.
 
     Handles task preparation, batch submission to providers, and registry management.
     """
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         task_preparator: BatchTaskPreparator,
@@ -117,7 +116,6 @@ class BatchSubmissionService:  # pylint: disable=too-few-public-methods
             )
             raise ExternalServiceError(vendor, f"Failed to check batch status: {e}", cause=e) from e
 
-    # pylint: disable=too-many-locals
     def submit_batch_job(
         self,
         agent_config: Dict[str, Any],

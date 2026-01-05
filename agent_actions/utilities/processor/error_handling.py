@@ -5,8 +5,6 @@ This module provides a mixin class that implements consistent error handling
 patterns across all processor modules.
 """
 
-# pylint: disable=line-too-long,import-outside-toplevel,no-else-raise
-# pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
 # Line-too-long: Error messages need to be descriptive
 # Import-outside-toplevel: Avoid circular imports with error module
 # No-else-raise: Code clarity - explicit error handling paths
@@ -294,7 +292,7 @@ class ProcessorErrorHandlerMixin:
                             )
                 if last_exception:
                     raise last_exception
-                return None  # Unreachable, but satisfies pylint
+                return None  # Unreachable, but satisfies type checker
 
             return wrapper
 

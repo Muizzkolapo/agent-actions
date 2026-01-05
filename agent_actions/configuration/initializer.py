@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Application initializer with startup validation.
 
@@ -14,7 +13,6 @@ from agent_actions.orchestration.agent_runner import AgentRunner
 from agent_actions.orchestration.application_container import ApplicationContainer
 from agent_actions.state_management.environment_config import EnvironmentConfig
 
-# pylint: disable=import-error
 from .startup_validator import StartupValidationError, validate_startup
 
 logger = logging.getLogger(__name__)

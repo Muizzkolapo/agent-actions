@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
-class ValidationIssue:  # pylint: disable=too-many-instance-attributes
+class ValidationIssue:
     """Represents a single validation issue (error or warning).
 
     Attributes:

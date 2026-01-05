@@ -98,7 +98,7 @@ class SourceSaveMode(Enum):
     ONLINE = "online"  # Optional locking/dedup for future parallel processing
 
 
-class UnifiedSourceDataSaver:  # pylint: disable=too-few-public-methods
+class UnifiedSourceDataSaver:
     """
     Unified source data saver with configurable deduplication and locking.
 

@@ -1,6 +1,5 @@
 """XML content loader implementation."""
 
-# pylint: disable=duplicate-code
 # Similar loader pattern is intentional across different file type loaders
 import logging
 import xml.etree.ElementTree as ET

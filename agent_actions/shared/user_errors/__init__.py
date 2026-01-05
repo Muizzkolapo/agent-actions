@@ -48,7 +48,7 @@ def format_user_error(exc: Exception, context: Optional[Dict[str, Any]] = None) 
         translator = ErrorTranslator()
         user_error = translator.translate(exc, context)
         return user_error.format_for_cli()
-    except Exception as format_error:  # pylint: disable=broad-exception-caught
+    except Exception as format_error:
         # Catch all exceptions to prevent error formatting from breaking error reporting
         logger.error("Error formatting failed", exc_info=format_error)
         return safe_format_error(exc)

@@ -128,7 +128,6 @@ class BatchProcessorConfig(BaseModel):
     @classmethod
     def validate_max_batch_size(cls, v, info):
         """Ensure max_batch_size is not smaller than default_batch_size."""
-        # pylint: disable=no-member
         if "default_batch_size" in info.data:
             if v < info.data["default_batch_size"]:
                 raise ConfigValidationError(
@@ -166,7 +165,6 @@ class ProcessorRegistryConfig(BaseModel):
         self, processor_type: str, processor_name: str
     ) -> Optional[ProcessorConfig]:
         """Get configuration for a specific processor."""
-        # pylint: disable=no-member
         if processor_type == "data_processor":
             return self.data_processors.get(processor_name)
         if processor_type == "generator":

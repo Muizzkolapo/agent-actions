@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """Base classes for artifact system."""
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from typing import Any, Dict, Optional
 logger = logging.getLogger(__name__)
 
 
-class ArtifactMetadata:  # pylint: disable=too-few-public-methods
+class ArtifactMetadata:
     """Standard metadata for all artifacts."""
 
     def __init__(self) -> None:
@@ -26,10 +25,10 @@ class ArtifactMetadata:  # pylint: disable=too-few-public-methods
 
     def _get_version(self) -> str:
         try:
-            import agent_actions  # type: ignore  # pylint: disable=import-outside-toplevel
+            import agent_actions  # type: ignore
 
             return getattr(agent_actions, "__version__")
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception as e:
             logger.warning(
                 "Failed to retrieve agent_actions version, using fallback: %s",
                 e,

@@ -28,7 +28,6 @@ class ContextStructureValidator(BaseValidator):
         super().__init__()
         self.issues: List[ValidationIssue] = []
 
-    # pylint: disable=too-many-locals
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """Validate context structure against expected schema.
 

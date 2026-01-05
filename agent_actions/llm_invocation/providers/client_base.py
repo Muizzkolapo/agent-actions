@@ -74,7 +74,7 @@ class BaseClient(ABC):
         """
         from agent_actions.errors import (
             ConfigurationError,
-        )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+        )  # New modular pattern!
 
         key_name: Optional[str] = agent_config.get(API_KEY_KEY)
         if not key_name:

@@ -8,7 +8,7 @@ for Groq API integration, supporting models like Llama3.
 import json
 from textwrap import dedent
 
-from groq import Groq  # pylint: disable=import-error
+from groq import Groq
 
 from agent_actions.errors import VendorAPIError  # New modular pattern!
 from agent_actions.llm_invocation.providers.client_base import BaseClient

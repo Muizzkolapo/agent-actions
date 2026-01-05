@@ -386,7 +386,7 @@ _GLOBAL_GUARD_FILTER = None
 
 def get_global_guard_filter() -> GuardFilter:
     """Get the global guard filter instance."""
-    global _GLOBAL_GUARD_FILTER  # pylint: disable=global-statement
+    global _GLOBAL_GUARD_FILTER
     if _GLOBAL_GUARD_FILTER is None:
         _GLOBAL_GUARD_FILTER = GuardFilter()
     return _GLOBAL_GUARD_FILTER

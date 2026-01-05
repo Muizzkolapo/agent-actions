@@ -9,7 +9,6 @@ from agent_actions.prompt_generation.prompt_handler import PromptLoader
 logger = logging.getLogger(__name__)
 
 
-# pylint: disable=too-few-public-methods
 class SampleEnricher:
     """Handles enriching prompts with few-shot samples."""
 

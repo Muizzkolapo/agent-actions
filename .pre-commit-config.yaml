@@ -6,14 +6,3 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
-
-  # Local hooks for pylint
-  - repo: local
-    hooks:
-      - id: pylint
-        name: pylint
-        entry: uv run pylint
-        language: system
-        types: [python]
-        files: ^agent_actions/
-        args: [--fail-under=10]

@@ -11,7 +11,7 @@ from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 
 
 @dataclass
-class BatchJobEntry:  # pylint: disable=too-many-instance-attributes
+class BatchJobEntry:
     """
     Represents a single batch job entry in the registry.
 

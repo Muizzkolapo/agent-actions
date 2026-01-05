@@ -39,7 +39,6 @@ class BatchProcessingService:
     Handles result retrieval, conversion, and output file generation.
     """
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         client_resolver: BatchClientResolver,
@@ -63,7 +62,6 @@ class BatchProcessingService:
         self._registry_manager_factory = registry_manager_factory
         self._source_handler = source_handler
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def process_batch_results(
         self,
         batch_id: str,
@@ -194,7 +192,7 @@ class BatchProcessingService:
                 )
                 if output_file:
                     processed_files.append(output_file)
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 logger.exception(
                     "Failed to process batch %s (%s): %s",
                     batch_id,
@@ -233,7 +231,7 @@ class BatchProcessingService:
             provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
             status = provider.check_status(batch_id)
             return status == BatchStatus.COMPLETED
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             return False
 
     def _determine_output_path(
@@ -276,7 +274,6 @@ class BatchProcessingService:
             side_output_file = side_output_dir / output_file.name
             BatchSideOutputHandler.save(side_output_data, side_output_file)
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _process_single_batch_file(
         self,
         batch_id: str,
@@ -370,7 +367,6 @@ class BatchProcessingService:
             agent_config=agent_config,
         )
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _retrieve_results(
         self,
         provider: BaseBatchClient,
@@ -394,7 +390,6 @@ class BatchProcessingService:
         Returns:
             List of batch results
         """
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )

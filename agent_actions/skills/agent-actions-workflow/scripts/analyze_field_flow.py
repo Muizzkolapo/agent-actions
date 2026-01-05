@@ -23,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 
-def get_field_type(value: Any) -> str:  # pylint: disable=too-many-return-statements
+def get_field_type(value: Any) -> str:
     """Get a simple type description for a value."""
     if value is None:
         return "null"
@@ -87,7 +87,7 @@ def parse_node_name(dirname: str) -> tuple[int, str]:
     return -1, dirname
 
 
-def analyze_workflow(target_dir: Path) -> None:  # pylint: disable=too-many-locals,too-many-branches
+def analyze_workflow(target_dir: Path) -> None:
     """Analyze field flow across all nodes."""
     nodes = []
 

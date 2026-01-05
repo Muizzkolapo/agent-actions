@@ -239,18 +239,7 @@ The LSP resolves these reference types in workflow YAML files:
 
 ---
 
-## 11. Pylint Compliance
-
-All files pass pylint with these patterns:
-- `# pylint: disable=too-many-branches` - For CLI commands with many conditionals
-- `# pylint: disable=too-many-return-statements` - For type inference functions
-- `# pylint: disable=duplicate-code` - For shared patterns between scripts
-- `encoding="utf-8"` - Explicit encoding on all `open()` calls
-- Docstrings on all `main()` functions
-
----
-
-## 12. Future Enhancements (Not Implemented)
+## 11. Future Enhancements (Not Implemented)
 
 From TASKS.md, these features are marked as future work:
 - [ ] Diagnostics (red squiggles for invalid refs)

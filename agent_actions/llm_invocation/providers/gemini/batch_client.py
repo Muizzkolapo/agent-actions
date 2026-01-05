@@ -36,7 +36,7 @@ class GeminiBatchClient(BaseBatchClient):
         if not GEMINI_AVAILABLE:
             from agent_actions.errors import (
                 DependencyError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise DependencyError(
                 "GeminiBatchProvider requires google-genai package",
@@ -175,7 +175,7 @@ class GeminiBatchClient(BaseBatchClient):
         except Exception as e:
             from agent_actions.errors import (
                 VendorAPIError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise VendorAPIError(
                 vendor="gemini",
@@ -210,7 +210,7 @@ class GeminiBatchClient(BaseBatchClient):
         if batch_job.state.name != "JOB_STATE_SUCCEEDED":
             from agent_actions.errors import (
                 ValidationError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise ValidationError(
                 "Batch job is not completed",
@@ -221,7 +221,7 @@ class GeminiBatchClient(BaseBatchClient):
         if not result_file_name:
             from agent_actions.errors import (
                 ValidationError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise ValidationError(
                 "Batch job has no output file", context={"batch_id": batch_id, "vendor": "gemini"}
@@ -234,7 +234,7 @@ class GeminiBatchClient(BaseBatchClient):
         if not file_content_bytes or len(file_content_bytes) == 0:
             from agent_actions.errors import (
                 VendorAPIError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise VendorAPIError(
                 vendor="gemini",

@@ -3,7 +3,7 @@
 from typing import Dict, Any, Optional
 
 
-class ErrorContextService:  # pylint: disable=too-few-public-methods
+class ErrorContextService:
     """
     Handles error context extraction and merging from exceptions.
 
@@ -61,7 +61,7 @@ class ErrorContextService:  # pylint: disable=too-few-public-methods
                         attr_value, (str, int, float, bool, type(None))
                     ):
                         merged_context[attr_name] = attr_value
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     # Silently skip attributes that can't be accessed - defensive programming
                     pass
 

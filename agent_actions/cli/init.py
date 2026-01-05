@@ -22,7 +22,7 @@ from agent_actions.validation.init_validator import InitCommandArgs
 from agent_actions.validation.project_validator import ProjectValidator
 
 
-class InitCommand:  # pylint: disable=too-few-public-methods
+class InitCommand:
     """Implementation of the init command."""
 
     def __init__(self, args: InitCommandArgs):

@@ -114,7 +114,6 @@ class PromptFormatter:
                 raw_prompt = "Process the following content: {content}"
             return raw_prompt
         except Exception as e:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.errors import PromptValidationError  # New modular pattern!
 
             raise PromptValidationError(
@@ -147,7 +146,6 @@ class PromptFormatter:
                 return PromptUtils.replace_field_references(raw_prompt, field_context)
             return raw_prompt
         except Exception as e:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.errors import PromptValidationError  # New modular pattern!
 
             raise PromptValidationError(

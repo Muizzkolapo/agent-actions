@@ -98,7 +98,7 @@ class WorkflowParser:
         except yaml.YAMLError as e:
             print(f"  ⚠ Warning: YAML parsing error - {e}")
             return None
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             print(f"  ⚠ Warning: Error reading file - {e}")
             return None
 

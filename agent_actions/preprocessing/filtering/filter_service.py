@@ -314,7 +314,7 @@ _GLOBAL_FILTER_SERVICE = None
 
 def get_filter_service() -> FilterService:
     """Get the global FilterService instance."""
-    global _GLOBAL_FILTER_SERVICE  # pylint: disable=global-statement
+    global _GLOBAL_FILTER_SERVICE
     if _GLOBAL_FILTER_SERVICE is None:
         _GLOBAL_FILTER_SERVICE = FilterService()
     return _GLOBAL_FILTER_SERVICE

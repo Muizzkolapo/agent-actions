@@ -69,7 +69,7 @@ from agent_actions.utilities.lineage.lineage_builder import LineageBuilder
 from agent_actions.utilities.id_generation.id_generator import IDGenerator
 
 
-class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
+class PassthroughItemBuilder:
     """
     Unified builder for passthrough items across batch and online modes.
 
@@ -80,7 +80,7 @@ class PassthroughItemBuilder:  # pylint: disable=too-few-public-methods
     """
 
     @staticmethod
-    def build_item(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def build_item(
         row: Dict[str, Any],
         reason: str,
         idx: int,

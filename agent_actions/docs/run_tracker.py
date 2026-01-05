@@ -16,7 +16,7 @@ from agent_actions.utilities.retry import retry
 
 
 @dataclass
-class RunConfig:  # pylint: disable=too-many-instance-attributes
+class RunConfig:
     """Configuration for recording a workflow run."""
 
     workflow_id: str
@@ -32,7 +32,7 @@ class RunConfig:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass
-class ActionCompleteConfig:  # pylint: disable=too-many-instance-attributes
+class ActionCompleteConfig:
     """Configuration for recording action completion."""
 
     run_id: str

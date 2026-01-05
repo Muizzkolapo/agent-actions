@@ -17,7 +17,6 @@ Example:
     refs = parser.parse_batch("Found {source.title} with {extract.count} items")
     # [ParsedReference(...), ParsedReference(...)]
 """
-# pylint: disable=line-too-long
 # Line-too-long: Regex patterns and docstrings require longer lines for readability
 
 import re

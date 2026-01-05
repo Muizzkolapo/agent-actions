@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class BatchProcessingContext:  # pylint: disable=too-many-instance-attributes
+class BatchProcessingContext:
     """
     Context passed through the processing pipeline.
 
@@ -65,7 +65,7 @@ class BatchProcessingContext:  # pylint: disable=too-many-instance-attributes
     original_batch_id: Optional[str] = None  # Set if this is a retry batch
 
 
-class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-arguments,too-many-positional-arguments
+class BatchResultProcessor:
     """
     Pipeline-based processor for batch results.
 
@@ -169,9 +169,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
         context_map = context_map or {}
 
         # Extract node index from output_directory
-        node_idx = BatchPassthroughBuilder._extract_node_index(  # pylint: disable=protected-access
-            output_directory
-        )
+        node_idx = BatchPassthroughBuilder._extract_node_index(output_directory)
 
         # Extract agent config values
         json_mode = True
@@ -239,7 +237,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
                         },
                     )
 
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except Exception as e:
                     # Catch all exceptions to prevent one item from breaking entire batch
                     # Processing exception - create error item
                     error_item = self._create_error_item(
@@ -392,7 +390,6 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
 
         if stored_passthrough:
             # Use pre-computed passthrough
-            # pylint: disable=import-outside-toplevel
             from agent_actions.utilities.context_scope.context_scope_processor import (
                 ContextScopeProcessor,
             )
@@ -408,7 +405,6 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
 
             for field_ref in passthrough_refs:
                 try:
-                    # pylint: disable=import-outside-toplevel
                     from agent_actions.utilities.context_scope.context_scope_processor import (
                         ContextScopeProcessor,
                     )
@@ -436,7 +432,6 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
 
         return generated_list
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _create_error_item(
         self,
         ctx: BatchProcessingContext,
@@ -493,9 +488,7 @@ class BatchResultProcessor:  # pylint: disable=too-few-public-methods,too-many-a
                 reason = "conditional_clause_failed"
 
                 # Build passthrough item
-                passthrough_item = builder._build_item(  # pylint: disable=protected-access
-                    original_row, reason, custom_id
-                )
+                passthrough_item = builder._build_item(original_row, reason, custom_id)
                 # Remove internal tracking field
                 passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
 

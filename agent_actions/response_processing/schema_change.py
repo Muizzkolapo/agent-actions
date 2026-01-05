@@ -234,7 +234,7 @@ def _inject_functions_into_schema(
     context_data_str: Optional[str],
     agent_config: Optional[Dict[str, Any]],
     captured_results: Dict[str, Any],
-) -> Any:  # pylint: disable=too-many-branches
+) -> Any:
     """
     Recursively traverse schema and replace dispatch_task() calls.
 
@@ -277,7 +277,7 @@ def _inject_functions_into_schema(
     return schema
 
 
-def prepare_schema_unified(  # pylint: disable=too-many-branches
+def prepare_schema_unified(
     agent_config: Dict[str, Any],
     vendor: str,
     tools_path: Optional[str] = None,

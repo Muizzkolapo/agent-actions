@@ -7,7 +7,7 @@ for Mistral API integration.
 
 import logging
 from textwrap import dedent
-from mistralai import Mistral  # pylint: disable=import-error
+from mistralai import Mistral
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (

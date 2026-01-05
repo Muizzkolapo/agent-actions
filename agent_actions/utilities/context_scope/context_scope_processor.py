@@ -3,7 +3,6 @@ Context Scope Processor - Field flow control for LLM context and output.
 
 Processes context_scope directives: static_data, observe, drop, passthrough.
 """
-# pylint: disable=line-too-long,import-outside-toplevel,broad-exception-caught
 # Line-too-long: Complex data transformations require descriptive variable names
 # Import-outside-toplevel: Avoid circular imports
 # Broad-exception-caught: Intentional fallback behavior for data processing
@@ -222,8 +221,6 @@ class ContextScopeProcessor:
         return llm_response
 
     @staticmethod
-    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
-    # pylint: disable=too-many-branches,too-many-statements
     # Complex field context building with historical data requires all these parameters
     def build_field_context_with_history(
         contents: Dict,

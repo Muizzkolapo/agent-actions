@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
     """Orchestrates the target content processing workflow."""
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         agent_config: Dict,
@@ -390,7 +389,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return await self.source_loader.load_source_data_async(file_path)
         return await asyncio.to_thread(self.source_loader.load_source_data, file_path)
 
-    # pylint: disable=too-many-locals
     async def _process_single_item_async(self, item: Dict, *args, **kwargs) -> List[Dict]:
         """
         Process a single data item asynchronously using proper async patterns.
@@ -517,7 +515,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 source_file_info["source_guid_groups"] = {
                     guid: len(items) for guid, items in source_groups.items()
                 }
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             # Fallback: If metadata extraction fails for any reason,
             # provide minimal source group info
             source_file_info["extracted"] = True
@@ -571,7 +569,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
         return filtered_data
 
-    # pylint: disable=too-many-locals
     def _process_single_item(
         self,
         item: Dict,

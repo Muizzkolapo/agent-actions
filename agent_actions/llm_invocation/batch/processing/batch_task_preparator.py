@@ -27,7 +27,7 @@ from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaK
 logger = logging.getLogger(__name__)
 
 
-class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
+class BatchTaskPreparator:
     """
     Prepares batch tasks from raw data.
 
@@ -70,7 +70,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         self.agent_indices = agent_indices or {}
         self.dependency_configs = dependency_configs or {}
 
-    # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     def prepare_tasks(
         self,
         agent_config: Dict[str, Any],
@@ -121,7 +120,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
         # 2.1 Pre-flight validation: check template variables against first data row
         self._run_preflight_validation(agent_config, raw_prompt, data, output_directory, batch_name)
-        # pylint: disable=import-outside-toplevel
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
@@ -162,7 +160,7 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
                     tasks_builder.append(result)
                     stats.included_items += 1
 
-            except Exception as e:  # pylint: disable=broad-exception-caught
+            except Exception as e:
                 # Catch all exceptions to avoid one bad row stopping entire batch
                 logger.debug("Failed to prepare task for row: %s", e, exc_info=True)
                 stats.error_items += 1
@@ -177,7 +175,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             tasks=final_tasks, context_map=context_map_builder, stats=stats, config=agent_config
         )
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _process_single_item(
         self,
         row: Dict[str, Any],
@@ -246,7 +243,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             context_map_builder=context_map_builder,
         )
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _prepare_single_task(
         self,
         _row: Dict[str, Any],
@@ -259,7 +255,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         context_map_builder: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Prepare a single batch task using PromptPreparationService."""
-        # pylint: disable=import-outside-toplevel
         from agent_actions.prompt_generation.prompt_preparation_service import (
             PromptPreparationService,
         )
@@ -310,7 +305,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
             return self.guard_handler
 
         # Create handler with filter service
-        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.filtering.guard_handler import (
             get_guard_handler,
         )
@@ -334,7 +328,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
 
     def _prepare_schema(self, agent_config: Dict[str, Any], provider) -> Optional[Dict[str, Any]]:
         """Prepare and compile schema for provider (resolves schema references from registry)."""
-        # pylint: disable=import-outside-toplevel
         from agent_actions.response_processing.schema_change import prepare_schema_unified
         from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 
@@ -356,7 +349,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         if self.filter_service:
             return self.filter_service
         # Fall back to global filter service
-        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.filtering.filter_service import get_filter_service
 
         return get_filter_service()
@@ -385,7 +377,6 @@ class BatchTaskPreparator:  # pylint: disable=too-few-public-methods
         Raises:
             PreFlightValidationError: If validation fails
         """
-        # pylint: disable=import-outside-toplevel
         from agent_actions.prompt_generation.prompt_preparation_service import (
             PromptPreparationService,
         )

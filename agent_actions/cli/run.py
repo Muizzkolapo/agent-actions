@@ -26,7 +26,7 @@ from agent_actions.validation.preflight import (
 )
 
 
-class RunCommand:  # pylint: disable=too-few-public-methods
+class RunCommand:
     """Implementation of the run command."""
 
     def __init__(self, args: RunCommandArgs):
@@ -99,7 +99,6 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         else:
             workflow.run()
 
-    # pylint: disable=too-many-branches,too-many-locals,too-many-statements
     def execute_validation_only(self, static_typing: bool = True) -> None:
         """
         Execute pre-flight validation only, without running the workflow.
@@ -116,7 +115,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
 
         Exits with code 0 if valid, 1 if errors found.
         """
-        import sys  # pylint: disable=import-outside-toplevel
+        import sys
 
         click.echo(f"Running pre-flight validation for: {self.args.agent}")
         click.echo("Setting up project paths...")
@@ -177,7 +176,6 @@ class RunCommand:  # pylint: disable=too-few-public-methods
         # 3. Static type checking (field references)
         if static_typing:
             click.echo("\nRunning static type checking...")
-            # pylint: disable=import-outside-toplevel
             from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
 
             # Build workflow config dict from agent_configs
@@ -285,7 +283,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                     "Run again to check status and continue."
                 )
 
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:
             status = "FAILED"
             # Capture full traceback for better debugging (like Airflow)
             error_message = traceback.format_exc()
@@ -297,7 +295,7 @@ class RunCommand:  # pylint: disable=too-few-public-methods
                 tracker.finalize_workflow_run(
                     run_id=run_id, status=status, error_message=error_message
                 )
-            except Exception as track_error:  # pylint: disable=broad-exception-caught
+            except Exception as track_error:
                 # Don't fail the workflow if tracking fails
                 click.echo(
                     f"Warning: Could not finalize workflow run tracking: {track_error}", err=True
@@ -349,7 +347,6 @@ class RunCommand:  # pylint: disable=too-few-public-methods
 )
 @handles_user_errors("run")
 @requires_project
-# pylint: disable=too-many-arguments,too-many-positional-arguments
 # Click decorators require explicit params
 def run(
     agent: str,

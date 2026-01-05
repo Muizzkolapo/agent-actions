@@ -48,7 +48,7 @@ class AnthropicBatchClient(BaseBatchClient):
         self.version = version or "2023-06-01"
         self.enable_prompt_caching = enable_prompt_caching
         try:
-            import anthropic  # pylint: disable=import-outside-toplevel
+            import anthropic
 
             self.anthropic = anthropic
             if api_key:
@@ -58,7 +58,7 @@ class AnthropicBatchClient(BaseBatchClient):
         except ImportError as e:
             from agent_actions.errors import (
                 ConfigurationError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise ConfigurationError(
                 "Required package not installed",
@@ -68,7 +68,7 @@ class AnthropicBatchClient(BaseBatchClient):
         except Exception as e:
             from agent_actions.errors import (
                 ConfigurationError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise ConfigurationError(
                 "Failed to initialize Anthropic client",

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ContextBuildConfig:  # pylint: disable=too-many-instance-attributes
+class ContextBuildConfig:
     """Configuration for building evaluation context."""
 
     agent_config: Dict[str, Any]

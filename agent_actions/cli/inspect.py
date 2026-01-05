@@ -31,10 +31,10 @@ from agent_actions.validation.static_analyzer import (
 )
 
 
-class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-instance-attributes
+class FieldFlowCommand:
     """Implementation of the field-flow inspection command."""
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         agent: str,
         user_code: Optional[str],
@@ -130,7 +130,6 @@ class FieldFlowCommand:  # pylint: disable=too-few-public-methods,too-many-insta
         # Get UDF registry
         udf_registry: Dict[str, Any] = {}
         try:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY
@@ -412,7 +411,7 @@ def inspect():
 )
 @handles_user_errors("inspect field-flow")
 @requires_project
-def field_flow(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def field_flow(
     agent: str,
     user_code: Optional[str],
     json_output: bool,
@@ -461,10 +460,10 @@ def field_flow(  # pylint: disable=too-many-arguments,too-many-positional-argume
     command.execute()
 
 
-class ConflictsCommand:  # pylint: disable=too-few-public-methods
+class ConflictsCommand:
     """Implementation of the conflicts inspection command."""
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         agent: str,
         user_code: Optional[str],
@@ -542,7 +541,6 @@ class ConflictsCommand:  # pylint: disable=too-few-public-methods
         # Get UDF registry
         udf_registry: Dict[str, Any] = {}
         try:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY

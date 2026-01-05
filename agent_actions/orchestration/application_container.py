@@ -183,7 +183,6 @@ class ApplicationContainer:
 
         dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
         # Import here to avoid circular dependency
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
 
         batch_service = BatchService(
@@ -266,7 +265,6 @@ class ApplicationContainer:
             results["services"]["generator"] = "healthy"
             # BatchService not registered, create instance for health check
             # Import here to avoid circular dependency
-            # pylint: disable=import-outside-toplevel
             from agent_actions.llm_invocation.batch.batch_service import BatchService
 
             BatchService()

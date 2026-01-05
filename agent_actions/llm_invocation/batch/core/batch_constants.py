@@ -86,7 +86,7 @@ class FilterStatus(str, Enum):
         return self.value
 
 
-class ContextMetaKeys:  # pylint: disable=too-few-public-methods
+class ContextMetaKeys:
     """Internal metadata keys used in context maps.
 
     These keys are used to track internal state during batch processing.

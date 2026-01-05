@@ -5,7 +5,6 @@ This module provides bulletproof error formatting functions that handle
 all edge cases including broken __str__ methods, circular references,
 and malformed exception chains.
 """
-# pylint: disable=broad-exception-caught  # Intentional - safety formatting must catch everything
 
 import logging
 from typing import Any, Set

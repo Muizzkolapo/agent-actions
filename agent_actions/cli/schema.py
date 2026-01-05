@@ -22,7 +22,7 @@ from agent_actions.response_processing.schema_loader import SchemaLoader
 from agent_actions.services import WorkflowSchemaService
 
 
-class SchemaCommand:  # pylint: disable=too-few-public-methods
+class SchemaCommand:
     """Implementation of the schema command."""
 
     def __init__(
@@ -101,7 +101,6 @@ class SchemaCommand:  # pylint: disable=too-few-public-methods
         # Get UDF registry (always try to load for tool schemas)
         udf_registry: Dict[str, Any] = {}
         try:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.utilities.udf_management.udf_registry import UDF_REGISTRY
 
             udf_registry = UDF_REGISTRY

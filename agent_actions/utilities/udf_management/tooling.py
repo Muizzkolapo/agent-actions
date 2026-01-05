@@ -1,5 +1,4 @@
 """Module for loading and running user-defined functions from a specified module."""
-# pylint: disable=line-too-long,import-outside-toplevel
 # Line-too-long: Descriptive error messages require long lines
 # Import-outside-toplevel: Avoid circular imports with udf_registry
 

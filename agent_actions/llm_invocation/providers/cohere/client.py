@@ -7,7 +7,7 @@ for Cohere API integration.
 
 import logging
 from textwrap import dedent
-import cohere  # pylint: disable=import-error
+import cohere
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (

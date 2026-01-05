@@ -13,7 +13,7 @@ from .parser import WorkflowParser, extract_fields_for_docs
 from .scanner import ProjectScanner
 
 
-class CatalogGenerator:  # pylint: disable=too-few-public-methods
+class CatalogGenerator:
     """Generate catalog.json from workflows."""
 
     def __init__(self, workflows_data: Dict[str, Dict], project_path: Optional[str] = None):
@@ -92,7 +92,6 @@ class CatalogGenerator:  # pylint: disable=too-few-public-methods
 
         return enriched
 
-    # pylint: disable=too-many-locals,too-many-branches
     def generate(
         self,
         prompts_data: Optional[Dict[str, Any]] = None,
@@ -223,7 +222,7 @@ class CatalogGenerator:  # pylint: disable=too-few-public-methods
         return catalog
 
 
-class RunsGenerator:  # pylint: disable=too-few-public-methods
+class RunsGenerator:
     """Initialize runs data structure."""
 
     @staticmethod
@@ -242,7 +241,7 @@ class RunsGenerator:  # pylint: disable=too-few-public-methods
         return runs
 
 
-def generate_docs(project_path: str, output_dir: Path) -> bool:  # pylint: disable=too-many-locals
+def generate_docs(project_path: str, output_dir: Path) -> bool:
     """
     Main entry point for docs generation.
 

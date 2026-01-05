@@ -75,7 +75,7 @@ class RepromptInterceptor(ResponseInterceptor):
         if self.prompt_debug:
             print("   Engine created successfully")
 
-    def intercept(self, response: Any, context: Dict[str, Any]) -> InterceptorResult:  # pylint: disable=too-many-branches
+    def intercept(self, response: Any, context: Dict[str, Any]) -> InterceptorResult:
         """Process response through reprompt engine.
 
         Args:

@@ -43,7 +43,7 @@ class DataProcessor(ProcessorErrorHandlerMixin, IDataProcessor):
         """Return AUTO processing mode to let system choose."""
         return ProcessingMode.AUTO
 
-    def process_item(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def process_item(
         self,
         contents: Dict,
         generated_data: List[Dict],

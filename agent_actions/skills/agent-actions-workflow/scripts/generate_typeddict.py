@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# pylint: disable=duplicate-code
 """
 Generate TypedDict schema from sample JSON data.
 
@@ -17,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 
-def infer_python_type(value: Any) -> str:  # pylint: disable=too-many-return-statements
+def infer_python_type(value: Any) -> str:
     """Infer Python type annotation from a JSON value."""
     if value is None:
         return "Any"

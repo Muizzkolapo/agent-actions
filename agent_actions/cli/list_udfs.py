@@ -18,7 +18,7 @@ from agent_actions.input_loading.udf_loader import discover_udfs
 from agent_actions.utilities.udf_management.udf_registry import list_udfs, clear_registry
 
 
-class ListUDFsCommand:  # pylint: disable=too-few-public-methods
+class ListUDFsCommand:
     """Implementation of the list-udfs command."""
 
     def __init__(self, user_code: str, json_output: bool, verbose: bool):

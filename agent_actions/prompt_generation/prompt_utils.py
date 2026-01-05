@@ -13,8 +13,6 @@ class PromptUtils:
     """
 
     @staticmethod
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
-    # pylint: disable=too-many-locals,too-many-branches
     def process_dispatch_in_text(
         text: str,
         tools_path: str,

@@ -1,5 +1,4 @@
 """Validation-related errors."""
-# pylint: disable=unnecessary-pass
 # Unnecessary-pass: Simple exception classes inherit all behavior from parent
 
 from agent_actions.errors.base import AgentActionsError

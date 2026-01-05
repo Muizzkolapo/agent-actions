@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Factory module for creating components with dependency injection.
 
@@ -46,8 +45,8 @@ def application_container_context(config: Optional[Dict[str, Any]] = None):
 def create_agent_runner(
     config: Optional[Dict[str, Any]] = None,
     use_tools: bool = True,
-    constructor_path: Optional[str] = None,  # pylint: disable=unused-argument
-    default_path: Optional[str] = None,  # pylint: disable=unused-argument
+    constructor_path: Optional[str] = None,
+    default_path: Optional[str] = None,
 ) -> AgentRunner:
     """
     Create an AgentRunner with proper dependency injection.

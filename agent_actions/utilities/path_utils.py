@@ -23,7 +23,7 @@ def get_path_manager() -> PathManager:
     Returns:
         Global PathManager instance
     """
-    global _global_path_manager  # pylint: disable=global-statement # Singleton pattern
+    global _global_path_manager  # Singleton pattern
     if _global_path_manager is None:
         _global_path_manager = PathManager()
     return _global_path_manager
@@ -231,7 +231,6 @@ def safe_path_join(*parts: Union[str, Path]) -> Path:
     for part in parts:
         joined_path = joined_path / Path(part)
     resolved_path = resolve_absolute_path(joined_path)
-    # pylint: disable=import-outside-toplevel # Avoid circular import
     from agent_actions.errors import FileSystemError
 
     pm = get_path_manager()
@@ -305,7 +304,7 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
         ValueError: If the dependencies input is invalid or a cyclic dependency is detected.
     """
     if not isinstance(dependencies, dict):
-        from agent_actions.errors import DataValidationError  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import DataValidationError
 
         message = (
             f"Invalid type for dependencies: expected dictionary, got {type(dependencies).__name__}"
@@ -329,7 +328,7 @@ def topological_sort(dependencies: Dict[T, List[T]]) -> List[T]:
                 if in_degree[neighbor] == 0:
                     queue.append(neighbor)
     if len(sorted_nodes) != len(all_nodes):
-        from agent_actions.errors import WorkflowError  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import WorkflowError
 
         cycle_nodes: Set[T] = all_nodes - set(sorted_nodes)
         message = "Cyclic dependency detected in the workflow"

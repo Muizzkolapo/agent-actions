@@ -1,6 +1,5 @@
 """JSON content loader implementation."""
 
-# pylint: disable=duplicate-code
 # Similar loader pattern is intentional across different file type loaders
 import json
 import logging

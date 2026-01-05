@@ -21,7 +21,7 @@ from .services import ErrorContextService
 logger = logging.getLogger(__name__)
 
 
-class ErrorTranslator:  # pylint: disable=too-few-public-methods
+class ErrorTranslator:
     """
     Translates Python exceptions to user-friendly errors.
 

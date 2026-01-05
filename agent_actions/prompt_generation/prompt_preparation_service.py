@@ -114,7 +114,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class PromptPreparationRequest:  # pylint: disable=too-many-instance-attributes
+class PromptPreparationRequest:
     """
     Request parameters for prompt preparation.
 
@@ -206,7 +206,7 @@ class PromptPreparationService:
         return mode in ("batch", "realtime")
 
     @staticmethod
-    def prepare_prompt_with_context(  # pylint: disable=too-many-arguments
+    def prepare_prompt_with_context(
         agent_config: Dict[str, Any],
         agent_name: str,
         contents: Dict[str, Any],
@@ -303,7 +303,6 @@ class PromptPreparationService:
         """
         # Validate required parameters
         if request.agent_config is None:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.errors.preflight import ContextStructureError
 
             raise ContextStructureError(
@@ -495,7 +494,7 @@ class PromptPreparationService:
             missing = []
             if "has no attribute" in error_str or "is undefined" in error_str:
                 # Try to extract the missing variable name
-                import re  # pylint: disable=import-outside-toplevel
+                import re
 
                 match = re.search(r"'(\w+)'", error_str)
                 if match:

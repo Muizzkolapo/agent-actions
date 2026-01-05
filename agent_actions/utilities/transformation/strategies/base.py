@@ -34,7 +34,7 @@ class IPassthroughTransformStrategy(ABC):
         """
 
     @abstractmethod
-    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform(
         self,
         data: List,
         context_data: Dict,
