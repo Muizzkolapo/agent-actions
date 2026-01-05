@@ -175,6 +175,81 @@ def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
     )
 ```
 
+## Nested TypedDicts for Complex Output
+
+When your UDF returns nested objects, **always use nested TypedDicts** instead of `Dict[str, Any]`. The framework converts `Dict[str, Any]` incorrectly to `additionalProperties: {type: string}`, causing schema validation errors.
+
+### Problem: Dict[str, Any]
+
+```python
+# BAD - Will cause schema validation errors
+class MyOutput(TypedDict, total=False):
+    results: List[Dict[str, Any]]      # Converted to additionalProperties: {type: 'string'}
+    metadata: Dict[str, Any]           # All values must be strings!
+```
+
+### Solution: Nested TypedDicts
+
+```python
+# GOOD - Explicit types for nested structures
+class SearchMetadata(TypedDict, total=False):
+    """Metadata about the search operation."""
+    total_count: int           # int type preserved
+    results_returned: int      # int type preserved
+    search_method: str
+    filters_applied: List[str]
+
+class MatchingItem(TypedDict, total=False):
+    """A single matching item."""
+    id: str
+    title: str
+    score: float               # float type preserved
+    tags: List[str]
+
+class MyOutput(TypedDict, total=False):
+    """Output schema with proper nested types."""
+    results: List[MatchingItem]
+    metadata: SearchMetadata
+```
+
+### Complete Example
+
+```python
+from typing import TypedDict, List
+from agent_actions import udf_tool
+
+class CatalogMetadata(TypedDict, total=False):
+    total_in_catalog: int
+    candidates_found: int
+    search_method: str
+
+class BookMatch(TypedDict, total=False):
+    isbn: str
+    title: str
+    relevance_score: float
+
+class SearchInput(TypedDict, total=False):
+    query: str
+    genres: List[str]
+
+class SearchOutput(TypedDict, total=False):
+    matching_books: List[BookMatch]
+    search_metadata: CatalogMetadata
+
+@udf_tool(input_type=SearchInput, output_type=SearchOutput)
+def search_catalog(data: dict) -> dict:
+    return {
+        "matching_books": [
+            {"isbn": "123", "title": "Book", "relevance_score": 0.95}
+        ],
+        "search_metadata": {
+            "total_in_catalog": 100,      # int works correctly
+            "candidates_found": 15,        # int works correctly
+            "search_method": "json_file"
+        }
+    }
+```
+
 ## Best Practices
 
 ### 1. Use Descriptive Type Names
