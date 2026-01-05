@@ -27,20 +27,20 @@ def get_field_type(value: Any) -> str:
     """Get a simple type description for a value."""
     if value is None:
         return "null"
-    if isinstance(value, bool):
+    elif isinstance(value, bool):
         return "bool"
-    if isinstance(value, int):
+    elif isinstance(value, int):
         return "int"
-    if isinstance(value, float):
+    elif isinstance(value, float):
         return "float"
-    if isinstance(value, str):
+    elif isinstance(value, str):
         return "str"
-    if isinstance(value, list):
+    elif isinstance(value, list):
         if not value:
             return "list[]"
         elem_type = get_field_type(value[0])
         return f"list[{elem_type}]"
-    if isinstance(value, dict):
+    elif isinstance(value, dict):
         return "dict"
     return "unknown"
 
@@ -67,7 +67,7 @@ def load_node_data(node_dir: Path) -> dict[str, str] | None:
     if not json_files:
         return None
 
-    with open(json_files[0], encoding="utf-8") as f:
+    with open(json_files[0]) as f:
         data = json.load(f)
 
     if isinstance(data, list) and data:
@@ -117,7 +117,7 @@ def analyze_workflow(target_dir: Path) -> None:
 
     prev_fields = set()
 
-    for node in nodes:
+    for i, node in enumerate(nodes):
         curr_fields = set(node["fields"].keys())
 
         added = curr_fields - prev_fields
@@ -155,7 +155,7 @@ def analyze_workflow(target_dir: Path) -> None:
 
     all_fields: dict[str, list[str]] = defaultdict(list)
     for node in nodes:
-        for field, _ in node["fields"].items():
+        for field, ftype in node["fields"].items():
             all_fields[field].append(f"node_{node['num']}")
 
     print(f"\nTotal unique fields: {len(all_fields)}")
@@ -166,7 +166,6 @@ def analyze_workflow(target_dir: Path) -> None:
 
 
 def main():
-    """CLI entry point for field flow analysis."""
     parser = argparse.ArgumentParser(description="Analyze field flow across workflow nodes")
     parser.add_argument("target_dir", help="Path to workflow's agent_io/target directory")
 

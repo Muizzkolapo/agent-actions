@@ -220,85 +220,6 @@ fields:
 additionalProperties: false
 ```
 
-## MCQ Question Generation Patterns
-
-### Option Length Balance (Critical)
-
-Unbalanced option lengths give away the answer (correct answer often longest).
-
-```markdown
-**OPTION LENGTH BALANCE (CRITICAL)**
-
-All 4 options MUST be similar length (within ±5 words).
-
-**Bad Example** (giveaway):
-- A: "Configure capability advertisement during initialization with validation" (8 words)
-- B: "Retry" (1 word)
-- C: "Ignore" (1 word)
-- D: "Rollback" (1 word)
-
-**Good Example** (balanced):
-- A: "Advertise capabilities during initialization and validate before use" (8 words)
-- B: "Enable capabilities on-demand when servers request them" (7 words)
-- C: "Skip negotiation and handle errors at runtime" (7 words)
-- D: "Let servers assume capabilities are available by default" (8 words)
-```
-
-### Answer Explanation Rules
-
-When options will be randomized, don't reference option letters:
-
-```markdown
-**ANSWER EXPLANATION RULES**:
-- ✅ Write a plain text paragraph explaining why the correct answer works
-- ✅ Focus on the technical principle and reasoning
-- ❌ Do NOT reference option letters (A, B, C, D) - options will be randomized
-- ❌ Do NOT explain why other options are wrong - handle separately
-
-**Good**: "Capability negotiation during initialization ensures both client and
-server know which features are available before attempting to use them."
-
-**Bad**: "Correct: Option A works because... Why B fails: ... Why C fails: ..."
-```
-
-### Scenario Conciseness
-
-Use ONE specific detail to ground scenarios, not multiple metrics:
-
-```markdown
-**Bad**: "error rate rose from 0.5% to 12%, host logs show JSON-RPC errors,
-message drops increased from 0.1% to 8%"
-
-**Good**: "error logs show 'unexpected notification' and 'tool not advertised' messages"
-```
-
-### Grounding Requirements
-
-Ensure generated content stays true to source material:
-
-```markdown
-## GROUNDING REQUIREMENTS (CRITICAL)
-
-Your question MUST:
-1. Test the EXACT concept from the source material
-2. Have a correct answer that aligns with the provided answer
-3. NOT introduce new concepts not in the source
-4. Use specific terms/values from the source when applicable
-```
-
-### Quality Tests Before Output
-
-Add validation tests at the end of extraction prompts:
-
-```markdown
-## QUALITY TESTS
-
-Before including a Q&A, verify:
-1. **Generalization Test**: Would this apply to ANY implementation, not just examples?
-2. **Objective Alignment Test**: Does this test a stated learning objective?
-3. **Responsibility Test**: Would answering help perform target responsibilities?
-```
-
 ## Best Practices
 
 1. **Start with role & authority** - Establish who the LLM is
@@ -309,5 +230,3 @@ Before including a Q&A, verify:
 6. **Quality gates** - Include tests like "Could this create a question?"
 7. **Minimize compound concepts** - Keep scenarios to ONE concept per prompt
 8. **Use markdown structure** - Headings, bold, bullets for scannability
-9. **Balance option lengths** - All MCQ options within ±5 words
-10. **Don't reference option letters** - Options may be randomized

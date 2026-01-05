@@ -14,9 +14,9 @@ import sys
 from pathlib import Path
 
 
-WORKFLOW_YAML_TEMPLATE = """######################################################################
+WORKFLOW_YAML_TEMPLATE = """################################################################################
 # {title}
-######################################################################
+################################################################################
 name: {name}
 description: "{description}"
 version: "1.0.0"
@@ -60,9 +60,7 @@ PROMPT_STORE_TEMPLATE = """# {title} Prompts
 You are an expert assistant.
 
 ## INPUT
-Use 'source.' prefix for input data fields:
-- Field 1: {{{{source.field_1}}}}
-- Field 2: {{{{source.field_2}}}}
+The user will provide data to process.
 
 ## TASK
 Process the data and extract the required information.
@@ -77,26 +75,6 @@ Process the data and extract the required information.
 ## IMPORTANT
 - Be accurate and thorough
 - Follow the schema exactly
-{{end_prompt}}
-
-
-{{prompt Second_Prompt}}
-## INPUT
-Use 'source.' for original input data:
-- Original Field: {{{{source.field_1}}}}
-
-Use '<action_name>.' for previous action outputs:
-- Previous Result: {{{{first_action.output_field}}}}
-
-## TASK
-Build on the previous action's output.
-
-## OUTPUT SCHEMA:
-```json
-{{
-  "final_result": "The final processed result"
-}}
-```
 {{end_prompt}}
 """
 
@@ -134,69 +112,51 @@ def my_tool_function(data: dict) -> dict:
 
 
 def init_workflow(name: str, output_dir: Path) -> None:
-    """Initialize a new workflow with proper structure.
+    """Initialize a new workflow with proper structure."""
 
-    Creates the workflow directory structure:
-      <workflow>/
-        agent_config/<name>.yml    - Workflow definition
-        agent_io/staging/          - Base input data (target/ created by agac)
-        seed_data/                 - Reference data (syllabus, lookups, etc.)
-
-    Note: Prompts and schemas go in central project directories:
-      - prompt_store/<name>.md     - Prompt definitions
-      - schema/<schema_name>.yml   - Schema definitions
-    """
     workflow_dir = output_dir / name
     title = name.replace("_", " ").title()
 
-    # Create directories (target/ is created by agac at runtime)
+    # Create directories
     (workflow_dir / "agent_config").mkdir(parents=True, exist_ok=True)
-    (workflow_dir / "agent_io" / "staging").mkdir(parents=True, exist_ok=True)
-    (workflow_dir / "seed_data").mkdir(parents=True, exist_ok=True)
+    (workflow_dir / "agent_io" / "source").mkdir(parents=True, exist_ok=True)
+    (workflow_dir / "agent_io" / "target").mkdir(parents=True, exist_ok=True)
+    (workflow_dir / "prompt_store").mkdir(parents=True, exist_ok=True)
 
     # Create workflow YAML
     yaml_content = WORKFLOW_YAML_TEMPLATE.format(
         name=name, title=title, description=f"{title} workflow"
     )
-    (workflow_dir / "agent_config" / f"{name}.yml").write_text(yaml_content, encoding="utf-8")
+    (workflow_dir / "agent_config" / f"{name}.yml").write_text(yaml_content)
 
-    # Create example staging file
-    # Note: Data structure is workflow-specific - define fields based on your needs
-    staging_example = """[
+    # Create prompt store
+    prompt_content = PROMPT_STORE_TEMPLATE.format(title=title)
+    (workflow_dir / "prompt_store" / f"{name}.md").write_text(prompt_content)
+
+    # Create example source file
+    source_example = """[
     {
-        "field_1": "value_1",
-        "field_2": "value_2",
-        "nested_field": {
-            "key": "value"
+        "source_guid": "example-001",
+        "content": {
+            "input_data": "Your input data here"
         }
     }
 ]"""
-    (workflow_dir / "agent_io" / "staging" / "example_staging.json").write_text(
-        staging_example, encoding="utf-8"
-    )
-
-    # Create prompt store template (for user to move to central location)
-    prompt_content = PROMPT_STORE_TEMPLATE.format(title=title)
-    prompt_file = workflow_dir / f"__{name}_prompts.md"
-    prompt_file.write_text(prompt_content, encoding="utf-8")
+    (workflow_dir / "agent_io" / "source" / "example_source.json").write_text(source_example)
 
     print(f"✅ Created workflow: {workflow_dir}")
     print(f"   ├── agent_config/{name}.yml")
-    print("   ├── agent_io/staging/example_staging.json")
-    print("   ├── seed_data/                    (for reference data)")
-    print(f"   └── __{name}_prompts.md          (move to prompt_store/)")
+    print(f"   ├── agent_io/source/example_source.json")
+    print(f"   └── prompt_store/{name}.md")
     print()
     print("Next steps:")
     print(f"  1. Edit agent_config/{name}.yml to define your actions")
-    print(f"  2. Move __{name}_prompts.md to your project's prompt_store/")
-    print("  3. Create schema files in your project's schema/ directory")
-    print("  4. Create tool files in your project's tools/ directory")
-    print("  5. Add base data to agent_io/staging/")
-    print("  6. Add reference data to seed_data/ (if needed)")
+    print(f"  2. Edit prompt_store/{name}.md to add your prompts")
+    print("  3. Create tool files in your tools directory")
+    print("  4. Add source data to agent_io/source/")
 
 
 def main():
-    """CLI entry point for workflow initialization."""
     parser = argparse.ArgumentParser(description="Initialize a new agent-actions workflow")
     parser.add_argument("name", help="Workflow name (snake_case)")
     parser.add_argument("--path", "-p", required=True, help="Output directory for the workflow")

@@ -39,6 +39,58 @@ Top-level workflow failure wrapper.
 
 ## Common Errors & Fixes
 
+### JSON Parsing Error (Curly Braces in Prompts)
+
+**Symptom:**
+```
+Problem: expected token ':', got '}'
+```
+
+**Cause:** Curly braces in prompt examples are interpreted as Jinja2 template syntax.
+
+**Bad prompt:**
+```markdown
+{prompt MyPrompt}
+Example of broken code: `{{{{{{{{ function() }}}}}s`
+{end_prompt}
+```
+
+**Fix:** Avoid curly braces in examples - use alternative characters:
+```markdown
+{prompt MyPrompt}
+Example of broken code: `]]]]]d function(argument)`
+{end_prompt}
+```
+
+**Why:** Prompts use Jinja2 for context (`{{ source.field }}`), so literal `{{` in examples breaks parsing.
+
+### Schema Format Error
+
+**Symptom:**
+```
+Schema validation failed / unexpected token
+```
+
+**Cause:** Using JSON Schema format instead of agent-actions format.
+
+**Wrong:**
+```yaml
+name: my_schema
+type: object
+properties:
+  field_name:
+    type: string
+```
+
+**Correct:**
+```yaml
+name: my_schema
+fields:
+  - id: field_name
+    type: string
+    description: "What this field contains"
+```
+
 ### Type Mismatch
 
 **Symptom:**
