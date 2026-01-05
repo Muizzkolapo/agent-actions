@@ -73,10 +73,14 @@ class StagingContentLoader:
                     source_guid = str(
                         uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(chunk_record, sort_keys=True))
                     )
+                    target_id = str(uuid.uuid4())
                     chunk_record.update(
                         {
                             "source_guid": source_guid,
-                            "target_id": str(uuid.uuid4()),
+                            "target_id": target_id,
+                            # Ancestry Chain: first-stage records are their own root
+                            "parent_target_id": None,
+                            "root_target_id": target_id,
                             "record_index": idx,
                             "chunk_index": chunk_idx,
                         }
@@ -86,10 +90,14 @@ class StagingContentLoader:
                 source_guid = str(
                     uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(record, sort_keys=True))
                 )
+                target_id = str(uuid.uuid4())
                 record.update(
                     {
                         "source_guid": source_guid,
-                        "target_id": str(uuid.uuid4()),
+                        "target_id": target_id,
+                        # Ancestry Chain: first-stage records are their own root
+                        "parent_target_id": None,
+                        "root_target_id": target_id,
                         "record_index": idx,
                     }
                 )

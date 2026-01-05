@@ -12,7 +12,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class HistoricalDataRequest:
-    """Request parameters for loading historical node data."""
+    """Request parameters for loading historical node data.
+
+    Supports Ancestry Chain pattern for parallel branch merging:
+    - parent_target_id: Links to immediate parent (Diamond/Fan-in patterns)
+    - root_target_id: Links to original ancestor (Map-Reduce patterns)
+    """
 
     action_name: str
     lineage: List[str]
@@ -20,6 +25,9 @@ class HistoricalDataRequest:
     file_path: str
     agent_indices: Dict[str, int]
     caller_lineage: Optional[List[str]] = None
+    # Ancestry Chain fields (RFC: docs/specs/RFC_ancestry_chain.md)
+    parent_target_id: Optional[str] = None
+    root_target_id: Optional[str] = None
 
 
 class HistoricalNodeDataLoader:
@@ -65,9 +73,8 @@ class HistoricalNodeDataLoader:
                 source_guid=request.source_guid,
             )
 
-            # Find the node_id in lineage for this action (used for diagnostics and logging)
-            # NOTE: This is no longer used for matching in _find_record_by_identifiers,
-            # but we keep it for logging and debugging purposes
+            # Find the node_id in lineage for this action
+            # If not found, this may be a parallel sibling (ancestry matching case)
             logger.debug(
                 "[DEBUG] Finding node_id for action='%s' in lineage=%s",
                 request.action_name,
@@ -77,15 +84,21 @@ class HistoricalNodeDataLoader:
                 request.action_name, request.lineage, request.agent_indices
             )
 
-            if not node_id:
-                logger.warning(
-                    "[DEBUG] No node_id found in lineage for action '%s'. Lineage: %s",
-                    request.action_name,
-                    request.lineage,
-                )
-                return None
+            # Determine if this is a parallel sibling case (node not in lineage)
+            is_parallel_sibling = node_id is None
 
-            logger.debug("[DEBUG] Found node_id=%s for action='%s'", node_id, request.action_name)
+            if is_parallel_sibling:
+                logger.debug(
+                    "[DEBUG] Node not in lineage for action '%s' - trying ancestry matching. "
+                    "parent_target_id=%s, root_target_id=%s",
+                    request.action_name,
+                    request.parent_target_id,
+                    request.root_target_id,
+                )
+            else:
+                logger.debug(
+                    "[DEBUG] Found node_id=%s for action='%s'", node_id, request.action_name
+                )
 
             # Get the node index for constructing the path
             node_idx = request.agent_indices.get(request.action_name)
@@ -114,14 +127,23 @@ class HistoricalNodeDataLoader:
             # DEBUG: Log what we're searching for
             lineage_status = "provided" if request.caller_lineage else "None"
             logger.debug(
-                "[DEBUG] Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s",
+                "[DEBUG] Searching for record: source_guid=%s, node_id=%s, caller_lineage=%s, "
+                "parent_target_id=%s, root_target_id=%s",
                 request.source_guid,
                 node_id,
                 lineage_status,
+                request.parent_target_id,
+                request.root_target_id,
             )
 
             record = HistoricalNodeDataLoader._find_record_by_identifiers(
-                data, request.source_guid, node_id, request.caller_lineage
+                data,
+                request.source_guid,
+                node_id,
+                request.caller_lineage,
+                parent_target_id=request.parent_target_id,
+                root_target_id=request.root_target_id,
+                is_parallel_sibling=is_parallel_sibling,
             )
 
             # DEBUG: Log result
@@ -276,107 +298,113 @@ class HistoricalNodeDataLoader:
         source_guid: str,
         _node_id: str,
         caller_lineage: Optional[List[str]] = None,
+        parent_target_id: Optional[str] = None,
+        root_target_id: Optional[str] = None,
+        is_parallel_sibling: bool = False,
     ) -> Optional[Dict]:
         """
-        Find a record in the data that matches source_guid and optionally lineage.
+        Find a record in the data using multi-strategy matching.
 
-        The matching strategy prioritizes source_guid as the primary identifier,
-        with lineage-based matching providing disambiguation for split record scenarios.
-
-        **Matching Logic**:
-        1. Primary filter: source_guid (stable across granularity changes)
-        2. Secondary filter: lineage prefix matching (for split records)
+        **Matching Priority** (RFC: docs/specs/RFC_ancestry_chain.md):
+        1. Lineage match (existing behavior) - for direct ancestors
+        2. Parent match (parent_target_id) - for parallel siblings (Diamond pattern)
+        3. Root match (root_target_id) - for Map-Reduce aggregation
+        4. Source GUID fallback - legacy compatibility
 
         **Scenarios Handled**:
-        - Granularity changes (1 doc → N facts): Matches by source_guid
-        - Split records (
-            same source_guid,
-            different branches): Uses lineage to select correct branch
-
-        - Legacy workflows (no lineage): Returns first match by source_guid
+        - Direct ancestors: Uses lineage prefix matching
+        - Parallel siblings: Uses parent_target_id (Diamond/Fan-in)
+        - Map-Reduce: Uses root_target_id
+        - Granularity changes: Falls back to source_guid
+        - Legacy workflows: Returns first source_guid match
 
         Args:
             data: List of records from the target file
             source_guid: Source GUID to match (required)
-            node_id: Node ID (kept for logging/diagnostics, not used for matching)
-            caller_lineage: Optional lineage from calling record for precise matching.
-                          If None, uses legacy matching (source_guid only).
-                          If provided, also checks lineage prefix matching.
+            _node_id: Node ID (kept for logging/diagnostics)
+            caller_lineage: Optional lineage for prefix matching
+            parent_target_id: Optional parent ID for sibling matching
+            root_target_id: Optional root ID for Map-Reduce matching
+            is_parallel_sibling: True if dependency node is not in caller's lineage
 
         Returns:
             The matching record or None if not found
-
-        Examples:
-            # Legacy matching (backward compatible)
-            >>> _find_record_by_identifiers(data, "guid-123", "node_5_abc")
-            # Returns first record matching source_guid
-
-            # Lineage-based matching (for split records)
-            >>> caller_lineage = ["node_0", "node_1", "node_5", "node_6_a", "node_23"]
-            >>> _find_record_by_identifiers(data, "guid-123", "node_5_abc", caller_lineage)
-            # Returns only the record whose lineage is a prefix of caller_lineage
         """
         if not isinstance(data, list):
             logger.debug("[DEBUG _find_record] Data is not a list, type=%s", type(data))
             return None
 
         logger.debug(
-            "[DEBUG _find_record] Searching %s records for source_guid=%s", len(data), source_guid
+            "[DEBUG _find_record] Searching %s records for source_guid=%s, "
+            "parent_target_id=%s, is_parallel_sibling=%s",
+            len(data),
+            source_guid,
+            parent_target_id,
+            is_parallel_sibling,
         )
 
         matches_found = 0
-        first_source_guid_match = None  # Track first match as fallback
+        first_source_guid_match = None
+        parent_match = None
+        root_match = None
 
         for record in data:
             if not isinstance(record, dict):
                 continue
 
-            # Match by source_guid only (allows matching across granularity changes)
-            # The node_id requirement was too strict and caused false negatives when
-            # granularity changed (e.g., 1 document → 5 facts, each with different node_id)
-            if record.get("source_guid") == source_guid:
-                matches_found += 1
-                caller_status = "provided" if caller_lineage else "None"
-                logger.debug(
-                    "[DEBUG _find_record] Match #%s: node_id=%s, has_lineage=%s, caller_lineage=%s",
-                    matches_found,
-                    record.get("node_id"),
-                    bool(record.get("lineage")),
-                    caller_status,
-                )
+            # Primary filter: source_guid
+            if record.get("source_guid") != source_guid:
+                continue
 
-                # Store first match as fallback for when lineage matching fails
-                if first_source_guid_match is None:
-                    first_source_guid_match = record
-
-                # If caller_lineage is provided, use lineage matching for disambiguation
-                # This is essential for split record scenarios where multiple records share
-                # the same source_guid and node_id but differ in their processing branch
-                if caller_lineage is not None:
-                    record_lineage = record.get("lineage")
-                    if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
-                        return record
-                    # Lineages don't match - continue searching for correct branch
-                    continue
-
-                # Legacy behavior: return first match when no lineage checking
-                # This maintains backward compatibility for workflows without lineage
-                logger.debug("[DEBUG _find_record] Returning match #%s", matches_found)
-                return record
-
-        # If we found source_guid matches but no lineage matches,
-        # return first match as fallback
-        if first_source_guid_match is not None:
+            matches_found += 1
             logger.debug(
-                "[DEBUG _find_record] No lineage match found, "
-                "returning first source_guid match as fallback"
+                "[DEBUG _find_record] Match #%s: node_id=%s, parent_target_id=%s, root_target_id=%s",
+                matches_found,
+                record.get("node_id"),
+                record.get("parent_target_id"),
+                record.get("root_target_id"),
             )
+
+            # Store first match as ultimate fallback
+            if first_source_guid_match is None:
+                first_source_guid_match = record
+
+            # Strategy 1: Lineage matching (for direct ancestors, not parallel siblings)
+            if not is_parallel_sibling and caller_lineage is not None:
+                record_lineage = record.get("lineage")
+                if HistoricalNodeDataLoader._lineages_match(record_lineage, caller_lineage):
+                    logger.debug("[DEBUG _find_record] Lineage match found")
+                    return record
+
+            # Strategy 2: Parent matching (for parallel siblings - Diamond pattern)
+            if parent_target_id and record.get("parent_target_id") == parent_target_id:
+                if parent_match is None:
+                    parent_match = record
+                    logger.debug("[DEBUG _find_record] Parent match found")
+
+            # Strategy 3: Root matching (for Map-Reduce aggregation)
+            if root_target_id and record.get("root_target_id") == root_target_id:
+                if root_match is None:
+                    root_match = record
+                    logger.debug("[DEBUG _find_record] Root match found")
+
+        # Return based on priority
+        if is_parallel_sibling:
+            # For parallel siblings, prefer ancestry matching over source_guid fallback
+            if parent_match:
+                logger.debug("[DEBUG _find_record] Returning parent_target_id match")
+                return parent_match
+            if root_match:
+                logger.debug("[DEBUG _find_record] Returning root_target_id match")
+                return root_match
+
+        # Fallback to first source_guid match (legacy behavior)
+        if first_source_guid_match is not None:
+            logger.debug("[DEBUG _find_record] No ancestry match, returning source_guid fallback")
             return first_source_guid_match
 
         logger.debug(
-            "[DEBUG _find_record] No matches found "
-            "(searched %s records, found %s source_guid matches)",
+            "[DEBUG _find_record] No matches found (searched %s records)",
             len(data),
-            matches_found,
         )
         return None

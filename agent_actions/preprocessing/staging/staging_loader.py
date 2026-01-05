@@ -398,17 +398,23 @@ def _prepare_text_chunks_batch(content, agent_config, batch_id, node_id):
         tokenizer_model=tokenizer_model,
         split_method=split_method,
     )
-    return [
-        {
-            "content": chunk,
-            "batch_id": batch_id,
-            "batch_uuid": f"{batch_id}_{idx}",
-            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
-            "target_id": str(uuid.uuid4()),
-            "node_id": node_id,
-        }
-        for idx, chunk in enumerate(chunks)
-    ]
+    result = []
+    for idx, chunk in enumerate(chunks):
+        target_id = str(uuid.uuid4())
+        result.append(
+            {
+                "content": chunk,
+                "batch_id": batch_id,
+                "batch_uuid": f"{batch_id}_{idx}",
+                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, str(chunk))),
+                "target_id": target_id,
+                # Ancestry Chain: first-stage records are their own root
+                "parent_target_id": None,
+                "root_target_id": target_id,
+                "node_id": node_id,
+            }
+        )
+    return result
 
 
 def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
@@ -442,17 +448,25 @@ def _prepare_json_batch(content, batch_id, node_id, file_path, agent_name):
         parsed = content
 
     if isinstance(parsed, list):
-        return [
-            {
-                **row,
-                "batch_id": batch_id,
-                "batch_uuid": f"{batch_id}_{idx}",
-                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
-                "target_id": str(uuid.uuid4()),
-                "node_id": node_id,
-            }
-            for idx, row in enumerate(parsed)
-        ]
+        result = []
+        for idx, row in enumerate(parsed):
+            target_id = str(uuid.uuid4())
+            result.append(
+                {
+                    **row,
+                    "batch_id": batch_id,
+                    "batch_uuid": f"{batch_id}_{idx}",
+                    "source_guid": str(
+                        uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))
+                    ),
+                    "target_id": target_id,
+                    # Ancestry Chain: first-stage records are their own root
+                    "parent_target_id": None,
+                    "root_target_id": target_id,
+                    "node_id": node_id,
+                }
+            )
+        return result
     return [{"content": parsed, "batch_id": batch_id, "batch_uuid": f"{batch_id}_0"}]
 
 
@@ -468,17 +482,23 @@ def _add_batch_metadata(rows, batch_id, node_id):
     Returns:
         List of dicts with batch metadata added
     """
-    return [
-        {
-            **row,
-            "batch_id": batch_id,
-            "batch_uuid": f"{batch_id}_{idx}",
-            "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
-            "target_id": str(uuid.uuid4()),
-            "node_id": node_id,
-        }
-        for idx, row in enumerate(rows)
-    ]
+    result = []
+    for idx, row in enumerate(rows):
+        target_id = str(uuid.uuid4())
+        result.append(
+            {
+                **row,
+                "batch_id": batch_id,
+                "batch_uuid": f"{batch_id}_{idx}",
+                "source_guid": str(uuid.uuid5(uuid.NAMESPACE_OID, json.dumps(row, sort_keys=True))),
+                "target_id": target_id,
+                # Ancestry Chain: first-stage records are their own root
+                "parent_target_id": None,
+                "root_target_id": target_id,
+                "node_id": node_id,
+            }
+        )
+    return result
 
 
 def _prepare_batch_data(ctx: DataPreparationContext):
@@ -537,10 +557,15 @@ def _prepare_batch_data(ctx: DataPreparationContext):
             },
         )
 
-    # Ensure all rows have target_id
+    # Ensure all rows have ancestry chain fields
     for row in data_chunk:
         if "target_id" not in row or not row["target_id"]:
             row["target_id"] = str(uuid.uuid4())
+        # First-stage records are their own root
+        if "parent_target_id" not in row:
+            row["parent_target_id"] = None
+        if "root_target_id" not in row:
+            row["root_target_id"] = row["target_id"]
 
     return data_chunk, src_text
 

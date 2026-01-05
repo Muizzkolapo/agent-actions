@@ -309,6 +309,9 @@ class ContextScopeProcessor:
                         file_path=file_path,
                         agent_indices=agent_indices,
                         caller_lineage=lineage,
+                        # Ancestry Chain fields for parallel branch merging
+                        parent_target_id=current_item.get("parent_target_id"),
+                        root_target_id=current_item.get("root_target_id"),
                     )
                     historical_data = HistoricalNodeDataLoader.load_historical_node_data(request)
 
