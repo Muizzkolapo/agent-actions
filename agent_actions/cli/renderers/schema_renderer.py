@@ -104,9 +104,7 @@ class SchemaRenderer:
 
         return tree
 
-    def render_action_detail(  # pylint: disable=too-many-branches
-        self, schema: ActionSchema
-    ) -> Panel:
+    def render_action_detail(self, schema: ActionSchema) -> Panel:
         """Render detailed view of a single action.
 
         Args:

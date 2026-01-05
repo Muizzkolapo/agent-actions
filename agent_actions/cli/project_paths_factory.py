@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ProjectPaths:  # pylint: disable=too-many-instance-attributes
+class ProjectPaths:
     """Container for project directory paths."""
 
     current_dir: Path
@@ -134,7 +134,6 @@ class ProjectPathsFactory:
             ) from e
 
     @classmethod
-    # pylint: disable=too-many-locals
     def create_project_paths(cls, agent_name: str, filename: str) -> ProjectPaths:
         """
         Create project paths for the given agent.

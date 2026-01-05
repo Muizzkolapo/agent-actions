@@ -55,7 +55,7 @@ class JSONRepairStrategy:
             print(f"Could not repair: {result.error}")
     """
 
-    def attempt_repair(self, raw: str) -> RepairResult:  # pylint: disable=too-many-return-statements
+    def attempt_repair(self, raw: str) -> RepairResult:
         """Try all repair strategies in order.
 
         Args:
@@ -142,7 +142,7 @@ class JSONRepairStrategy:
 
         return text
 
-    def _extract_json_block(self, text: str) -> Optional[str]:  # pylint: disable=too-many-branches
+    def _extract_json_block(self, text: str) -> Optional[str]:
         """Extract JSON object or array from surrounding text.
 
         Finds the first { or [ and matches to its closing bracket.

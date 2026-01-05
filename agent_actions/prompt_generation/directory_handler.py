@@ -8,8 +8,6 @@ from agent_actions.prompt_generation.json_file_handler import JsonFileHandler
 class DirectoryCombiner:
     """Handles combining JSON data from directories."""
 
-    # pylint: disable=too-few-public-methods
-
     def __init__(self):
         """Initialize the directory combiner."""
         self.file_handler = JsonFileHandler()

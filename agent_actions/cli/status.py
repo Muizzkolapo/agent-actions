@@ -17,7 +17,7 @@ from agent_actions.cli.project_paths_factory import ProjectPathsFactory
 from agent_actions.validation.status_validator import StatusCommandArgs
 
 
-class StatusCommand:  # pylint: disable=too-few-public-methods
+class StatusCommand:
     """Implementation of the status command."""
 
     def __init__(self, args: StatusCommandArgs):

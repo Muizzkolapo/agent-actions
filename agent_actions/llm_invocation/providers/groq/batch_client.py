@@ -46,13 +46,13 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             api_key: Groq API key (falls back to GROQ_API_KEY env var)
         """
         try:
-            from groq import Groq  # pylint: disable=import-outside-toplevel
+            from groq import Groq
 
             self._groq_module = Groq
             resolved_key = api_key or os.getenv("GROQ_API_KEY")
             self.client = Groq(api_key=resolved_key)
         except ImportError as e:
-            from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import DependencyError
 
             raise DependencyError(
                 "GroqBatchProvider requires groq package",
@@ -121,7 +121,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
         """Submit batch to Groq API."""
-        from agent_actions.errors import VendorAPIError  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import VendorAPIError
 
         try:
             # Upload file
@@ -162,7 +162,7 @@ class GroqBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Fetch raw results from Groq API."""
-        from agent_actions.errors import (  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import (
             ValidationError,
             VendorAPIError,
         )

@@ -18,7 +18,7 @@ from agent_actions.validation.render_validator import RenderCommandArgs
 logger = logging.getLogger(__name__)
 
 
-class RenderCommand:  # pylint: disable=too-few-public-methods
+class RenderCommand:
     """Implementation of the render command."""
 
     def __init__(self, args: RenderCommandArgs):

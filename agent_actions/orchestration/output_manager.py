@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Agent output management module.
 
@@ -252,7 +251,7 @@ class AgentOutputManager:
 
         return [str(upstream_path)]
 
-    def get_upstream_directories(self, idx: int) -> List[str]:  # pylint: disable=too-many-locals
+    def get_upstream_directories(self, idx: int) -> List[str]:
         """
         Get upstream data directories for an agent, resolving dependencies.
 

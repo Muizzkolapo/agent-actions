@@ -1,6 +1,5 @@
 """Module for loading source data."""
 
-# pylint: disable=broad-exception-caught
 # Broad exceptions are intentionally caught for robust error handling and logging
 import json
 import logging

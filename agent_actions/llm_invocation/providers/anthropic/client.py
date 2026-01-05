@@ -10,7 +10,7 @@ from datetime import datetime
 from textwrap import dedent
 from typing import Any, Dict, List, Optional, Union
 
-import anthropic  # pylint: disable=import-error
+import anthropic
 
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.llm_invocation.providers.client_base import BaseClient
@@ -94,7 +94,7 @@ class AnthropicClient(BaseClient):
             )
             from agent_actions.errors import (
                 VendorAPIError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise VendorAPIError(
                 "No valid content with 'input' found in response",
@@ -117,7 +117,7 @@ class AnthropicClient(BaseClient):
         """Non-JSON mode is not implemented for Claude."""
         from agent_actions.errors import (
             ConfigurationError,
-        )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+        )  # New modular pattern!
 
         raise ConfigurationError(
             "Non-JSON mode not implemented for Claude",

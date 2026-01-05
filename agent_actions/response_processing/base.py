@@ -29,7 +29,6 @@ class ResponseInterceptor(ABC):
         """Configure the interceptor from agent config."""
 
 
-# pylint: disable=too-few-public-methods
 class InterceptorChain:
     """Manages the chain of interceptors."""
 

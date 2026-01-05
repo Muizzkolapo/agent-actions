@@ -46,7 +46,7 @@ class WorkflowStaticAnalyzer:
         4. Fields haven't been dropped from output
     """
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         workflow_config: Dict[str, Any],
         udf_registry: Optional[Dict[str, Any]] = None,
@@ -118,7 +118,6 @@ class WorkflowStaticAnalyzer:
         """Add the special source node for workflow input."""
         if self.source_schema:
             # Extract fields from provided source schema
-            # pylint: disable=protected-access
             fields = self.schema_extractor._extract_fields_from_json_schema(self.source_schema)
             schema = OutputSchema(schema_fields=fields)
         else:
@@ -379,7 +378,7 @@ class WorkflowStaticAnalyzer:
         Returns:
             Configured WorkflowStaticAnalyzer
         """
-        import yaml  # pylint: disable=import-outside-toplevel
+        import yaml
 
         with open(workflow_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)

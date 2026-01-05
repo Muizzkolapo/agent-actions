@@ -12,7 +12,7 @@ class GuardType(str, Enum):
     UDF = "udf"
 
 
-class GuardExpression:  # pylint: disable=too-few-public-methods
+class GuardExpression:
     """Parsed guard expression."""
 
     def __init__(self, guard_type: GuardType, expression: str, original: str):
@@ -240,7 +240,7 @@ class GuardParser:
         Returns:
             GuardConfig instance
         """
-        from .consolidated_guard import parse_guard_config  # pylint: disable=import-outside-toplevel,cyclic-import
+        from .consolidated_guard import parse_guard_config
 
         return parse_guard_config(guard_data)
 

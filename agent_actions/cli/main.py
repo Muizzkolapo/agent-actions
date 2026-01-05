@@ -34,7 +34,7 @@ from agent_actions.utilities.safe_format import format_exception_chain_for_debug
 __version__ = "1.0.0"
 
 
-class CLI:  # pylint: disable=too-few-public-methods
+class CLI:
     """Agent Actions CLI application."""
 
     def __init__(self) -> None:
@@ -57,7 +57,7 @@ class CLI:  # pylint: disable=too-few-public-methods
             help="Enable debug mode with verbose logging and source file/line references",
         )
         @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
-        def group(debug: bool, verbose: bool) -> None:  # pylint: disable=unused-argument
+        def group(debug: bool, verbose: bool) -> None:
             """Agent Actions CLI tool for managing and running agent workflows."""
 
         return group
@@ -148,7 +148,6 @@ class CLI:  # pylint: disable=too-few-public-methods
         print(f"Agent Actions CLI v{__version__}")
         return 0
 
-    # pylint: disable=too-many-return-statements
     def execute(self, argv: Optional[Sequence[str]] = None) -> int:
         """
         Execute the CLI application with the provided arguments.
@@ -201,7 +200,7 @@ class CLI:  # pylint: disable=too-few-public-methods
             )
             print(click.style("Error: ", fg="red", bold=True) + error_msg, file=sys.stderr)
             return 1
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             context = {
                 "command": argv[0] if argv else "agent-actions",
                 "operation": "cli_execution",

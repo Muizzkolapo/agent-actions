@@ -634,7 +634,6 @@ def _process_batch_mode(ctx: BatchProcessingContext):
         None (writes output files as side effect)
     """
     # Import here to avoid circular dependency
-    # pylint: disable=import-outside-toplevel
     from agent_actions.llm_invocation.batch.batch_service import BatchService
 
     local_batch_id = _get_batch_id_from_chunk(ctx.data_chunk)

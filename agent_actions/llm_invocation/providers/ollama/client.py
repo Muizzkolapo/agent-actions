@@ -12,7 +12,7 @@ A mirror of OpenAIClient that supports:
 
 import json
 import os
-from ollama import Client  # pylint: disable=import-error
+from ollama import Client
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 

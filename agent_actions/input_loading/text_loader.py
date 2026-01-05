@@ -1,6 +1,5 @@
 """Text content loader implementation."""
 
-# pylint: disable=duplicate-code
 # Similar loader pattern is intentional across different file type loaders
 import logging
 from typing import Any, Optional

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Union
 
 
-class BatchSourceHandler:  # pylint: disable=too-few-public-methods
+class BatchSourceHandler:
     """
     Handles batch source data persistence.
 
@@ -29,7 +29,6 @@ class BatchSourceHandler:  # pylint: disable=too-few-public-methods
             base_directory: Base directory for input files
             _output_directory: Output directory for processed files (unused)
         """
-        # pylint: disable=import-outside-toplevel
         from agent_actions.file_io.unified_source_data_saver import UnifiedSourceDataSaver
 
         # Calculate paths for source saving

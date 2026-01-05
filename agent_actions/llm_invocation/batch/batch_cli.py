@@ -35,7 +35,6 @@ def status(batch_id: str = None):
     args = BatchCommandArgs(batch_id=batch_id)
     service = BatchService()
     if not args.batch_id:
-        # pylint: disable=protected-access,no-member
         args.batch_id = service._get_last_batch_job_id()
         if not args.batch_id:
             click.echo("No batch ID provided and no previous batch job found.")
@@ -66,7 +65,6 @@ def retrieve(batch_id: str = None, output_dir: str = "."):
     args = BatchCommandArgs(batch_id=batch_id, output_dir=output_dir)
     service = BatchService()
     if not args.batch_id:
-        # pylint: disable=protected-access,no-member
         args.batch_id = service._get_last_batch_job_id()
         if not args.batch_id:
             click.echo("No batch ID provided and no previous batch job found.")

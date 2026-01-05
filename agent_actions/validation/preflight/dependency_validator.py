@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """Dependency validator for pre-flight validation.
 
 Validates agent dependencies, detecting circular dependencies and missing

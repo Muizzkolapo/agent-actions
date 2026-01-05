@@ -56,7 +56,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                     )
         except IOError as e:
             self.handle_file_error(e, "write_staging", self.file_path, file_type=self.file_type)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
                 e,
@@ -80,7 +80,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 json.dump(data, file, indent=4)
         except IOError as e:
             self.handle_file_error(e, "write_target", self.file_path, file_type=self.file_type)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
                 e,
@@ -101,7 +101,7 @@ class FileWriter(ProcessorErrorHandlerMixin):
                 json.dump(data, file, indent=4)
         except IOError as e:
             self.handle_file_error(e, "write_source", self.file_path, file_type=self.file_type)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             # Catch-all to delegate all errors to error handler mixin
             self.handle_processing_error(
                 e,

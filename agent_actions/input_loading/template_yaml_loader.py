@@ -1,5 +1,4 @@
 """Custom YAML loader for handling template syntax in old workflow files."""
-# pylint: disable=too-few-public-methods,too-many-locals
 # too-few-public-methods: This is a utility class with a single responsibility
 # too-many-locals: Complex template processing requires multiple local variables
 

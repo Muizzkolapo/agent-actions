@@ -49,7 +49,7 @@ class WorkflowSchemaService:
         analyzer: Underlying WorkflowStaticAnalyzer instance
     """
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         workflow_config: Dict[str, Any],
         udf_registry: Optional[Dict[str, Any]] = None,

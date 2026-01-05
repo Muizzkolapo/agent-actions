@@ -110,7 +110,7 @@ def _process_filter_result(
     return (True, None)
 
 
-def run_dynamic_agent(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def run_dynamic_agent(
     agent_config: Dict,
     agent_name: str,
     context: Any,
@@ -220,7 +220,7 @@ def _should_skip_guard(agent_config: Dict, context: Any) -> bool:
         request = FilterItemRequest(data=context, condition=guard_config["clause"])
         filter_result = filter_service.filter_item(request)
         return not filter_result.matched if filter_result.success else False
-    except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
+    except Exception as e:  # Intentional fallback
         logger.debug(
             "Guard skip check failed, using passthrough_on_error setting: %s",
             e,
@@ -243,7 +243,7 @@ def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
             passthrough_on_error = guard_config.get("passthrough_on_error", True)
             return not passthrough_on_error
         return not filter_result.matched
-    except Exception as e:  # pylint: disable=broad-exception-caught # Intentional fallback
+    except Exception as e:  # Intentional fallback
         logger.debug(
             "Guard filter check failed, using passthrough_on_error setting: %s",
             e,
@@ -253,7 +253,7 @@ def _should_filter_guard(agent_config: Dict, context: Any) -> bool:
         return not passthrough_on_error
 
 
-def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def transform_with_passthrough(
     data: List[Any],
     context_data: Dict[str, Any],
     source_guid: str,

@@ -13,7 +13,7 @@ from agent_actions.llm_invocation.batch.core.batch_constants import (
 )
 
 
-class BatchContextMetadata:  # pylint: disable=too-few-public-methods
+class BatchContextMetadata:
     """Helper class for batch context metadata operations.
 
     Provides static methods for accessing and modifying internal metadata

@@ -30,7 +30,6 @@ class PathValidator(BaseValidator):
         super().__init__()
         self.issues: List[ValidationIssue] = []
 
-    # pylint: disable=too-many-branches
     def validate(self, data: Any, config: Optional[Dict[str, Any]] = None) -> bool:
         """Validate paths in the provided configuration.
 
@@ -132,7 +131,6 @@ class PathValidator(BaseValidator):
 
         return not self.has_errors()
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def validate_paths(
         self,
         paths: List[str],

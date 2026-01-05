@@ -1,5 +1,4 @@
 """External service and vendor API errors."""
-# pylint: disable=too-many-arguments,too-many-positional-arguments,unnecessary-pass
 # Too-many-arguments: Legacy compatibility for VendorAPIError requires all parameters
 # Unnecessary-pass: Simple exception classes inherit all behavior from parent
 

@@ -5,8 +5,6 @@ Orchestrates automatic retry of failed/missing batch records.
 Handles the full retry chain lifecycle from detection to result merging.
 """
 
-# pylint: disable=duplicate-code
-
 import logging
 import time
 from dataclasses import dataclass, field
@@ -119,8 +117,6 @@ class BatchRetryOrchestrator:
             output_directory="/path/to/output",
         )
     """
-
-    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
 
     # Poll interval for checking batch status (seconds)
     DEFAULT_POLL_INTERVAL = 30
@@ -505,7 +501,6 @@ class BatchRetryOrchestrator:
             retry_results = provider.retrieve_results(retry_batch_id, output_directory)
 
             # Import here to avoid circular dependency
-            # pylint: disable=import-outside-toplevel
             from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
                 BatchResultReconciler,
             )

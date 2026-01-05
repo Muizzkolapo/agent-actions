@@ -43,7 +43,7 @@ class BatchClientFactory:
     """
 
     @staticmethod
-    def create_client(  # pylint: disable=too-many-return-statements
+    def create_client(
         client_type: str = "openai", config: Optional[Dict[str, Any]] = None
     ) -> BaseBatchClient:
         """
@@ -69,7 +69,6 @@ class BatchClientFactory:
             try:
                 return GeminiBatchClient(api_key=api_key)
             except ImportError as e:
-                # pylint: disable=import-outside-toplevel
                 from agent_actions.errors import DependencyError
 
                 raise DependencyError(
@@ -86,7 +85,7 @@ class BatchClientFactory:
             return OllamaBatchClient(base_url=base_url)
         if client_type == "anthropic":
             if not ANTHROPIC_AVAILABLE:
-                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import DependencyError
 
                 raise DependencyError(
                     "AnthropicBatchClient requires anthropic package",
@@ -106,7 +105,6 @@ class BatchClientFactory:
                     enable_prompt_caching=enable_prompt_caching,
                 )
             except ImportError as e:
-                # pylint: disable=import-outside-toplevel
                 from agent_actions.errors import DependencyError
 
                 raise DependencyError(
@@ -121,7 +119,7 @@ class BatchClientFactory:
 
         if client_type == "groq":
             if not GROQ_AVAILABLE:
-                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import DependencyError
 
                 raise DependencyError(
                     "GroqBatchClient requires groq package",
@@ -136,7 +134,7 @@ class BatchClientFactory:
 
         if client_type == "mistral":
             if not MISTRAL_AVAILABLE:
-                from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+                from agent_actions.errors import DependencyError
 
                 raise DependencyError(
                     "MistralBatchClient requires mistralai package",
@@ -160,7 +158,6 @@ class BatchClientFactory:
                 polls_until_complete=polls_until_complete,
             )
 
-        # pylint: disable=import-outside-toplevel
         from agent_actions.errors import ConfigurationError
 
         supported = BatchClientFactory.get_supported_clients()

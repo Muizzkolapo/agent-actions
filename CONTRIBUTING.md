@@ -19,7 +19,7 @@ task hooks:install
 task check
 
 # Individual checks
-task lint          # pylint
+task lint          # ruff linting
 task lint:ruff     # ruff (logging rules)
 task lint:logging  # AST-based logging checker
 task mypy          # type checking

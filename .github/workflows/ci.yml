@@ -29,9 +29,6 @@ jobs:
       - name: Run ruff format check
         run: uv run ruff format --check agent_actions tests
 
-      - name: Run pylint
-        run: task lint
-
   # Dead code analysis (warning only)
   dead-code:
     name: Dead Code Analysis

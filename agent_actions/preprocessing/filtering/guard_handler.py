@@ -534,7 +534,7 @@ def get_guard_handler() -> GuardHandler:
     Returns:
         Singleton GuardHandler instance
     """
-    global _GLOBAL_GUARD_HANDLER  # pylint: disable=global-statement
+    global _GLOBAL_GUARD_HANDLER
     if _GLOBAL_GUARD_HANDLER is None:
         _GLOBAL_GUARD_HANDLER = GuardHandler(get_filter_service())
     return _GLOBAL_GUARD_HANDLER

@@ -17,7 +17,7 @@ from .strategies import (
 )
 
 
-class PassthroughTransformer:  # pylint: disable=too-few-public-methods
+class PassthroughTransformer:
     """
     Orchestrates passthrough transformations using Strategy Pattern.
 
@@ -51,7 +51,7 @@ class PassthroughTransformer:  # pylint: disable=too-few-public-methods
             DefaultStructureStrategy(),  # Catch-all
         ]
 
-    def transform_with_passthrough(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform_with_passthrough(
         self,
         data: List,
         context_data: Dict,

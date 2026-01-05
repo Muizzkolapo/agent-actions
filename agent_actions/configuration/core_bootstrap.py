@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Dependency Injection Configuration for Agent Actions.
 
@@ -43,10 +42,9 @@ class DIConfigurator:
     @staticmethod
     def _register_core_services(
         container: DependencyContainer,
-        config: Dict[str, Any],  # pylint: disable=unused-argument
+        config: Dict[str, Any],
     ):
         """Register core application services."""
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
         from agent_actions.state_management.path_manager import PathManager
 
@@ -57,11 +55,10 @@ class DIConfigurator:
     @staticmethod
     def _register_processors(
         container: DependencyContainer,
-        config: Dict[str, Any],  # pylint: disable=unused-argument
+        config: Dict[str, Any],
     ):
         """Register processor implementations."""
         # Data processors
-        # pylint: disable=import-outside-toplevel
         from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
 
@@ -71,7 +68,7 @@ class DIConfigurator:
     @staticmethod
     def _register_utilities(
         container: DependencyContainer,
-        config: Dict[str, Any],  # pylint: disable=unused-argument
+        config: Dict[str, Any],
     ):
         """Register utility services."""
         # Note: These imports may need to be updated based on the new structure
@@ -85,7 +82,6 @@ class DIConfigurator:
     @staticmethod
     def configure_for_testing() -> DependencyContainer:
         """Configure container for testing with mocks."""
-        # pylint: disable=import-outside-toplevel
         from unittest.mock import Mock
 
         container = DependencyContainer()
@@ -114,7 +110,6 @@ class DIConfigurator:
         container.register_factory(IGenerator, generator_factory)
 
         # Mock core services
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
         from agent_actions.state_management.path_manager import PathManager
 

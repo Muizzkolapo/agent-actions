@@ -29,7 +29,7 @@ class ToolClient:
         if not model_name:
             from agent_actions.errors import (
                 ConfigurationError,
-            )  # New modular pattern!  # pylint: disable=import-outside-toplevel
+            )  # New modular pattern!
 
             raise ConfigurationError(
                 "Tool vendor requires 'model_name' (UDF path) in agent config",

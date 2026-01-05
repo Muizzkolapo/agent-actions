@@ -165,12 +165,12 @@ class PipelineConfig(BaseModel):
 
     def get_stage(self, stage_name: str) -> Optional[StageConfig]:
         """Get a stage by name."""
-        return self.stage_registry.get(stage_name)  # pylint: disable=no-member
+        return self.stage_registry.get(stage_name)
 
     def remove_stage(self, stage_name: str) -> "PipelineConfig":
         """Remove a stage from the pipeline."""
         self.stages = [s for s in self.stages if s.name != stage_name]
-        self.stage_registry.pop(stage_name, None)  # pylint: disable=no-member
+        self.stage_registry.pop(stage_name, None)
         return self
 
     def validate_dependencies(self) -> bool:
@@ -241,19 +241,19 @@ class PipelineRegistry(BaseModel):
 
     def get_pipeline(self, name: str) -> Optional[PipelineConfig]:
         """Get a pipeline configuration."""
-        return self.pipelines.get(name)  # pylint: disable=no-member
+        return self.pipelines.get(name)
 
     def get_workflow(self, name: str) -> Optional[WorkflowConfig]:
         """Get a workflow configuration."""
-        return self.workflows.get(name)  # pylint: disable=no-member
+        return self.workflows.get(name)
 
     def list_pipelines(self) -> List[str]:
         """List all registered pipeline names."""
-        return list(self.pipelines.keys())  # pylint: disable=no-member
+        return list(self.pipelines.keys())
 
     def list_workflows(self) -> List[str]:
         """List all registered workflow names."""
-        return list(self.workflows.keys())  # pylint: disable=no-member
+        return list(self.workflows.keys())
 
 
 __all__ = [

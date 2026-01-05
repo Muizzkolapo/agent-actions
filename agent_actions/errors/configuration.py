@@ -1,5 +1,4 @@
 """Configuration-related errors."""
-# pylint: disable=too-many-arguments,too-many-positional-arguments,unnecessary-pass
 # Too-many-arguments: Legacy compatibility requires preserving all parameters
 # Unnecessary-pass: Simple exception classes inherit all behavior from parent
 

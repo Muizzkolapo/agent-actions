@@ -374,7 +374,6 @@ class ActionExpander:
         return replacer
 
     @staticmethod
-    # pylint: disable=too-many-locals
     def _expand_loop_action(
         action: Dict[str, Any],
         loop_config: Dict[str, Any],

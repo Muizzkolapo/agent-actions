@@ -20,7 +20,7 @@ class ProcessingMode(Enum):
 
 
 # Base interfaces
-class IAsyncCapable(ABC):  # pylint: disable=too-few-public-methods
+class IAsyncCapable(ABC):
     """Interface for components that support async operations."""
 
     @abstractmethod
@@ -32,15 +32,15 @@ class IAsyncCapable(ABC):  # pylint: disable=too-few-public-methods
         """Return the preferred processing mode for this component."""
 
 
-class ILoader(IAsyncCapable):  # pylint: disable=too-few-public-methods
+class ILoader(IAsyncCapable):
     """Base interface for all loaders."""
 
 
-class IProcessor(IAsyncCapable):  # pylint: disable=too-few-public-methods
+class IProcessor(IAsyncCapable):
     """Base interface for all processors."""
 
 
-class IGenerator(IAsyncCapable):  # pylint: disable=too-few-public-methods
+class IGenerator(IAsyncCapable):
     """Base interface for all generators."""
 
 

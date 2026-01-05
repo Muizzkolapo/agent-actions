@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """
 Agent workflow orchestration.
 
@@ -54,7 +53,7 @@ from agent_actions.prompt_generation.output_processor import OutputProcessor
 logger = logging.getLogger(__name__)
 
 
-class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
+class AgentWorkflow:
     """
     Orchestrates multi-agent workflow execution.
 
@@ -121,7 +120,7 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
         )
         self.artifact_linker = ArtifactLinker(workflows_root)
 
-    def _create_child_workflow(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _create_child_workflow(
         self,
         config_path: str,
         user_code_path: Optional[str],
@@ -168,7 +167,6 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
             self.config.paths.parent_output, self.config.paths.constructor_path
         )
         # Import here to avoid circular dependency
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.batch_service import BatchService
 
         batch_service = BatchService(
@@ -675,7 +673,6 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
 
     def _handle_workflow_error(self, error: Exception):
         """Handle workflow execution error with structured output."""
-        # pylint: disable=import-outside-toplevel
         from agent_actions.errors.preflight import PreFlightValidationError
 
         self.state.failed = True
@@ -700,4 +697,4 @@ class AgentWorkflow:  # pylint: disable=too-many-instance-attributes
 
         # Mark exception as already displayed to prevent duplicate output
         # The CLI decorator will check for this attribute
-        error._already_displayed = True  # pylint: disable=protected-access
+        error._already_displayed = True

@@ -72,7 +72,6 @@ class BatchJobManager:
         client = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
         return client.check_status(batch_id)
 
-    # pylint: disable=too-many-return-statements
     def are_all_jobs_completed(self, output_directory: str) -> bool:
         """Check if all batch jobs in the registry are completed.
 
@@ -109,7 +108,7 @@ class BatchJobManager:
                     if actual_status not in BatchStatus.terminal_states():
                         return False
 
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except Exception as e:
                     logger.warning(
                         "Failed to check status for batch %s in registry: %s",
                         batch_id,
@@ -133,7 +132,6 @@ class BatchJobManager:
         except (json.JSONDecodeError, KeyError):
             return True
 
-    # pylint: disable=too-many-return-statements,too-many-branches
     def get_registry_status(self, output_directory: str) -> str:
         """Get the overall status of all batch jobs in the registry.
 
@@ -176,7 +174,7 @@ class BatchJobManager:
                     else:
                         in_progress_count += 1
 
-                except Exception as e:  # pylint: disable=broad-exception-caught
+                except Exception as e:
                     logger.debug(
                         "Could not check status for batch %s, treating as in_progress: %s",
                         batch_id,

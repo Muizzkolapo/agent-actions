@@ -15,7 +15,7 @@ from agent_actions.reprompting.json_repair import JSONRepairStrategy, RepairResu
 
 
 @dataclass
-class RepromptResult:  # pylint: disable=too-many-instance-attributes
+class RepromptResult:
     """Result of reprompt processing.
 
     Attributes:
@@ -249,7 +249,7 @@ class RepromptEngine:
         try:
             text = str(response)
             return self.json_repair.attempt_repair(text)
-        except Exception as e:  # pylint: disable=broad-exception-caught
+        except Exception as e:
             return RepairResult(success=False, error=str(e))
 
     def generate_improved_prompt(

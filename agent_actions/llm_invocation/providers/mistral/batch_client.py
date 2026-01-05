@@ -45,13 +45,13 @@ class MistralBatchClient(BaseBatchClient):
             api_key: Mistral API key (falls back to MISTRAL_API_KEY env var)
         """
         try:
-            from mistralai import Mistral  # pylint: disable=import-outside-toplevel
+            from mistralai import Mistral
 
             self._mistral_module = Mistral
             resolved_key = api_key or os.getenv("MISTRAL_API_KEY")
             self.client = Mistral(api_key=resolved_key)
         except ImportError as e:
-            from agent_actions.errors import DependencyError  # pylint: disable=import-outside-toplevel
+            from agent_actions.errors import DependencyError
 
             raise DependencyError(
                 "MistralBatchProvider requires mistralai package",
@@ -116,7 +116,7 @@ class MistralBatchClient(BaseBatchClient):
 
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
         """Submit batch to Mistral API."""
-        from agent_actions.errors import VendorAPIError  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import VendorAPIError
 
         try:
             # Upload file
@@ -162,7 +162,7 @@ class MistralBatchClient(BaseBatchClient):
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
         """Fetch raw results from Mistral API."""
-        from agent_actions.errors import (  # pylint: disable=import-outside-toplevel
+        from agent_actions.errors import (
             ValidationError,
             VendorAPIError,
         )

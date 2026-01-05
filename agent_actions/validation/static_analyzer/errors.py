@@ -78,10 +78,10 @@ class StaticTypeIssue:
         return "\n".join(lines)
 
 
-class StaticTypeError(StaticTypeIssue):  # pylint: disable=too-few-public-methods
+class StaticTypeError(StaticTypeIssue):
     """Blocking error that prevents workflow execution."""
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         message: str,
         location: FieldLocation,
@@ -101,10 +101,10 @@ class StaticTypeError(StaticTypeIssue):  # pylint: disable=too-few-public-method
         )
 
 
-class StaticTypeWarning(StaticTypeIssue):  # pylint: disable=too-few-public-methods
+class StaticTypeWarning(StaticTypeIssue):
     """Non-blocking warning that doesn't prevent execution."""
 
-    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def __init__(
         self,
         message: str,
         location: FieldLocation,
@@ -204,7 +204,6 @@ class StaticValidationResult:
     def raise_if_invalid(self) -> None:
         """Raise exception if validation failed."""
         if not self.is_valid:
-            # pylint: disable=import-outside-toplevel
             from agent_actions.errors.preflight import PreFlightValidationError
 
             raise PreFlightValidationError(

@@ -148,11 +148,11 @@ class VendorRegistry(BaseModel):
 
     def get_vendor_config(self, vendor_name: str) -> Optional[VendorConfig]:
         """Get configuration for a specific vendor."""
-        return self.vendors.get(vendor_name)  # pylint: disable=no-member
+        return self.vendors.get(vendor_name)
 
     def get_default_vendor_config(self) -> Optional[VendorConfig]:
         """Get the default vendor configuration."""
-        return self.vendors.get(self.default_vendor)  # pylint: disable=no-member
+        return self.vendors.get(self.default_vendor)
 
     def register_vendor(self, name: str, config: VendorConfig):
         """Register a new vendor configuration."""
@@ -160,7 +160,7 @@ class VendorRegistry(BaseModel):
 
     def list_vendor_types(self) -> List[VendorType]:
         """Get list of all registered vendor types."""
-        return [config.vendor_type for config in self.vendors.values()]  # pylint: disable=no-member
+        return [config.vendor_type for config in self.vendors.values()]
 
     @classmethod
     def create_default_registry(cls) -> "VendorRegistry":

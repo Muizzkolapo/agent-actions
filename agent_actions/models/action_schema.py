@@ -95,7 +95,7 @@ class UpstreamReference:
 
 
 @dataclass
-class ActionSchema:  # pylint: disable=too-many-instance-attributes
+class ActionSchema:
     """Unified schema for any action type.
 
     Provides a consistent interface for all action types (llm, tool, source, seed),

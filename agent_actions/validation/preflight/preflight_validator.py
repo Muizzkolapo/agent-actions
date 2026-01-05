@@ -96,7 +96,6 @@ class PreFlightValidator:
         self._template_validator = TemplateVariableValidator()
         self._context_validator = ContextStructureValidator()
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def validate(
         self,
         template: Optional[str] = None,

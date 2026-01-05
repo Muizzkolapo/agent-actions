@@ -531,7 +531,6 @@ class SafeExpressionEvaluator:
 
         try:
             # Use eval with restricted globals and locals (safe: no builtins, validated AST)
-            # pylint: disable=eval-used
             return eval(expression, {"__builtins__": {}}, safe_context)  # nosec B307
         except Exception as e:
             raise ValueError(f"Error evaluating expression: {e}") from e
@@ -635,7 +634,7 @@ _GLOBAL_PARSER = None
 
 def get_global_parser() -> WhereClauseParser:
     """Get the global WHERE clause parser instance."""
-    global _GLOBAL_PARSER  # pylint: disable=global-statement
+    global _GLOBAL_PARSER
     if _GLOBAL_PARSER is None:
         _GLOBAL_PARSER = WhereClauseParser()
     return _GLOBAL_PARSER

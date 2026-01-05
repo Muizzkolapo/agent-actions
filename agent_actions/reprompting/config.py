@@ -43,7 +43,7 @@ PRESETS: Dict[str, Dict[str, Any]] = {
 
 
 @dataclass
-class RepromptConfig:  # pylint: disable=too-many-instance-attributes
+class RepromptConfig:
     """Simple configuration for reprompting with preset support.
 
     Attributes:

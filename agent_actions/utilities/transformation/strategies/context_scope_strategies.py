@@ -35,7 +35,7 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
             and has_passthrough_config
         )
 
-    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform(
         self,
         data: List,
         context_data: Dict,
@@ -85,7 +85,6 @@ class ContextScopeStructuredStrategy(IPassthroughTransformStrategy):
 
         if context_scope and context_scope.get("passthrough"):
             passthrough_refs = context_scope.get("passthrough", [])
-            # pylint: disable=no-member
             return ContextScopeProcessor.extract_field_names_from_references(passthrough_refs)
 
         return []
@@ -114,7 +113,7 @@ class ContextScopeUnstructuredStrategy(IPassthroughTransformStrategy):
             and has_passthrough_config
         )
 
-    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform(
         self,
         data: List,
         context_data: Dict,
@@ -173,7 +172,7 @@ class NoOpStrategy(IPassthroughTransformStrategy):
             and (passthrough_fields is None or len(passthrough_fields) == 0)
         )
 
-    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform(
         self,
         data: List,
         context_data: Dict,
@@ -206,7 +205,7 @@ class DefaultStructureStrategy(IPassthroughTransformStrategy):
         """
         return True  # Catch-all
 
-    def transform(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def transform(
         self,
         data: List,
         context_data: Dict,

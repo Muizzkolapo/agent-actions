@@ -49,7 +49,7 @@ def skills():
     is_flag=True,
     help="Overwrite existing skills if they exist",
 )
-def install(tool: str, force: bool):  # pylint: disable=too-many-branches
+def install(tool: str, force: bool):
     """
     Install bundled skills to your project.
 

@@ -74,7 +74,7 @@ class AgentStrategy(ABC):
         if self.processor_factory is None:
             raise RuntimeError("BaseAgentStrategy requires processor_factory")
         # Import here to avoid circular dependency
-        from agent_actions.orchestration.target_generator import create_target_generator_from_params  # pylint: disable=import-outside-toplevel
+        from agent_actions.orchestration.target_generator import create_target_generator_from_params
 
         generator = create_target_generator_from_params(
             agent_config=params.agent_config,

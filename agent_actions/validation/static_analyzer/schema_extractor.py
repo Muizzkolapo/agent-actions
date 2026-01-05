@@ -177,7 +177,7 @@ class SchemaExtractor:
         """
         # Import here to avoid circular imports
         if reference_extractor is None:
-            from .reference_extractor import (  # pylint: disable=import-outside-toplevel
+            from .reference_extractor import (
                 ReferenceExtractor,
             )
 
@@ -259,7 +259,7 @@ class SchemaExtractor:
             else:
                 input_schema.optional_fields.add(field_name)
 
-    def _extract_llm_schema(  # pylint: disable=too-many-branches,too-many-statements
+    def _extract_llm_schema(
         self,
         config: Dict[str, Any],
         output: OutputSchema,
@@ -289,7 +289,7 @@ class SchemaExtractor:
                     output.json_schema = loaded
                     output.schema_fields = self._extract_fields_from_json_schema(loaded)
                     return
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     pass  # Schema loading failed - will fall through to schemaless
 
         if not schema_def:
@@ -323,7 +323,7 @@ class SchemaExtractor:
                     loaded = schema_loader.load_schema(schema_def)
                     output.json_schema = loaded
                     output.schema_fields = self._extract_fields_from_json_schema(loaded)
-                except Exception:  # pylint: disable=broad-exception-caught
+                except Exception:
                     output.is_dynamic = True
             else:
                 output.is_dynamic = True
@@ -434,9 +434,7 @@ class SchemaExtractor:
         if config.get("return_collection"):
             output.schema_fields.add("input_data")
 
-    def _extract_fields_from_json_schema(  # pylint: disable=too-many-branches
-        self, schema: Dict[str, Any]
-    ) -> Set[str]:
+    def _extract_fields_from_json_schema(self, schema: Dict[str, Any]) -> Set[str]:
         """Extract top-level field names from JSON schema.
 
         Handles:

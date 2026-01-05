@@ -1,4 +1,3 @@
-# pylint: disable=duplicate-code
 """Batch retrieval service for downloading batch job results.
 
 This service encapsulates all result retrieval functionality, extracted from
@@ -26,7 +25,7 @@ from agent_actions.errors import ExternalServiceError
 logger = logging.getLogger(__name__)
 
 
-class BatchRetrievalService:  # pylint: disable=too-few-public-methods
+class BatchRetrievalService:
     """Service for retrieving batch job results.
 
     Handles downloading results from batch API providers and saving to JSONL files.
@@ -134,7 +133,6 @@ class BatchRetrievalService:  # pylint: disable=too-few-public-methods
                 }
                 f.write(json.dumps(raw_format) + "\n")
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _retrieve_results(
         self,
         provider: BaseBatchClient,
@@ -158,7 +156,6 @@ class BatchRetrievalService:  # pylint: disable=too-few-public-methods
         Returns:
             List of batch results
         """
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )

@@ -84,7 +84,7 @@ def retry(
                 for attempt in range(1, strategy.max_attempts + 1):
                     try:
                         return await func(*args, **kwargs)
-                    except exception_types as e:  # pylint: disable=catching-non-exception
+                    except exception_types as e:
                         last_exception = e
                         if attempt == strategy.max_attempts:
                             logger.warning(
@@ -124,7 +124,7 @@ def retry(
             for attempt in range(1, strategy.max_attempts + 1):
                 try:
                     return func(*args, **kwargs)
-                except exception_types as e:  # pylint: disable=catching-non-exception
+                except exception_types as e:
                     last_exception = e
                     if attempt == strategy.max_attempts:
                         logger.warning(

@@ -29,13 +29,12 @@ from agent_actions.errors import ProcessingError
 logger = logging.getLogger(__name__)
 
 
-class BatchRetryService:  # pylint: disable=too-few-public-methods
+class BatchRetryService:
     """Service for handling batch job retry operations.
 
     Encapsulates retry orchestration, reconciliation, and retry chain management.
     """
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def __init__(
         self,
         client_resolver: BatchClientResolver,
@@ -60,7 +59,6 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
         self._task_preparator = task_preparator
         self._retry_orchestrator: Optional[BatchRetryOrchestrator] = None
 
-    # pylint: disable=too-many-locals
     def retry_batch_job(
         self,
         batch_id: str,
@@ -119,7 +117,6 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
         )
 
         # Create reconciler to find missing records
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )
@@ -198,7 +195,6 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
             )
         return self._retry_orchestrator
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def _retrieve_results(
         self,
         provider: BaseBatchClient,
@@ -222,7 +218,6 @@ class BatchRetryService:  # pylint: disable=too-few-public-methods
         Returns:
             List of batch results
         """
-        # pylint: disable=import-outside-toplevel
         from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
         )
