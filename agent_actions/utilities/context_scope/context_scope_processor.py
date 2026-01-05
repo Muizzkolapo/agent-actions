@@ -225,7 +225,7 @@ class ContextScopeProcessor:
     def build_field_context_with_history(
         contents: Dict,
         agent_name: str,
-        agent_config: Dict,
+        agent_config: Optional[Dict],
         agent_indices: Optional[Dict[str, int]] = None,
         dependency_configs: Optional[Dict[str, Dict]] = None,
         source_content: Optional[Any] = None,
@@ -238,6 +238,7 @@ class ContextScopeProcessor:
         from agent_actions.utilities.context_scope.llm_context_utils import LLMContextUtils
         from agent_actions.preprocessing.context.historical_node_loader import (
             HistoricalNodeDataLoader,
+            HistoricalDataRequest,
         )
 
         field_context = {}
@@ -318,10 +319,6 @@ class ContextScopeProcessor:
                         continue
 
                     # Load historical data for this action
-                    from agent_actions.preprocessing.context.historical_node_loader import (
-                        HistoricalDataRequest,
-                    )
-
                     request = HistoricalDataRequest(
                         action_name=action_name,
                         lineage=lineage,
@@ -341,7 +338,7 @@ class ContextScopeProcessor:
         # Fallback: Also check declared dependencies for flat contents
         # (Backward compatibility for immediate predecessor data in contents)
         if dependency_configs:
-            dependencies = agent_config.get("dependencies", [])
+            dependencies = agent_config.get("dependencies", []) if agent_config else []
             for dep_name in dependencies:
                 # Skip if already loaded from historical data
                 if dep_name in field_context:

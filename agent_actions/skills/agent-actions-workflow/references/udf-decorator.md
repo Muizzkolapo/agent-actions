@@ -184,7 +184,7 @@ When your UDF returns nested objects, **always use nested TypedDicts** instead o
 ```python
 # BAD - Will cause schema validation errors
 class MyOutput(TypedDict, total=False):
-    results: List[Dict[str, Any]]      # Framework interprets incorrectly
+    results: List[Dict[str, Any]]      # Converted to additionalProperties: {type: 'string'}
     metadata: Dict[str, Any]           # All values must be strings!
 ```
 

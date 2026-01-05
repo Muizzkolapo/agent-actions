@@ -136,7 +136,7 @@ target_word_counts: dict
 
 ### Dict[str, Any] Causes String-Only Schema
 
-**Symptom:**
+**Symptom:** (During UDF schema validation)
 ```
 30 is not of type 'string'
 Failed validating 'type' in schema['properties']['metadata']['additionalProperties']:
