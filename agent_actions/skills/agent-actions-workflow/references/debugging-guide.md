@@ -134,6 +134,35 @@ target_word_counts: Dict[str, int]
 target_word_counts: dict
 ```
 
+### Dict[str, Any] Causes String-Only Schema
+
+**Symptom:**
+```
+30 is not of type 'string'
+Failed validating 'type' in schema['properties']['metadata']['additionalProperties']:
+    {'type': 'string'}
+```
+
+**Cause:** `Dict[str, Any]` in TypedDict is incorrectly converted to `additionalProperties: {type: string}`, so all values must be strings.
+
+**Bad:**
+```python
+class MyOutput(TypedDict, total=False):
+    metadata: Dict[str, Any]  # Will only accept string values!
+```
+
+**Fix:** Use nested TypedDict with explicit types:
+```python
+class MetadataOutput(TypedDict, total=False):
+    total_count: int      # int type preserved
+    search_method: str
+
+class MyOutput(TypedDict, total=False):
+    metadata: MetadataOutput  # Proper type handling
+```
+
+See **udf-decorator.md → Nested TypedDicts** for complete examples.
+
 ### Missing Required Fields
 
 **Symptom:**

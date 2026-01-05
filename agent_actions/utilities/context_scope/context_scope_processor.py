@@ -297,6 +297,26 @@ class ContextScopeProcessor:
                     if action_idx >= current_idx:
                         continue
 
+                    # Parallel Branch Fix: Only load ancestors (in lineage) or explicit dependencies
+                    # This prevents loading files from unrelated parallel branches (siblings/cousins)
+                    is_ancestor = (
+                        HistoricalNodeDataLoader._find_node_in_lineage(
+                            action_name, lineage, agent_indices
+                        )
+                        is not None
+                    )
+
+                    is_dependency = False
+                    if agent_config and "dependencies" in agent_config:
+                        is_dependency = action_name in agent_config["dependencies"]
+
+                    if not is_ancestor and not is_dependency:
+                        logger.debug(
+                            "Skipping historical load for unrelated branch: action=%s (not in lineage or dependencies)",
+                            action_name,
+                        )
+                        continue
+
                     # Load historical data for this action
                     from agent_actions.preprocessing.context.historical_node_loader import (
                         HistoricalDataRequest,
