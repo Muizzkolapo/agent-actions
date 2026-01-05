@@ -47,12 +47,12 @@ missing_references=['source.page_content']
 
 ### Fix Options
 
-1. **Restructure input data** - Extract the array as the source file:
+1. **Restructure input data** - Extract the array and place in staging:
    ```python
    # Transform wrapper to flat array
    data = json.load(open("wrapper.json"))
    records = data["scraped_links"]  # Extract the array
-   json.dump(records, open("source/data.json", "w"))
+   json.dump(records, open("agent_io/staging/data.json", "w"))  # Place in staging/
    ```
 
 2. **Add preprocessing tool action** - First action extracts items:
@@ -78,11 +78,11 @@ agent_workflow/
     ├── agent_config/
     │   └── my_workflow.yml
     └── agent_io/
-        ├── source/              # Input data
+        ├── staging/             # INPUT: Place your files here
         │   └── data.json
-        ├── staging/             # Processed source
-        │   └── data.json
-        └── target/              # Node outputs
+        ├── source/              # METADATA: Framework adds tracking fields
+        │   └── data.json        # (auto-generated from staging/)
+        └── target/              # OUTPUT: Node results
             ├── node_0_action_name/
             │   └── data.json
             ├── node_1_action_name/
@@ -90,6 +90,19 @@ agent_workflow/
             └── final_workflow_output/
                 └── data.json
 ```
+
+### Data Flow: staging/ → source/ → target/
+
+1. **staging/** - Your raw input files go here
+   - Place JSON/CSV files with your data
+   - This is the starting point
+
+2. **source/** - Framework processes staging/ and adds metadata
+   - Adds `source_guid`, `node_id`, `lineage` fields
+   - DO NOT place files here manually
+
+3. **target/** - Each action writes output to its own subdirectory
+   - Node directories named: `node_{index}_{action_name}/`
 
 ## Metadata Fields
 

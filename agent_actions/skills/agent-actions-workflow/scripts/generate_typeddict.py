@@ -16,19 +16,19 @@ from pathlib import Path
 from typing import Any
 
 
-def infer_python_type(value: Any) -> str:
+def infer_python_type(value: Any, field_name: str = "") -> str:
     """Infer Python type annotation from a JSON value."""
     if value is None:
         return "Any"
-    if isinstance(value, bool):
+    elif isinstance(value, bool):
         return "bool"
-    if isinstance(value, int):
+    elif isinstance(value, int):
         return "int"
-    if isinstance(value, float):
+    elif isinstance(value, float):
         return "float"
-    if isinstance(value, str):
+    elif isinstance(value, str):
         return "str"
-    if isinstance(value, list):
+    elif isinstance(value, list):
         if not value:
             return "List[Any]"
         # Check if all elements are same type
@@ -37,7 +37,7 @@ def infer_python_type(value: Any) -> str:
             elem_type = elem_types.pop()
             return f"List[{elem_type}]"
         return "List[Any]"
-    if isinstance(value, dict):
+    elif isinstance(value, dict):
         # Check if it's a simple dict or needs nested TypedDict
         if not value:
             return "dict"
@@ -60,7 +60,7 @@ def extract_fields_from_json(data: dict) -> dict[str, str]:
         # Skip internal/metadata fields
         if key in ("source_guid", "target_id", "node_id", "lineage"):
             continue
-        fields[key] = infer_python_type(value)
+        fields[key] = infer_python_type(value, key)
 
     return fields
 
@@ -99,11 +99,11 @@ def generate_typeddict(
         "",
         "",
         f"class {class_name}(TypedDict, total=False):",
-        '    """Input schema for function.',
-        "",
+        f'    """Input schema for function.',
+        f"",
         f"    Source: {source_node} output",
         f"    Destination: {dest_node} output",
-        '    """',
+        f'    """',
     ]
 
     if core_fields:
@@ -121,7 +121,6 @@ def generate_typeddict(
 
 
 def main():
-    """CLI entry point for TypedDict generation."""
     parser = argparse.ArgumentParser(description="Generate TypedDict schema from sample JSON")
     parser.add_argument("json_file", help="Path to sample JSON file")
     parser.add_argument(
@@ -154,7 +153,7 @@ def main():
         print(f"Error: File not found: {json_path}", file=sys.stderr)
         sys.exit(1)
 
-    with open(json_path, encoding="utf-8") as f:
+    with open(json_path) as f:
         data = json.load(f)
 
     # Handle array of records
@@ -174,7 +173,7 @@ def main():
     # Output
     if args.output:
         output_path = Path(args.output)
-        output_path.write_text(result, encoding="utf-8")
+        output_path.write_text(result)
         print(f"Generated TypedDict written to: {output_path}")
     else:
         print(result)

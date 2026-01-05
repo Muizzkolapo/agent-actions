@@ -33,8 +33,8 @@ project/
 │       ├── agent_config/
 │       │   └── my_workflow.yml # Workflow definition
 │       ├── agent_io/
-│       │   ├── source/         # Input data
-│       │   └── target/         # Output per node
+│       │   ├── staging/        # Input data (base data to process)
+│       │   └── target/         # Output per node (created by agac)
 │       └── seed_data/          # Static reference data
 ├── prompt_store/               # Prompt templates
 ├── schema/                     # Output schemas
@@ -130,6 +130,33 @@ guard:
   on_false: "skip"
 ```
 
+## Loop Execution
+
+Execute actions multiple times with varying parameters:
+
+```yaml
+- name: generate_distractor
+  loop:
+    param: stage
+    range: [1, 2, 3]
+    mode: parallel  # or sequential
+  schema:
+    distractor_${stage}: string        # Dynamic: distractor_1, distractor_2, etc.
+    explanation_${stage}: string
+  prompt: |
+    Generate distractor {{ loop.stage }} for the question.
+```
+
+**Loop Consumption:** Merge outputs from looped actions:
+
+```yaml
+- name: combine_distractors
+  dependencies: [generate_distractor]
+  loop_consumption:
+    source: generate_distractor
+    pattern: merge  # Combines all loop outputs
+```
+
 ## Cross-Workflow Dependencies
 
 ```yaml
@@ -158,6 +185,197 @@ Using syllabus: {{ seed.exam_syllabus.exam_name }}
 
 Reference: `prompt: $workflow_name.Extract_Facts`
 
+### Template Variable Prefixes
+
+All context sources use **explicit namespacing** by design:
+
+| Prefix | Source | Example |
+|--------|--------|---------|
+| `source.` | Input data from staging | `{{ source.title }}`, `{{ source.content }}` |
+| `seed.` | Static reference data | `{{ seed.config.setting }}` |
+| `<action_name>.` | Previous action output | `{{ classify.category }}`, `{{ validate.is_valid }}` |
+
+### Why Explicit Namespacing (Design Principle)
+
+Explicit namespacing is **required by design**, not a limitation:
+
+| Benefit | Description |
+|---------|-------------|
+| **Clarity** | Always know where a field comes from |
+| **No conflicts** | Multiple actions can output same field name |
+| **Self-documenting** | Templates are readable without context |
+| **Safe refactoring** | Rename actions without hidden breakage |
+| **Easy debugging** | Trace fields to their source action |
+
+```jinja2
+{# CORRECT - explicit namespacing #}
+{{ source.title }}                        {# from staging #}
+{{ seed.exam_syllabus.exam_name }}        {# from seed_data #}
+{{ classify_genre.primary_bisac_code }}   {# from classify_genre action #}
+{{ generate_seo.primary_keywords }}       {# from generate_seo action #}
+
+{# WRONG - implicit access not allowed #}
+{{ title }}              {# Ambiguous: staging or action output? #}
+{{ primary_keywords }}   {# Ambiguous: which action? #}
+```
+
+### Avoiding Field Name Conflicts
+
+With explicit namespacing, actions can safely output the same field name:
+
+```yaml
+actions:
+  - name: extract_entities
+    schema: { count: integer }  # entity count
+
+  - name: extract_keywords
+    schema: { count: integer }  # keyword count
+
+  - name: summarize
+    dependencies: [extract_entities, extract_keywords]
+    prompt: |
+      Entity count: {{ extract_entities.count }}
+      Keyword count: {{ extract_keywords.count }}
+      {# No ambiguity - each 'count' is namespaced #}
+```
+
+## Workflow Patterns
+
+Use these patterns for common parallel and merge scenarios:
+
+| Pattern | Structure | Use Case |
+|---------|-----------|----------|
+| **Diamond/Fan-in** | split → parallel branches → merge | Enrich from multiple angles, combine results |
+| **Multi-enrichment** | single source → parallel specialists → unified | Extract different aspects independently |
+| **Ensemble/Voting** | same input → multiple LLMs → consensus | Compare model outputs, pick best |
+| **Conditional Merge** | parallel with guards → merge available | Only merge branches that ran |
+
+### Diamond/Fan-in Pattern
+
+Split to parallel branches, merge all results:
+
+```yaml
+actions:
+  - name: validate
+    schema: { title: string, content: string }
+
+  - name: generate_seo
+    dependencies: [validate]
+    schema: { primary_keywords: list }
+
+  - name: generate_recommendations
+    dependencies: [validate]
+    schema: { similar_books: list }
+
+  - name: assess_reading_level
+    dependencies: [validate]
+    schema: { reading_level: string }
+
+  - name: score_quality
+    dependencies: [generate_seo, generate_recommendations, assess_reading_level]
+    # All 3 parallel parents accessible via namespacing:
+    prompt: |
+      SEO: {{ generate_seo.primary_keywords }}
+      Similar: {{ generate_recommendations.similar_books }}
+      Level: {{ assess_reading_level.reading_level }}
+```
+
+### Multi-enrichment Pattern
+
+Multiple specialists extract different aspects:
+
+```yaml
+actions:
+  - name: extract_entities
+    dependencies: [prepare]
+    schema: { entities: list, count: integer }
+
+  - name: extract_sentiment
+    dependencies: [prepare]
+    schema: { sentiment: string, confidence: number }
+
+  - name: extract_topics
+    dependencies: [prepare]
+    schema: { topics: list, count: integer }
+
+  - name: unified_analysis
+    dependencies: [extract_entities, extract_sentiment, extract_topics]
+    prompt: |
+      Entities: {{ extract_entities.entities }}
+      Sentiment: {{ extract_sentiment.sentiment }}
+      Topics: {{ extract_topics.topics }}
+```
+
+### Ensemble/Voting Pattern
+
+Multiple LLMs, pick best answer:
+
+```yaml
+actions:
+  - name: gpt4_answer
+    dependencies: [prepare]
+    model_vendor: openai
+    model_name: gpt-4o
+
+  - name: claude_answer
+    dependencies: [prepare]
+    model_vendor: anthropic
+    model_name: claude-sonnet-4-20250514
+
+  - name: best_answer
+    dependencies: [gpt4_answer, claude_answer]
+    prompt: |
+      Compare and select the best answer:
+      GPT-4: {{ gpt4_answer.response }}
+      Claude: {{ claude_answer.response }}
+```
+
+### Conditional Merge Pattern
+
+Merge only branches that ran (using guards):
+
+```yaml
+actions:
+  - name: classify
+    schema: { complexity: string }
+
+  - name: fast_path
+    dependencies: [classify]
+    guard:
+      condition: 'complexity == "low"'
+      on_false: "skip"
+    schema: { result: string }
+
+  - name: slow_path
+    dependencies: [classify]
+    guard:
+      condition: 'complexity == "high"'
+      on_false: "skip"
+    schema: { result: string }
+
+  - name: combine
+    dependencies: [fast_path, slow_path]
+    # Handle potentially missing branches in prompt:
+    prompt: |
+      {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}
+      {% if slow_path %}Slow result: {{ slow_path.result }}{% endif %}
+```
+
+### Chained Actions
+
+Sequential dependency access:
+
+```markdown
+{prompt Second_Step}
+## INPUT
+Original data: {{ source.title }}
+Previous result: {{ first_action.processed_field }}
+
+## TASK
+Build on the previous action's output.
+{end_prompt}
+```
+
 ## UDF Tool Pattern
 
 ```python
@@ -165,23 +383,87 @@ from typing import List, TypedDict
 from agent_actions import udf_tool
 
 class MyInput(TypedDict, total=False):
-    """Source: node_N output, Destination: node_M output"""
+    """Source: node_N output, Destination: node_M output.
+
+    Use total=False to make all fields optional.
+    """
     question: str
     options: List[str]
+    metadata: dict  # Passthrough fields
 
 @udf_tool(input_type=MyInput)
 def my_function(data: dict) -> dict:
-    result = data.copy()
+    """Process data and return modified dict."""
+    # Handle content wrapper if present
+    if 'content' in data:
+        content = data['content']
+    else:
+        content = data
+
+    # Copy to avoid mutating input
+    result = content.copy()
+
+    # Add/modify fields
     result['processed'] = True
+    result['result_value'] = content.get('question', '')[:50]
+
     return result
 ```
 
-**Type Mapping:**
+### Granularity Options
+
+**Record (default):** Process one record at a time
+```yaml
+- name: filter_questions
+  kind: tool
+  impl: filter_by_score
+  granularity: record
+```
+
+**File:** Process all records at once (for aggregation, dedup, clustering)
+```python
+from agent_actions.configuration.new_format_schema import Granularity
+
+@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
+def run_dedup(data: List[Dict]) -> List[Dict]:
+    seen = set()
+    return [r for r in data if r['fact'] not in seen and not seen.add(r['fact'])]
+```
+
+### FileUDFResult for Lineage
+
+Track input→output mapping in FILE granularity:
+
+```python
+from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
+
+@udf_tool(input_type=DedupInput, granularity=Granularity.FILE)
+def dedup_with_lineage(data: List[Dict]) -> FileUDFResult:
+    seen = {}
+    outputs = []
+    source_mapping = {}
+
+    for idx, record in enumerate(data):
+        fact = record['fact']
+        if fact not in seen:
+            seen[fact] = len(outputs)
+            outputs.append(record)
+            source_mapping[len(outputs) - 1] = idx
+
+    return FileUDFResult(
+        outputs=outputs,
+        source_mapping=source_mapping,
+        input_count=len(data)
+    )
+```
+
+### Type Mapping
 
 | JSON | Python | Notes |
 |------|--------|-------|
 | string | `str` | |
 | integer | `int` | |
+| number | `float` | |
 | array | `List[str]` or `List[Any]` | |
 | object | `dict` | For mixed-type dicts |
 | varies | `Any` | When type can change |
@@ -204,76 +486,6 @@ target_counts: Dict[str, int]  # Fails if values include strings
 # GOOD
 target_counts: dict            # Allows any structure
 ```
-
-## Type Consistency Across Actions (CRITICAL)
-
-### What is an Action?
-
-An **action** is a single step in a workflow that either:
-- Calls an LLM with a prompt (LLM action)
-- Runs a Python function (tool action)
-
-Actions are defined in your workflow YAML and execute sequentially based on dependencies. Each action reads from upstream actions and writes to its output directory (`agent_io/target/node_<index>_<action_name>/`), where index starts at 0.
-
-When a field flows through multiple actions, **ALL tools must use the same type**.
-
-### Problem: Field Type Changes Mid-Pipeline
-
-```
-add_answer_text creates answer_text → generate_distractor_1 → ... → filter_questions uses answer_text
-```
-
-If `add_answer_text` outputs `List[str]` but `filter_questions`'s tool expects `str`, you get:
-```
-validation_error: ['item1', 'item2'] is not of type 'string'
-schema_constraint: {'type': 'string'}
-```
-
-### Solution: Use Consistent Types
-
-**BAD - Variable type:**
-```python
-# Some tools expect string, others list
-answer_text: str                    # Tool A
-answer_text: Union[str, List[str]]  # Tool B - Union doesn't work!
-answer_text: Any                    # Tool C
-```
-
-**GOOD - Always use list:**
-```python
-# ALL tools use List[str]
-answer_text: List[str]  # Even for single items: ["answer"]
-```
-
-### When Changing Field Types
-
-1. **Update ALL downstream tools** that touch the field
-2. **Fix existing data** in all action output directories:
-
-```python
-import json
-import glob
-
-# Each action writes to agent_io/target/node_<index>_<action_name>/
-for json_file in glob.glob("agent_io/target/node_*/combined_scraped_sample.json"):
-    with open(json_file, 'r') as f:
-        data = json.load(f)
-
-    for record in data:
-        if 'content' in record and 'answer_text' in record['content']:
-            val = record['content']['answer_text']
-            if isinstance(val, str):
-                record['content']['answer_text'] = [val]  # Convert to list
-
-    with open(json_file, 'w') as f:
-        json.dump(data, f, indent=4)
-```
-
-### Avoid Union Types
-
-`Union[str, List[str]]` doesn't translate properly to JSON schema. Use:
-- `List[str]` - Always a list (even single items)
-- `Any` - When you truly need flexibility (less safe)
 
 ## Debugging
 
@@ -298,169 +510,6 @@ reprompt: smart  # Retry with LLM feedback
 ```
 
 See `references/debugging-guide.md` for complete troubleshooting.
-
-## Advanced Features
-
-### Loop with Dynamic Schema
-
-Generate multiple outputs with parameter expansion:
-
-```yaml
-- name: generate_distractor
-  loop:
-    param: stage
-    range: [1, 2, 3]
-    mode: sequential  # or parallel
-  schema:
-    distractor_${stage}: string           # → distractor_1, distractor_2
-    explanation_${stage}: string
-  prompt: $workflow.Generate_Distractor
-  context_scope:
-    observe:
-      - generate_distractor_${stage-1}    # Previous iteration
-```
-
-### Reprompt Strategies
-
-Auto-retry with increasing sophistication:
-
-```yaml
-- name: extract_facts
-  reprompt: smart          # Presets: basic, smart, thorough
-  # Or custom:
-  reprompt:
-    max_attempts: 5
-    json_repair: true       # Fix brackets, commas, escapes
-    use_llm_critique: true  # Analyze why validation failed
-    critique_after_attempt: 2
-```
-
-| Preset | Attempts | JSON Repair | LLM Critique |
-|--------|----------|-------------|--------------|
-| `basic` | 3 | Yes | No |
-| `smart` | 4 | Yes | After 2nd |
-| `thorough` | 5 | Yes | After 1st + self-reflection |
-
-### Granularity: File-Level Processing
-
-Process all records at once (for aggregation, clustering, deduplication):
-
-```yaml
-- name: cluster_facts
-  kind: tool
-  impl: cluster_similar_facts
-  granularity: file       # Default is "record"
-```
-
-```python
-from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
-
-@udf_tool(input_type=..., granularity=Granularity.FILE)
-def cluster_similar_facts(data: List[Dict]) -> FileUDFResult:
-    # Process ALL records together
-    clusters = group_similar(data)
-    return FileUDFResult(
-        outputs=clusters,
-        source_mapping=mapping,  # Track input → output lineage
-        input_count=len(data)
-    )
-```
-
-### Batch Mode (50% Cost Savings)
-
-For 100+ records, use async batch API:
-
-```yaml
-defaults:
-  run_mode: batch          # vs "online" (default)
-```
-
-```bash
-# Submit batch
-agac run -a my_workflow
-
-# Check status
-agac batch status --batch-id <id>
-
-# Retrieve results
-agac batch retrieve --batch-id <id> -o ./output
-
-# Retry failed
-agac batch retry --batch-id <id> --max-attempts 3
-```
-
-**Batch context note:** Data is at root level (not under `source`). Write mode-agnostic prompts:
-```jinja2
-{% if source is defined %}{{ source.field }}{% else %}{{ field }}{% endif %}
-```
-
-### Few-Shot Examples
-
-Include examples from training data:
-
-```yaml
-- name: generate_question
-  few_shot: 3              # Include 3 examples in prompt
-```
-
-### Resumable Execution
-
-Re-running skips completed actions:
-
-```bash
-# First run fails at action 5
-agac run -a my_workflow
-
-# Fix the issue, re-run - actions 0-4 are skipped
-agac run -a my_workflow
-```
-
-Status tracked in `agent_io/.agent_status.json`.
-
-### Validation Commands
-
-```bash
-# Validate without executing
-agac run -a my_workflow --validate-only
-
-# Check UDF references
-agac validate-udfs -a my_workflow -u ./tools
-
-# Inspect field flow
-agac inspect field-flow -a my_workflow
-
-# Detect field conflicts
-agac inspect conflicts -a my_workflow
-
-# View rendered prompts (debugging)
-agac render -a my_workflow
-```
-
-### Execution Metrics
-
-Track in `artefact/runs.json`:
-
-```json
-{
-  "workflow_name": "my_workflow",
-  "total_runs": 15,
-  "successful_runs": 14,
-  "success_rate": 0.93,
-  "total_tokens": 125000,
-  "avg_duration_seconds": 45.2
-}
-```
-
-### Operational Control
-
-```yaml
-- name: expensive_action
-  is_operational: false    # Disable without removing
-  max_execution_time: 600  # Timeout (seconds)
-  enable_caching: true     # Cache responses
-  temperature: 0.1         # LLM temperature
-  max_tokens: 4000         # Response limit
-```
 
 ## Resources
 
