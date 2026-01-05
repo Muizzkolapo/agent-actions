@@ -310,9 +310,9 @@ class TestParallelBranchMerge:
         result = HistoricalNodeDataLoader.load_historical_node_data(request)
 
         assert result is not None
-        assert (
-            result.get("seo_score") == 85
-        ), "Should get parent-001's branch (seo_score=85), not parent-002's (seo_score=50)"
+        assert result.get("seo_score") == 85, (
+            "Should get parent-001's branch (seo_score=85), not parent-002's (seo_score=50)"
+        )
 
 
 class TestMapReducePattern:
