@@ -207,6 +207,79 @@ class TestValidatePreflightFunction:
         assert not result.is_valid
 
 
+class TestSeedDataValidation:
+    """Tests for validating templates with seed data context."""
+
+    def test_validate_passes_with_seed_data_reference(self):
+        """Test validation passes when template references seed.field correctly."""
+        validator = PreFlightValidator()
+        result = validator.validate(
+            template="Exam: {{ seed.exam_syllabus.exam_name }}\nContent: {{ source.page_content }}",
+            context={
+                "source": {"page_content": "Sample content", "url": "http://example.com"},
+                "seed": {"exam_syllabus": {"exam_name": "AWS Solutions Architect"}},
+            },
+            agent_name="extract_qa",
+            mode="online",
+        )
+
+        assert result.is_valid
+        assert len(result.errors) == 0
+
+    def test_validate_fails_for_missing_seed_field(self):
+        """Test validation fails when seed field is missing from context."""
+        validator = PreFlightValidator()
+        result = validator.validate(
+            template="{{ seed.nonexistent_field }}",
+            context={
+                "source": {"page_content": "test"},
+                # seed namespace missing
+            },
+            agent_name="test_agent",
+            mode="online",
+        )
+
+        assert not result.is_valid
+        # Error should reference the missing seed field
+        assert any("seed" in str(e.missing_refs) for e in result.errors)
+
+    def test_validate_with_previous_action_output(self):
+        """Test validation passes with previous action outputs in context."""
+        validator = PreFlightValidator()
+        result = validator.validate(
+            template=("Summary: {{ generate_summary.key_concepts }}\nSource: {{ source.content }}"),
+            context={
+                "source": {"content": "Original document"},
+                "generate_summary": {"key_concepts": ["concept1", "concept2"]},
+            },
+            agent_name="refine_action",
+            mode="batch",
+        )
+
+        assert result.is_valid
+
+    def test_validate_with_combined_input_context(self):
+        """Test validation with full INPUT context structure (source + seed + actions)."""
+        validator = PreFlightValidator()
+        # This mimics the full INPUT context structure per context-handling.md
+        result = validator.validate(
+            template=(
+                "{{ source.page_content }}\n"
+                "{{ seed.exam_syllabus.exam_name }}\n"
+                "{{ extract_raw.questions }}"
+            ),
+            context={
+                "source": {"page_content": "Document text", "url": "http://test.com"},
+                "seed": {"exam_syllabus": {"exam_name": "Test Exam", "topics": []}},
+                "extract_raw": {"questions": ["Q1", "Q2"]},
+            },
+            agent_name="refine_qa",
+            mode="online",
+        )
+
+        assert result.is_valid
+
+
 class TestBatchOnlineConsistency:
     """Tests to verify batch and online modes produce consistent errors."""
 

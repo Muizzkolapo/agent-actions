@@ -139,31 +139,52 @@ def _extract_staged_fields(data_chunk: list) -> list:
                     all_fields.add(f"content.{key}")
                     all_fields.add(key)  # Also available without prefix
 
-    # Filter out internal batch metadata fields
-    internal_fields = {"batch_id", "batch_uuid", "source_guid", "target_id", "node_id"}
+    # Filter out internal metadata fields (not user-facing)
+    internal_fields = {
+        "batch_id",
+        "batch_uuid",
+        "source_guid",
+        "target_id",
+        "node_id",
+        "lineage",
+        "content",  # System wrapper fields
+    }
     user_fields = sorted(f for f in all_fields if f not in internal_fields)
 
     return user_fields
 
 
-def _validate_staged_data(data_chunk: list, agent_config: dict, agent_name: str, mode: str):
+def _validate_staged_data(
+    raw_content: any,
+    file_type: str,
+    agent_config: dict,
+    agent_name: str,
+    mode: str,
+    file_path: str,
+):
     """
-    Validate staged data against template requirements BEFORE processing.
+    Validate INPUT context against template requirements BEFORE LLM execution.
 
-    This early validation catches missing fields before:
-    - Source saving (batch mode)
-    - Agent execution (realtime mode)
+    This runs BEFORE _prepare_realtime_data() to catch template errors early,
+    avoiding wasted LLM calls. Validates against INPUT context (source + seed),
+    NOT against LLM OUTPUT.
 
     Args:
-        data_chunk: List of prepared data items
+        raw_content: Raw content from staging file (JSON array, text, etc.)
+        file_type: File extension (.json, .txt, .md, etc.)
         agent_config: Agent configuration with prompt template
         agent_name: Name of agent (for error context)
         mode: Execution mode ('batch' or 'online')
+        file_path: Path to input file (for context building)
 
     Raises:
-        PreFlightValidationError: If template references fields not in staged data
+        PreFlightValidationError: If template references fields not in context
     """
-    if not data_chunk:
+    from agent_actions.prompt_generation.prompt_preparation_service import (
+        PromptPreparationService,
+    )
+
+    if not raw_content:
         return  # Nothing to validate
 
     # Get raw prompt template
@@ -175,56 +196,45 @@ def _validate_staged_data(data_chunk: list, agent_config: dict, agent_name: str,
     if not raw_prompt:
         return
 
-    # Use first item as validation sample
-    first_item = data_chunk[0]
-
-    # Build sample context from staged data
-    # This mirrors what PromptPreparationService will do
-    if isinstance(first_item, dict):
-        content = first_item.get("content", first_item)
-        if isinstance(content, dict):
-            sample_context = {**content}
-        else:
-            sample_context = {"content": content}
-        # Also add source if it's a common pattern
-        sample_context["source"] = content if isinstance(content, dict) else first_item
+    # Build INPUT context from raw staging data
+    # For JSON: first item becomes source content
+    # For text: raw text becomes source content
+    if file_type == ".json" and isinstance(raw_content, list) and raw_content:
+        # JSON array: use first item as sample source content
+        first_item = raw_content[0]
+        source_content = first_item
+    elif file_type == ".json" and isinstance(raw_content, dict):
+        # Single JSON object
+        source_content = raw_content
+        first_item = raw_content
     else:
-        sample_context = {"content": first_item}
+        # Text/other: wrap in dict with page_content
+        source_content = {"page_content": str(raw_content)[:1000]}  # Truncate for validation
+        first_item = {"page_content": source_content["page_content"]}
 
-    # Get staged fields for better error messaging
-    staged_fields = _extract_staged_fields(data_chunk)
+    # Use PromptPreparationService to build INPUT context
+    # This builds: {source: {...}, seed: {...}, previous_actions: {...}}
+    prep_result = PromptPreparationService.prepare_prompt_with_context(
+        agent_config=agent_config,
+        agent_name=agent_name,
+        contents=source_content if isinstance(source_content, dict) else {},
+        mode="batch" if mode == "batch" else "realtime",
+        source_content=source_content,
+        current_item=first_item,
+        file_path=file_path,
+    )
 
-    # Run preflight validation
+    # Validate against INPUT context (source + seed + previous actions)
     validator = PreFlightValidator()
     result = validator.validate(
         template=raw_prompt,
-        context=sample_context,
+        context=prep_result.prompt_context,
         agent_name=agent_name,
         mode=mode,
+        agent_config=agent_config,
     )
 
-    # If validation failed, enhance error with staged fields info
-    if not result.is_valid and result.errors:
-        first_error = result.errors[0]
-        # Build hint showing what was staged
-        staged_preview = ", ".join(staged_fields[:10])
-        if len(staged_fields) > 10:
-            staged_preview += "..."
-        base_hint = first_error.hint or "Check your input data has the required fields."
-        enhanced_hint = f"Staged data contains: {staged_preview}. {base_hint}"
-
-        raise PreFlightValidationError(
-            first_error.message,
-            available_references=staged_fields,  # Show what was actually staged
-            missing_references=first_error.missing_refs,
-            hint=enhanced_hint,
-            mode=mode,
-            agent_name=agent_name,
-            context={
-                "staged_fields": staged_fields,
-                "validation_phase": "staging",
-            },
-        )
+    result.raise_if_invalid()
 
 
 def generate_staging(ctx: StagingContext):
@@ -269,7 +279,21 @@ def generate_staging(ctx: StagingContext):
     )
 
     # ============================================================================
-    # STEP 1: Prepare data based on run mode
+    # STEP 1: PREFLIGHT VALIDATION ON INPUT (before any LLM execution!)
+    # ============================================================================
+    # Validate template against INPUT context (staging data + seed)
+    # This MUST run BEFORE _prepare_realtime_data() which executes the LLM
+    _validate_staged_data(
+        raw_content=content,
+        file_type=file_type,
+        agent_config=ctx.agent_config,
+        agent_name=ctx.agent_name,
+        mode=run_mode or "online",
+        file_path=ctx.file_path,
+    )
+
+    # ============================================================================
+    # STEP 2: Prepare data based on run mode (LLM runs here for realtime)
     # ============================================================================
     prep_ctx = DataPreparationContext(
         content=content,
@@ -287,26 +311,14 @@ def generate_staging(ctx: StagingContext):
         data_chunk, src_text = _prepare_realtime_data(prep_ctx)
 
     # ============================================================================
-    # STEP 1.5: PREFLIGHT VALIDATION ON STAGED DATA (catch issues early)
-    # ============================================================================
-    # Validate that staged data has fields required by the template
-    # This catches missing field errors BEFORE expensive processing/saving
-    _validate_staged_data(
-        data_chunk=data_chunk,
-        agent_config=ctx.agent_config,
-        agent_name=ctx.agent_name,
-        mode=run_mode or "online",
-    )
-
-    # ============================================================================
-    # STEP 2: UNIFIED SOURCE SAVING (happens for BOTH modes)
+    # STEP 3: UNIFIED SOURCE SAVING (happens for BOTH modes)
     # ============================================================================
     # This is the KEY fix: save source BEFORE any processing
     # Prevents timing issues where processing tries to load source that doesn't exist yet
     _save_source_data(src_text, data_chunk, ctx.file_path, ctx.base_directory, ctx.output_directory)
 
     # ============================================================================
-    # STEP 3: Process based on mode (source is now guaranteed to exist)
+    # STEP 4: Process based on mode (source is now guaranteed to exist)
     # ============================================================================
     if run_mode == "batch":
         batch_ctx = BatchProcessingContext(
