@@ -1,10 +1,5 @@
 """
 Validator for agent type and type-specific configuration requirements.
-
-Different agent types have different required fields:
-- llm: requires model_name
-- function: requires code_path (and validates it exists)
-- tool: requires model_name
 """
 
 from pathlib import Path

@@ -1,23 +1,5 @@
 """
 Validates field references against the workflow dependency graph.
-
-Ensures that guards and other components only reference:
-- Actions that exist in the workflow
-- Actions that are upstream of the current action
-- Actions that are declared in dependencies (strict mode)
-
-Example:
-    validator = ReferenceValidator()
-
-    errors = validator.validate(
-        references=['extract_facts.count', 'source.title'],
-        agent_config={'dependencies': ['extract_facts']},
-        agent_indices={'extract_facts': 0, 'my_action': 1},
-        current_agent_name='my_action'
-    )
-
-    if errors:
-        raise WorkflowValidationError("\\n".join(errors))
 """
 
 import logging

@@ -1,13 +1,5 @@
 """
 Ollama client for agent-actions LLM invocation.
-
-A mirror of OpenAIClient that supports:
-
-* Structured output via the `format=` parameter.
-* Optional host override with either:
-    - agent_config["base_url"]  (highest priority)
-    - the environment variable OLLAMA_HOST
-    - default http://localhost:11434
 """
 
 import json

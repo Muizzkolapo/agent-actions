@@ -1,10 +1,5 @@
 """
 Lineage Tracking Service.
-
-This module provides utilities for building and tracking lineage chains:
-- Filter valid node IDs from lineage
-- Build lineage by appending node IDs
-- Add lineage tracking to objects
 """
 
 from typing import Dict, List, Any

@@ -1,15 +1,5 @@
-"""Configuration for reprompting system with preset support.
-
-Simple usage:
-    reprompt: true        # Basic preset
-    reprompt: smart       # LLM critique on 3rd+ attempt
-    reprompt: thorough    # Full pipeline with self-reflection
-
-Advanced usage:
-    reprompt:
-        preset: smart
-        max_attempts: 5
-        json_repair: true
+"""
+Configuration for reprompting system with preset support.
 """
 
 from dataclasses import dataclass, field

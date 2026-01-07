@@ -1,11 +1,5 @@
 """
 Shared utilities for agent configuration validation.
-
-Provides:
-- Case-insensitive dict operations
-- Validation constants (required/optional keys)
-- Error message formatting
-- Agent type definitions
 """
 
 from typing import Dict, Any, Set, Optional

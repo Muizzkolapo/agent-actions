@@ -1,18 +1,5 @@
 """
 Mock Batch Client for Testing Retry Functionality.
-
-Simulates batch processing with configurable failure rates.
-Use this for manual testing of retry logic without hitting real APIs.
-
-Usage:
-    # In your workflow YAML:
-    model_vendor: mock
-    model_name: mock-model
-
-    # Control failures via environment variables:
-    MOCK_BATCH_FAILURE_RATE=0.3  # 30% of records will "fail"
-    MOCK_BATCH_FAILURE_IDS=id1,id2,id3  # Specific IDs to fail
-    MOCK_BATCH_POLLS_UNTIL_COMPLETE=2  # Number of polls before completion
 """
 
 import os

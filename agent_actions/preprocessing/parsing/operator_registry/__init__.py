@@ -1,14 +1,5 @@
 """
 Operator registry for WHERE clause processing.
-
-This module provides a registry system for operators used in WHERE clause evaluation.
-
-The module has been refactored into submodules for better maintainability:
-- base: Base classes and type definitions
-- comparison: Comparison operators (==, !=, <, >, IN, LIKE, BETWEEN, etc.)
-- logical: Logical operators (AND, OR, NOT)
-- functions: Function operators (LENGTH, UPPER, LOWER, TRIM)
-- registry: OperatorRegistry class with auto-discovery
 """
 
 # Base classes and types

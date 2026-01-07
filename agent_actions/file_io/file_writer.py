@@ -1,10 +1,5 @@
 """
 Shared file writing utilities.
-
-This module provides file writing utilities used across the agent-actions framework
-by both batch and realtime modes, as well as orchestration and preprocessing.
-
-Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 """
 
 import json

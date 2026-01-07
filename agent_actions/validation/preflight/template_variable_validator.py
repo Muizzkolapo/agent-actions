@@ -1,8 +1,5 @@
-"""Template variable validator for pre-flight validation.
-
-Extracts variables from Jinja2 templates and validates they exist in context,
-without actually rendering the template. This catches missing variable errors
-early, before any LLM calls are made.
+"""
+Template variable validator for pre-flight validation.
 """
 
 from typing import Any, Dict, List, Optional, Set, Tuple

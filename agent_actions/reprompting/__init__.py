@@ -1,16 +1,5 @@
-"""Reprompting system for improving LLM outputs through iterative refinement.
-
-This package provides:
-- RepromptConfig: Simple configuration with presets (basic, smart, thorough)
-- ConstraintValidator: Built-in constraint validation
-- JSONRepairStrategy: JSON repair before reprompting
-- RepromptEngine: Core reprompt logic
-- RepromptInterceptor: Integration with interceptor system
-
-Simple usage in workflow YAML:
-    reprompt: true  # Uses 'basic' preset with sensible defaults
-    reprompt: smart  # Uses LLM critique on 3rd+ attempt
-    reprompt: thorough  # Full pipeline with self-reflection
+"""
+Reprompting system for improving LLM outputs through iterative refinement.
 """
 
 from agent_actions.reprompting.config import RepromptConfig

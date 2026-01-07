@@ -1,9 +1,5 @@
 """
 Batch Result Processor.
-
-Pipeline-based processor for converting batch provider results to workflow format.
-Replaces the complex _convert_batch_results_to_workflow_format method with a clean,
-testable pipeline architecture.
 """
 
 import logging

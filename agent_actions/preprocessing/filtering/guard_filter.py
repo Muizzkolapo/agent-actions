@@ -1,9 +1,5 @@
 """
 Guard filter service.
-
-This module provides a production-ready guard filtering service that uses
-proper grammar parsing, AST evaluation, and comprehensive security measures
-for evaluating guard conditions in agent workflows.
 """
 
 import logging

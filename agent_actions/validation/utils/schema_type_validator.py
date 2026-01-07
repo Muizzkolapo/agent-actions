@@ -1,10 +1,5 @@
 """
 Utility for validating schema type strings.
-
-Handles complex schema type validation including:
-- Basic types (string, number, etc.)
-- Array types (array[string], etc.)
-- Complex object types (array[object:{'prop': 'type'}])
 """
 
 import json

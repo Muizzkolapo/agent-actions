@@ -1,9 +1,5 @@
-"""Core reprompt engine that orchestrates JSON repair, constraints, and prompt improvement.
-
-The RepromptEngine is the central component that:
-1. Attempts JSON repair before reprompting (free, no API call)
-2. Validates responses against constraints
-3. Generates improved prompts when validation fails
+"""
+Core reprompt engine that orchestrates JSON repair, constraints, and prompt improvement.
 """
 
 from dataclasses import dataclass, field

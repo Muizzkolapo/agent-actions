@@ -1,9 +1,5 @@
 """
 Artifact linking for workflow input/output management.
-
-This module handles manifest-based artifact linking between workflows,
-allowing downstream workflows to read directly from upstream outputs
-without file duplication or symlinks.
 """
 
 from __future__ import annotations

@@ -1,9 +1,5 @@
 """
 Shared utility for resolving tools_path from agent configuration.
-
-This module provides a unified way to resolve tools_path across both
-batch and realtime modes, eliminating duplication and ensuring consistent
-behavior.
 """
 
 import logging

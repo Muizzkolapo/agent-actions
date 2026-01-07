@@ -1,9 +1,5 @@
 """
 CLI decorators for agent-actions commands.
-
-This module provides decorators that enhance CLI commands with additional
-functionality such as automatic project root detection and standardized
-error handling.
 """
 
 import os

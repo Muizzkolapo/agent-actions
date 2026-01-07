@@ -1,9 +1,5 @@
-"""Extract output schemas from agent configurations.
-
-Handles schema extraction from:
-- LLM agents: from `schema` or `output_schema` field
-- Tool/UDF agents: from Python files via AST parsing (using impl field)
-- Non-JSON agents: fallback to content field
+"""
+Extract output schemas from agent configurations.
 """
 
 from pathlib import Path

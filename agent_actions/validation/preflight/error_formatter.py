@@ -1,8 +1,5 @@
-"""Unified error formatter for pre-flight validation.
-
-Provides consistent error message formatting across batch and online modes,
-ensuring users see identical, actionable error messages regardless of
-execution mode.
+"""
+Unified error formatter for pre-flight validation.
 """
 
 from dataclasses import dataclass, field

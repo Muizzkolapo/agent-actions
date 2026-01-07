@@ -1,14 +1,5 @@
-"""Built-in constraint validators for reprompting system.
-
-Constraints are used to validate LLM responses and trigger reprompting
-when requirements aren't met.
-
-Usage in YAML:
-    constraints:
-      - not_contains: maze
-      - required_fields: [name, description]
-      - non_empty: [name]
-      - max_length: 1000
+"""
+Built-in constraint validators for reprompting system.
 """
 
 import re

@@ -1,8 +1,5 @@
-"""Centralized access to batch context metadata fields.
-
-This module provides a helper class for managing internal metadata fields
-in batch context records. It eliminates direct string key access and provides
-type-safe methods for getting/setting metadata.
+"""
+Centralized access to batch context metadata fields.
 """
 
 from typing import Any, Dict, Optional

@@ -1,8 +1,5 @@
-"""Schema-aware field validation for UDF output schemas.
-
-Validates that field references (e.g., 'my_udf.result.count') exist in the
-UDF's output schema definition. Enables compile-time validation of field
-references against JSON Schema structures.
+"""
+Schema-aware field validation for UDF output schemas.
 """
 
 from dataclasses import dataclass

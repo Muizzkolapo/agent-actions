@@ -1,28 +1,5 @@
-"""Static workflow analysis for compile-time type checking.
-
-This module provides TypeScript-like static type checking for workflow
-configurations. It validates that all field references are valid before
-any execution, catching errors at config load time rather than runtime.
-
-Example:
-    from agent_actions.validation.static_analyzer import (
-        WorkflowStaticAnalyzer,
-        analyze_workflow,
-    )
-
-    # Analyze a workflow config
-    result = analyze_workflow(workflow_config)
-
-    if not result.is_valid:
-        print(result.format_report())
-        raise ValueError("Static type checking failed")
-
-    # Or use the class directly
-    analyzer = WorkflowStaticAnalyzer(workflow_config)
-    result = analyzer.analyze()
-
-    # Get data flow summary
-    summary = analyzer.get_data_flow_summary()
+"""
+Static workflow analysis for compile-time type checking.
 """
 
 from .data_flow_graph import (

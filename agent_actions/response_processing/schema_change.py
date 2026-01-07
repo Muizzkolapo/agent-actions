@@ -1,8 +1,5 @@
-"""Schema compilation and transformation utilities for multi-vendor support.
-
-This module provides utilities for converting unified schema definitions into
-vendor-specific formats (OpenAI, Anthropic, Gemini, Ollama) and handling
-JSON Schema to unified format conversions.
+"""
+Schema compilation and transformation utilities for multi-vendor support.
 """
 
 from typing import Tuple, Dict, Any, Optional, Union

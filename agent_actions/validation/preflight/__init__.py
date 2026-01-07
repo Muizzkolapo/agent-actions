@@ -1,10 +1,5 @@
-"""Pre-flight validation package for unified batch/online validation.
-
-This package provides validators that run before any LLM calls to catch
-configuration and input errors early, with consistent error messaging
-across both batch and online execution modes.
-
-Includes static type checking for workflow data flow validation.
+"""
+Pre-flight validation package for unified batch/online validation.
 """
 
 from agent_actions.validation.preflight.error_formatter import (

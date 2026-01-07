@@ -1,9 +1,5 @@
 """
 User-friendly error formatting system.
-
-This module converts internal Python exceptions into clear, actionable
-error messages for config authors (similar to dbt/Terraform tools).
-Users should never see Python stack traces or internal implementation details.
 """
 
 import logging

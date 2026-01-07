@@ -1,11 +1,5 @@
 """
 Validator for vendor compatibility across batch and online modes.
-
-Unified validator that handles vendor compatibility validation for both modes:
-- Batch mode: Requires specific vendor support (openai, gemini, etc.)
-- Online mode: Accepts all vendors (no restrictions)
-
-This replaces the previous batch_mode_compatibility_validator.py.
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (

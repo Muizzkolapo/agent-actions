@@ -1,15 +1,5 @@
 """
 Prompt Analysis using Jinja2 AST Parser (NO REGEX).
-
-Instead of fragile regex parsing, this uses Jinja2's built-in Abstract Syntax Tree
-(AST) parser to extract variable references with 100% accuracy.
-
-Benefits over regex:
-- Handles all Jinja2 syntax correctly (filters, tests, conditionals)
-- No false positives/negatives
-- Knows context (inside {% if %}, in filters, etc.)
-- Respects Jinja2 escaping and string literals
-- Industry-standard approach
 """
 
 import logging

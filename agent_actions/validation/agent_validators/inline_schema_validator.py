@@ -1,12 +1,5 @@
 """
 Validator for inline schema configuration.
-
-Validates:
-- Schema is a dictionary
-- Field names are strings
-- Field types are strings
-- Field types are valid (using SchemaTypeValidator)
-- Warns about schema/schema_name conflicts
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (

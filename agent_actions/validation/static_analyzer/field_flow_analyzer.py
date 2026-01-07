@@ -1,26 +1,5 @@
-"""Field flow analyzer for workflow data lineage tracking.
-
-Analyzes how fields flow through a workflow, tracking:
-- Which agents produce which fields
-- Which agents consume which fields
-- Field transformations (observe, passthrough, drop)
-- Complete lineage from source to consumption
-
-Example:
-    from agent_actions.validation.static_analyzer import (
-        WorkflowStaticAnalyzer,
-        FieldFlowAnalyzer,
-    )
-
-    analyzer = WorkflowStaticAnalyzer(workflow_config)
-    graph = analyzer.get_graph()
-    result = analyzer.analyze()
-
-    flow_analyzer = FieldFlowAnalyzer(graph, result)
-    flow = flow_analyzer.get_full_flow()
-
-    # Trace a specific field
-    lineage = flow_analyzer.get_field_lineage("extractor", "summary")
+"""
+Field flow analyzer for workflow data lineage tracking.
 """
 
 from dataclasses import dataclass, field

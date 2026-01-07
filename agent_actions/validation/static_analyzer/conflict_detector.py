@@ -1,24 +1,5 @@
-"""Conflict detector for workflow field name collisions.
-
-Detects field name conflicts that can cause ambiguous references:
-- Shadowing conflicts: Multiple actions produce same field name
-- Ambiguous references: Unqualified field reference matches multiple sources
-- Drop-recreate conflicts: Field dropped then recreated with same name
-
-Example:
-    from agent_actions.validation.static_analyzer import (
-        WorkflowStaticAnalyzer,
-        ConflictDetector,
-    )
-
-    analyzer = WorkflowStaticAnalyzer(workflow_config)
-    graph = analyzer.get_graph()
-
-    detector = ConflictDetector(graph)
-    conflicts = detector.detect_all()
-
-    for conflict in conflicts:
-        print(f"{conflict.severity}: {conflict.message}")
+"""
+Conflict detector for workflow field name collisions.
 """
 
 from dataclasses import dataclass, field

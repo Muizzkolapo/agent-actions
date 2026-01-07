@@ -1,33 +1,5 @@
 """
 Centralized service for parsing and resolving field references.
-
-This is the main entry point for field reference operations across the codebase.
-Provides unified parsing, resolution, and substitution for field references in
-guards, prompts, filters, and context_scope directives.
-
-Features:
-- Multiple syntax support: selector (action.field), template ({action.field}), Jinja
-- Nested path resolution: action.response.data.status
-- Array index support: action.items.0.name
-- Validation against dependency graph
-- Substitution in text strings
-
-Example:
-    resolver = FieldReferenceResolver()
-
-    # Parse and resolve a reference
-    result = resolver.resolve(
-        "extract_facts.response.count",
-        field_context={'extract_facts': {'response': {'count': 5}}}
-    )
-    # result.value = 5
-
-    # Substitute in text
-    text = resolver.substitute(
-        "Found {source.title} with {extract.count} items",
-        field_context
-    )
-    # "Found My Document with 5 items"
 """
 
 import json
