@@ -16,6 +16,16 @@
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "Agent Actions",
+      "properties": {
+        "agentActions.pythonPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to Python interpreter. Leave empty to auto-detect from VS Code Python extension."
+        }
+      }
+    },
     "grammars": [
       {
         "scopeName": "markdown.prompt-blocks.injection",
