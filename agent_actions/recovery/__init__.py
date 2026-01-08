@@ -15,8 +15,8 @@ Key difference:
 - Reprompt: Modify prompt with error feedback, retry
 """
 
-from agent_actions.recovery.config import RecoveryConfig, RecoveryMode
-from agent_actions.recovery.engine import RecoveryEngine, RecoveryResult
+from agent_actions.recovery.recovery_config import RecoveryConfig, RecoveryMode
+from agent_actions.recovery.recovery_engine import RecoveryEngine, RecoveryResult
 
 __all__ = [
     "RecoveryConfig",

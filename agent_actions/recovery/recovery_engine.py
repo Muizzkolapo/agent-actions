@@ -10,12 +10,14 @@ import logging
 import time
 import random
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, Optional, Union
 
-from agent_actions.recovery.config import (
+from agent_actions.recovery.recovery_config import (
     RecoveryConfig,
     RecoveryMode,
     ExhaustedBehavior,
+    RetryConfig,
+    RepromptConfig,
 )
 from agent_actions.errors import RateLimitError, NetworkError
 
@@ -73,7 +75,7 @@ class RecoveryEngine:
             config: RecoveryConfig instance
             tracker: Optional RetryTracker for logging events
         """
-        self.config = config
+        self.recovery_config = config
         self.tracker = tracker
 
         # Lazy import JSON repair to avoid circular deps
@@ -115,8 +117,8 @@ class RecoveryEngine:
         action_name = context.get("action", "unknown")
         record = context.get("record", {})
 
-        retry_config = self.config.retry
-        reprompt_config = self.config.reprompt
+        retry_config = self.recovery_config.retry
+        reprompt_config = self.recovery_config.reprompt
 
         total_attempts = 0
         last_error = None
@@ -131,7 +133,7 @@ class RecoveryEngine:
             try:
                 # Inner loop: reprompt for validation errors
                 reprompt_attempt = 0
-                current_prompt_modifier = None
+                _current_prompt_modifier = None  # Reserved for future use
 
                 while (
                     reprompt_attempt < reprompt_config.max_attempts
@@ -176,7 +178,7 @@ class RecoveryEngine:
                                     reprompt_attempt < reprompt_config.max_attempts
                                     and build_reprompt_fn
                                 ):
-                                    current_prompt_modifier = build_reprompt_fn(
+                                    _current_prompt_modifier = build_reprompt_fn(
                                         response, error_msg, reprompt_attempt
                                     )
                                     continue
@@ -333,7 +335,7 @@ class RecoveryEngine:
                 record=record,
             )
 
-    def _mark_success(self, action: str) -> None:
+    def _mark_success(self, _action: str) -> None:
         """Mark the last event as successful."""
         # Tracker handles this internally
         pass
