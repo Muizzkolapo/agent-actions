@@ -1,13 +1,5 @@
 """
 Ollama Local Batch Client - Simple local batch simulation.
-
-This client simulates batch processing by:
-1. Writing input JSONL files
-2. Processing all requests immediately using Ollama
-3. Writing output JSONL files
-
-No external API server needed - everything runs in-process.
-Registry tracking is handled by BatchService, not this client.
 """
 
 import json

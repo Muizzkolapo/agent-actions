@@ -1,10 +1,5 @@
 """
 Interceptor that validates responses using user-defined functions.
-
-User-defined validators must:
-1. Accept (response: Any, **kwargs) where response is the raw API response
-2. Extract content from the response structure as needed
-3. Return Tuple[bool, str | None] - (success, error_message)
 """
 
 from __future__ import annotations

@@ -1,38 +1,5 @@
 """
 UDF (User-Defined Function) Registry for Agent Actions.
-
-This module provides a decorator-based registration system for user-defined functions,
-similar to dbt macros. Functions are auto-discovered and referenced by name only.
-
-Key Features:
-- @udf_tool decorator with type hint schemas (TypedDict, Pydantic, dataclass)
-- Case-insensitive exact name matching
-- Duplicate detection at registration time
-- Function metadata storage (module, file, docstring, signature, schema)
-- Thread-safe registry operations
-- Input and output schema validation
-- Schema compilation caching for performance
-
-Usage:
-    from typing import TypedDict
-    from agent_actions import udf_tool
-    from agent_actions.configuration.new_format_schema import Granularity
-
-    class MyInput(TypedDict):
-        text: str
-
-    class MyOutput(TypedDict):
-        result: str
-
-    @udf_tool(input_type=MyInput, output_type=MyOutput)
-    def my_function(data):
-        '''Process data.'''
-        return {'result': data['text']}
-
-    # Batch processing
-    @udf_tool(input_type=MyInput, granularity=Granularity.FILE)
-    def batch_function(data):
-        return [{'result': item['text']} for item in data]
 """
 
 import inspect

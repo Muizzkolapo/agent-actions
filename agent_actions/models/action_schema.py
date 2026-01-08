@@ -1,19 +1,5 @@
-"""Unified schema model for workflow actions.
-
-Provides a single, consistent representation for action schemas used by
-both the `schema` and `inspect` CLI commands, eliminating duplication.
-
-Example:
-    from agent_actions.models import ActionSchema, FieldInfo, FieldSource
-
-    schema = ActionSchema(
-        name="extractor",
-        kind="llm",
-        output_fields=[
-            FieldInfo(name="summary", source=FieldSource.SCHEMA),
-            FieldInfo(name="title", source=FieldSource.OBSERVE),
-        ],
-    )
+"""
+Unified schema model for workflow actions.
 """
 
 from dataclasses import dataclass, field

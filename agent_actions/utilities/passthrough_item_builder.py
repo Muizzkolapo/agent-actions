@@ -1,66 +1,8 @@
 """
 Unified passthrough item construction for batch and online modes.
 
-This module consolidates passthrough item building logic that was duplicated between:
-- Batch mode: batch_passthrough_builder.py (class-based)
-- Online mode: target_content_processor.py (inline construction)
-
-## Overview
-
-PassthroughItemBuilder provides a single, unified interface for constructing passthrough
-items with consistent structure across both execution modes. It handles all the metadata,
-lineage, and field management that was previously implemented separately.
-
-## Usage
-
-**Batch Mode** (replacing batch_passthrough_builder.py logic):
-```python
-from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
-
-# Build passthrough item from filtered row
-passthrough_item = PassthroughItemBuilder.build_item(
-    row=row,
-    reason='where_clause_not_matched',
-    idx=1,
-    custom_id=custom_id,
-    mode='batch'
-)
-```
-
-**Online Mode** (replacing inline construction in target_content_processor.py):
-```python
-from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
-
-# Build passthrough item from filtered item
-passthrough_item = PassthroughItemBuilder.build_item(
-    row=item,
-    reason='where_clause_not_matched',
-    idx=self.idx,
-    source_guid=source_guid,
-    mode='online'
-)
-```
-
-## Benefits
-
-1. **Single Source of Truth** - One implementation for passthrough construction
-2. **Consistent Structure** - Both modes produce identical passthrough items
-3. **Mode-Specific Metadata** - Automatically handles legacy vs new metadata formats
-4. **Better Testing** - Centralized logic is easier to test comprehensively
-
-## Related Components
-
-- **FieldManager**: Creates base processed item structure
-- **LineageBuilder**: Builds lineage tracking for passthrough items
-- **IDGenerator**: Generates target_id and node_id
-- **BatchPassthroughBuilder**: Uses this builder internally
-- **TargetContentProcessor**: Uses this builder for online mode
-
-## See Also
-
-- Architecture docs: `dev_artefacts/BATCH_REALTIME_ARCHITECTURE.md`
-- Tests: `tests/utilities/test_passthrough_item_builder.py`
-- Plan: Phase 3 in consolidation plan
+This module consolidates passthrough item building logic from batch (batch_passthrough_builder.py)
+and online (target_content_processor.py) modes into a unified interface.
 """
 
 from typing import Dict, Optional, Any

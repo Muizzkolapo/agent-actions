@@ -1,9 +1,5 @@
 """
 Validator for agent entry basic structure.
-
-This is the first validator in the chain and performs critical checks:
-- Entry must be a dictionary
-- Entry must be accessible
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (

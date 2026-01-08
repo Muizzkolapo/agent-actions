@@ -1,22 +1,5 @@
 """
 Base batch client interface for batch processing systems.
-
-This module defines the abstract base class that all batch clients must implement,
-enabling support for multiple batch processing backends (OpenAI, custom, etc.).
-
-Key Design Principle:
---------------------
-Different clients have different input/output formats, but we intercept and transform
-these to match our standardized format. This ensures the rest of the agent-actions
-system doesn't need to know about client-specific details.
-
-Flow:
-1. Agent-actions data → BatchTask → Client-specific format (via format_task_for_client)
-2. Submit to client
-3. Client-specific response → BatchResult (via parse_client_response)
-4. BatchResult → Agent-actions workflow format
-
-This allows us to add new clients without changing the core workflow logic.
 """
 
 from abc import ABC, abstractmethod

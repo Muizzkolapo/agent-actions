@@ -1,28 +1,5 @@
 """
 LLM Context Builder - Mode-specific implementations for batch and realtime.
-
-Handles context_scope.drop (field removal) and context_scope.observe (field merging)
-with mode-specific implementations to maintain backward compatibility.
-
-ARCHITECTURE NOTE: This is the ONLY place where batch vs realtime divergence is
-intentional and acceptable. The divergence exists because:
-
-- Batch mode: Uses simple dict.pop() for field removal. This is appropriate
-  because batch processes clean, new data where direct dict manipulation is safe.
-
-- Realtime mode: Uses DataTransformer.remove_schema_objects() for field removal.
-  This maintains backward compatibility with existing realtime consumers that
-  expect the DataTransformer's behavior.
-
-Both methods produce SEMANTICALLY EQUIVALENT output - the difference is only in
-implementation strategy, not in the resulting context shape. Dropped fields are
-absent in both modes, observed fields are merged in both modes.
-
-IMPORTANT: Do NOT add additional mode-specific logic here. If you need different
-behavior between modes, you're likely violating the architecture invariant that
-templates work identically in both modes.
-
-See: https://github.com/Muizzkolapo/agent-actions/issues/640
 """
 
 from typing import Dict, Any, Optional

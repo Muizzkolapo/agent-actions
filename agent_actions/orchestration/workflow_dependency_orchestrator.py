@@ -1,9 +1,5 @@
 """
 Workflow dependency orchestration for upstream/downstream execution.
-
-This module handles recursive execution of dependent workflows,
-coordinating upstream dependencies before and downstream workflows after
-the main workflow completes.
 """
 
 from __future__ import annotations

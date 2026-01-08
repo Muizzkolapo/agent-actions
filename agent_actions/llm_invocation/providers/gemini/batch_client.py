@@ -1,9 +1,5 @@
 """
 Gemini Batch API client implementation.
-
-This module implements the BaseBatchClient interface for Google's Gemini Batch API,
-handling the transformation between our standardized format and Gemini's
-specific requirements.
 """
 
 import json

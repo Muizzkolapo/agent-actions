@@ -1,9 +1,5 @@
 """
 Field Management Service.
-
-This module provides utilities for managing required fields in data objects:
-- Ensure required fields exist (target_id, source_guid, node_id)
-- Create processed items with all required fields
 """
 
 from typing import Dict, Any, Optional, List

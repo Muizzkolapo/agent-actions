@@ -1,9 +1,5 @@
-"""Module for staging data loading and processing.
-
-REFACTORED: Unified source saving logic to prevent timing issues.
-- Source data is ALWAYS saved before any processing (batch or realtime)
-- Single source of truth for source saving eliminates duplication
-- Helper functions separate concerns and improve maintainability
+"""
+Module for staging data loading and processing.
 """
 
 from dataclasses import dataclass

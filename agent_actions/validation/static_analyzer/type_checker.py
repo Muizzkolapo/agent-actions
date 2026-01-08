@@ -1,9 +1,5 @@
-"""Static type checker for workflow field references.
-
-Validates that all field references in a workflow are valid:
-- Referenced agents exist
-- Referenced agents are declared in dependencies
-- Referenced fields exist in upstream agent's output schema
+"""
+Static type checker for workflow field references.
 """
 
 from typing import List

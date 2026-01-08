@@ -1,28 +1,5 @@
 """
 Service for building rich evaluation contexts for guards, filters, and prompts.
-
-Bridges the existing ContextScopeProcessor infrastructure with guard/filter evaluation
-by providing unified access to all upstream action data.
-
-The key insight is that ContextScopeProcessor.build_field_context_with_history() already
-auto-loads ALL upstream action data - this module makes that data accessible to guards
-and filters which previously only had access to current item content.
-
-Example:
-    provider = EvaluationContextProvider()
-
-    # Build context for guard evaluation
-    context = provider.build_context(
-        current_item=item,
-        agent_config=config,
-        agent_name='my_action',
-        agent_indices={'extract': 0, 'my_action': 1},
-        file_path='/path/to/target'
-    )
-
-    # Now guards can access upstream fields!
-    # WHERE clause: "extract.count > 5" will work!
-    eval_data = context.to_flat_dict()
 """
 
 import logging

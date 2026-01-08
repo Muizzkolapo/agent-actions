@@ -1,21 +1,5 @@
 """
 Unified parser for field references across different syntaxes.
-
-Supports:
-- Selector syntax: action.field or action.nested.path (guards, context_scope)
-- Template syntax: {action.field} (legacy prompts)
-- Jinja syntax: {{ action.field }} (modern prompts)
-
-Example:
-    parser = ReferenceParser()
-
-    # Parse selector syntax
-    ref = parser.parse("extract_facts.response.data.count")
-    # ParsedReference(action_name="extract_facts", field_path=["response", "data", "count"])
-
-    # Parse from text
-    refs = parser.parse_batch("Found {source.title} with {extract.count} items")
-    # [ParsedReference(...), ParsedReference(...)]
 """
 # Line-too-long: Regex patterns and docstrings require longer lines for readability
 

@@ -1,9 +1,5 @@
-"""Extract field references from agent configurations.
-
-Parses templates, guards, and context_scope directives to extract
-all field references that an agent requires from upstream agents.
-
-Uses Jinja2's AST parser for robust template analysis.
+"""
+Extract field references from agent configurations.
 """
 
 import re

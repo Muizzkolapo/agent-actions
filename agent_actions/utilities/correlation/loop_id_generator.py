@@ -1,10 +1,5 @@
 """
 Loop Correlation Service.
-
-This module provides thread-safe loop correlation ID management:
-- Generate deterministic correlation IDs for loop contexts
-- Maintain a registry for consistency across loop iterations
-- Support both source_guid-based and position-based correlation
 """
 
 import threading

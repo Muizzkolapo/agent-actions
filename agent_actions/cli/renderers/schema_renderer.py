@@ -1,22 +1,5 @@
-"""Unified Rich rendering for schema display.
-
-Provides consistent rendering of action schemas across CLI commands,
-eliminating duplicate display logic in schema.py and inspect.py.
-
-Example:
-    from agent_actions.cli.renderers import SchemaRenderer
-    from agent_actions.services import WorkflowSchemaService
-
-    service = WorkflowSchemaService(config)
-    renderer = SchemaRenderer(console)
-
-    # Render summary table
-    table = renderer.render_summary_table(service.get_all_schemas(), execution_order)
-    console.print(table)
-
-    # Render action detail
-    panel = renderer.render_action_detail(service.get_action_schema("extractor"))
-    console.print(panel)
+"""
+Unified Rich rendering for schema display.
 """
 
 from typing import Dict, List, Optional

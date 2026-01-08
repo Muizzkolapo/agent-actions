@@ -1,23 +1,5 @@
 """
 Thread-safe token usage tracking for LLM providers.
-
-Providers that support token usage reporting (OpenAI, Anthropic) store
-usage data in thread-local storage after API calls. AgentExecutor retrieves
-this data to track token consumption per action.
-
-Thread-local storage ensures no cross-contamination in parallel execution.
-Each thread maintains its own usage data, preventing race conditions when
-multiple agents run concurrently.
-
-Usage Pattern:
-    In provider (OpenAI, Anthropic):
-        usage_data = {'input_tokens': 100, 'output_tokens': 50, 'total_tokens': 150}
-        set_last_usage(usage_data)
-
-    In orchestration (AgentExecutor):
-        tokens = get_last_usage()  # Returns usage dict or None
-        if tokens:
-            track_action_tokens(tokens)
 """
 
 import threading

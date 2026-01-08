@@ -1,9 +1,5 @@
 """
 Anthropic Batch API client implementation.
-
-This module implements the BaseBatchClient interface for Anthropic's API,
-handling the transformation between our standardized format and Anthropic's
-specific requirements.
 """
 
 import json

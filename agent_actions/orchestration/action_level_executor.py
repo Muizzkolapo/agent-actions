@@ -1,11 +1,5 @@
 """
 Action-level execution orchestration module.
-
-Handles dependency analysis, action-level computation, and parallel execution.
-Extracted from agent_workflow.py to consolidate parallel execution logic.
-
-An "Action" is a stage of execution where multiple agents can run in parallel
-if they have no inter-dependencies.
 """
 
 import asyncio

@@ -1,9 +1,5 @@
 """
 Safe error formatting utilities that never crash.
-
-This module provides bulletproof error formatting functions that handle
-all edge cases including broken __str__ methods, circular references,
-and malformed exception chains.
 """
 
 import logging

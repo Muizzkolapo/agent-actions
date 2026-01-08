@@ -1,10 +1,5 @@
 """
 Vendor configuration models for LLM providers.
-
-This module provides vendor configuration classes and enums used across the agent-actions framework
-by both batch and realtime modes, as well as response processing.
-
-Moved from llm_invocation/realtime/ to utilities/ to reflect its shared usage.
 """
 
 from enum import Enum

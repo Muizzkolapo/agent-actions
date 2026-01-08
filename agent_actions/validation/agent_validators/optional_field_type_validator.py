@@ -1,13 +1,5 @@
 """
 Validator for optional field types in agent configuration.
-
-Validates that optional fields have correct types when present:
-- description: string
-- version: string, int, or float
-- dependencies: list
-- is_operational: boolean
-- json_mode: boolean
-- prompt_debug: boolean
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (

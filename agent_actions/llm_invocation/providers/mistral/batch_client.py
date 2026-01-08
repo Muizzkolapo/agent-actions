@@ -1,9 +1,5 @@
 """
 Mistral Batch API client implementation.
-
-This module implements the BaseBatchClient interface for Mistral's Batch API,
-handling the transformation between our standardized format and Mistral's
-specific requirements.
 """
 
 import os

@@ -1,11 +1,5 @@
-"""Centralized error exports for agent-actions.
-
-This module provides a clean, organized error hierarchy following the dbt-mcp pattern.
-All errors are organized by domain and exported from a single location for easy imports.
-
-Usage:
-    from agent_actions.errors import ConfigurationError, ValidationError
-    from agent_actions.errors import FileLoadError, AgentExecutionError
+"""
+Centralized error exports for agent-actions.
 """
 
 # Base error

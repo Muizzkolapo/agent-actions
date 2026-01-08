@@ -1,11 +1,5 @@
 """
 Custom exceptions for field resolution operations.
-
-Provides specific exception types for different error scenarios:
-- InvalidReferenceError: Malformed field reference syntax
-- ReferenceNotFoundError: Referenced action or field not found in context
-- DependencyValidationError: Reference violates dependency graph constraints
-- SchemaFieldValidationError: Field reference doesn't match action's output schema
 """
 
 

@@ -1,14 +1,5 @@
-"""Agent Actions logging infrastructure.
-
-This module provides structured logging with correlation IDs, consistent
-formatting, and centralized configuration for the Agent Actions framework.
-
-Example:
-    >>> from agent_actions.logging import LoggerFactory, CorrelationContext
-    >>> LoggerFactory.initialize()
-    >>> logger = LoggerFactory.get_logger('my_module')
-    >>> ctx = CorrelationContext.start_workflow('my-workflow')
-    >>> logger.info('Starting processing')  # Includes correlation_id
+"""
+Agent Actions logging infrastructure.
 """
 
 from agent_actions.logging.config import HandlerConfig, LoggingConfig, LogLevel

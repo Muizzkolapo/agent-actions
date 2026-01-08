@@ -1,10 +1,5 @@
 """
 ID Generation Service.
-
-This module provides centralized ID generation utilities for processors:
-- UUID4 target IDs
-- Node IDs with index prefix
-- Deterministic UUID5 GUIDs from content
 """
 
 import uuid

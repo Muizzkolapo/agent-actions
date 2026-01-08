@@ -1,25 +1,5 @@
-"""Workflow schema service for unified schema access.
-
-Provides a single source of truth for accessing workflow action schemas,
-wrapping the underlying WorkflowStaticAnalyzer and converting its
-data structures to the unified ActionSchema model.
-
-Example:
-    from agent_actions.services import WorkflowSchemaService
-
-    service = WorkflowSchemaService(workflow_config, udf_registry)
-
-    # Get schema for a single action
-    schema = service.get_action_schema("extractor")
-    print(schema.available_outputs)
-
-    # Get all schemas
-    all_schemas = service.get_all_schemas()
-
-    # Validate the workflow
-    result = service.validate()
-    if not result.is_valid:
-        print(result.format_report())
+"""
+Workflow schema service for unified schema access.
 """
 
 from typing import Any, Dict, List, Optional

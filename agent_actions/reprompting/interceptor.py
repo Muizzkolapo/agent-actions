@@ -1,9 +1,5 @@
-"""Reprompt interceptor that integrates with the response interceptor system.
-
-This interceptor uses RepromptEngine to:
-1. Attempt JSON repair on responses
-2. Validate against constraints
-3. Generate improved prompts for retry when validation fails
+"""
+Reprompt interceptor that integrates with the response interceptor system.
 """
 
 from typing import Any, Dict, List, Optional

@@ -1,10 +1,5 @@
 """
 Orchestrator for agent entry validation.
-
-Coordinates execution of specialized validators in a chain, handling:
-- Early termination on critical structural failures
-- Shared context and utilities access
-- Error and warning aggregation
 """
 
 from typing import Dict, Any, List, Optional

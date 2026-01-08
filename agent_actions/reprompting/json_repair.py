@@ -1,14 +1,5 @@
-"""JSON repair strategies for fixing common LLM JSON output errors.
-
-This module provides repair strategies that can fix JSON errors without
-making additional API calls. Repairs are attempted in order of likelihood.
-
-Common issues fixed:
-- Markdown code blocks (```json ... ```)
-- Trailing commas in arrays/objects
-- Single quotes instead of double quotes
-- Unclosed brackets/braces
-- Truncated JSON
+"""
+JSON repair strategies for fixing common LLM JSON output errors.
 """
 
 import json

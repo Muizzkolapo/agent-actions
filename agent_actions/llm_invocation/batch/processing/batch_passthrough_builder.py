@@ -1,11 +1,5 @@
 """
 Passthrough Data Builder.
-
-Centralized logic for building passthrough data structures for filtered/skipped items.
-Eliminates code duplication between different passthrough creation scenarios.
-
-This builder now delegates to PassthroughItemBuilder for item construction,
-providing a high-level interface for batch mode passthrough operations.
 """
 
 import re

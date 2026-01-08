@@ -1,18 +1,5 @@
 """
 Preprocessing module for Agent Actions framework.
-
-This module provides data preprocessing, transformation, filtering, chunking,
-and staging operations for agent-based workflows.
-
-Submodules:
-- parsing: Guard condition AST parsing and operator registry
-- filtering: Dataset filtering logic with guard condition support
-- chunking: Field-level text splitting with strategies
-- transformation: Data structure transformations (dict, string, response)
-- context: Historical context preprocessing
-- staging: Staging data loading and processing
-- processing: Core data processor with registry
-- utilities: Source path management
 """
 
 # Parsing submodule

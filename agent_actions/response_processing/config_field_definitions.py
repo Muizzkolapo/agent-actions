@@ -1,22 +1,5 @@
 """
 Centralized config field definitions for ActionExpander.
-
-This module provides a whitelist-based system for automatic field inheritance,
-eliminating the need for manual field-by-field copying in ActionExpander.
-
-Adding a new simple config field:
-    1. Add the field to SIMPLE_CONFIG_FIELDS dict with its default value
-    2. That's it! The field will be automatically inherited via inherit_simple_fields()
-
-Simple vs Complex Fields:
-    - Simple: Fields that follow the pattern action.get(field, defaults.get(field, default))
-              No transformation, validation, or special logic needed.
-    - Complex: Fields requiring template replacement, parsing, merging, or validation
-              These still need manual handling in ActionExpander.
-
-Examples:
-    Simple fields: model_vendor, json_mode, few_shot
-    Complex fields: schema (template replacement), guard (parsing), observe/drops (additive merging)
 """
 
 from typing import Dict, Any

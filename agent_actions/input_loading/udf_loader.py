@@ -1,13 +1,5 @@
 """
 UDF Discovery and Validation Module.
-
-This module provides functionality to automatically discover and validate
-User-Defined Functions (UDFs) decorated with @udf_tool.
-
-Key Features:
-- Auto-discovery by scanning directories and importing Python files
-- Validation of UDF references in configuration
-- Integration with UDF registry for function lookup
 """
 
 import importlib.util

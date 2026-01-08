@@ -1,12 +1,5 @@
 """
 Agent workflow orchestration.
-
-This module provides the main AgentWorkflow class that orchestrates
-multi-agent workflow execution. It delegates to specialized modules:
-- ArtifactLinker: File system operations and symlink management
-- WorkflowDependencyOrchestrator: Upstream/downstream workflow coordination
-- AgentExecutor: Single agent execution
-- ActionLevelOrchestrator: Parallel execution coordination
 """
 
 import hashlib

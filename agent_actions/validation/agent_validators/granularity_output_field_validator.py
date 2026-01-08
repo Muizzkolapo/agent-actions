@@ -1,9 +1,5 @@
 """
 Validator for granularity and output_field configuration.
-
-Checks:
-- granularity must be 'record' or 'file'
-- output_field can only be used when json_mode is false
 """
 
 from agent_actions.validation.agent_validators.base_agent_validator import (
