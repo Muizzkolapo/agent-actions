@@ -284,11 +284,170 @@ When workflows chain:
 
 Data from `upstream_workflow.final_action` becomes input.
 
+## Grounded Retrieval Pattern
+
+Use this pattern when LLM output needs to reference **real data** (products, documents, records) instead of hallucinating.
+
+### Problem: LLM Hallucination
+
+```yaml
+# BAD - LLM invents fake IDs/data
+- name: generate_recommendations
+  prompt: "Recommend 5 similar items..."
+  # LLM returns: {"id": "FAKE-123", "name": "Made Up Item"}
+```
+
+### Solution: 3-Step Grounded Retrieval
+
+```yaml
+# STEP 1: LLM generates SEARCH CRITERIA (not final data)
+- name: generate_search_criteria
+  schema: search_criteria
+  prompt: $workflow.Generate_Search_Criteria
+  # Output: {query_text, categories, keywords, exclude_id}
+
+# STEP 2: TOOL retrieves REAL candidates from data source
+- name: retrieve_candidates
+  kind: tool
+  impl: search_catalog
+  # Output: {results: [...real items from DB...], metadata: {...}}
+
+# STEP 3: LLM RANKS from retrieved candidates only
+- name: rank_results
+  dependencies: [retrieve_candidates]
+  schema: ranked_results
+  prompt: $workflow.Rank_Results
+  context_scope:
+    observe:
+      - retrieve_candidates.results  # LLM can ONLY see real items
+  # Output: Ranked subset with explanations
+```
+
+### Key Components
+
+**1. Search Criteria Schema:**
+```yaml
+name: search_criteria
+fields:
+  - id: query_text
+    type: string
+    description: "Natural language search query"
+  - id: categories
+    type: array
+    items: {type: string}
+  - id: keywords
+    type: array
+    items: {type: string}
+  - id: exclude_id
+    type: string
+    description: "Current item's ID to exclude from results"
+```
+
+**2. Retrieval Tool:**
+```python
+class SearchCatalogOutput(TypedDict, total=False):
+    results: List[ResultItem]  # Use nested TypedDict, NOT Dict[str, Any]
+    metadata: SearchMetadata
+
+@udf_tool(input_type=SearchInput, output_type=SearchCatalogOutput)
+def search_catalog(data: dict) -> dict:
+    # Load from seed_data, vector DB, or SQL
+    catalog = load_catalog()
+    matches = score_and_filter(catalog, data)
+    return {"results": matches, "metadata": {...}}
+```
+
+**3. Ranking Prompt:**
+```markdown
+{prompt Rank_Results}
+Select the TOP 5 most relevant items from these candidates.
+
+## AVAILABLE CANDIDATES (you MUST choose from these only)
+{% for item in retrieve_candidates.results %}
+- ID: {{ item.id }}
+  Name: "{{ item.name }}"
+  Category: {{ item.category }}
+{% endfor %}
+
+⚠️ DO NOT invent items. Only use IDs from the list above.
+{end_prompt}
+```
+
+### Seed Data for Catalog
+
+```yaml
+defaults:
+  context_scope:
+    seed_data:
+      catalog: $file:catalog.json
+```
+
+Place catalog in: `agent_workflow/my_workflow/seed_data/catalog.json`
+
+### Benefits
+
+- ✅ **Zero hallucination** - All IDs/names are real
+- ✅ **Auditable** - Can trace which candidates were retrieved
+- ✅ **Swappable backend** - JSON file → Vector DB → SQL without workflow changes
+- ✅ **Testable** - Fixed catalog = deterministic outputs
+
+## Context Passthrough for Merging Branches
+
+When parallel branches merge, use `context_scope.passthrough` to preserve upstream data.
+
+### Problem: Lost Data at Merge Point
+
+```yaml
+# Parallel branches
+- name: enrich_metadata
+  dependencies: [validate_input]
+
+- name: generate_summary
+  dependencies: [validate_input]
+
+# Merge point - only gets its own schema output!
+- name: score_quality
+  dependencies: [enrich_metadata, generate_summary]
+  schema: score_quality
+  # ERROR: downstream tool receives empty data
+```
+
+### Solution: Explicit Passthrough
+
+```yaml
+- name: score_quality
+  dependencies: [enrich_metadata, generate_summary, classify_content]
+  schema: score_quality
+  prompt: $workflow.Score_Quality
+  context_scope:
+    passthrough:
+      # Source metadata
+      - source.id
+      - source.name
+      - source.category
+      # From upstream actions
+      - validate_input.validated_fields
+      - enrich_metadata.enriched_data
+      - generate_summary.summary_text
+      - classify_content.classification
+```
+
+### When to Use Passthrough
+
+| Scenario | Use Passthrough |
+|----------|----------------|
+| LLM action followed by tool that needs full context | ✅ Yes |
+| Parallel branches merging before final formatting | ✅ Yes |
+| Sequential LLM actions where each adds fields | Usually automatic |
+| Tool actions (UDFs return full data) | Usually not needed |
+
 ## Best Practices
 
 1. **Preserve source_guid** - Never modify, enables tracing
 2. **Add, don't replace** - Enrich records with new fields
-3. **Use meaningful field names** - `syllabus_alignment_score` not `score1`
+3. **Use meaningful field names** - `quality_score` not `score1`
 4. **Document field sources** - Comment which node adds which field
 5. **Check lineage for debugging** - Full processing path available
 6. **Use guards early** - Filter bad data before expensive processing
+7. **Use grounded retrieval** - When LLM output must reference real data
+8. **Use passthrough at merge points** - Prevent data loss when branches converge

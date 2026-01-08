@@ -1,6 +1,6 @@
 ---
 name: agent-actions-workflow
-description: Build, debug, and manage agent-actions workflows with YAML configs, UDF tools, and TypedDict schemas. Use when (1) creating new agent-actions workflows, (2) adding/modifying workflow actions, (3) creating UDF tool files with TypedDict schemas, (4) debugging schema validation errors, (5) tracing field flow between nodes, (6) understanding context_scope (observe/passthrough/drop), (7) configuring guards and conditional execution, (8) setting up cross-workflow dependencies, (9) using the agac CLI.
+description: Build, debug, and manage agent-actions workflows with YAML configs, UDF tools, and TypedDict schemas. Use when (1) creating new agent-actions workflows, (2) adding/modifying workflow actions, (3) creating UDF tool files with TypedDict schemas, (4) debugging schema validation errors, (5) tracing field flow between nodes, (6) understanding context_scope (observe/passthrough/drop), (7) configuring guards and conditional execution, (8) setting up cross-workflow dependencies, (9) using the agac CLI, (10) configuring retry (transient errors) and reprompt (validation errors).
 ---
 
 # Agent Actions Workflow Builder
@@ -156,6 +156,30 @@ Execute actions multiple times with varying parameters:
     source: generate_distractor
     pattern: merge  # Combines all loop outputs
 ```
+
+## Retry & Reprompt
+
+**Retry** handles transient errors (rate limits, network). **Reprompt** handles validation errors (bad JSON, schema violations).
+
+```yaml
+defaults:
+  # Retry: transient errors
+  retry:
+    max_attempts: 3
+    on_exhausted: dead_letter  # continue | fail | dead_letter
+
+  # Reprompt: validation errors (requires explicit config)
+  reprompt:
+    max_attempts: 4
+    json_repair: true           # Fix malformed JSON without API call
+    use_llm_critique: true      # Use LLM to analyze failures
+    critique_after_attempt: 2   # Start critique after N attempts
+    on_exhausted: continue
+```
+
+To disable: `reprompt: false`
+
+See `references/debugging-guide.md` for reprompt options.
 
 ## Cross-Workflow Dependencies
 
@@ -506,7 +530,12 @@ Common validation errors and fixes:
 Use reprompting for auto-retry on schema failures:
 
 ```yaml
-reprompt: smart  # Retry with LLM feedback
+reprompt:
+  max_attempts: 4
+  json_repair: true
+  use_llm_critique: true
+  critique_after_attempt: 2
+  on_exhausted: continue
 ```
 
 See `references/debugging-guide.md` for complete troubleshooting.

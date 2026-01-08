@@ -52,6 +52,61 @@ def _maybe_inject_failure() -> None:
         )
 
 
+# Reprompt failure injection config
+_REPROMPT_TEST_MODE = os.getenv("REPROMPT_TEST_MODE", "").lower()
+_REPROMPT_FAILURE_RATE = float(os.getenv("REPROMPT_FAILURE_RATE", "0.5"))
+_REPROMPT_SUCCESS_AFTER = int(os.getenv("REPROMPT_SUCCESS_AFTER", "2"))
+_reprompt_failure_count = 0
+
+if _REPROMPT_TEST_MODE:
+    logger.info(
+        "Ollama reprompt failure injection enabled: mode=%s, rate=%.2f, success_after=%d",
+        _REPROMPT_TEST_MODE,
+        _REPROMPT_FAILURE_RATE,
+        _REPROMPT_SUCCESS_AFTER,
+    )
+
+# Malformed JSON samples for testing
+_MALFORMED_SAMPLES = [
+    '```json\n{"name": "test", "value": 123}\n```',  # Markdown wrapped
+    '{"name": "test", "items": [1, 2, 3,]}',  # Trailing comma
+    "{'name': 'test', 'value': 123}",  # Single quotes
+    '{"name": "test", "items": [1, 2, 3',  # Unclosed bracket
+]
+
+
+def _maybe_inject_reprompt_failure(valid_response: Any) -> Any:
+    """
+    Maybe inject malformed response for testing reprompt.
+
+    Returns either the valid response or an injected malformed response.
+    """
+    global _reprompt_failure_count
+
+    if not _REPROMPT_TEST_MODE:
+        return valid_response
+
+    # Allow success after N failures
+    if _reprompt_failure_count >= _REPROMPT_SUCCESS_AFTER:
+        _reprompt_failure_count = 0
+        logger.info("[REPROMPT TEST] Allowing success after %d failures", _REPROMPT_SUCCESS_AFTER)
+        return valid_response
+
+    if _RNG.random() < _REPROMPT_FAILURE_RATE:
+        _reprompt_failure_count += 1
+
+        if _REPROMPT_TEST_MODE == "malformed_json":
+            sample = _RNG.choice(_MALFORMED_SAMPLES)
+            logger.info("[INJECTED REPROMPT FAILURE] Returning malformed JSON: %s...", sample[:40])
+            return sample
+
+        if _REPROMPT_TEST_MODE == "missing_fields":
+            logger.info("[INJECTED REPROMPT FAILURE] Returning response with missing fields")
+            return {"_partial": True, "injected_error": "missing_fields"}
+
+    return valid_response
+
+
 def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
     """Wrap Ollama errors into unified agent-actions error types.
 
@@ -186,15 +241,43 @@ class OllamaClient(BaseClient):
 
         # Parse JSON response
         content = response.message.content
-        try:
-            parsed = json.loads(content)
-            if isinstance(parsed, dict):
-                return [parsed]
-            return [{"response": parsed}]
-        except json.JSONDecodeError as e:
-            logger.warning("Failed to parse Ollama JSON response: %s", e)
-            # Return raw content for reprompt handling
-            return [{"raw_response": content, "_parse_error": str(e)}]
+
+        # Inject reprompt failure if testing (returns malformed content)
+        content = _maybe_inject_reprompt_failure(content)
+
+        # If injection returned a string (malformed JSON), try to repair then parse
+        if isinstance(content, str):
+            try:
+                parsed = json.loads(content)
+                if isinstance(parsed, dict):
+                    return [parsed]
+                return [{"response": parsed}]
+            except json.JSONDecodeError as e:
+                # Try JSON repair before giving up
+                from agent_actions.reprompting.json_repair import JSONRepairStrategy
+
+                repair = JSONRepairStrategy()
+                repair_result = repair.attempt_repair(content)
+
+                if repair_result.success:
+                    logger.info(
+                        "JSON repaired using %s: %s",
+                        repair_result.repair_method,
+                        str(repair_result.data)[:100],
+                    )
+                    if isinstance(repair_result.data, dict):
+                        return [repair_result.data]
+                    return [{"response": repair_result.data}]
+
+                # Repair failed - return raw content for reprompt handling
+                logger.warning("Failed to parse/repair Ollama JSON response: %s", e)
+                return [{"raw_response": content, "_parse_error": str(e)}]
+
+        # If injection returned a dict (missing fields), return directly
+        if isinstance(content, dict):
+            return [content]
+
+        return [{"response": content}]
 
     @staticmethod
     def call_non_json(

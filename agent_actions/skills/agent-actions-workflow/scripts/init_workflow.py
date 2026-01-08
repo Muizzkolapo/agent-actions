@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
 Initialize a new agent-actions workflow with proper directory structure.
+
+Usage:
+    python init_workflow.py <workflow-name> --path <output-dir>
+
+Example:
+    python init_workflow.py my_quiz_gen --path /path/to/agent_workflow
 """
 
 import argparse
