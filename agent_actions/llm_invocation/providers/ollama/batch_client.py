@@ -1,16 +1,31 @@
 """
 Ollama Local Batch Client - Simple local batch simulation.
+
+Supports:
+- Synchronous batch processing (simulates async interface)
+- JSON mode with structured outputs
+- Failure injection for testing batch retry (via environment variables)
+
+Failure Injection (for testing batch retry):
+    OLLAMA_FAILURE_RATE=0.3     # 30% of records will fail (trigger retry)
+    OLLAMA_FAILURE_IDS=id1,id2  # Specific custom_ids to fail
+    OLLAMA_FAILURE_SEED=42      # Reproducible failures for testing
 """
 
 import json
+import logging
+import os
+import random
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Set
 
 from ollama import Client
 from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
@@ -19,6 +34,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     This client processes batches synchronously but maintains
     the same interface as true async clients (OpenAI, Anthropic).
+
+    Supports failure injection via environment variables to test
+    the batch retry infrastructure.
     """
 
     def __init__(self, base_url: Optional[str] = None):
@@ -28,10 +46,23 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         Args:
             base_url: Ollama server URL (default: http://localhost:11434)
         """
-        import os
-
         self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
         self.client = Client(host=self.base_url)
+
+        # Failure injection config (for testing retry)
+        self._failure_rate = float(os.getenv("OLLAMA_FAILURE_RATE", "0"))
+        self._failure_ids: Set[str] = set(
+            id.strip() for id in os.getenv("OLLAMA_FAILURE_IDS", "").split(",") if id.strip()
+        )
+        seed_str = os.getenv("OLLAMA_FAILURE_SEED", "")
+        self._rng = random.Random(int(seed_str) if seed_str.isdigit() else None)
+
+        if self._failure_rate > 0 or self._failure_ids:
+            logger.info(
+                "Ollama failure injection enabled: rate=%.2f, ids=%s",
+                self._failure_rate,
+                self._failure_ids or "random",
+            )
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
@@ -82,6 +113,50 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         """Write tasks to JSONL file for Ollama."""
         return self._write_jsonl_file(tasks, batch_dir, batch_name, "ollama")
 
+    def _extract_ollama_schema(self, schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """
+        Extract the inner JSON schema for Ollama's format parameter.
+
+        OpenAI format: {"name": "...", "strict": true, "schema": {...}}
+        Ollama expects: {"type": "object", "properties": {...}, "required": [...]}
+        """
+        if not schema:
+            return None
+
+        # If schema has nested "schema" key (OpenAI format), extract it
+        if "schema" in schema and isinstance(schema["schema"], dict):
+            return schema["schema"]
+
+        # If it's already a raw JSON schema, return as-is
+        if "type" in schema or "properties" in schema:
+            return schema
+
+        return schema
+
+    def _should_inject_failure(self, custom_id: str) -> bool:
+        """
+        Check if this request should fail (for testing retry).
+
+        Failures are injected based on:
+        1. OLLAMA_FAILURE_IDS - specific custom_ids to fail
+        2. OLLAMA_FAILURE_RATE - random percentage of requests to fail
+
+        Args:
+            custom_id: The custom_id of the request
+
+        Returns:
+            True if failure should be injected (record will be missing from results)
+        """
+        # Check specific IDs first
+        if custom_id in self._failure_ids:
+            return True
+
+        # Check random failure rate
+        if self._failure_rate > 0 and self._rng.random() < self._failure_rate:
+            return True
+
+        return False
+
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
         """Process batch synchronously with Ollama (no actual API submission)."""
         # Generate batch ID
@@ -100,7 +175,14 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         failed = 0
 
         for idx, task in enumerate(tasks, 1):
-            print(f"Processing request {idx}/{len(tasks)}: {task['custom_id']}")
+            custom_id = task["custom_id"]
+            print(f"Processing request {idx}/{len(tasks)}: {custom_id}")
+
+            # Check for failure injection (skip record to simulate missing)
+            if self._should_inject_failure(custom_id):
+                print(f"  [INJECTED FAILURE] Skipping {custom_id} to trigger retry")
+                failed += 1
+                continue  # Don't add to results - makes it "missing"
 
             try:
                 # Extract request data
@@ -118,12 +200,16 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 if max_tokens is not None:
                     options["num_predict"] = max_tokens
 
-                # Handle JSON mode
+                # Handle JSON mode with structured outputs
                 format_param = None
                 response_format = body.get("response_format")
                 if response_format and isinstance(response_format, dict):
                     if response_format.get("type") == "json_schema":
-                        format_param = "json"
+                        json_schema = response_format.get("json_schema", {})
+                        # Extract actual schema for Ollama
+                        format_param = self._extract_ollama_schema(json_schema)
+                        if not format_param:
+                            format_param = "json"
 
                 # Call Ollama
                 ollama_response = self.client.chat(
@@ -131,17 +217,15 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 )
 
                 # Transform to OpenAI format
-                openai_response = self._transform_ollama_response(
-                    ollama_response, task["custom_id"], model
-                )
+                openai_response = self._transform_ollama_response(ollama_response, custom_id, model)
 
                 results.append(openai_response)
                 completed += 1
 
             except Exception as e:
-                print(f"Error processing {task['custom_id']}: {e}")
+                print(f"Error processing {custom_id}: {e}")
                 error_response = {
-                    "custom_id": task["custom_id"],
+                    "custom_id": custom_id,
                     "response": None,
                     "error": {"message": str(e), "type": "ollama_error", "code": "inference_error"},
                 }

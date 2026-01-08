@@ -42,6 +42,7 @@ from agent_actions.orchestration.workflow_models import (
     WorkflowServices,
 )
 from agent_actions.prompt_generation.output_processor import OutputProcessor
+from agent_actions.utilities.retry_tracker import RetryTrackerContext
 
 logger = logging.getLogger(__name__)
 
@@ -166,8 +167,9 @@ class AgentWorkflow:
             agent_indices=self.agent_indices, dependency_configs=self.agent_configs
         )
 
-        # Get agent folder
+        # Get agent folder and store for retry tracking
         agent_folder = Path(agent_runner.get_agent_folder(self.agent_name))
+        self._agent_folder = agent_folder  # Store for retry tracker context
         status_file = agent_folder / ".agent_status.json"
 
         # Initialize loop correlator
@@ -499,6 +501,17 @@ class AgentWorkflow:
         workflow_start = datetime.now()
         self._log_workflow_start(workflow_start, is_async=False)
 
+        # Set up retry tracking context for this workflow run
+        run_id = self.workflow_session_id or datetime.now().strftime("%Y%m%d%H%M%S")
+        with RetryTrackerContext(
+            output_directory=str(self._agent_folder),
+            run_id=run_id,
+            workflow_name=self.agent_name,
+        ):
+            return self._run_workflow_with_context(previous_context, workflow_start)
+
+    def _run_workflow_with_context(self, previous_context, workflow_start):
+        """Execute workflow with retry tracking context active."""
         try:
             total_agents = len(self.execution_order)
             self.console.print(f"Found {total_agents} agents to run.")

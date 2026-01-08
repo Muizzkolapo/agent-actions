@@ -16,6 +16,42 @@ class ToolClient:
     """Client for executing user-defined functions as LLM clients."""
 
     @staticmethod
+    def _strip_internal_fields(data: Union[str, Dict]) -> Union[str, Dict]:
+        """Strip internal metadata fields from context data before UDF invocation.
+
+        Internal fields like batch_id, source_guid, node_id, _batch_filter_status
+        are tracking metadata and should not be passed to user-defined functions.
+
+        Args:
+            data: Context data (str or dict)
+
+        Returns:
+            Cleaned data with internal fields removed
+        """
+        if isinstance(data, str):
+            try:
+                parsed = json.loads(data)
+                if isinstance(parsed, dict):
+                    from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
+                        BatchContextMetadata,
+                    )
+
+                    cleaned = BatchContextMetadata.strip_internal_fields(parsed)
+                    return json.dumps(cleaned)
+                return data
+            except (json.JSONDecodeError, TypeError):
+                return data
+
+        if isinstance(data, dict):
+            from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
+                BatchContextMetadata,
+            )
+
+            return BatchContextMetadata.strip_internal_fields(data)
+
+        return data
+
+    @staticmethod
     def invoke(
         agent_config: Dict[str, Any],
         context_data: Union[str, Dict],
@@ -39,9 +75,13 @@ class ToolClient:
                     "agent_config_keys": list(agent_config.keys()),
                 },
             )
+
+        # Strip internal metadata fields before passing to UDF
+        clean_context = ToolClient._strip_internal_fields(context_data)
+
         side_output = agent_config.get("side_output", False)
         udf_kwargs = tool_args if tool_args is not None else {}
-        response = execute_user_defined_function(model_name, context_data, **udf_kwargs)
+        response = execute_user_defined_function(model_name, clean_context, **udf_kwargs)
         if side_output:
             condition, result = response
             if condition:

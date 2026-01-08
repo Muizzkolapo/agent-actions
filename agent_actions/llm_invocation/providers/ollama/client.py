@@ -1,19 +1,102 @@
 """
 Ollama client for agent-actions LLM invocation.
+
+Supports:
+- Non-JSON mode (plain text responses)
+- JSON mode with structured outputs (via format parameter)
+- Failure injection for testing online retry (via environment variables)
+
+SDK errors are wrapped into unified agent-actions error types to enable
+consistent retry handling across all providers.
+
+Failure Injection (for testing online retry):
+    OLLAMA_FAILURE_RATE=0.3     # 30% of requests will fail (trigger retry)
+    OLLAMA_FAILURE_SEED=42      # Reproducible failures for testing
 """
 
 import json
+import logging
 import os
-from ollama import Client
+import random
+from typing import Any, Dict, List, Optional
+
+from ollama import Client, ResponseError
+import httpx
+
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.utilities.constants import MODEL_NAME_KEY
+from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
+
+logger = logging.getLogger(__name__)
+
+# Failure injection config (loaded once at module level)
+_FAILURE_RATE = float(os.getenv("OLLAMA_FAILURE_RATE", "0"))
+_FAILURE_SEED = os.getenv("OLLAMA_FAILURE_SEED", "")
+_RNG = random.Random(int(_FAILURE_SEED) if _FAILURE_SEED.isdigit() else None)
+
+if _FAILURE_RATE > 0:
+    logger.info("Ollama online failure injection enabled: rate=%.2f", _FAILURE_RATE)
+
+
+def _maybe_inject_failure() -> None:
+    """
+    Maybe raise a transient error for testing retry.
+
+    Raises RateLimitError based on OLLAMA_FAILURE_RATE.
+    """
+    if _FAILURE_RATE > 0 and _RNG.random() < _FAILURE_RATE:
+        logger.info("[INJECTED FAILURE] Simulating rate limit for retry testing")
+        raise RateLimitError(
+            "Simulated rate limit (injected for testing)",
+            context={"vendor": "ollama", "injected": True, "retry_after": 1},
+        )
+
+
+def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
+    """Wrap Ollama errors into unified agent-actions error types.
+
+    Args:
+        e: The Ollama exception
+        model_name: Model name for context
+
+    Returns:
+        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
+    """
+    context = {"vendor": "ollama", "model": model_name}
+
+    # Connection errors (Ollama uses httpx)
+    if isinstance(e, httpx.ConnectError):
+        return NetworkError(f"Ollama connection error: {e}", context=context, cause=e)
+
+    if isinstance(e, httpx.TimeoutException):
+        return NetworkError(f"Ollama timeout: {e}", context=context, cause=e)
+
+    if isinstance(e, httpx.HTTPStatusError):
+        status_code = e.response.status_code
+        if status_code == 429:
+            return RateLimitError(f"Ollama rate limit: {e}", context=context, cause=e)
+        if status_code in (502, 503, 504):
+            return NetworkError(f"Ollama server error: {e}", context=context, cause=e)
+        return VendorAPIError(f"Ollama HTTP error: {e}", context=context, cause=e)
+
+    # Ollama ResponseError
+    if isinstance(e, ResponseError):
+        return VendorAPIError(f"Ollama error: {e}", context=context, cause=e)
+
+    # Unknown error, re-raise as-is
+    return e
 
 
 class OllamaClient(BaseClient):
-    """Ollama local LLM client for JSON and non-JSON invocations."""
+    """
+    Ollama local LLM client for JSON and non-JSON invocations.
+
+    Supports structured outputs via Ollama's `format` parameter.
+    Supports failure injection via environment variables for testing retry.
+    """
 
     @staticmethod
-    def _prep_messages(prompt_config: str, context_data: str):
+    def _prep_messages(prompt_config: str, context_data: str) -> List[Dict[str, str]]:
         """Prepare messages with system and user roles."""
         return [
             {"role": "system", "content": prompt_config},
@@ -21,59 +104,58 @@ class OllamaClient(BaseClient):
         ]
 
     @staticmethod
-    def _get_client(agent_config) -> Client:
+    def _get_client(agent_config: Dict[str, Any]) -> Client:
         """Return an Ollama Client pointed at the correct host."""
         host = agent_config.get("base_url") or os.getenv("OLLAMA_HOST")
         return Client(host=host) if host else Client()
 
-    @classmethod
-    def invoke(cls, agent_config, prompt_config, context_data, schema=None):
+    @staticmethod
+    def _extract_ollama_schema(schema: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
-        Override invoke to enforce Ollama does NOT support JSON mode.
+        Extract the inner JSON schema for Ollama's format parameter.
 
-        Raises:
-            ConfigurationError: If json_mode is enabled for Ollama
+        OpenAI format: {"name": "...", "strict": true, "schema": {...}}
+        Ollama expects: {"type": "object", "properties": {...}, "required": [...]}
         """
-        from agent_actions.utilities.constants import JSON_MODE_KEY
-        from agent_actions.errors import ConfigurationError  # New modular pattern!
+        if not schema:
+            return None
 
-        json_mode = agent_config.get(JSON_MODE_KEY, True)
-        if json_mode:
-            raise ConfigurationError(
-                "Ollama does not support json_mode=true. Structured output is unreliable with Ollama models.",
-                context={
-                    "vendor": "ollama",
-                    "model": agent_config.get("model_name", "unknown"),
-                    "json_mode": json_mode,
-                    "operation": "invoke",
-                    "hint": "Set json_mode: false in your agent configuration or workflow defaults",
-                },
-            )
-        api_key = None
-        try:
-            api_key = cls.get_api_key(agent_config)
-        except (KeyError, AttributeError, TypeError):
-            pass
-        return cls.call_non_json(api_key, agent_config, prompt_config, context_data)
+        # If schema has nested "schema" key (OpenAI format), extract it
+        if "schema" in schema and isinstance(schema["schema"], dict):
+            return schema["schema"]
+
+        # If it's already a raw JSON schema, return as-is
+        if "type" in schema or "properties" in schema:
+            return schema
+
+        return schema
 
     @staticmethod
-    def call_json(_api_key, _agent_config, _prompt_config, _context_data, _schema):
+    def call_json(
+        _api_key: Optional[str],
+        agent_config: Dict[str, Any],
+        prompt_config: str,
+        context_data: Any,
+        schema: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
         """
-        NOTE: This method should not be called for Ollama.
-        The invoke() method enforces json_mode=false.
+        Call Ollama API in JSON mode with structured output.
 
-        Kept for interface compatibility.
-        """
-        raise NotImplementedError(
-            "Ollama does not support JSON mode. This method should never be called due to invoke() validation."
-        )
+        Uses Ollama's `format` parameter to enforce JSON schema.
 
-    @staticmethod
-    def call_non_json(_api_key, agent_config, prompt_config, context_data, _schema=None):
+        Args:
+            _api_key: Not used for Ollama (local model)
+            agent_config: Agent configuration with model_name
+            prompt_config: System prompt
+            context_data: User context (string or dict)
+            schema: JSON schema for structured output
+
+        Returns:
+            List with single response dict containing parsed JSON fields
         """
-        Plain-text chat (no schema enforcement).
-        This is the ONLY supported mode for Ollama.
-        """
+        # Check for failure injection (for testing retry)
+        _maybe_inject_failure()
+
         model = agent_config[MODEL_NAME_KEY]
         ctx_str = (
             json.dumps(context_data, ensure_ascii=False)
@@ -81,9 +163,83 @@ class OllamaClient(BaseClient):
             else context_data
         )
         messages = OllamaClient._prep_messages(prompt_config, ctx_str)
-        response = OllamaClient._get_client(agent_config).chat(
-            model=model, messages=messages, stream=False
+
+        # Extract schema for Ollama's format parameter
+        ollama_schema = OllamaClient._extract_ollama_schema(schema)
+
+        logger.debug("Calling Ollama with JSON mode, schema=%s", bool(ollama_schema))
+
+        try:
+            response = OllamaClient._get_client(agent_config).chat(
+                model=model,
+                messages=messages,
+                stream=False,
+                format=ollama_schema if ollama_schema else "json",
+            )
+        except (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.HTTPStatusError,
+            ResponseError,
+        ) as e:
+            raise _wrap_ollama_error(e, model) from e
+
+        # Parse JSON response
+        content = response.message.content
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, dict):
+                return [parsed]
+            return [{"response": parsed}]
+        except json.JSONDecodeError as e:
+            logger.warning("Failed to parse Ollama JSON response: %s", e)
+            # Return raw content for reprompt handling
+            return [{"raw_response": content, "_parse_error": str(e)}]
+
+    @staticmethod
+    def call_non_json(
+        _api_key: Optional[str],
+        agent_config: Dict[str, Any],
+        prompt_config: str,
+        context_data: Any,
+        _schema: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Plain-text chat (no schema enforcement).
+
+        Args:
+            _api_key: Not used for Ollama (local model)
+            agent_config: Agent configuration with model_name and output_field
+            prompt_config: System prompt
+            context_data: User context (string or dict)
+            _schema: Ignored for non-JSON mode
+
+        Returns:
+            List with single response dict containing output_field
+        """
+        # Check for failure injection (for testing retry)
+        _maybe_inject_failure()
+
+        model = agent_config[MODEL_NAME_KEY]
+        ctx_str = (
+            json.dumps(context_data, ensure_ascii=False)
+            if not isinstance(context_data, str)
+            else context_data
         )
+        messages = OllamaClient._prep_messages(prompt_config, ctx_str)
+
+        try:
+            response = OllamaClient._get_client(agent_config).chat(
+                model=model, messages=messages, stream=False
+            )
+        except (
+            httpx.ConnectError,
+            httpx.TimeoutException,
+            httpx.HTTPStatusError,
+            ResponseError,
+        ) as e:
+            raise _wrap_ollama_error(e, model) from e
+
         output_field = agent_config.get("output_field", "raw_response")
         response_content = {output_field: response.message.content}
         return [response_content]

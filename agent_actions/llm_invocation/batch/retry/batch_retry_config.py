@@ -5,8 +5,17 @@ Configuration model for automatic retry behavior in batch processing.
 Supports flexible YAML parsing (bool, string preset, or detailed dict).
 """
 
+from enum import Enum
 from typing import Any, Dict, Optional, Union
 from pydantic import BaseModel, Field, field_validator
+
+
+class ExhaustedBehavior(str, Enum):
+    """Behavior when retry attempts are exhausted."""
+
+    CONTINUE = "continue"  # Continue with partial data (default, lossy)
+    FAIL = "fail"  # Fail the workflow if any records exhausted
+    DEAD_LETTER = "dead_letter"  # Write failed records to .failed.json
 
 
 # Preset configurations for common retry strategies
@@ -14,18 +23,27 @@ RETRY_PRESETS = {
     "default": {
         "enabled": True,
         "max_attempts": 3,
+        "on_exhausted": "continue",
     },
     "aggressive": {
         "enabled": True,
         "max_attempts": 5,
+        "on_exhausted": "continue",
     },
     "conservative": {
         "enabled": True,
         "max_attempts": 2,
+        "on_exhausted": "continue",
+    },
+    "strict": {
+        "enabled": True,
+        "max_attempts": 3,
+        "on_exhausted": "fail",
     },
     "disabled": {
         "enabled": False,
         "max_attempts": 0,
+        "on_exhausted": "continue",
     },
 }
 
@@ -39,6 +57,7 @@ class RetryConfig(BaseModel):
     Attributes:
         enabled: Whether automatic retries are enabled
         max_attempts: Maximum number of retry attempts (0 = disabled)
+        on_exhausted: Behavior when retries are exhausted
 
     Example YAML configurations:
         # Simple boolean
@@ -46,11 +65,13 @@ class RetryConfig(BaseModel):
 
         # Preset name
         retry: aggressive
+        retry: strict  # fails workflow if records still missing
 
         # Detailed config
         retry:
           enabled: true
           max_attempts: 5
+          on_exhausted: dead_letter  # write failed to .failed.json
     """
 
     enabled: bool = Field(default=True, description="Enable automatic retries")
@@ -60,12 +81,30 @@ class RetryConfig(BaseModel):
         le=10,
         description="Maximum retry attempts (0 = disabled, max 10)",
     )
+    on_exhausted: ExhaustedBehavior = Field(
+        default=ExhaustedBehavior.CONTINUE,
+        description="Behavior when retries exhausted: continue, fail, or dead_letter",
+    )
 
     @field_validator("max_attempts")
     @classmethod
     def validate_max_attempts(cls, v: int) -> int:
         """Ensure max_attempts is consistent with enabled state."""
         # If max_attempts is 0, effectively disabled
+        return v
+
+    @field_validator("on_exhausted", mode="before")
+    @classmethod
+    def validate_on_exhausted(cls, v: Any) -> ExhaustedBehavior:
+        """Convert string to ExhaustedBehavior enum."""
+        if isinstance(v, ExhaustedBehavior):
+            return v
+        if isinstance(v, str):
+            try:
+                return ExhaustedBehavior(v.lower())
+            except ValueError:
+                valid = ", ".join(e.value for e in ExhaustedBehavior)
+                raise ValueError(f"Invalid on_exhausted: '{v}'. Valid: {valid}")
         return v
 
     @classmethod
@@ -130,12 +169,12 @@ class RetryConfig(BaseModel):
     @classmethod
     def disabled(cls) -> "RetryConfig":
         """Create a disabled retry configuration."""
-        return cls(enabled=False, max_attempts=0)
+        return cls(enabled=False, max_attempts=0, on_exhausted=ExhaustedBehavior.CONTINUE)
 
     @classmethod
     def default(cls) -> "RetryConfig":
         """Create default retry configuration."""
-        return cls(enabled=True, max_attempts=3)
+        return cls(enabled=True, max_attempts=3, on_exhausted=ExhaustedBehavior.CONTINUE)
 
     @property
     def is_enabled(self) -> bool:
@@ -161,6 +200,7 @@ class RetryConfig(BaseModel):
         return {
             "enabled": self.enabled,
             "max_attempts": self.max_attempts,
+            "on_exhausted": self.on_exhausted.value,
         }
 
 
