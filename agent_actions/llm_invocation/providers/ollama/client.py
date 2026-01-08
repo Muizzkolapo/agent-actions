@@ -58,6 +58,12 @@ _REPROMPT_FAILURE_RATE = float(os.getenv("REPROMPT_FAILURE_RATE", "0.5"))
 _REPROMPT_SUCCESS_AFTER = int(os.getenv("REPROMPT_SUCCESS_AFTER", "2"))
 _reprompt_failure_count = 0
 
+# Skip JSON repair in client for testing (allows malformed JSON to reach interceptor)
+_SKIP_JSON_REPAIR_IN_CLIENT = os.getenv("SKIP_JSON_REPAIR_IN_CLIENT", "").lower() == "true"
+
+if _SKIP_JSON_REPAIR_IN_CLIENT:
+    logger.info("JSON repair disabled in client for testing")
+
 if _REPROMPT_TEST_MODE:
     logger.info(
         "Ollama reprompt failure injection enabled: mode=%s, rate=%.2f, success_after=%d",
@@ -259,7 +265,7 @@ class OllamaClient(BaseClient):
                 repair = JSONRepairStrategy()
                 repair_result = repair.attempt_repair(content)
 
-                if repair_result.success:
+                if repair_result.success and not _SKIP_JSON_REPAIR_IN_CLIENT:
                     logger.info(
                         "JSON repaired using %s: %s",
                         repair_result.repair_method,
@@ -269,8 +275,11 @@ class OllamaClient(BaseClient):
                         return [repair_result.data]
                     return [{"response": repair_result.data}]
 
-                # Repair failed - return raw content for reprompt handling
-                logger.warning("Failed to parse/repair Ollama JSON response: %s", e)
+                # Repair failed or skipped - return raw content for reprompt handling
+                if _SKIP_JSON_REPAIR_IN_CLIENT:
+                    logger.info("JSON repair skipped for testing - returning raw content")
+                else:
+                    logger.warning("Failed to parse/repair Ollama JSON response: %s", e)
                 return [{"raw_response": content, "_parse_error": str(e)}]
 
         # If injection returned a dict (missing fields), return directly
