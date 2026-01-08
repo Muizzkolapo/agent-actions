@@ -3,11 +3,15 @@ Cohere client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Cohere API integration.
+
+SDK errors are wrapped into unified agent-actions error types to enable
+consistent retry handling across all providers.
 """
 
 import logging
 from textwrap import dedent
 import cohere
+from cohere.core import api_error as cohere_errors
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
@@ -15,10 +19,42 @@ from agent_actions.llm_invocation.providers.mixins import (
     GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
-from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
+
+
+def _wrap_cohere_error(e: Exception, model_name: str) -> Exception:
+    """Wrap Cohere SDK errors into unified agent-actions error types.
+
+    This enables the central retry engine to handle transient errors
+    consistently across all providers.
+
+    Args:
+        e: The Cohere SDK exception
+        model_name: Model name for context
+
+    Returns:
+        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
+    """
+    context = {"vendor": "cohere", "model": model_name}
+
+    # Check status code for rate limit (429)
+    if isinstance(e, cohere_errors.ApiError):
+        status_code = getattr(e, "status_code", None)
+        if status_code == 429:
+            return RateLimitError(f"Cohere rate limit: {e}", context=context, cause=e)
+        if status_code in (502, 503, 504):
+            return NetworkError(f"Cohere server error: {e}", context=context, cause=e)
+        return VendorAPIError(f"Cohere API error: {e}", context=context, cause=e)
+
+    # Connection errors
+    if isinstance(e, (ConnectionError, TimeoutError)):
+        return NetworkError(f"Cohere connection error: {e}", context=context, cause=e)
+
+    # Unknown error, re-raise as-is
+    return e
 
 
 class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
@@ -53,8 +89,10 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 operation="call_json",
                 model_name=model_name,
             )
-        except VendorAPIError:
+        except (RateLimitError, NetworkError, VendorAPIError):
             raise
+        except cohere_errors.ApiError as e:
+            raise _wrap_cohere_error(e, model_name) from e
         except Exception as e:
             CohereClient.handle_generic_error(e, "Cohere", "call_json", model_name)
 
@@ -88,6 +126,10 @@ class CohereClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 },
             )
             return [response_message]
+        except (RateLimitError, NetworkError, VendorAPIError):
+            raise
+        except cohere_errors.ApiError as e:
+            raise _wrap_cohere_error(e, model_name) from e
         except Exception as e:
             logger.exception(
                 "Cohere non-JSON API call failed",

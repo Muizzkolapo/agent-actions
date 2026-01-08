@@ -100,7 +100,12 @@ class ActionConfig(BaseModel):
     )
     retry: Optional[Union[bool, str, Dict[str, Any]]] = Field(
         default=None,
-        description="Batch retry config: true, 'aggressive', 'conservative', or dict",
+        description=(
+            "Retry config for transient errors (rate limits, timeouts). "
+            "Works for both online and batch modes. "
+            "Options: true (default 3 retries), false, 'aggressive' (5), 'conservative' (2), "
+            "or dict with: max_retries, initial_delay, max_delay, backoff_factor"
+        ),
     )
 
     @field_validator("guard")
@@ -131,20 +136,43 @@ class ActionConfig(BaseModel):
     @field_validator("retry")
     @classmethod
     def validate_retry(cls, v):
-        """Validate retry configuration."""
+        """Validate retry configuration for both online and batch modes."""
         if v is not None:
             try:
-                # Import here to avoid circular dependency
-                from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
-
                 if isinstance(v, bool):
-                    pass  # Valid
+                    pass  # Valid: true/false
                 elif isinstance(v, str):
-                    # Validate preset name
+                    # Validate preset name (batch presets)
+                    from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
+                        RetryConfig,
+                    )
+
                     RetryConfig.from_yaml(v)
                 elif isinstance(v, dict):
-                    # Validate dict config
-                    RetryConfig.from_yaml(v)
+                    # Validate dict config - supports both batch and online fields
+                    valid_fields = {
+                        # Common fields
+                        "enabled",
+                        "max_retries",
+                        "max_attempts",  # Batch alias for max_retries
+                        # Online-specific fields
+                        "initial_delay",
+                        "max_delay",
+                        "backoff_factor",
+                        # Batch-specific fields
+                        "preset",
+                    }
+                    invalid_fields = set(v.keys()) - valid_fields
+                    if invalid_fields:
+                        raise ConfigValidationError(
+                            "retry_fields",
+                            f"Unknown retry fields: {invalid_fields}",
+                            context={
+                                "invalid_fields": list(invalid_fields),
+                                "valid_fields": list(valid_fields),
+                                "operation": "validate_retry",
+                            },
+                        )
                 else:
                     raise ConfigValidationError(
                         "retry_type",
@@ -185,7 +213,10 @@ class DefaultsConfig(BaseModel):
     )
     retry: Optional[Union[bool, str, Dict[str, Any]]] = Field(
         default=None,
-        description='Default batch retry configuration: true, "aggressive", or detailed config',
+        description=(
+            "Default retry config for transient errors. "
+            "Options: true, false, 'aggressive', 'conservative', or dict"
+        ),
     )
 
 

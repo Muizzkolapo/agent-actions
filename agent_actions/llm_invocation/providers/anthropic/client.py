@@ -3,6 +3,9 @@ Anthropic Claude client for agent-actions.
 
 Provides implementation of call_json() and call_non_json() methods
 for Anthropic's Claude API integration.
+
+SDK errors are wrapped into unified agent-actions error types to enable
+consistent retry handling across all providers.
 """
 
 import logging
@@ -16,8 +19,57 @@ from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.utilities.constants import MODEL_NAME_KEY
+from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError, ConfigurationError
 
 logger = logging.getLogger(__name__)
+
+
+def _wrap_anthropic_error(e: Exception, model_name: str) -> Exception:
+    """Wrap Anthropic SDK errors into unified agent-actions error types.
+
+    This enables the central retry engine to handle transient errors
+    consistently across all providers.
+
+    Args:
+        e: The Anthropic SDK exception
+        model_name: Model name for context
+
+    Returns:
+        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
+    """
+    context = {"vendor": "anthropic", "model": model_name}
+
+    # Rate limit errors
+    if isinstance(e, anthropic.RateLimitError):
+        retry_after = None
+        if hasattr(e, "response") and e.response:
+            retry_after = e.response.headers.get("retry-after")
+            if retry_after:
+                try:
+                    retry_after = float(retry_after)
+                except ValueError:
+                    retry_after = None
+        context["retry_after"] = retry_after
+        return RateLimitError(f"Anthropic rate limit: {e}", context=context, cause=e)
+
+    # Connection/network errors
+    if isinstance(e, anthropic.APIConnectionError):
+        return NetworkError(f"Anthropic connection error: {e}", context=context, cause=e)
+
+    # Timeout errors
+    if isinstance(e, anthropic.APITimeoutError):
+        return NetworkError(f"Anthropic timeout: {e}", context=context, cause=e)
+
+    # Internal server errors (potentially transient)
+    if isinstance(e, anthropic.InternalServerError):
+        return NetworkError(f"Anthropic server error: {e}", context=context, cause=e)
+
+    # Other API errors (not retryable)
+    if isinstance(e, anthropic.APIError):
+        return VendorAPIError(f"Anthropic API error: {e}", context=context, cause=e)
+
+    # Unknown error, re-raise as-is
+    return e
 
 
 class AnthropicClient(BaseClient):
@@ -57,7 +109,10 @@ class AnthropicClient(BaseClient):
         )
 
         start_time = datetime.now()
-        response = client.messages.create(**api_args)
+        try:
+            response = client.messages.create(**api_args)
+        except anthropic.APIError as e:
+            raise _wrap_anthropic_error(e, model_name) from e
         duration = (datetime.now() - start_time).total_seconds()
 
         # Extract token usage and store in thread-local
@@ -92,10 +147,6 @@ class AnthropicClient(BaseClient):
                 (block.text for block in response.content if hasattr(block, "text")),
                 "No text content available",
             )
-            from agent_actions.errors import (
-                VendorAPIError,
-            )  # New modular pattern!
-
             raise VendorAPIError(
                 "No valid content with 'input' found in response",
                 context={
@@ -115,10 +166,6 @@ class AnthropicClient(BaseClient):
         context_data: Dict[str, Any],
     ) -> List[Dict[str, str]]:
         """Non-JSON mode is not implemented for Claude."""
-        from agent_actions.errors import (
-            ConfigurationError,
-        )  # New modular pattern!
-
         raise ConfigurationError(
             "Non-JSON mode not implemented for Claude",
             context={

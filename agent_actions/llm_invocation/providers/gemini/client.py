@@ -3,11 +3,15 @@ Gemini client for agent-actions LLM invocation.
 
 Provides implementation of call_json() and call_non_json() methods
 for Google Gemini API integration.
+
+SDK errors are wrapped into unified agent-actions error types to enable
+consistent retry handling across all providers.
 """
 
 import logging
 from textwrap import dedent
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from agent_actions.preprocessing.transformation.string_transformer import StringProcessor
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.llm_invocation.providers.mixins import (
@@ -15,10 +19,49 @@ from agent_actions.llm_invocation.providers.mixins import (
     GenericErrorHandlerMixin,
 )
 from agent_actions.utilities.constants import MODEL_NAME_KEY
-from agent_actions.errors import VendorAPIError  # New modular pattern!
+from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm_invocation.providers.usage_tracker import set_last_usage
 
 logger = logging.getLogger(__name__)
+
+
+def _wrap_gemini_error(e: Exception, model_name: str) -> Exception:
+    """Wrap Google Gemini SDK errors into unified agent-actions error types.
+
+    This enables the central retry engine to handle transient errors
+    consistently across all providers.
+
+    Args:
+        e: The Google API exception
+        model_name: Model name for context
+
+    Returns:
+        Wrapped exception (RateLimitError, NetworkError, or VendorAPIError)
+    """
+    context = {"vendor": "gemini", "model": model_name}
+
+    # Rate limit / quota exceeded
+    if isinstance(e, google_exceptions.ResourceExhausted):
+        return RateLimitError(f"Gemini rate limit: {e}", context=context, cause=e)
+
+    # Service unavailable (potentially transient)
+    if isinstance(e, google_exceptions.ServiceUnavailable):
+        return NetworkError(f"Gemini service unavailable: {e}", context=context, cause=e)
+
+    # Timeout / deadline exceeded
+    if isinstance(e, google_exceptions.DeadlineExceeded):
+        return NetworkError(f"Gemini timeout: {e}", context=context, cause=e)
+
+    # Internal server error
+    if isinstance(e, google_exceptions.InternalServerError):
+        return NetworkError(f"Gemini server error: {e}", context=context, cause=e)
+
+    # Other Google API errors (not retryable)
+    if isinstance(e, google_exceptions.GoogleAPICallError):
+        return VendorAPIError(f"Gemini API error: {e}", context=context, cause=e)
+
+    # Unknown error, re-raise as-is
+    return e
 
 
 class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
@@ -48,16 +91,18 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                     }
                 )
 
-            return GeminiHandler.parse_json_response(
+            return GeminiClient.parse_json_response(
                 response_content=response_temp.text,
                 vendor_name="Gemini",
                 operation="call_json",
                 model_name=model_name,
             )
-        except VendorAPIError:
+        except (RateLimitError, NetworkError, VendorAPIError):
             raise
+        except google_exceptions.GoogleAPICallError as e:
+            raise _wrap_gemini_error(e, model_name) from e
         except Exception as e:
-            GeminiHandler.handle_generic_error(e, "Gemini", "call_json", model_name)
+            GeminiClient.handle_generic_error(e, "Gemini", "call_json", model_name)
 
     @staticmethod
     def call_non_json(api_key, agent_config, prompt_config, context_data):
@@ -93,6 +138,10 @@ class GeminiClient(BaseClient, JSONResponseMixin, GenericErrorHandlerMixin):
                 },
             )
             return [response_list]
+        except (RateLimitError, NetworkError, VendorAPIError):
+            raise
+        except google_exceptions.GoogleAPICallError as e:
+            raise _wrap_gemini_error(e, model_name) from e
         except Exception as e:
             logger.exception(
                 "Gemini non-JSON API call failed",
