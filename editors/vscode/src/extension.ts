@@ -7,15 +7,41 @@ import {
 
 let client: LanguageClient;
 
-export function activate(context: vscode.ExtensionContext) {
-    // Server options - run the agac-lsp command directly
-    // After `pip install agent-actions`, agac-lsp is in PATH
+async function getPythonPath(): Promise<string> {
+    // Try to get Python path from VS Code's Python extension
+    const pythonExt = vscode.extensions.getExtension('ms-python.python');
+    if (pythonExt) {
+        if (!pythonExt.isActive) {
+            await pythonExt.activate();
+        }
+        const pythonApi = pythonExt.exports;
+        const envPath = pythonApi?.environments?.getActiveEnvironmentPath?.();
+        if (envPath?.path) {
+            return envPath.path;
+        }
+    }
+
+    // Fallback: check config, then common paths
+    const config = vscode.workspace.getConfiguration('agentActions');
+    const configPath = config.get<string>('pythonPath');
+    if (configPath) {
+        return configPath;
+    }
+
+    // Default to python3 (more reliable on macOS/Linux)
+    return 'python3';
+}
+
+export async function activate(_context: vscode.ExtensionContext) {
+    const pythonPath = await getPythonPath();
+
+    // Server options - run the LSP server
     const serverOptions: ServerOptions = {
-        command: 'agac-lsp',
-        args: ['--stdio'],
+        command: pythonPath,
+        args: ['-m', 'agent_actions.lsp.server', '--stdio'],
     };
 
-    console.log('Starting Agent Actions LSP server with: agac-lsp --stdio');
+    console.log(`Starting Agent Actions LSP server with: ${pythonPath} -m agent_actions.lsp.server --stdio`);
 
     // Client options
     const clientOptions: LanguageClientOptions = {
