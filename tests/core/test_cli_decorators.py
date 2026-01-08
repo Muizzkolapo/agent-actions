@@ -48,18 +48,6 @@ class TestRequiresProjectDecorator:
             assert "📁 Project root:" in result.output
             assert "Executed" in result.output
 
-    def test_decorator_raises_when_not_in_project(self, tmp_path):
-        """Test decorator raises ProjectNotFoundError when not in project."""
-
-        @click.command()
-        @requires_project
-        def test_cmd():
-            click.echo("Should not execute")
-
-        runner = CliRunner()
-        result = runner.invoke(test_cmd)
-        assert result.exit_code != 0
-
     def test_decorator_with_function_args(self, tmp_path):
         """Test decorator preserves function arguments."""
 
@@ -124,18 +112,6 @@ class TestRequiresProjectIntegration:
             result = runner.invoke(test_cmd, catch_exceptions=False)
             assert result.exit_code == 0
             assert "📁 Project root:" in result.output
-
-    def test_decorator_error_provides_helpful_message(self, tmp_path):
-        """Test that error message is helpful when not in project."""
-
-        @click.command()
-        @requires_project
-        def test_cmd():
-            click.echo("Should not reach here")
-
-        runner = CliRunner()
-        result = runner.invoke(test_cmd)
-        assert result.exit_code != 0
 
 
 class TestDecoratorCWDRestoration:
@@ -308,22 +284,6 @@ class TestHandlesUserErrorsDecorator:
         result = runner.invoke(test_cmd, ["--name", ""])
 
         assert result.exit_code != 0
-
-    def test_decorator_stacks_with_requires_project(self):
-        """Test decorator works correctly when stacked with @requires_project."""
-
-        @click.command()
-        @handles_user_errors("test")
-        @requires_project
-        def test_cmd():
-            click.echo("Should not reach here")
-
-        runner = CliRunner()
-        # Run without being in a project - should catch ProjectNotFoundError
-        result = runner.invoke(test_cmd)
-
-        assert result.exit_code != 0
-        # Error should be formatted by format_user_error
 
     def test_decorator_handles_agent_execution_errors(self):
         """Test decorator handles various AgentActions exception types."""

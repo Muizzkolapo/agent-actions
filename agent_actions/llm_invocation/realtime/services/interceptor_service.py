@@ -7,7 +7,7 @@ import json
 import sys
 from typing import Dict, Any, Optional, List, Union
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
-from agent_actions.recovery.config import RecoveryConfig
+from agent_actions.recovery.recovery_config import RecoveryConfig
 from .prompt_service import PromptService
 from .context_service import ContextService
 from .schema_service import SchemaService

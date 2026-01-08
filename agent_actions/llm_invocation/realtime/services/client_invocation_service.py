@@ -12,7 +12,7 @@ import random
 from typing import Dict, Any, Optional, List, Union, Callable, TYPE_CHECKING
 
 from agent_actions.errors import RateLimitError, NetworkError
-from agent_actions.recovery.config import RecoveryConfig, ExhaustedBehavior
+from agent_actions.recovery.recovery_config import RecoveryConfig, ExhaustedBehavior
 
 if TYPE_CHECKING:
     from agent_actions.utilities.retry_tracker import RetryTracker
