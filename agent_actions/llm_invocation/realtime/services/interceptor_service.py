@@ -1,9 +1,13 @@
-"""Interceptor execution service for agent builder."""
+"""Interceptor execution service for agent builder.
+
+Handles validation and reprompting using unified RecoveryConfig.
+"""
 
 import json
 import sys
 from typing import Dict, Any, Optional, List, Union
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
+from agent_actions.recovery.config import RecoveryConfig
 from .prompt_service import PromptService
 from .context_service import ContextService
 from .schema_service import SchemaService
@@ -11,7 +15,38 @@ from .client_invocation_service import ClientInvocationService
 
 
 class InterceptorService:
-    """Handles interceptor pipeline execution with validation and reprompting."""
+    """Handles interceptor pipeline execution with validation and reprompting.
+
+    Uses unified RecoveryConfig for consistent reprompt configuration.
+    """
+
+    @staticmethod
+    def _get_recovery_config(agent_config: Dict[str, Any]) -> RecoveryConfig:
+        """Extract recovery configuration from agent config.
+
+        Supports both legacy and new formats:
+            # Legacy formats
+            reprompt: true
+            reprompt: smart
+            reprompt:
+              max_attempts: 3
+              json_repair: true
+
+            # New unified format
+            recovery:
+              reprompt:
+                max_attempts: 3
+                on_exhausted: continue
+        """
+        # Check for new unified recovery config
+        recovery_value = agent_config.get("recovery")
+        if recovery_value is not None:
+            return RecoveryConfig.from_yaml(recovery_value=recovery_value)
+
+        # Fall back to legacy config
+        retry_value = agent_config.get("retry", True)
+        reprompt_value = agent_config.get("reprompt", False)
+        return RecoveryConfig.from_yaml(retry_value=retry_value, reprompt_value=reprompt_value)
 
     @staticmethod
     def execute_with_interceptors(
@@ -35,6 +70,8 @@ class InterceptorService:
         3. Retries with modified prompt up to max_attempts
         4. Returns successful response or failed response after max attempts
 
+        Uses unified RecoveryConfig for reprompt settings.
+
         Args:
             agent_config: Agent configuration with interceptor settings
             udf: User defined function (agent_name) - currently unused
@@ -52,7 +89,6 @@ class InterceptorService:
         """
         # Lazy imports to avoid circular dependencies
         from agent_actions.response_processing.factory import InterceptorFactory
-        from agent_actions.reprompting.config import RepromptConfig
         from agent_actions.reprompting.interceptor import RepromptInterceptor
 
         # Propagate prompt_debug to all interceptors
@@ -66,18 +102,23 @@ class InterceptorService:
         # Build interceptor chain (validation interceptors)
         interceptors = InterceptorFactory.build_chain(interceptor_configs_with_debug)
 
-        # Create reprompt interceptor from agent_config if reprompt is enabled
-        reprompt_value = agent_config.get("reprompt", False)
-        reprompt_config = RepromptConfig.from_yaml(reprompt_value)
+        # Get unified recovery config
+        recovery_config = InterceptorService._get_recovery_config(agent_config)
+        reprompt_config = recovery_config.reprompt
         reprompt_interceptor = None
 
         if reprompt_config.enabled:
             reprompt_interceptor = RepromptInterceptor()
+            # Pass reprompt config settings to interceptor
             reprompt_interceptor.configure(
                 {
-                    "reprompt": reprompt_value,
+                    "reprompt": agent_config.get("reprompt", False),
                     "constraints": agent_config.get("constraints", []),
                     "prompt_debug": prompt_debug,
+                    # Pass unified config settings
+                    "max_attempts": reprompt_config.max_attempts,
+                    "json_repair": reprompt_config.json_repair,
+                    "on_exhausted": reprompt_config.on_exhausted.value,
                 }
             )
 
@@ -121,8 +162,9 @@ class InterceptorService:
 
             # Handle reprompting if validation failed in previous iteration
             if reprompt_interceptor and execution_context.get("validation_error"):
-                # Add json_mode to context for JSON repair
+                # Add json_mode and json_repair settings to context
                 execution_context["json_mode"] = agent_config.get("json_mode", True)
+                execution_context["json_repair"] = reprompt_config.json_repair
 
                 reprompt_result = reprompt_interceptor.intercept(
                     execution_context.get("failed_response"), execution_context

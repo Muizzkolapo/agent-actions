@@ -1,6 +1,18 @@
 #!/usr/bin/env python3
 """
 Analyze field flow across workflow nodes.
+
+Traces which fields appear at each node and identifies:
+- Fields added by each action
+- Fields passed through
+- Fields dropped
+- Type changes between nodes
+
+Usage:
+    python analyze_field_flow.py <workflow-target-dir>
+
+Example:
+    python analyze_field_flow.py /path/to/workflow/agent_io/target
 """
 
 import argparse

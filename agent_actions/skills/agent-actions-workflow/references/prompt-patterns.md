@@ -26,67 +26,6 @@ Guide for writing effective prompts in agent-actions workflows.
 {{ previous_action.field_name }}              # Upstream action output
 ```
 
-**CRITICAL: Always use action_name.field_name, not just field_name**
-
-### Common Template Variable Errors
-
-**❌ Wrong - Direct field access:**
-```jinja2
-{{ target_word_counts.correct_answer_words }}
-```
-Error: `Template references undefined variables - Missing: target_word_counts`
-
-**✅ Correct - Access via action name:**
-```jinja2
-{{ suggest_distractor_counts.target_word_counts.correct_answer_words }}
-```
-
-**Why this matters:**
-- Variables in prompts come from `context_scope.observe` or `context_scope.passthrough`
-- You must reference them by their source action name: `action_name.field_name`
-- The framework doesn't flatten the namespace - it keeps action-scoped structure
-
-**Example workflow:**
-```yaml
-- name: suggest_word_counts
-  schema:
-    target_counts: object
-
-- name: generate_text
-  dependencies: [suggest_word_counts]
-  context_scope:
-    observe:
-      - suggest_word_counts.target_counts  # Make available to prompt
-  prompt: $my_workflow.Generate_Text
-```
-
-**In prompt:**
-```jinja2
-{% if suggest_word_counts.target_counts.constraint == "lesser_than" %}
-Write {{ suggest_word_counts.target_counts.max_words }} words or less
-{% endif %}
-```
-
-### Debugging Template Variables
-
-**Available variables in error messages:**
-
-When you see:
-```
-Missing: target_word_counts
-Available: source, extract_raw_qa, suggest_distractor_counts, (+14 more)
-```
-
-This means:
-- `target_word_counts` is NOT a root-level variable
-- It's likely nested under one of the available actions
-- Check: `suggest_distractor_counts.target_word_counts`
-
-**Quick fix checklist:**
-1. Find the action name in "Available" list
-2. Update template to use `action_name.field_name`
-3. Verify field is in `context_scope.observe` or `passthrough`
-
 ### Loops
 
 ```jinja2
@@ -172,6 +111,48 @@ Question tests a specific API method with real-world scenario
 
 ### Bad Example
 Question defines what a service is (tests memorization, not understanding)
+```
+
+## Common Template Variable Errors
+
+### Missing Action Name Prefix
+
+Template variables MUST include the action name prefix when referencing upstream action outputs.
+
+**Wrong:**
+```jinja2
+{{ summary.word_count }}
+{{ items[0] }}
+```
+
+**Correct:**
+```jinja2
+{{ analyze_content.summary.word_count }}
+{{ extract_items.items[0] }}
+```
+
+**Error you'll see:**
+```
+PreFlightValidationError: Template references undefined variables
+missing_references=['summary']
+```
+
+**Rule:** Always use `action_name.field_name` pattern. The action name is the `name:` field from your workflow YAML.
+
+### Accessing Nested Objects
+
+When an action outputs nested objects, chain through the full path:
+
+```jinja2
+# Action 'search_catalog' outputs: {results: [...], metadata: {...}}
+
+# Access the array
+{% for item in search_catalog.results %}
+  {{ item.title }}
+{% endfor %}
+
+# Access nested metadata
+{{ search_catalog.metadata.total_count }}
 ```
 
 ## Anti-Patterns to Avoid

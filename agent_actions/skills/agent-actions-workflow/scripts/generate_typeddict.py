@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """
 Generate TypedDict schema from sample JSON data.
+
+Usage:
+    python generate_typeddict.py <sample.json> [--output tool.py] [--class-name MyInput]
+
+Example:
+    python generate_typeddict.py node_5_output/combined_scraped_sample.json --output my_tool.py
 """
 
 import argparse

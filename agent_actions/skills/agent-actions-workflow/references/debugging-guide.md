@@ -172,7 +172,12 @@ See **udf-decorator.md → Nested TypedDicts** for complete examples.
 
 **Fix:** Ensure UDF provides all schema-required fields. Use reprompting:
 ```yaml
-reprompt: smart  # Retry with error feedback
+reprompt:
+  max_attempts: 4
+  json_repair: true
+  use_llm_critique: true
+  critique_after_attempt: 2
+  on_exhausted: continue
 ```
 
 ## Debugging Workflow
@@ -199,21 +204,28 @@ reprompt: smart  # Retry with error feedback
 
 ## Reprompting System
 
-Auto-retry on schema failures:
-
-| Preset | Max Attempts | JSON Repair | LLM Critique |
-|--------|--------------|-------------|--------------|
-| `basic` | 3 | Yes | No |
-| `smart` | 4 | Yes | Yes (after 2nd) |
-| `thorough` | 5 | Yes | Yes (after 1st) |
+Auto-retry on schema failures with explicit configuration:
 
 ```yaml
-reprompt: smart
-# or
 reprompt:
-  preset: thorough
-  max_attempts: 5
+  max_attempts: 3          # Number of retry attempts
+  json_repair: true        # Try to fix malformed JSON first (no API call)
+  use_llm_critique: false  # Use LLM to analyze failures
+  critique_after_attempt: 2  # Start LLM critique after N attempts
+  on_exhausted: continue   # continue | fail | dead_letter
 ```
+
+**Options:**
+
+| Option | Description |
+|--------|-------------|
+| `max_attempts` | Maximum retry attempts (default: 3) |
+| `json_repair` | Attempt JSON repair before retry (default: true) |
+| `use_llm_critique` | Use LLM to analyze failures (default: false) |
+| `critique_after_attempt` | Start LLM critique after N attempts (default: 2) |
+| `on_exhausted` | Behavior when exhausted: `continue`, `fail`, `dead_letter` |
+
+To disable: `reprompt: false`
 
 ## Validation Commands
 

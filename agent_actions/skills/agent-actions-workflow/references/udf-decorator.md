@@ -218,34 +218,34 @@ class MyOutput(TypedDict, total=False):
 from typing import TypedDict, List
 from agent_actions import udf_tool
 
-class CatalogMetadata(TypedDict, total=False):
-    total_in_catalog: int
-    candidates_found: int
-    search_method: str
+class OperationMetadata(TypedDict, total=False):
+    total_processed: int
+    matches_found: int
+    method: str
 
-class BookMatch(TypedDict, total=False):
-    isbn: str
-    title: str
-    relevance_score: float
+class ResultItem(TypedDict, total=False):
+    id: str
+    name: str
+    score: float
 
 class SearchInput(TypedDict, total=False):
     query: str
-    genres: List[str]
+    filters: List[str]
 
 class SearchOutput(TypedDict, total=False):
-    matching_books: List[BookMatch]
-    search_metadata: CatalogMetadata
+    results: List[ResultItem]
+    metadata: OperationMetadata
 
 @udf_tool(input_type=SearchInput, output_type=SearchOutput)
-def search_catalog(data: dict) -> dict:
+def search_items(data: dict) -> dict:
     return {
-        "matching_books": [
-            {"isbn": "123", "title": "Book", "relevance_score": 0.95}
+        "results": [
+            {"id": "123", "name": "Item A", "score": 0.95}
         ],
-        "search_metadata": {
-            "total_in_catalog": 100,      # int works correctly
-            "candidates_found": 15,        # int works correctly
-            "search_method": "json_file"
+        "metadata": {
+            "total_processed": 100,      # int works correctly
+            "matches_found": 15,          # int works correctly
+            "method": "fuzzy_match"
         }
     }
 ```
