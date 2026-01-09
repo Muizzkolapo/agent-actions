@@ -2,7 +2,7 @@
 Agent builder module for dynamic LLM agent invocation.
 
 This module provides the main entry point for creating and executing dynamic agents
-with support for multiple LLM vendors, validation interceptors, and retry logic.
+with support for multiple LLM vendors.
 """
 
 import json
@@ -14,7 +14,6 @@ from .services import (
     ContextService,
     SchemaService,
     ClientInvocationService,
-    InterceptorService,
 )
 
 
@@ -31,10 +30,6 @@ def create_dynamic_agent(
 ) -> List[Any]:
     """
     Build and execute a prompt against the selected vendor.
-
-    If the agent configuration specifies response interceptors, the request
-    will be executed through the interceptor pipeline which can validate and
-    reprompt on failure.
 
     Args:
         agent_config: Agent configuration with model/prompt settings
@@ -53,23 +48,6 @@ def create_dynamic_agent(
     Returns:
         List of response items from the LLM
     """
-    # If interceptors configured, use interceptor service
-    interceptor_configs = agent_config.get("interceptors", [])
-    if interceptor_configs:
-        return InterceptorService.execute_with_interceptors(
-            agent_config,
-            udf,
-            context_data_str,
-            formatted_prompt,
-            tools_path,
-            tool_args,
-            source_content,
-            interceptor_configs,
-            additional_context,
-            original_context,
-        )
-
-    # Standard (non-interceptor) agent execution
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
     # - Static data loading (context_scope.static_data)
@@ -104,7 +82,6 @@ def create_dynamic_agent(
     context_data = ContextService.prepare_context_data(context_data_str, original_context, is_tool)
 
     # Note: dispatch_task() injection now happens in PromptPreparationService
-    # No need to call inject_function_outputs_into_prompt here anymore
     # TODO: captured_results (add_dispatch feature) needs to be returned from PromptPreparationService
     captured_results = {}
 
