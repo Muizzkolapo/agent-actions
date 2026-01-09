@@ -80,6 +80,35 @@ class TestRepromptEngineProcessResponse:
         assert result.response == {"name": "test"}
         assert result.repair_method == "strip_markdown"
 
+    def test_process_error_dict_extracts_and_repairs(self, basic_engine):
+        """Test processing error dict from provider extracts raw_response and repairs it."""
+        # Simulate what Ollama client returns on JSON parse failure
+        error_dict = {
+            "raw_response": '```json\n{"name": "test", "value": 123}\n```',
+            "_parse_error": "Expecting value: line 1 column 1 (char 0)",
+        }
+        result = basic_engine.process_response(
+            error_dict,
+            {"original_prompt": "Generate JSON", "attempt": 0, "json_mode": True},
+        )
+        assert result.success is True
+        assert result.response == {"name": "test", "value": 123}
+        assert result.repair_method in ["strip_markdown", "markdown_extraction"]
+
+    def test_process_error_dict_with_trailing_comma(self, basic_engine):
+        """Test processing error dict with trailing comma."""
+        error_dict = {
+            "raw_response": '{"name": "test", "items": [1, 2, 3,]}',
+            "_parse_error": "Expecting ',' delimiter: line 1 column 35 (char 34)",
+        }
+        result = basic_engine.process_response(
+            error_dict,
+            {"original_prompt": "Generate JSON", "attempt": 0, "json_mode": True},
+        )
+        assert result.success is True
+        assert result.response == {"name": "test", "items": [1, 2, 3]}
+        assert result.repair_method == "fix_trailing_commas"
+
     def test_process_invalid_json_needs_retry(self, basic_engine):
         """Test processing invalid JSON returns needs_retry."""
         result = basic_engine.process_response(

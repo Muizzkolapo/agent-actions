@@ -234,6 +234,15 @@ class RepromptEngine:
 
     def _try_json_repair(self, response: Any) -> RepairResult:
         """Attempt to repair JSON if response is a string."""
+        # Check if this is an error response from a provider client
+        if isinstance(response, dict) and "raw_response" in response and "_parse_error" in response:
+            # Extract raw content for repair
+            raw_content = response["raw_response"]
+            if isinstance(raw_content, str):
+                return self.json_repair.attempt_repair(raw_content)
+            # If raw_response is not a string, treat as already parsed
+            return RepairResult(success=True, data=raw_content, repair_method="already_parsed")
+
         if isinstance(response, (dict, list)):
             # Already parsed JSON
             return RepairResult(success=True, data=response, repair_method="already_parsed")
