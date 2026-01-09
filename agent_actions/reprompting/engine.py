@@ -234,7 +234,7 @@ class RepromptEngine:
 
     def _try_json_repair(self, response: Any) -> RepairResult:
         """Attempt to repair JSON if response is a string."""
-        # Check if this is an error response from a provider client
+        # Check if this is an error response from a provider client (dict)
         if isinstance(response, dict) and "raw_response" in response and "_parse_error" in response:
             # Extract raw content for repair
             raw_content = response["raw_response"]
@@ -242,6 +242,27 @@ class RepromptEngine:
                 return self.json_repair.attempt_repair(raw_content)
             # If raw_response is not a string, treat as already parsed
             return RepairResult(success=True, data=raw_content, repair_method="already_parsed")
+
+        # Check if this is a list containing a single error dict (common from providers)
+        if isinstance(response, list) and len(response) == 1:
+            item = response[0]
+            if isinstance(item, dict) and "raw_response" in item and "_parse_error" in item:
+                # Extract and repair, then wrap back in list
+                raw_content = item["raw_response"]
+                if isinstance(raw_content, str):
+                    repair_result = self.json_repair.attempt_repair(raw_content)
+                    if repair_result.success:
+                        # Wrap repaired data back in list to match input structure
+                        return RepairResult(
+                            success=True,
+                            data=[repair_result.data],
+                            repair_method=repair_result.repair_method,
+                        )
+                    return repair_result
+                # If raw_response is not a string, wrap as list
+                return RepairResult(
+                    success=True, data=[raw_content], repair_method="already_parsed"
+                )
 
         if isinstance(response, (dict, list)):
             # Already parsed JSON
