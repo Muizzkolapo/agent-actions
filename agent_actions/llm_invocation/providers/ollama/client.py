@@ -58,12 +58,6 @@ _REPROMPT_FAILURE_RATE = float(os.getenv("REPROMPT_FAILURE_RATE", "0.5"))
 _REPROMPT_SUCCESS_AFTER = int(os.getenv("REPROMPT_SUCCESS_AFTER", "2"))
 _reprompt_failure_count = 0
 
-# Skip JSON repair in client for testing (allows malformed JSON to reach interceptor)
-_SKIP_JSON_REPAIR_IN_CLIENT = os.getenv("SKIP_JSON_REPAIR_IN_CLIENT", "").lower() == "true"
-
-if _SKIP_JSON_REPAIR_IN_CLIENT:
-    logger.info("JSON repair disabled in client for testing")
-
 if _REPROMPT_TEST_MODE:
     logger.info(
         "Ollama reprompt failure injection enabled: mode=%s, rate=%.2f, success_after=%d",
@@ -251,7 +245,7 @@ class OllamaClient(BaseClient):
         # Inject reprompt failure if testing (returns malformed content)
         content = _maybe_inject_reprompt_failure(content)
 
-        # If injection returned a string (malformed JSON), try to repair then parse
+        # Parse JSON response - RepromptEngine handles repair if needed
         if isinstance(content, str):
             try:
                 parsed = json.loads(content)
@@ -259,27 +253,8 @@ class OllamaClient(BaseClient):
                     return [parsed]
                 return [{"response": parsed}]
             except json.JSONDecodeError as e:
-                # Try JSON repair before giving up
-                from agent_actions.reprompting.json_repair import JSONRepairStrategy
-
-                repair = JSONRepairStrategy()
-                repair_result = repair.attempt_repair(content)
-
-                if repair_result.success and not _SKIP_JSON_REPAIR_IN_CLIENT:
-                    logger.info(
-                        "JSON repaired using %s: %s",
-                        repair_result.repair_method,
-                        str(repair_result.data)[:100],
-                    )
-                    if isinstance(repair_result.data, dict):
-                        return [repair_result.data]
-                    return [{"response": repair_result.data}]
-
-                # Repair failed or skipped - return raw content for reprompt handling
-                if _SKIP_JSON_REPAIR_IN_CLIENT:
-                    logger.info("JSON repair skipped for testing - returning raw content")
-                else:
-                    logger.warning("Failed to parse/repair Ollama JSON response: %s", e)
+                # Return raw content - RepromptEngine will handle repair
+                logger.debug("JSON parse failed, delegating to RepromptEngine: %s", e)
                 return [{"raw_response": content, "_parse_error": str(e)}]
 
         # If injection returned a dict (missing fields), return directly
