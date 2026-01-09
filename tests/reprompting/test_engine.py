@@ -109,6 +109,44 @@ class TestRepromptEngineProcessResponse:
         assert result.response == {"name": "test", "items": [1, 2, 3]}
         assert result.repair_method == "fix_trailing_commas"
 
+    def test_process_list_with_error_dict(self, basic_engine):
+        """Test processing list containing error dict (real-world provider format)."""
+        # Simulate what Ollama client actually returns
+        error_list = [
+            {
+                "raw_response": '```json\n{"name": "test", "value": 123}\n```',
+                "_parse_error": "Expecting value: line 1 column 1 (char 0)",
+            }
+        ]
+        result = basic_engine.process_response(
+            error_list,
+            {"original_prompt": "Generate JSON", "attempt": 0, "json_mode": True},
+        )
+        assert result.success is True
+        # Result should be a list with repaired data
+        assert isinstance(result.response, list)
+        assert len(result.response) == 1
+        assert result.response[0] == {"name": "test", "value": 123}
+        assert result.repair_method in ["strip_markdown", "markdown_extraction"]
+
+    def test_process_list_with_error_dict_trailing_comma(self, basic_engine):
+        """Test list error dict with trailing comma."""
+        error_list = [
+            {
+                "raw_response": '{"name": "test", "items": [1, 2, 3,]}',
+                "_parse_error": "Expecting ',' delimiter: line 1 column 35 (char 34)",
+            }
+        ]
+        result = basic_engine.process_response(
+            error_list,
+            {"original_prompt": "Generate JSON", "attempt": 0, "json_mode": True},
+        )
+        assert result.success is True
+        assert isinstance(result.response, list)
+        assert len(result.response) == 1
+        assert result.response[0] == {"name": "test", "items": [1, 2, 3]}
+        assert result.repair_method == "fix_trailing_commas"
+
     def test_process_invalid_json_needs_retry(self, basic_engine):
         """Test processing invalid JSON returns needs_retry."""
         result = basic_engine.process_response(
