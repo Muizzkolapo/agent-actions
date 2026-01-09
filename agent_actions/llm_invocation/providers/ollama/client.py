@@ -4,13 +4,13 @@ Ollama client for agent-actions LLM invocation.
 Supports:
 - Non-JSON mode (plain text responses)
 - JSON mode with structured outputs (via format parameter)
-- Failure injection for testing online retry (via environment variables)
+- Failure injection for testing retry (via environment variables)
 
 SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
 
-Failure Injection (for testing online retry):
-    OLLAMA_FAILURE_RATE=0.3     # 30% of requests will fail (trigger retry)
+Failure Injection (for testing retry):
+    OLLAMA_FAILURE_RATE=0.3     # 30% of requests will fail with RateLimitError
     OLLAMA_FAILURE_SEED=42      # Reproducible failures for testing
 """
 
@@ -50,61 +50,6 @@ def _maybe_inject_failure() -> None:
             "Simulated rate limit (injected for testing)",
             context={"vendor": "ollama", "injected": True, "retry_after": 1},
         )
-
-
-# Reprompt failure injection config
-_REPROMPT_TEST_MODE = os.getenv("REPROMPT_TEST_MODE", "").lower()
-_REPROMPT_FAILURE_RATE = float(os.getenv("REPROMPT_FAILURE_RATE", "0.5"))
-_REPROMPT_SUCCESS_AFTER = int(os.getenv("REPROMPT_SUCCESS_AFTER", "2"))
-_reprompt_failure_count = 0
-
-if _REPROMPT_TEST_MODE:
-    logger.info(
-        "Ollama reprompt failure injection enabled: mode=%s, rate=%.2f, success_after=%d",
-        _REPROMPT_TEST_MODE,
-        _REPROMPT_FAILURE_RATE,
-        _REPROMPT_SUCCESS_AFTER,
-    )
-
-# Malformed JSON samples for testing
-_MALFORMED_SAMPLES = [
-    '```json\n{"name": "test", "value": 123}\n```',  # Markdown wrapped
-    '{"name": "test", "items": [1, 2, 3,]}',  # Trailing comma
-    "{'name': 'test', 'value': 123}",  # Single quotes
-    '{"name": "test", "items": [1, 2, 3',  # Unclosed bracket
-]
-
-
-def _maybe_inject_reprompt_failure(valid_response: Any) -> Any:
-    """
-    Maybe inject malformed response for testing reprompt.
-
-    Returns either the valid response or an injected malformed response.
-    """
-    global _reprompt_failure_count
-
-    if not _REPROMPT_TEST_MODE:
-        return valid_response
-
-    # Allow success after N failures
-    if _reprompt_failure_count >= _REPROMPT_SUCCESS_AFTER:
-        _reprompt_failure_count = 0
-        logger.info("[REPROMPT TEST] Allowing success after %d failures", _REPROMPT_SUCCESS_AFTER)
-        return valid_response
-
-    if _RNG.random() < _REPROMPT_FAILURE_RATE:
-        _reprompt_failure_count += 1
-
-        if _REPROMPT_TEST_MODE == "malformed_json":
-            sample = _RNG.choice(_MALFORMED_SAMPLES)
-            logger.info("[INJECTED REPROMPT FAILURE] Returning malformed JSON: %s...", sample[:40])
-            return sample
-
-        if _REPROMPT_TEST_MODE == "missing_fields":
-            logger.info("[INJECTED REPROMPT FAILURE] Returning response with missing fields")
-            return {"_partial": True, "injected_error": "missing_fields"}
-
-    return valid_response
 
 
 def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
@@ -175,6 +120,18 @@ class OllamaClient(BaseClient):
         if not schema:
             return None
 
+        # If schema is a tuple (shouldn't happen but handle it)
+        if isinstance(schema, tuple):
+            logger.warning("Schema is a tuple, extracting first element: %s", schema)
+            schema = schema[0] if schema else None
+            if not schema:
+                return None
+
+        # Ensure schema is a dict
+        if not isinstance(schema, dict):
+            logger.warning("Schema is not a dict (type=%s), returning None", type(schema))
+            return None
+
         # If schema has nested "schema" key (OpenAI format), extract it
         if "schema" in schema and isinstance(schema["schema"], dict):
             return schema["schema"]
@@ -220,7 +177,11 @@ class OllamaClient(BaseClient):
         messages = OllamaClient._prep_messages(prompt_config, ctx_str)
 
         # Extract schema for Ollama's format parameter
+        logger.debug("Schema received by Ollama client: type=%s, value=%s", type(schema), schema)
         ollama_schema = OllamaClient._extract_ollama_schema(schema)
+        logger.debug(
+            "Schema after extraction: type=%s, value=%s", type(ollama_schema), ollama_schema
+        )
 
         logger.debug("Calling Ollama with JSON mode, schema=%s", bool(ollama_schema))
 
@@ -242,10 +203,6 @@ class OllamaClient(BaseClient):
         # Parse JSON response
         content = response.message.content
 
-        # Inject reprompt failure if testing (returns malformed content)
-        content = _maybe_inject_reprompt_failure(content)
-
-        # If injection returned a string (malformed JSON), try to repair then parse
         if isinstance(content, str):
             try:
                 parsed = json.loads(content)
@@ -253,27 +210,10 @@ class OllamaClient(BaseClient):
                     return [parsed]
                 return [{"response": parsed}]
             except json.JSONDecodeError as e:
-                # Try JSON repair before giving up
-                from agent_actions.reprompting.json_repair import JSONRepairStrategy
-
-                repair = JSONRepairStrategy()
-                repair_result = repair.attempt_repair(content)
-
-                if repair_result.success:
-                    logger.info(
-                        "JSON repaired using %s: %s",
-                        repair_result.repair_method,
-                        str(repair_result.data)[:100],
-                    )
-                    if isinstance(repair_result.data, dict):
-                        return [repair_result.data]
-                    return [{"response": repair_result.data}]
-
-                # Repair failed - return raw content for reprompt handling
-                logger.warning("Failed to parse/repair Ollama JSON response: %s", e)
+                # Return raw content with error info
+                logger.debug("JSON parse failed: %s", e)
                 return [{"raw_response": content, "_parse_error": str(e)}]
 
-        # If injection returned a dict (missing fields), return directly
         if isinstance(content, dict):
             return [content]
 
