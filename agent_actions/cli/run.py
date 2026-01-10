@@ -99,6 +99,100 @@ class RunCommand:
         else:
             workflow.run()
 
+    def _setup_validation_workflow(self, paths) -> AgentWorkflow:
+        """Set up workflow for validation."""
+        filename = f"{self.agent_name}.yml"
+        full_path = self._find_config_file(paths.agent_config_dir, filename)
+
+        click.echo("Rendering and loading configuration...")
+        ConfigRenderer.render_and_load_config(
+            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
+        )
+
+        click.echo("Loading workflow configuration...")
+        return AgentWorkflow(
+            WorkflowConfig(
+                paths=WorkflowPaths(
+                    constructor_path=str(full_path),
+                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
+                    default_path=str(paths.default_config_path),
+                ),
+                use_tools=self.args.use_tools,
+                run_upstream=self.args.upstream,
+                run_downstream=self.args.downstream,
+            )
+        )
+
+    def _collect_issues_from_validator(self, validator, prefix: str) -> tuple[list, list]:
+        """Collect and categorize issues from a validator."""
+        errors = []
+        warnings = []
+        for issue in validator.get_issues():
+            message = f"[{prefix}] {issue.message}"
+            if issue.issue_type == "error":
+                errors.append(message)
+            else:
+                warnings.append(message)
+        return errors, warnings
+
+    def _validate_vendors(self, agent_configs: dict) -> tuple[list, list]:
+        """Validate vendor compatibility for all agents."""
+        errors = []
+        warnings = []
+        vendor_validator = VendorCompatibilityValidator()
+
+        for agent_name, agent_config in agent_configs.items():
+            if not vendor_validator.validate_vendor_config(agent_config, agent_name):
+                agent_errors, agent_warnings = self._collect_issues_from_validator(
+                    vendor_validator, agent_name
+                )
+                errors.extend(agent_errors)
+                warnings.extend(agent_warnings)
+
+        return errors, warnings
+
+    def _validate_dependencies(self, agent_configs: dict) -> tuple[list, list]:
+        """Validate workflow dependencies."""
+        dep_validator = DependencyValidator()
+        if dep_validator.validate_workflow({"agents": agent_configs}, agent_configs):
+            return [], []
+        return self._collect_issues_from_validator(dep_validator, "dependency")
+
+    def _run_static_analysis(self, agent_configs: dict) -> tuple[list, list]:
+        """Run static type checking on field references."""
+        click.echo("\nRunning static type checking...")
+        from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
+
+        workflow_config = {
+            "actions": [{**config, "name": name} for name, config in agent_configs.items()]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        static_result = analyzer.analyze()
+
+        errors = [f"[static] {e.format_message()}" for e in static_result.errors]
+        warnings = [f"[static] {w.format_message()}" for w in static_result.warnings]
+        return errors, warnings
+
+    def _report_validation_results(self, errors: list, warnings: list) -> None:
+        """Report validation results to the user."""
+        click.echo("")
+        if errors:
+            click.echo(click.style("VALIDATION FAILED", fg="red", bold=True))
+            click.echo(f"\n{len(errors)} error(s) found:\n")
+            for error in errors:
+                click.echo(click.style(f"  ERROR: {error}", fg="red"))
+        else:
+            click.echo(click.style("VALIDATION PASSED", fg="green", bold=True))
+
+        if warnings:
+            click.echo(f"\n{len(warnings)} warning(s):\n")
+            for warning in warnings:
+                click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
+
+        click.echo("")
+        click.echo("-" * 50)
+
     def execute_validation_only(self, static_typing: bool = True) -> None:
         """
         Execute pre-flight validation only, without running the workflow.
@@ -123,94 +217,25 @@ class RunCommand:
         paths = ProjectPathsFactory.create_project_paths(self.agent_name, self.args.agent)
         PromptValidator().validate(paths.prompt_dir)
 
-        filename = f"{self.agent_name}.yml"
-        full_path = self._find_config_file(paths.agent_config_dir, filename)
-
-        click.echo("Rendering and loading configuration...")
-        ConfigRenderer.render_and_load_config(
-            self.agent_name, full_path, paths.template_dir, paths.rendered_workflows_dir
-        )
-
-        click.echo("Loading workflow configuration...")
-        workflow = AgentWorkflow(
-            WorkflowConfig(
-                paths=WorkflowPaths(
-                    constructor_path=str(full_path),
-                    user_code_path=str(self.args.user_code) if self.args.user_code else None,
-                    default_path=str(paths.default_config_path),
-                ),
-                use_tools=self.args.use_tools,
-                run_upstream=self.args.upstream,
-                run_downstream=self.args.downstream,
-            )
-        )
+        workflow = self._setup_validation_workflow(paths)
 
         click.echo("\nRunning pre-flight validation...")
         click.echo("-" * 50)
 
-        errors = []
-        warnings = []
+        # Collect all validation issues
+        errors, warnings = self._validate_vendors(workflow.agent_configs)
 
-        # 1. Validate vendor compatibility for each agent
-        vendor_validator = VendorCompatibilityValidator()
-        for agent_name, agent_config in workflow.agent_configs.items():
-            if not vendor_validator.validate_vendor_config(agent_config, agent_name):
-                for issue in vendor_validator.get_issues():
-                    if issue.issue_type == "error":
-                        errors.append(f"[{agent_name}] {issue.message}")
-                    else:
-                        warnings.append(f"[{agent_name}] {issue.message}")
+        dep_errors, dep_warnings = self._validate_dependencies(workflow.agent_configs)
+        errors.extend(dep_errors)
+        warnings.extend(dep_warnings)
 
-        # 2. Validate dependencies
-        dep_validator = DependencyValidator()
-        if not dep_validator.validate_workflow(
-            {"agents": workflow.agent_configs},
-            workflow.agent_configs,
-        ):
-            for issue in dep_validator.get_issues():
-                if issue.issue_type == "error":
-                    errors.append(f"[dependency] {issue.message}")
-                else:
-                    warnings.append(f"[dependency] {issue.message}")
-
-        # 3. Static type checking (field references)
         if static_typing:
-            click.echo("\nRunning static type checking...")
-            from agent_actions.validation.static_analyzer import WorkflowStaticAnalyzer
+            static_errors, static_warnings = self._run_static_analysis(workflow.agent_configs)
+            errors.extend(static_errors)
+            warnings.extend(static_warnings)
 
-            # Build workflow config dict from agent_configs
-            workflow_config = {
-                "actions": [
-                    {**config, "name": name} for name, config in workflow.agent_configs.items()
-                ]
-            }
-
-            analyzer = WorkflowStaticAnalyzer(workflow_config)
-            static_result = analyzer.analyze()
-
-            for error in static_result.errors:
-                errors.append(f"[static] {error.format_message()}")
-
-            for warning in static_result.warnings:
-                warnings.append(f"[static] {warning.format_message()}")
-
-        # 4. Report results
-        click.echo("")
-        if errors:
-            click.echo(click.style("VALIDATION FAILED", fg="red", bold=True))
-            click.echo(f"\n{len(errors)} error(s) found:\n")
-            for error in errors:
-                click.echo(click.style(f"  ERROR: {error}", fg="red"))
-        else:
-            click.echo(click.style("VALIDATION PASSED", fg="green", bold=True))
-
-        if warnings:
-            click.echo(f"\n{len(warnings)} warning(s):\n")
-            for warning in warnings:
-                click.echo(click.style(f"  WARNING: {warning}", fg="yellow"))
-
-        click.echo("")
-        click.echo("-" * 50)
+        # Report and exit
+        self._report_validation_results(errors, warnings)
 
         if errors:
             click.echo("Pre-flight validation failed. Fix errors before running workflow.")
