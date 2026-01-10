@@ -74,6 +74,18 @@ class ConfigValidator(BaseValidator):
                 key = file_obj.stem.lower()
                 name_locations.setdefault(key, []).append(str(file_obj.resolve()))
 
+    def _find_name_conflicts(
+        self,
+        agent_name: str,
+        name_locations: Dict[str, List[str]],
+        exclude_path: Optional[str] = None,
+    ) -> List[str]:
+        """Find conflicting file paths for an agent name."""
+        conflicts = name_locations.get(agent_name.lower(), [])
+        if exclude_path:
+            conflicts = [p for p in conflicts if p != exclude_path]
+        return conflicts
+
     def _check_agent_name_unique_logic(
         self,
         agent_name_to_check: str,
@@ -83,12 +95,12 @@ class ConfigValidator(BaseValidator):
         """Check that agent name is unique in the project."""
         try:
             name_locations = self._collect_agent_config_files(project_dir_str)
-            resolved_current_file_path = (
+            resolved_path = (
                 str(Path(current_file_path_str).resolve()) if current_file_path_str else None
             )
-            conflicts = name_locations.get(agent_name_to_check.lower(), [])
-            if resolved_current_file_path:
-                conflicts = [p for p in conflicts if p != resolved_current_file_path]
+            conflicts = self._find_name_conflicts(
+                agent_name_to_check, name_locations, resolved_path
+            )
             if conflicts:
                 self.add_error(
                     f"Agent name '{agent_name_to_check}' is not unique. "
@@ -143,33 +155,25 @@ class ConfigValidator(BaseValidator):
         valid_prop_types = {"string", "number", "integer", "boolean", "object"}
         return base_type in valid_prop_types
 
-    def _is_valid_schema_type(
-        self, type_str: str, valid_types: set, valid_array_types: set
-    ) -> bool:
-        """
-        Check if a schema type string is valid, including complex object notation.
-
-        Args:
-            type_str: The type string to validate
-            valid_types: Set of valid basic types
-            valid_array_types: Set of valid array types
-
-        Returns:
-            bool: True if the type is valid, False otherwise
-        """
-        if type_str in valid_types or type_str in valid_array_types:
-            return True
+    def _is_valid_array_object_type(self, type_str: str) -> bool:
+        """Validate array[object:...] type notation."""
         if not (type_str.startswith("array[object:") and type_str.endswith("]")):
             return False
         properties_dict = self._parse_properties_dict(type_str[13:-1])
         if not isinstance(properties_dict, dict):
             return False
-        for prop_name, prop_type in properties_dict.items():
-            if not isinstance(prop_name, str):
-                return False
-            if not self._validate_property_type(prop_type):
-                return False
-        return True
+        return all(
+            isinstance(prop_name, str) and self._validate_property_type(prop_type)
+            for prop_name, prop_type in properties_dict.items()
+        )
+
+    def _is_valid_schema_type(
+        self, type_str: str, valid_types: set, valid_array_types: set
+    ) -> bool:
+        """Check if a schema type string is valid, including complex object notation."""
+        if type_str in valid_types or type_str in valid_array_types:
+            return True
+        return self._is_valid_array_object_type(type_str)
 
     def _validate_agent_entries_list_logic(
         self, agent_cfg_list: Any, agent_name_ctx: str, proj_root: Optional[Path] = None
@@ -335,6 +339,23 @@ class ConfigValidator(BaseValidator):
             handler(data, project_root_path)
         return not self.has_errors()
 
+    def _validate_config_file_access(self, cfg_file: Path) -> bool:
+        """Validate config file exists and is accessible.
+
+        Returns:
+            True if file is accessible, False otherwise (errors added to self).
+        """
+        if not self._ensure_path_exists(cfg_file):
+            self.add_error(f"Config file does not exist: {cfg_file}")
+            return False
+        if not self._is_file(cfg_file):
+            self.add_error(f"Config path is not a file: {cfg_file}")
+            return False
+        if not os.access(cfg_file, os.R_OK):
+            self.add_error(f"Config file not readable: {cfg_file}")
+            return False
+        return True
+
     def _validate_agent_config_file_meta_operation(
         self, data: Dict[str, Any], project_root_path: Optional[Path]
     ) -> None:
@@ -350,13 +371,7 @@ class ConfigValidator(BaseValidator):
             )
             return
         cfg_file = Path(cfg_path)
-        if not self._ensure_path_exists(cfg_file):
-            self.add_error(f"Config file does not exist: {cfg_file}")
-        elif not self._is_file(cfg_file):
-            self.add_error(f"Config path is not a file: {cfg_file}")
-        elif not os.access(cfg_file, os.R_OK):
-            self.add_error(f"Config file not readable: {cfg_file}")
-        else:
+        if self._validate_config_file_access(cfg_file):
             self._check_agent_file_unique_logic(str(cfg_file.resolve()), str(project_root_path))
             self._check_agent_name_unique_logic(
                 agent_name, str(project_root_path), str(cfg_file.resolve())
