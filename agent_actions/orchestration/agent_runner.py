@@ -235,6 +235,69 @@ class AgentRunner:
             return True
         return False
 
+    def _should_skip_item(self, item: Path, input_path: Path, processed_paths: set) -> bool:
+        """Check if an item should be skipped during processing."""
+        if "batch" in item.parts:
+            return True
+        if not item.is_file():
+            return True
+        if item.name.startswith("."):
+            return True
+        relative_path = item.relative_to(input_path)
+        if relative_path in processed_paths:
+            return True
+        return False
+
+    def _process_directory_files(
+        self,
+        input_path: Path,
+        output_path: Path,
+        input_directory: str,
+        params: FileProcessParams,
+        processed_paths: set,
+    ) -> int:
+        """Process all files in a single directory. Returns count of files processed."""
+        count = 0
+        for item in input_path.rglob("*"):
+            if self._should_skip_item(item, input_path, processed_paths):
+                continue
+
+            relative_path = item.relative_to(input_path)
+            processed_paths.add(relative_path)
+
+            self._process_single_file(
+                SingleFileProcessParams(
+                    locations=FileLocationParams(
+                        item=item,
+                        input_path=input_path,
+                        output_path=output_path,
+                        input_directory=input_directory,
+                    ),
+                    agent_config=params.agent_config,
+                    agent_name=params.agent_name,
+                    strategy=params.strategy,
+                    idx=params.idx,
+                )
+            )
+            count += 1
+        return count
+
+    def _warn_no_files_found(self, params: FileProcessParams) -> None:
+        """Log warning if no files were found in upstream directories."""
+        has_content = any(
+            Path(d).exists() and any(Path(d).iterdir()) for d in params.upstream_data_dirs
+        )
+        if not has_content:
+            logger.warning(
+                "No files found in upstream directories: %s. Processing continues.",
+                params.upstream_data_dirs,
+                extra={
+                    "upstream_data_dirs": params.upstream_data_dirs,
+                    "agent_name": params.agent_name,
+                    "operation": "directory_processing",
+                },
+            )
+
     def process_files(self, params: FileProcessParams) -> None:
         """
         Walks through the upstream data directories, processing each file with the given strategy,
@@ -242,14 +305,8 @@ class AgentRunner:
         - Any directory named 'batch'
         - Hidden files (starting with '.')
         - Marker files (e.g., .passthrough_processed)
-
-        Args:
-            params: FileProcessParams containing all processing parameters
-
-        Raises:
-            ValueError: If no files are found in the input directory.
         """
-        files_processed_count: int = 0
+        files_processed_count = 0
         output_path = Path(params.output_directory)
         processed_relative_paths: set = set()
 
@@ -259,61 +316,12 @@ class AgentRunner:
                 logger.warning("Upstream directory not found: %s", input_directory)
                 continue
 
-            for item in input_path.rglob("*"):
-                if "batch" in item.parts:
-                    continue
-                if item.is_file():
-                    relative_path = item.relative_to(input_path)
-                    if relative_path in processed_relative_paths:
-                        continue
-                    if item.name.startswith("."):
-                        continue
-
-                    processed_relative_paths.add(relative_path)
-                    self._process_single_file(
-                        SingleFileProcessParams(
-                            locations=FileLocationParams(
-                                item=item,
-                                input_path=input_path,
-                                output_path=output_path,
-                                input_directory=input_directory,
-                            ),
-                            agent_config=params.agent_config,
-                            agent_name=params.agent_name,
-                            strategy=params.strategy,
-                            idx=params.idx,
-                        )
-                    )
-                    files_processed_count += 1
-
-        if files_processed_count == 0:
-            # Check if any input path has content
-            has_content = any(
-                Path(d).exists() and any(Path(d).iterdir()) for d in params.upstream_data_dirs
+            files_processed_count += self._process_directory_files(
+                input_path, output_path, input_directory, params, processed_relative_paths
             )
 
-            if not has_content:
-                logger.warning(
-                    "No files found in upstream directories: %s. Processing continues.",
-                    params.upstream_data_dirs,
-                    extra={
-                        "upstream_data_dirs": params.upstream_data_dirs,
-                        "agent_name": params.agent_name,
-                        "operation": "directory_processing",
-                    },
-                )
-            else:
-                logger.info(
-                    "No files to process in %s (potentially filtered), "
-                    "but directory structure was mirrored. "
-                    "Processing continues.",
-                    params.upstream_data_dirs,
-                    extra={
-                        "upstream_data_dirs": params.upstream_data_dirs,
-                        "agent_name": params.agent_name,
-                        "operation": "directory_processing",
-                    },
-                )
+        if files_processed_count == 0:
+            self._warn_no_files_found(params)
 
     def process_and_generate_for_agent(self, params: ProcessGenerateParams) -> str:
         """
