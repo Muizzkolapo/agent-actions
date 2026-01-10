@@ -103,6 +103,15 @@ class ActionExpander:
             )
 
     @staticmethod
+    def _merge_directive_value(existing: Any, new_value: Any) -> Any:
+        """Merge two directive values based on their types."""
+        if isinstance(existing, dict) and isinstance(new_value, dict):
+            return {**existing, **new_value}
+        if isinstance(existing, list) and isinstance(new_value, list):
+            return list(dict.fromkeys(existing + new_value))
+        return new_value
+
+    @staticmethod
     def _deep_merge_context_scope(
         defaults_scope: Optional[Dict[str, Any]], action_scope: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
@@ -111,49 +120,18 @@ class ActionExpander:
 
         Action-level directives are merged with (not replace) defaults directives.
         This allows actions to define drop/observe while inheriting seed_data from defaults.
-
-        Args:
-            defaults_scope: context_scope from defaults (may be None)
-            action_scope: context_scope from action config (may be None)
-
-        Returns:
-            Merged context_scope dict
-
-        Examples:
-            >>> defaults = {'seed_data': {'exam': 'file.json'}}
-            >>> action = {'drop': ['source.api_key']}
-            >>> _deep_merge_context_scope(defaults, action)
-            {'seed_data': {'exam': 'file.json'}, 'drop': ['source.api_key']}
-
-            >>> defaults = {'observe': ['agent1.field1']}
-            >>> action = {'observe': ['agent2.field2'], 'drop': ['source.id']}
-            >>> _deep_merge_context_scope(defaults, action)
-            {'observe': ['agent1.field1', 'agent2.field2'], 'drop': ['source.id']}
         """
         if not defaults_scope:
             return action_scope or {}
         if not action_scope:
             return defaults_scope or {}
 
-        # Start with defaults
         merged = {**defaults_scope}
 
-        # Merge action-level directives
         for key, value in action_scope.items():
             if key in merged:
-                # Both defaults and action have this directive
-                if isinstance(merged[key], dict) and isinstance(value, dict):
-                    # Deep merge for dict directives (e.g., seed_data)
-                    merged[key] = {**merged[key], **value}
-                elif isinstance(merged[key], list) and isinstance(value, list):
-                    # Combine lists and preserve order while removing duplicates
-                    # Action values come after defaults values
-                    merged[key] = list(dict.fromkeys(merged[key] + value))
-                else:
-                    # For scalar values, action overrides defaults
-                    merged[key] = value
+                merged[key] = ActionExpander._merge_directive_value(merged[key], value)
             else:
-                # New directive from action
                 merged[key] = value
 
         return merged
