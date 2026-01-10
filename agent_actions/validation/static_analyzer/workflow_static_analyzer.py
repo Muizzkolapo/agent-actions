@@ -329,6 +329,31 @@ class WorkflowStaticAnalyzer:
 
         return "\n".join(lines)
 
+    def _get_execution_order(self) -> List[str]:
+        """Get execution order, falling back to node keys if cycle detected."""
+        try:
+            return self.graph.topological_sort()
+        except ValueError:
+            return list(self.graph.nodes.keys())
+
+    def _build_agent_references(self, node: DataFlowNode) -> List[Dict[str, str]]:
+        """Build references list for an agent node."""
+        return [
+            {"agent": req.source_agent, "field": req.field_path}
+            for req in node.input_requirements
+            if req.source_agent not in self.graph.SPECIAL_NAMESPACES
+        ]
+
+    def _build_agent_info(self, node: DataFlowNode) -> Dict[str, Any]:
+        """Build agent info dictionary for a node."""
+        return {
+            "name": node.name,
+            "kind": node.agent_kind.value,
+            "output_fields": sorted(node.output_schema.available_fields),
+            "dependencies": sorted(node.dependencies),
+            "references": self._build_agent_references(node),
+        }
+
     def get_data_flow_summary(self) -> Dict[str, Any]:
         """Get a summary of data flow in the workflow.
 
@@ -338,24 +363,11 @@ class WorkflowStaticAnalyzer:
         if not self._built:
             self._build_graph()
 
-        try:
-            execution_order = self.graph.topological_sort()
-        except ValueError:
-            execution_order = list(self.graph.nodes.keys())
+        execution_order = self._get_execution_order()
 
         return {
             "agents": [
-                {
-                    "name": node.name,
-                    "kind": node.agent_kind.value,
-                    "output_fields": sorted(node.output_schema.available_fields),
-                    "dependencies": sorted(node.dependencies),
-                    "references": [
-                        {"agent": req.source_agent, "field": req.field_path}
-                        for req in node.input_requirements
-                        if req.source_agent not in self.graph.SPECIAL_NAMESPACES
-                    ],
-                }
+                self._build_agent_info(node)
                 for name, node in self.graph.nodes.items()
                 if not self.graph.is_special_namespace(name)
             ],
