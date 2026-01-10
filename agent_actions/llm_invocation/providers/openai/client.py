@@ -25,6 +25,26 @@ from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 logger = logging.getLogger(__name__)
 
 
+def _extract_retry_after(e: Exception) -> Optional[float]:
+    """Extract retry-after header from an API error response.
+
+    Args:
+        e: The API exception with potential response headers
+
+    Returns:
+        Parsed retry-after value as float, or None if not available
+    """
+    if not hasattr(e, "response") or not e.response:
+        return None
+    retry_after = e.response.headers.get("retry-after")
+    if not retry_after:
+        return None
+    try:
+        return float(retry_after)
+    except ValueError:
+        return None
+
+
 def _wrap_openai_error(e: Exception, model_name: str) -> Exception:
     """Wrap OpenAI SDK errors into unified agent-actions error types.
 
@@ -40,37 +60,22 @@ def _wrap_openai_error(e: Exception, model_name: str) -> Exception:
     """
     context = {"vendor": "openai", "model": model_name}
 
-    # Rate limit errors
     if isinstance(e, openai.RateLimitError):
-        # Extract retry_after if available
-        retry_after = None
-        if hasattr(e, "response") and e.response:
-            retry_after = e.response.headers.get("retry-after")
-            if retry_after:
-                try:
-                    retry_after = float(retry_after)
-                except ValueError:
-                    retry_after = None
-        context["retry_after"] = retry_after
+        context["retry_after"] = _extract_retry_after(e)
         return RateLimitError(f"OpenAI rate limit: {e}", context=context, cause=e)
 
-    # Connection/network errors
     if isinstance(e, openai.APIConnectionError):
         return NetworkError(f"OpenAI connection error: {e}", context=context, cause=e)
 
-    # Timeout errors
     if isinstance(e, openai.APITimeoutError):
         return NetworkError(f"OpenAI timeout: {e}", context=context, cause=e)
 
-    # Internal server errors (potentially transient)
     if isinstance(e, openai.InternalServerError):
         return NetworkError(f"OpenAI server error: {e}", context=context, cause=e)
 
-    # Other API errors (not retryable)
     if isinstance(e, openai.APIError):
         return VendorAPIError(f"OpenAI API error: {e}", context=context, cause=e)
 
-    # Unknown error, re-raise as-is
     return e
 
 
