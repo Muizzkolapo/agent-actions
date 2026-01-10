@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Any
+from typing import Any, Dict, Iterable, List
 
 from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.preprocessing.chunking.strategies.chunking_strategies import (
@@ -78,32 +78,31 @@ class FieldAnalyzer:
         )
         ConfigValidator.validate_field_analyzer_config(chunk_config)
 
-    def analyze_record(self, record: Dict[str, Any]) -> FieldAnalysisResult:
-        """
-        Analyze a record to determine which fields need chunking.
-
-        Args:
-            record: Dictionary containing record data to analyze
-
-        Returns:
-            FieldAnalysisResult with fields that require chunking
-        """
-        result = FieldAnalysisResult()
+    def _determine_fields_to_analyze(self, record: Dict[str, Any]) -> Iterable[str]:
+        """Determine which fields should be analyzed for chunking."""
         if self.config.chunk_fields:
-            fields_to_analyze = self.config.chunk_fields
-        elif self.config.auto_detect_enabled:
-            fields_to_analyze = self.detect_text_fields(record)
-        else:
-            fields_to_analyze = record.keys()
-        for field_name in fields_to_analyze:
-            if field_name not in record:
+            return self.config.chunk_fields
+        if self.config.auto_detect_enabled:
+            return self.detect_text_fields(record)
+        return record.keys()
+
+    def _should_analyze_field(self, field_name: str, record: Dict[str, Any]) -> bool:
+        """Check if a field should be analyzed (exists, is string, not preserved)."""
+        if field_name not in record:
+            return False
+        if not isinstance(record[field_name], str):
+            return False
+        return field_name not in self.config.preserve_fields
+
+    def analyze_record(self, record: Dict[str, Any]) -> FieldAnalysisResult:
+        """Analyze a record to determine which fields need chunking."""
+        result = FieldAnalysisResult()
+        for field_name in self._determine_fields_to_analyze(record):
+            if not self._should_analyze_field(field_name, record):
                 continue
-            value = record[field_name]
-            if not isinstance(value, str):
-                continue
-            if field_name in self.config.preserve_fields:
-                continue
-            token_count = Tokenizer.num_tokens_from_string(value, self.config.tokenizer_model)
+            token_count = Tokenizer.num_tokens_from_string(
+                record[field_name], self.config.tokenizer_model
+            )
             result.field_sizes[field_name] = token_count
             if self.should_chunk_field(field_name, token_count):
                 result.fields_to_chunk.append(field_name)
