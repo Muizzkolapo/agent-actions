@@ -17,9 +17,9 @@ from agent_actions.llm_invocation.batch.processing.batch_passthrough_builder imp
     BatchPassthroughBuilder,
 )
 from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
-from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import RetryMetadata
 from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
+from agent_actions.utilities.metadata import MetadataExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -356,13 +356,16 @@ class BatchResultProcessor:
         """
         Build retry metadata dict for a processed record.
 
+        Uses the unified MetadataExtractor to ensure consistent structure
+        between batch and online modes.
+
         Args:
             ctx: Processing context with retry tracking info
 
         Returns:
             Retry metadata dictionary
         """
-        return RetryMetadata(
+        return MetadataExtractor.build_retry_metadata(
             was_retried=ctx.retry_attempt > 0,
             retry_attempts=ctx.retry_attempt,
             original_batch_id=ctx.original_batch_id,

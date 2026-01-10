@@ -3,7 +3,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import (
-    RetryMetadata,
     RetryBatchResult,
     RetryChainResult,
     BatchRetryOrchestrator,
@@ -12,10 +11,11 @@ from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryCon
 from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
     BatchReconciliationResult,
 )
+from agent_actions.utilities.metadata import RetryMetadata
 
 
 class TestRetryMetadata:
-    """Tests for RetryMetadata dataclass."""
+    """Tests for RetryMetadata dataclass (unified metadata module)."""
 
     def test_default_values(self):
         """Test default metadata values."""
