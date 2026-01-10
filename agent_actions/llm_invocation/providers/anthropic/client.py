@@ -24,6 +24,26 @@ from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError, C
 logger = logging.getLogger(__name__)
 
 
+def _extract_retry_after(e: Exception) -> Optional[float]:
+    """Extract retry-after header from an API error response.
+
+    Args:
+        e: The API exception with potential response headers
+
+    Returns:
+        Parsed retry-after value as float, or None if not available
+    """
+    if not hasattr(e, "response") or not e.response:
+        return None
+    retry_after = e.response.headers.get("retry-after")
+    if not retry_after:
+        return None
+    try:
+        return float(retry_after)
+    except ValueError:
+        return None
+
+
 def _wrap_anthropic_error(e: Exception, model_name: str) -> Exception:
     """Wrap Anthropic SDK errors into unified agent-actions error types.
 
@@ -39,36 +59,22 @@ def _wrap_anthropic_error(e: Exception, model_name: str) -> Exception:
     """
     context = {"vendor": "anthropic", "model": model_name}
 
-    # Rate limit errors
     if isinstance(e, anthropic.RateLimitError):
-        retry_after = None
-        if hasattr(e, "response") and e.response:
-            retry_after = e.response.headers.get("retry-after")
-            if retry_after:
-                try:
-                    retry_after = float(retry_after)
-                except ValueError:
-                    retry_after = None
-        context["retry_after"] = retry_after
+        context["retry_after"] = _extract_retry_after(e)
         return RateLimitError(f"Anthropic rate limit: {e}", context=context, cause=e)
 
-    # Connection/network errors
     if isinstance(e, anthropic.APIConnectionError):
         return NetworkError(f"Anthropic connection error: {e}", context=context, cause=e)
 
-    # Timeout errors
     if isinstance(e, anthropic.APITimeoutError):
         return NetworkError(f"Anthropic timeout: {e}", context=context, cause=e)
 
-    # Internal server errors (potentially transient)
     if isinstance(e, anthropic.InternalServerError):
         return NetworkError(f"Anthropic server error: {e}", context=context, cause=e)
 
-    # Other API errors (not retryable)
     if isinstance(e, anthropic.APIError):
         return VendorAPIError(f"Anthropic API error: {e}", context=context, cause=e)
 
-    # Unknown error, re-raise as-is
     return e
 
 
