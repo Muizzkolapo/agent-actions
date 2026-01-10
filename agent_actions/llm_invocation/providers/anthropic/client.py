@@ -76,6 +76,59 @@ class AnthropicClient(BaseClient):
     """Anthropic Claude API client for JSON and non-JSON LLM invocations."""
 
     @staticmethod
+    def _build_api_args(
+        model_name: str,
+        prompt_dedent: str,
+        schema: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Build API arguments for the Anthropic call."""
+        api_args = {
+            "model": model_name,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": prompt_dedent}],
+        }
+        if schema is not None:
+            api_args["tools"] = schema
+        return api_args
+
+    @staticmethod
+    def _extract_and_store_usage(response: Any) -> None:
+        """Extract token usage from response and store in thread-local."""
+        if not response.usage:
+            return
+        usage_data = {
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+            "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
+        }
+        set_last_usage(usage_data)
+
+    @staticmethod
+    def _extract_response_content(
+        response: Any, model_name: str
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """Extract content from response, raising error if not found."""
+        response_content = next(
+            (block.input for block in response.content if hasattr(block, "input")), None
+        )
+        if response_content is not None:
+            return response_content
+
+        text_content = next(
+            (block.text for block in response.content if hasattr(block, "text")),
+            "No text content available",
+        )
+        raise VendorAPIError(
+            "No valid content with 'input' found in response",
+            context={
+                "model_name": model_name,
+                "vendor": "anthropic",
+                "text_content": text_content[:200],
+                "api_operation": "messages.create",
+            },
+        )
+
+    @staticmethod
     def call_json(
         api_key: Optional[str],
         agent_config: Dict[str, Any],
@@ -88,15 +141,9 @@ class AnthropicClient(BaseClient):
         context_data_str: str = StringProcessor.process_as_string(context_data)
         prompt = f"\n            <|begin_of_user_instruction|>: {prompt_config} :<|end_of_user_instruction|>\n            <|begin_of_text|>: {str(context_data_str)} :<|end_of_text|>\n        "
         prompt_dedent: str = dedent(prompt)
-        api_args = {
-            "model": model_name,
-            "max_tokens": 1024,
-            "messages": [{"role": "user", "content": prompt_dedent}],
-        }
-        if schema is not None:
-            api_args["tools"] = schema
 
-        # Log API request at DEBUG level
+        api_args = AnthropicClient._build_api_args(model_name, prompt_dedent, schema)
+
         logger.debug(
             "Anthropic API request",
             extra={
@@ -115,17 +162,8 @@ class AnthropicClient(BaseClient):
             raise _wrap_anthropic_error(e, model_name) from e
         duration = (datetime.now() - start_time).total_seconds()
 
-        # Extract token usage and store in thread-local
-        usage_data = None
-        if response.usage:
-            usage_data = {
-                "input_tokens": response.usage.input_tokens,
-                "output_tokens": response.usage.output_tokens,
-                "total_tokens": response.usage.input_tokens + response.usage.output_tokens,
-            }
-            set_last_usage(usage_data)
+        AnthropicClient._extract_and_store_usage(response)
 
-        # Log API response at DEBUG level
         logger.debug(
             "Anthropic API response",
             extra={
@@ -139,24 +177,8 @@ class AnthropicClient(BaseClient):
                 },
             },
         )
-        response_content: Optional[Union[Dict[str, Any], List[Dict[str, Any]]]] = next(
-            (block.input for block in response.content if hasattr(block, "input")), None
-        )
-        if response_content is None:
-            text_content = next(
-                (block.text for block in response.content if hasattr(block, "text")),
-                "No text content available",
-            )
-            raise VendorAPIError(
-                "No valid content with 'input' found in response",
-                context={
-                    "model_name": model_name,
-                    "vendor": "anthropic",
-                    "text_content": text_content[:200],
-                    "api_operation": "messages.create",
-                },
-            )
-        return response_content
+
+        return AnthropicClient._extract_response_content(response, model_name)
 
     @staticmethod
     def call_non_json(
