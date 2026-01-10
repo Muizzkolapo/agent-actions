@@ -59,6 +59,8 @@ class PassthroughTransformer:
         agent_config: Dict,
         idx: int = 0,
         passthrough_fields: Optional[Dict] = None,
+        metadata: Optional[Dict] = None,
+        retry_metadata: Optional[Dict] = None,
     ) -> List:
         """
         Apply context_scope.passthrough logic to generated data.
@@ -80,6 +82,8 @@ class PassthroughTransformer:
                                from context_data. This enables passthrough
                                from ANY previous action (not just immediate
                                predecessor).
+            metadata: Optional LLM response metadata to add to output items
+            retry_metadata: Optional retry tracking metadata
 
         Returns:
             Transformed data list with passthrough fields merged
@@ -100,8 +104,13 @@ class PassthroughTransformer:
                 )
                 break
 
-        # Step 4: Ensure all items have required fields
-        return [self.field_manager.ensure_required_fields(obj, source_guid, idx) for obj in output]
+        # Step 4: Ensure all items have required fields and add metadata
+        return [
+            self.field_manager.ensure_required_fields(
+                obj, source_guid, idx, metadata=metadata, retry_metadata=retry_metadata
+            )
+            for obj in output
+        ]
 
     @staticmethod
     def _is_already_structured(data: List) -> bool:

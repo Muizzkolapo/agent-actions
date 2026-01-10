@@ -9,6 +9,7 @@ from agent_actions.errors import ProcessingError
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.metadata import MetadataExtractor
 from agent_actions.preprocessing.context.context_preprocessor import ContextPreprocessor
 from agent_actions.prompt_generation.prompt_preparation_service import PromptPreparationService
 from ..utilities.source_path_manager import SourcePathManager
@@ -60,12 +61,29 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         )
 
     def _add_lineage_tracking(self, transformed_response, context_data):
-        """Add lineage tracking to transformed response."""
+        """Add lineage tracking and metadata to transformed response."""
         idx = self.agent_config.get("idx", 0)
+
+        # Build metadata for online mode output consistency
+        response_metadata = MetadataExtractor.extract_from_response(
+            response=None,  # Raw response not available at this level
+            agent_config=self.agent_config,
+        )
+        retry_metadata = MetadataExtractor.build_retry_metadata(
+            was_retried=False,
+            retry_attempts=0,
+        )
+
         for i, node in enumerate(transformed_response):
             node_id = IDGenerator.generate_node_id(idx)
             transformed_response[i] = LineageBuilder.add_context_lineage_tracking(
                 node, context_data, node_id
+            )
+            # Add metadata fields for consistency with batch mode
+            FieldManager.add_metadata(
+                transformed_response[i],
+                metadata=response_metadata.to_dict(),
+                retry_metadata=retry_metadata.to_dict(),
             )
         return transformed_response
 

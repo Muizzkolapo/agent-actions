@@ -19,16 +19,26 @@ class FieldManager:
         """
         self.id_generator = id_generator or IDGenerator
 
-    def ensure_required_fields(self, obj: Dict, source_guid: str, idx: int = 0) -> Dict:
+    def ensure_required_fields(
+        self,
+        obj: Dict,
+        source_guid: str,
+        idx: int = 0,
+        metadata: Optional[Dict[str, Any]] = None,
+        retry_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict:
         """
         Ensure an object has all required fields.
 
         Required fields: target_id, source_guid, node_id.
+        Optional fields: metadata, _retry_metadata.
 
         Args:
             obj: Object to update
             source_guid: Source GUID to use if missing
             idx: Index for node_id generation
+            metadata: Optional LLM response metadata to add
+            retry_metadata: Optional retry tracking metadata to add
 
         Returns:
             Updated object with all required fields
@@ -40,6 +50,13 @@ class FieldManager:
             obj["source_guid"] = source_guid
         if "node_id" not in obj or not obj["node_id"]:
             obj["node_id"] = self.id_generator.generate_node_id(idx)
+
+        # Add metadata fields if provided and not already present
+        if metadata is not None and "metadata" not in obj:
+            obj["metadata"] = metadata
+        if retry_metadata is not None and "_retry_metadata" not in obj:
+            obj["_retry_metadata"] = retry_metadata
+
         return obj
 
     def create_processed_item(
@@ -49,6 +66,8 @@ class FieldManager:
         target_id: Optional[str] = None,
         node_id: Optional[str] = None,
         lineage: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        retry_metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """
         Create a standard processed item with all required fields.
@@ -59,14 +78,47 @@ class FieldManager:
             target_id: Optional target ID (will generate if not provided)
             node_id: Optional node ID (will generate if not provided)
             lineage: Optional lineage (will create empty if not provided)
+            metadata: Optional LLM response metadata
+            retry_metadata: Optional retry tracking metadata
 
         Returns:
             Standard processed item dictionary
         """
-        return {
+        item: Dict[str, Any] = {
             "source_guid": source_guid,
             "content": content,
             "target_id": target_id or self.id_generator.generate_target_id(),
             "node_id": node_id or self.id_generator.generate_node_id(0),
             "lineage": lineage or [],
         }
+
+        # Add metadata fields if provided
+        if metadata is not None:
+            item["metadata"] = metadata
+        if retry_metadata is not None:
+            item["_retry_metadata"] = retry_metadata
+
+        return item
+
+    @staticmethod
+    def add_metadata(
+        obj: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+        retry_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Add metadata fields to an existing object.
+
+        Args:
+            obj: Object to update (modified in place)
+            metadata: Optional LLM response metadata
+            retry_metadata: Optional retry tracking metadata
+
+        Returns:
+            The updated object (same reference as input)
+        """
+        if metadata is not None:
+            obj["metadata"] = metadata
+        if retry_metadata is not None:
+            obj["_retry_metadata"] = retry_metadata
+        return obj

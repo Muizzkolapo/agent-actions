@@ -10,6 +10,7 @@
 | [field_resolution](field_resolution/_MANIFEST.md) | Field Resolution Module - Centralized field reference parsing and resolution. |
 | [id_generation](id_generation/_MANIFEST.md) | ID generation utilities for processors. |
 | [lineage](lineage/_MANIFEST.md) | Lineage tracking utilities for processors. |
+| [metadata](metadata/_MANIFEST.md) | Unified metadata system for batch and online modes. |
 | [processor](processor/_MANIFEST.md) | Processor infrastructure and helpers. |
 | [transformation](transformation/_MANIFEST.md) | Data transformation utilities for processors. |
 | [udf_management](udf_management/_MANIFEST.md) | UDF registration and execution system. |

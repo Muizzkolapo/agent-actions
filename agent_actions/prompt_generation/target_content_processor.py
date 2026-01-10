@@ -22,6 +22,7 @@ from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
+from agent_actions.utilities.metadata import MetadataExtractor
 from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
@@ -447,6 +448,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         passthrough_fields=passthrough_fields,
                     )
                 base_node_id = IDGenerator.generate_node_id(self.idx)
+
+                # Build metadata for online mode output consistency
+                response_metadata = MetadataExtractor.extract_from_response(
+                    response=None,  # Raw response not available at this level
+                    agent_config=self.agent_config,
+                )
+                retry_metadata = MetadataExtractor.build_retry_metadata(
+                    was_retried=False,
+                    retry_attempts=0,
+                )
+
                 for i, obj in enumerate(processed):
                     obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records, append sub-index to node_id
@@ -454,6 +466,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
                     obj = LoopIdGenerator.add_loop_correlation_id(
                         obj, self.agent_config, record_index=record_index
+                    )
+                    # Add metadata fields for consistency with batch mode
+                    FieldManager.add_metadata(
+                        obj,
+                        metadata=response_metadata.to_dict(),
+                        retry_metadata=retry_metadata.to_dict(),
                     )
                     processed[i] = obj
             else:
@@ -478,6 +496,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         processed_item["content"].update(passthrough_fields)
                     else:
                         processed_item.update(passthrough_fields)
+
+                # Add metadata to skipped item for consistency
+                skip_metadata = MetadataExtractor.build_retry_metadata(
+                    was_retried=False,
+                    retry_attempts=0,
+                )
+                FieldManager.add_metadata(
+                    processed_item,
+                    metadata={},  # No LLM response for skipped items
+                    retry_metadata=skip_metadata.to_dict(),
+                )
 
                 processed = [processed_item]
             return processed
@@ -612,6 +641,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     passthrough_fields=passthrough_fields,
                 )
                 base_node_id = IDGenerator.generate_node_id(self.idx)
+
+                # Build metadata for online mode output consistency
+                response_metadata = MetadataExtractor.extract_from_response(
+                    response=None,  # Raw response not available at this level
+                    agent_config=self.agent_config,
+                )
+                retry_metadata = MetadataExtractor.build_retry_metadata(
+                    was_retried=False,
+                    retry_attempts=0,
+                )
+
                 for i, obj in enumerate(processed):
                     obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
                     # For split records, append sub-index to node_id
@@ -619,6 +659,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
                     obj = LoopIdGenerator.add_loop_correlation_id(
                         obj, self.agent_config, record_index=record_index
+                    )
+                    # Add metadata fields for consistency with batch mode
+                    FieldManager.add_metadata(
+                        obj,
+                        metadata=response_metadata.to_dict(),
+                        retry_metadata=retry_metadata.to_dict(),
                     )
                     processed[i] = obj
             else:
@@ -647,6 +693,18 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_item = LoopIdGenerator.add_loop_correlation_id(
                     processed_item, self.agent_config, record_index=record_index
                 )
+
+                # Add metadata to skipped item for consistency
+                skip_metadata = MetadataExtractor.build_retry_metadata(
+                    was_retried=False,
+                    retry_attempts=0,
+                )
+                FieldManager.add_metadata(
+                    processed_item,
+                    metadata={},  # No LLM response for skipped items
+                    retry_metadata=skip_metadata.to_dict(),
+                )
+
                 processed = [processed_item]
             return processed
         except Exception as ex:

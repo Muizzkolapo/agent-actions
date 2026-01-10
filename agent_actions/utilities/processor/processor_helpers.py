@@ -260,9 +260,32 @@ def transform_with_passthrough(
     agent_config: Dict[str, Any],
     idx: int = 0,
     passthrough_fields: Optional[Dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
+    retry_metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Any]:
-    """Apply ``context_scope.passthrough`` logic to generated data consistently."""
+    """Apply ``context_scope.passthrough`` logic to generated data consistently.
+
+    Args:
+        data: Generated data list
+        context_data: Context data dictionary containing fields
+        source_guid: Source GUID
+        agent_config: Agent configuration containing context_scope
+        idx: Index for node generation
+        passthrough_fields: Optional pre-computed passthrough fields
+        metadata: Optional LLM response metadata to add to output items
+        retry_metadata: Optional retry tracking metadata
+
+    Returns:
+        Transformed data list with passthrough fields and metadata merged
+    """
     transformer = PassthroughTransformer()
     return transformer.transform_with_passthrough(
-        data, context_data, source_guid, agent_config, idx, passthrough_fields=passthrough_fields
+        data,
+        context_data,
+        source_guid,
+        agent_config,
+        idx,
+        passthrough_fields=passthrough_fields,
+        metadata=metadata,
+        retry_metadata=retry_metadata,
     )
