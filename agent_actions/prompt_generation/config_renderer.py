@@ -8,7 +8,7 @@ and processing the resulting configuration data.
 import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Union, List, cast
+from typing import Any, Dict, Optional, Union, List, cast
 
 import yaml
 from yaml import YAMLError
@@ -309,80 +309,92 @@ class ConfigRenderingService:
             )
         return cast(AgentConfigMap, data)
 
-    def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
-        """
-        Validate the config - handle both old and new formats.
-        """
-        current_directory = Path.cwd()
-        project_root_path = AgentManager.find_project_root(start_path=current_directory)
-        if "actions" in config and "name" in config:
-            actions = config.get("actions", [])
-            validated_entries: List[AgentEntryDict] = []
-            for action in actions:
-                agent_entry = {
-                    "agent_type": action.get("name", "unknown"),
-                    "name": action.get("name"),
-                    "model_vendor": action.get("vendor", "openai"),
-                    "model_name": action.get("model", "gpt-4"),
-                    "is_operational": True,
-                    "dependencies": [],
-                    "granularity": action.get("granularity", "record"),
-                    "run_mode": "online",
-                    "few_shot": action.get("few_shot", 0),
-                    "json_mode": action.get("json_mode", True),
-                }
-                if action.get("kind") == "tool":
-                    agent_entry["model_vendor"] = "tool"
-                    agent_entry["model_name"] = action.get("impl", action.get("name"))
-                if action.get("schema") or action.get("output_schema"):
-                    schema_value = action.get("schema") or action.get("output_schema")
-                    if isinstance(schema_value, str):
-                        agent_entry["schema_name"] = schema_value
-                    else:
-                        agent_entry["schema"] = schema_value
-                if action.get("prompt"):
-                    agent_entry["prompt"] = action.get("prompt")
-                try:
-                    entry_model = AgentConfig.model_validate(agent_entry)
-                    validated_entries.append(entry_model.model_dump(exclude_unset=True))
-                except ValidationError as e:
-                    raise ConfigValidationError(
-                        config_key="action_configuration",
-                        reason="Invalid action configuration",
-                        context={
-                            "action_name": action.get("name", "unknown"),
-                            "agent_name": agent_name,
-                        },
-                        cause=e,
-                    ) from e
-            config["_validated_actions"] = validated_entries
-        else:
-            agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
-            if agent_entries_list is None:
-                raise ConfigValidationError(
-                    config_key="agent_configuration",
-                    reason="No agent configuration found",
-                    context={"agent_name": agent_name, "operation": "validate_config"},
-                )
-            validated_entries: List[AgentEntryDict] = []
-            for entry in agent_entries_list:
-                try:
-                    entry_model = AgentConfig.model_validate(entry)
-                    validated_entries.append(entry_model.model_dump(exclude_unset=True))
-                except ValidationError as e:
-                    raise ConfigValidationError(
-                        config_key="agent_configuration",
-                        reason="Invalid agent configuration",
-                        context={"agent_name": agent_name, "operation": "validate_config"},
-                        cause=e,
-                    ) from e
-            config[agent_name] = validated_entries
+    def _build_agent_entry_from_action(self, action: Dict[str, Any]) -> Dict[str, Any]:
+        """Build agent entry dictionary from action configuration."""
+        agent_entry = {
+            "agent_type": action.get("name", "unknown"),
+            "name": action.get("name"),
+            "model_vendor": action.get("vendor", "openai"),
+            "model_name": action.get("model", "gpt-4"),
+            "is_operational": True,
+            "dependencies": [],
+            "granularity": action.get("granularity", "record"),
+            "run_mode": "online",
+            "few_shot": action.get("few_shot", 0),
+            "json_mode": action.get("json_mode", True),
+        }
+
+        if action.get("kind") == "tool":
+            agent_entry["model_vendor"] = "tool"
+            agent_entry["model_name"] = action.get("impl", action.get("name"))
+
+        schema_value = action.get("schema") or action.get("output_schema")
+        if schema_value:
+            key = "schema_name" if isinstance(schema_value, str) else "schema"
+            agent_entry[key] = schema_value
+
+        if action.get("prompt"):
+            agent_entry["prompt"] = action.get("prompt")
+
+        return agent_entry
+
+    def _validate_entry_with_pydantic(
+        self, entry: Dict[str, Any], agent_name: str, config_key: str
+    ) -> AgentEntryDict:
+        """Validate a single entry using Pydantic model."""
+        try:
+            entry_model = AgentConfig.model_validate(entry)
+            return entry_model.model_dump(exclude_unset=True)
+        except ValidationError as e:
+            raise ConfigValidationError(
+                config_key=config_key,
+                reason=f"Invalid {config_key.replace('_', ' ')}",
+                context={"action_name": entry.get("name", "unknown"), "agent_name": agent_name},
+                cause=e,
+            ) from e
+
+    def _validate_new_format(self, config: AgentConfigMap, agent_name: str) -> List[AgentEntryDict]:
+        """Validate new format config with 'actions' key."""
+        actions = config.get("actions", [])
+        validated_entries = []
+        for action in actions:
+            agent_entry = self._build_agent_entry_from_action(action)
+            validated = self._validate_entry_with_pydantic(
+                agent_entry, agent_name, "action_configuration"
+            )
+            validated_entries.append(validated)
+        config["_validated_actions"] = validated_entries
+        return validated_entries
+
+    def _validate_legacy_format(
+        self, config: AgentConfigMap, agent_name: str
+    ) -> List[AgentEntryDict]:
+        """Validate legacy format config with agent_name key."""
+        agent_entries_list = cast(List[AgentEntryDict], config.get(agent_name))
+        if agent_entries_list is None:
+            raise ConfigValidationError(
+                config_key="agent_configuration",
+                reason="No agent configuration found",
+                context={"agent_name": agent_name, "operation": "validate_config"},
+            )
+
+        validated_entries = []
+        for entry in agent_entries_list:
+            validated = self._validate_entry_with_pydantic(entry, agent_name, "agent_configuration")
+            validated_entries.append(validated)
+        config[agent_name] = validated_entries
+        return validated_entries
+
+    def _run_config_validator(
+        self, validated_entries: List[AgentEntryDict], agent_name: str, project_root: Path
+    ) -> None:
+        """Run ConfigValidator on validated entries."""
         config_validator_instance = ConfigValidator()
         validation_payload = {
             "operation": "validate_agent_entries",
             "agent_config_data": validated_entries,
             "agent_name_context": agent_name,
-            "project_dir": str(project_root_path),
+            "project_dir": str(project_root),
         }
         if not config_validator_instance.validate(validation_payload):
             errors = config_validator_instance.get_errors()
@@ -396,6 +408,18 @@ class ConfigRenderingService:
                         "operation": "validate_config",
                     },
                 )
+
+    def _validate_agent_config_block(self, config: AgentConfigMap, agent_name: str) -> None:
+        """Validate the config - handle both old and new formats."""
+        project_root_path = AgentManager.find_project_root(start_path=Path.cwd())
+
+        is_new_format = "actions" in config and "name" in config
+        if is_new_format:
+            validated_entries = self._validate_new_format(config, agent_name)
+        else:
+            validated_entries = self._validate_legacy_format(config, agent_name)
+
+        self._run_config_validator(validated_entries, agent_name, project_root_path)
 
     @as_validation_error(ConfigurationError)
     def render_and_load_config(
