@@ -14,9 +14,7 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `should_retry` | Method | Determine if another retry attempt should be made. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for serialization. | - |
 | `get_retry_config` | Function | Extract retry configuration from agent config with fallback to default. | - |
-| `batch_retry_orchestrator.py` | Module | Batch Retry Orchestrator. | `llm_invocation` |
-| `RetryMetadata` | Class | Metadata about retry attempts for a single record. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `to_dict` | Method | Convert to dictionary for JSON serialization. | - |
+| `batch_retry_orchestrator.py` | Module | Batch Retry Orchestrator. Uses `RetryMetadata` from unified metadata module. | `llm_invocation` |
 | `RetryBatchResult` | Class | Result of a single retry batch submission and processing. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `all_succeeded` | Method | Check if all records in this retry succeeded. | - |
 | `RetryChainResult` | Class | Result of the complete retry chain orchestration. | - |

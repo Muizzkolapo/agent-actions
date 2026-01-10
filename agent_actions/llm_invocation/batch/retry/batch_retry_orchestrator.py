@@ -25,31 +25,9 @@ from agent_actions.llm_invocation.batch.processing.batch_result_reconciler impor
 )
 from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus, ContextMetaKeys
 from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
+from agent_actions.utilities.metadata import MetadataExtractor
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class RetryMetadata:
-    """
-    Metadata about retry attempts for a single record.
-
-    Attached to each output record to track retry history.
-    """
-
-    was_retried: bool = False
-    retry_attempts: int = 0  # 0 = succeeded on original batch
-    original_batch_id: Optional[str] = None
-    final_batch_id: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "was_retried": self.was_retried,
-            "retry_attempts": self.retry_attempts,
-            "original_batch_id": self.original_batch_id,
-            "final_batch_id": self.final_batch_id,
-        }
 
 
 @dataclass
@@ -629,7 +607,7 @@ class BatchRetryOrchestrator:
         Returns:
             Record with _retry_metadata added
         """
-        metadata = RetryMetadata(
+        metadata = MetadataExtractor.build_retry_metadata(
             was_retried=retry_attempts > 0,
             retry_attempts=retry_attempts,
             original_batch_id=original_batch_id,
