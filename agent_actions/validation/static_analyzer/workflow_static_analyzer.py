@@ -4,7 +4,7 @@ Provides a unified interface for static type checking of workflow configurations
 similar to TypeScript's compile-time type checking.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from .data_flow_graph import (
     AgentKind,
@@ -285,6 +285,32 @@ class WorkflowStaticAnalyzer:
 
         return result
 
+    def _format_input_schema(self, input_info: Dict[str, Any]) -> List[str]:
+        """Format input schema section as lines."""
+        if input_info["is_template_based"]:
+            return ["    (template-based - see field references)"]
+        if input_info["is_dynamic"]:
+            return ["    (dynamic - determined at runtime)"]
+
+        lines = []
+        if input_info["required"]:
+            lines.append(f"    required: {', '.join(input_info['required'])}")
+        if input_info["optional"]:
+            lines.append(f"    optional: {', '.join(input_info['optional'])}")
+        if not lines:
+            lines.append("    (no fields)")
+        return lines
+
+    def _format_output_schema(self, output_info: Dict[str, Any]) -> List[str]:
+        """Format output schema section as lines."""
+        if output_info["is_schemaless"]:
+            return ["    (schemaless - freeform output)"]
+        if output_info["is_dynamic"]:
+            return ["    (dynamic - determined at runtime)"]
+        if output_info["fields"]:
+            return [f"    fields: {', '.join(output_info['fields'])}"]
+        return ["    (no fields)"]
+
     def format_action_schemas(self) -> str:
         """Format action schemas as a readable string.
 
@@ -297,28 +323,9 @@ class WorkflowStaticAnalyzer:
         for name, info in sorted(schemas.items()):
             lines.append(f"\n{name} ({info['kind']}):")
             lines.append("  Input:")
-
-            if info["input"]["is_template_based"]:
-                lines.append("    (template-based - see field references)")
-            elif info["input"]["is_dynamic"]:
-                lines.append("    (dynamic - determined at runtime)")
-            else:
-                if info["input"]["required"]:
-                    lines.append(f"    required: {', '.join(info['input']['required'])}")
-                if info["input"]["optional"]:
-                    lines.append(f"    optional: {', '.join(info['input']['optional'])}")
-                if not info["input"]["required"] and not info["input"]["optional"]:
-                    lines.append("    (no fields)")
-
+            lines.extend(self._format_input_schema(info["input"]))
             lines.append("  Output:")
-            if info["output"]["is_schemaless"]:
-                lines.append("    (schemaless - freeform output)")
-            elif info["output"]["is_dynamic"]:
-                lines.append("    (dynamic - determined at runtime)")
-            elif info["output"]["fields"]:
-                lines.append(f"    fields: {', '.join(info['output']['fields'])}")
-            else:
-                lines.append("    (no fields)")
+            lines.extend(self._format_output_schema(info["output"]))
 
         return "\n".join(lines)
 
