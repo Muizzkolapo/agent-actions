@@ -344,7 +344,7 @@ class MetadataTimer:
         self._start_time = time.perf_counter()
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, _exc_type, _exc_val, _exc_tb) -> None:
         self._end_time = time.perf_counter()
 
     @property
