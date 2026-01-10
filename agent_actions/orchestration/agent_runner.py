@@ -151,6 +151,39 @@ class AgentRunner:
         logger.debug("Resolved upstream from manifest: %s", upstream_path)
         return [upstream_path]
 
+    def _resolve_start_node_directories(self, agent_folder: Path) -> List[Path]:
+        """Resolve upstream directories for the start node (idx=0).
+
+        Tries manifest-based resolution first for inter-workflow dependencies,
+        falls back to staging directory for direct file input.
+        """
+        manifest_dirs = self._resolve_upstream_from_manifest(agent_folder)
+        if manifest_dirs:
+            return manifest_dirs
+        return [agent_folder / "staging"]
+
+    def _resolve_dependency_directories(
+        self, agent_folder: Path, dependencies: List[str]
+    ) -> List[Path]:
+        """Resolve upstream directories from explicit dependencies (DAG/Diamond pattern)."""
+        upstream_dirs: List[Path] = []
+        for dep_name in dependencies:
+            dep_idx = self.agent_indices.get(dep_name)
+            if dep_idx is not None:
+                indexed_dep_type = f"node_{dep_idx}_{dep_name}"
+                upstream_dirs.append(agent_folder / "target" / indexed_dep_type)
+            else:
+                logger.warning("Dependency %s index not found.", dep_name)
+        return upstream_dirs
+
+    def _resolve_linear_directory(
+        self, agent_folder: Path, previous_agent_type: str, idx: int
+    ) -> Path:
+        """Resolve upstream directory for linear workflow (default behavior)."""
+        prev_idx = idx - 1
+        indexed_previous_type = f"node_{prev_idx}_{previous_agent_type}"
+        return agent_folder / "target" / indexed_previous_type
+
     def setup_directories(
         self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int
     ) -> Tuple[List[str], str]:
@@ -166,44 +199,25 @@ class AgentRunner:
         Returns:
             Tuple[List[str], str]: (upstream_data_dirs, output_directory)
         """
-        indexed_agent_type: str = f"node_{idx}_{agent_config['agent_type']}"
+        agent_folder_path = Path(agent_folder)
+        indexed_agent_type = f"node_{idx}_{agent_config['agent_type']}"
         dependencies = agent_config.get("dependencies", [])
-        upstream_data_dirs: List[Path] = []
 
-        # 1. Start Node: Check manifest first, fall back to staging
+        # Determine upstream directories based on workflow position
         if idx == 0:
-            # Try manifest-based resolution first (for inter-workflow dependencies)
-            manifest_dirs = self._resolve_upstream_from_manifest(Path(agent_folder))
-            if manifest_dirs:
-                upstream_data_dirs.extend(manifest_dirs)
-            else:
-                # Fall back to staging for direct file input
-                staging_dir = Path(agent_folder) / "staging"
-                upstream_data_dirs.append(staging_dir)
-
-        # 2. Explicit Dependencies (DAG/Diamond)
+            upstream_data_dirs = self._resolve_start_node_directories(agent_folder_path)
         elif dependencies and hasattr(self, "agent_indices") and self.agent_indices:
-            for dep_name in dependencies:
-                dep_idx = self.agent_indices.get(dep_name)
-                if dep_idx is not None:
-                    indexed_previous_agent_type: str = f"node_{dep_idx}_{dep_name}"
-                    upstream_data_dirs.append(
-                        Path(agent_folder) / "target" / indexed_previous_agent_type
-                    )
-                else:
-                    # Fallback for missing index (shouldn't happen)
-                    logger.warning("Dependency %s index not found.", dep_name)
-
-        # 3. Default Linear Behavior
+            upstream_data_dirs = self._resolve_dependency_directories(
+                agent_folder_path, dependencies
+            )
         elif previous_agent_type:
-            prev_idx: int = idx - 1
-            indexed_previous_agent_type: str = f"node_{prev_idx}_{previous_agent_type}"
-            upstream_data_dirs.append(Path(agent_folder) / "target" / indexed_previous_agent_type)
+            upstream_data_dirs = [
+                self._resolve_linear_directory(agent_folder_path, previous_agent_type, idx)
+            ]
         else:
-            # Fallback if no previous agent and not index 0 (rare edge case)
-            upstream_data_dirs.append(Path(agent_folder) / "staging")
+            upstream_data_dirs = [agent_folder_path / "staging"]
 
-        output_directory: Path = Path(agent_folder) / "target" / indexed_agent_type
+        output_directory = agent_folder_path / "target" / indexed_agent_type
         output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
 
