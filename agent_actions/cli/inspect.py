@@ -577,19 +577,46 @@ class ConflictsCommand:
         """Output conflicts as JSON."""
         click.echo(json_lib.dumps(result.to_dict(), indent=2))
 
+    def _filter_conflicts(self, result) -> list:
+        """Filter conflicts based on include_info setting."""
+        if self.include_info:
+            return result.conflicts
+        return [c for c in result.conflicts if c.severity != ConflictSeverity.INFO]
+
+    def _format_severity_summary(self, conflicts: list) -> str:
+        """Format a summary string of conflict counts by severity."""
+        error_count = sum(1 for c in conflicts if c.severity == ConflictSeverity.ERROR)
+        warning_count = sum(1 for c in conflicts if c.severity == ConflictSeverity.WARNING)
+        info_count = sum(1 for c in conflicts if c.severity == ConflictSeverity.INFO)
+
+        parts = []
+        if error_count:
+            parts.append(f"[red]{error_count} error(s)[/red]")
+        if warning_count:
+            parts.append(f"[yellow]{warning_count} warning(s)[/yellow]")
+        if info_count:
+            parts.append(f"[dim]{info_count} info[/dim]")
+        return ", ".join(parts)
+
+    def _group_conflicts_by_type(self, conflicts: list) -> Dict[ConflictType, list]:
+        """Group conflicts by their type."""
+        by_type: Dict[ConflictType, list] = {}
+        for conflict in conflicts:
+            if conflict.conflict_type not in by_type:
+                by_type[conflict.conflict_type] = []
+            by_type[conflict.conflict_type].append(conflict)
+        return by_type
+
     def _output_rich(self, result) -> None:
         """Output conflicts using rich formatting."""
-        # Summary
+        # No conflicts at all
         if not result.has_conflicts:
             self.console.print("[green]No conflicts detected[/green]\n")
             self._print_summary(result)
             return
 
-        # Filter out INFO-level conflicts unless include_info is set
-        conflicts_to_show = result.conflicts
-        if not self.include_info:
-            conflicts_to_show = [c for c in result.conflicts if c.severity != ConflictSeverity.INFO]
-
+        # Filter and check for significant conflicts
+        conflicts_to_show = self._filter_conflicts(result)
         if not conflicts_to_show:
             self.console.print("[green]No significant conflicts detected[/green]")
             self.console.print(
@@ -599,28 +626,12 @@ class ConflictsCommand:
             self._print_summary(result)
             return
 
-        # Show error count
-        error_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.ERROR)
-        warning_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.WARNING)
-        info_count = sum(1 for c in conflicts_to_show if c.severity == ConflictSeverity.INFO)
+        # Show severity summary
+        summary = self._format_severity_summary(conflicts_to_show)
+        self.console.print(summary + "\n")
 
-        parts = []
-        if error_count:
-            parts.append(f"[red]{error_count} error(s)[/red]")
-        if warning_count:
-            parts.append(f"[yellow]{warning_count} warning(s)[/yellow]")
-        if info_count:
-            parts.append(f"[dim]{info_count} info[/dim]")
-        self.console.print(", ".join(parts) + "\n")
-
-        # Group by type
-        by_type: Dict[ConflictType, list] = {}
-        for conflict in conflicts_to_show:
-            if conflict.conflict_type not in by_type:
-                by_type[conflict.conflict_type] = []
-            by_type[conflict.conflict_type].append(conflict)
-
-        # Render each type
+        # Group and render by type
+        by_type = self._group_conflicts_by_type(conflicts_to_show)
         for conflict_type, conflict_list in by_type.items():
             self._render_conflict_group(conflict_type, conflict_list)
 
