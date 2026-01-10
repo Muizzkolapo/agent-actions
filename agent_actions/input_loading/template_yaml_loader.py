@@ -183,42 +183,67 @@ class TemplateYamlLoader:
 
         return "\n".join(yaml_lines)
 
+    def _strip_quotes(self, value: str) -> str:
+        """Strip surrounding quotes from a value."""
+        if len(value) >= 2:
+            if (value.startswith('"') and value.endswith('"')) or (
+                value.startswith("'") and value.endswith("'")
+            ):
+                return value[1:-1]
+        return value
+
+    def _parse_boolean(self, value: str) -> Any:
+        """Parse boolean string values. Returns original if not boolean."""
+        if value.lower() == "true":
+            return True
+        if value.lower() == "false":
+            return False
+        return None
+
+    def _parse_list_value(self, value: str) -> List[str]:
+        """Parse a list value from bracketed string."""
+        list_content = value[1:-1]
+        if not list_content.strip():
+            return []
+        items = [item.strip().strip("\"'") for item in list_content.split(",")]
+        return [item for item in items if item]
+
+    def _parse_param_value(self, value: str) -> Any:
+        """Parse a single parameter value, handling type conversions."""
+        value = self._strip_quotes(value)
+
+        # Check for boolean
+        bool_result = self._parse_boolean(value)
+        if bool_result is not None:
+            return bool_result
+
+        # Check for list
+        if value.startswith("[") and value.endswith("]"):
+            return self._parse_list_value(value)
+
+        # Dict values are skipped (return None to signal skip)
+        if value.startswith("{") and value.endswith("}"):
+            return None
+
+        return value
+
     def _parse_template_params(self, params_str: str) -> Dict[str, Any]:
         """Parse template parameters from string."""
         param_dict = {}
-
-        # Split by commas, but be careful with nested structures
         params = self._smart_split_params(params_str)
 
         for param in params:
             param = param.strip()
-            if "=" in param:
-                key, value = param.split("=", 1)
-                key = key.strip()
-                value = value.strip()
+            if "=" not in param:
+                continue
 
-                # Clean quotes
-                if (value.startswith('"') and value.endswith('"')) or (
-                    value.startswith("'") and value.endswith("'")
-                ):
-                    value = value[1:-1]
+            key, value = param.split("=", 1)
+            key = key.strip()
+            value = value.strip()
 
-                # Handle special values
-                if value.lower() in ("true", "false"):
-                    value = value.lower() == "true"
-                elif value.startswith("[") and value.endswith("]"):
-                    # Handle list values
-                    list_content = value[1:-1]
-                    if list_content.strip():
-                        items = [item.strip().strip("\"'") for item in list_content.split(",")]
-                        value = [item for item in items if item]
-                    else:
-                        value = []
-                elif value.startswith("{") and value.endswith("}"):
-                    # Handle dict values - skip for now to avoid YAML parsing issues
-                    continue
-
-                param_dict[key] = value
+            parsed_value = self._parse_param_value(value)
+            if parsed_value is not None:
+                param_dict[key] = parsed_value
 
         return param_dict
 
