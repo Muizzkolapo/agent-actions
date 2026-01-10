@@ -211,41 +211,72 @@ class ConfigValidator(BaseValidator):
                     f"Agent '{agent_name}' has missing dependencies: {', '.join(sorted(missing))}."
                 )
 
-    def _validate_operational_dependencies_logic(
+    def _build_agent_sets(
         self, agent_cfgs_map: Dict[str, Dict[str, Any]]
-    ) -> None:
-        """Validate operational dependencies."""
+    ) -> tuple[Set[str], Set[str]]:
+        """Build sets of active and all agent names (lowercased).
+
+        Returns:
+            Tuple of (active_agents, all_agents) sets.
+        """
         active_agents = {
             name.lower()
             for name, cfg in agent_cfgs_map.items()
             if isinstance(cfg, dict) and _ci_dict(cfg).get("is_operational", True)
         }
         all_agents = {name.lower() for name in agent_cfgs_map}
+        return active_agents, all_agents
+
+    def _validate_single_dependency(
+        self,
+        agent_name: str,
+        dep: Any,
+        all_agents: Set[str],
+        active_agents: Set[str],
+        agent_cfgs_map: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """Validate a single dependency for an agent."""
+        if not isinstance(dep, str):
+            self.add_error(f"Agent '{agent_name}' has a non-string dependency: {dep}.")
+            return
+        dep_lc = dep.lower()
+        if dep_lc not in all_agents:
+            self.add_error(f"Active agent '{agent_name}' depends on a non-existent agent '{dep}'.")
+        elif dep_lc not in active_agents:
+            dep_cfg_ci = _ci_dict(agent_cfgs_map.get(dep, {}))
+            if not dep_cfg_ci.get("is_operational", True):
+                self.add_error(f"Active agent '{agent_name}' depends on an inactive agent '{dep}'.")
+
+    def _validate_agent_dependencies(
+        self,
+        agent_name: str,
+        cfg: Dict[str, Any],
+        all_agents: Set[str],
+        active_agents: Set[str],
+        agent_cfgs_map: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """Validate all dependencies for a single agent."""
+        cfg_ci = _ci_dict(cfg) if isinstance(cfg, dict) else {}
+        if not cfg_ci.get("is_operational", True):
+            return
+        deps = cfg_ci.get("dependencies", [])
+        if not isinstance(deps, list):
+            self.add_error(f"Agent '{agent_name}' has a 'dependencies' field that is not a list.")
+            return
+        for dep in deps:
+            self._validate_single_dependency(
+                agent_name, dep, all_agents, active_agents, agent_cfgs_map
+            )
+
+    def _validate_operational_dependencies_logic(
+        self, agent_cfgs_map: Dict[str, Dict[str, Any]]
+    ) -> None:
+        """Validate operational dependencies."""
+        active_agents, all_agents = self._build_agent_sets(agent_cfgs_map)
         for agent_name, cfg in agent_cfgs_map.items():
-            cfg_ci = _ci_dict(cfg) if isinstance(cfg, dict) else {}
-            if not cfg_ci.get("is_operational", True):
-                continue
-            deps = cfg_ci.get("dependencies", [])
-            if not isinstance(deps, list):
-                self.add_error(
-                    f"Agent '{agent_name}' has a 'dependencies' field that is not a list."
-                )
-                continue
-            for dep in deps:
-                if not isinstance(dep, str):
-                    self.add_error(f"Agent '{agent_name}' has a non-string dependency: {dep}.")
-                    continue
-                dep_lc = dep.lower()
-                if dep_lc not in all_agents:
-                    self.add_error(
-                        f"Active agent '{agent_name}' depends on a non-existent agent '{dep}'."
-                    )
-                elif dep_lc not in active_agents:
-                    dep_cfg_ci = _ci_dict(agent_cfgs_map.get(dep, {}))
-                    if not dep_cfg_ci.get("is_operational", True):
-                        self.add_error(
-                            f"Active agent '{agent_name}' depends on an inactive agent '{dep}'."
-                        )
+            self._validate_agent_dependencies(
+                agent_name, cfg, all_agents, active_agents, agent_cfgs_map
+            )
 
     def _check_circular_dependencies_logic(self, full_config_data: AgentConfigMap) -> None:
         """Check for circular dependencies in agent configuration."""
