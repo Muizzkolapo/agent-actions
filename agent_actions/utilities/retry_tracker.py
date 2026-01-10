@@ -30,7 +30,6 @@ Usage:
 
 import json
 import logging
-import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -475,7 +474,7 @@ class RetryTrackerContext:
         set_current_retry_tracker(self._tracker)
         return self._tracker
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, _exc_type, _exc_val, _exc_tb):
         """Exit context and restore previous tracker."""
         set_current_retry_tracker(self._previous_tracker)
         return False
