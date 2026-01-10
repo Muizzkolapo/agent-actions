@@ -191,43 +191,45 @@ class WhereClauseParser:
         # Enable packrat parsing for better performance
         ParserElement.enablePackrat()
 
-    def _build_comparison_operators(self):
-        """Build comparison operators from the registry."""
-        # Get all comparison operators sorted by symbol length (longest first)
-        comparison_ops = []
-        for info in self.registry.list_operators():
-            if info.operator_type.value == "comparison":
-                if info.arity == 2:  # Binary operators
-                    comparison_ops.append((info.symbol, info.name))
-                elif info.arity == 1:  # Unary operators
-                    comparison_ops.append((info.symbol, info.name))
-
+    def _collect_comparison_operators(self):
+        """Collect and sort comparison operators from the registry."""
+        comparison_ops = [
+            (info.symbol, info.name)
+            for info in self.registry.list_operators()
+            if info.operator_type.value == "comparison" and info.arity in (1, 2)
+        ]
         # Sort by length (longest first) to avoid partial matches
         comparison_ops.sort(key=lambda x: len(x[0]), reverse=True)
+        return comparison_ops
 
-        # Create pyparsing alternatives
-        op_literals = []
-        for symbol, name in comparison_ops:
-            if " " in symbol:
-                # Multi-word operators like "IS NULL", "NOT IN"
-                words = symbol.split()
-                op_literal = CaselessKeyword(words[0])
-                for word in words[1:]:
-                    op_literal = op_literal + CaselessKeyword(word)
-            else:
-                # Single operators like "==", "!="
-                op_literal = Literal(symbol)
+    def _create_operator_literal(self, symbol: str, name: str):
+        """Create a pyparsing literal for a single operator."""
+        if " " in symbol:
+            # Multi-word operators like "IS NULL", "NOT IN"
+            words = symbol.split()
+            op_literal = CaselessKeyword(words[0])
+            for word in words[1:]:
+                op_literal = op_literal + CaselessKeyword(word)
+        else:
+            # Single operators like "==", "!="
+            op_literal = Literal(symbol)
+        op_literal.setParseAction(lambda t, name=name: name)
+        return op_literal
 
-            op_literal.setParseAction(lambda t, name=name: name)
-            op_literals.append(op_literal)
+    def _build_comparison_operators(self):
+        """Build comparison operators from the registry."""
+        comparison_ops = self._collect_comparison_operators()
+        op_literals = [
+            self._create_operator_literal(symbol, name) for symbol, name in comparison_ops
+        ]
 
-        # Return the first match
-        if op_literals:
-            result = op_literals[0]
-            for op in op_literals[1:]:
-                result = result | op
-            return result
-        return Literal("==")  # Fallback
+        if not op_literals:
+            return Literal("==")  # Fallback
+
+        result = op_literals[0]
+        for op in op_literals[1:]:
+            result = result | op
+        return result
 
     def _parse_array(self, tokens):
         """Parse array literal tokens into LiteralNode."""
@@ -424,36 +426,27 @@ class WhereClauseParser:
                 error=ParseError(f"Unexpected error: {str(e)}", 1, 1, "UnexpectedError"),
             )
 
+    # Pattern for valid field names: identifier with optional dot-separated path
+    _FIELD_PATTERN = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
+    # Pattern to split WHERE clause into tokens
+    _OPERATOR_SPLIT_PATTERN = re.compile(
+        r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
+        flags=re.IGNORECASE,
+    )
+
+    def _is_valid_field_token(self, token: str) -> bool:
+        """Check if a token is a valid field name."""
+        token = token.strip()
+        if not token or token.startswith('"') or token.startswith("'"):
+            return True  # Skip empty, string literals
+        if not re.match(r"^[a-zA-Z_]", token):
+            return True  # Not a field name, skip
+        return bool(self._FIELD_PATTERN.fullmatch(token.split()[0]))
+
     def _validate_field_names(self, where_clause: str) -> bool:
-        """
-        Validate field names to prevent injection attacks.
-
-        Args:
-            where_clause: The WHERE clause to validate
-
-        Returns:
-            True if field names are valid, False otherwise
-        """
-        # Allow only alphanumeric characters, underscores, and dots for field paths
-        field_pattern = re.compile(r"[a-zA-Z_][a-zA-Z0-9_]*(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*")
-
-        # Extract potential field names (before operators)
-        # This is a simple heuristic - the real validation happens during parsing
-        tokens = re.split(
-            r"[=!<>]|\b(?:and|or|not|in|like|between|is|null|contains)\b",
-            where_clause,
-            flags=re.IGNORECASE,
-        )
-
-        for token in tokens:
-            token = token.strip()
-            if token and not token.startswith('"') and not token.startswith("'"):
-                # Check if it could be a field name
-                if re.match(r"^[a-zA-Z_]", token):
-                    if not field_pattern.fullmatch(token.split()[0]):
-                        return False
-
-        return True
+        """Validate field names to prevent injection attacks."""
+        tokens = self._OPERATOR_SPLIT_PATTERN.split(where_clause)
+        return all(self._is_valid_field_token(token) for token in tokens)
 
     def clear_cache(self):
         """Clear the parsing cache."""
@@ -535,55 +528,41 @@ class SafeExpressionEvaluator:
         except Exception as e:
             raise ValueError(f"Error evaluating expression: {e}") from e
 
+    # Unsafe AST node types that indicate code injection attempts
+    _UNSAFE_NODE_TYPES = (
+        ast.Import,
+        ast.ImportFrom,
+        ast.FunctionDef,
+        ast.ClassDef,
+        ast.AsyncFunctionDef,
+        ast.Global,
+        ast.Nonlocal,
+        ast.Delete,
+    )
+
+    def _is_safe_call(self, node: ast.Call) -> bool:
+        """Check if a Call node is safe (uses only allowed functions)."""
+        if isinstance(node.func, ast.Name):
+            return node.func.id in self.allowed_names
+        return False
+
+    def _is_safe_node(self, node: ast.AST) -> bool:
+        """Check if a single AST node is safe."""
+        if isinstance(node, self._UNSAFE_NODE_TYPES):
+            return False
+        if isinstance(node, ast.Attribute) and not self._is_safe_attribute(node):
+            return False
+        if isinstance(node, ast.Call) and not self._is_safe_call(node):
+            return False
+        return True
+
     def _is_safe_expression(self, expression: str) -> bool:
-        """
-        Check if an expression is safe to evaluate.
-
-        Args:
-            expression: The expression to check
-
-        Returns:
-            True if the expression is safe, False otherwise
-        """
+        """Check if an expression is safe to evaluate."""
         try:
-            # Parse the expression into an AST
             tree = ast.parse(expression, mode="eval")
         except SyntaxError:
             return False
-
-        # Check for unsafe node types
-        for node in ast.walk(tree):
-            if isinstance(
-                node,
-                (
-                    ast.Import,
-                    ast.ImportFrom,
-                    ast.FunctionDef,
-                    ast.ClassDef,
-                    ast.AsyncFunctionDef,
-                    ast.Global,
-                    ast.Nonlocal,
-                    ast.Delete,
-                ),
-            ):
-                return False
-
-            # Allow only safe attribute access
-            if isinstance(node, ast.Attribute):
-                # Check if it's a safe attribute access
-                if not self._is_safe_attribute(node):
-                    return False
-
-            # Restrict function calls to known safe functions
-            if isinstance(node, ast.Call):
-                if isinstance(node.func, ast.Name):
-                    if node.func.id not in self.allowed_names:
-                        return False
-                else:
-                    # Only allow calls to known safe functions
-                    return False
-
-        return True
+        return all(self._is_safe_node(node) for node in ast.walk(tree))
 
     def _is_safe_attribute(self, node: ast.Attribute) -> bool:
         """
