@@ -6,13 +6,19 @@ for Groq API integration, supporting models like Llama3.
 
 SDK errors are wrapped into unified agent-actions error types to enable
 consistent retry handling across all providers.
+
+JSON parse failures return error dicts for RepromptEngine repair support,
+as Groq's json_object mode can produce malformed output.
 """
 
 import json
+import logging
 from textwrap import dedent
 
 import groq
 from groq import Groq
+
+logger = logging.getLogger(__name__)
 
 from agent_actions.errors import VendorAPIError, RateLimitError, NetworkError
 from agent_actions.llm_invocation.providers.client_base import BaseClient
@@ -95,9 +101,21 @@ class GroqClient(BaseClient):
                     }
                 )
             response_temp = llm.choices[0].message.content
-            response = json.loads(response_temp)
-            response_list = DataTransformer.ensure_list(response)
-            return response_list
+            try:
+                response = json.loads(response_temp)
+                response_list = DataTransformer.ensure_list(response)
+                return response_list
+            except json.JSONDecodeError as e:
+                # Return error dict for RepromptEngine repair
+                logger.warning(
+                    "Groq returned invalid JSON, returning error dict for repair",
+                    extra={
+                        "model": model_name,
+                        "response_text": response_temp[:200] if response_temp else "",
+                        "error": str(e),
+                    },
+                )
+                return [{"raw_response": response_temp, "_parse_error": str(e)}]
         except (RateLimitError, NetworkError, VendorAPIError):
             raise
         except groq.APIError as e:

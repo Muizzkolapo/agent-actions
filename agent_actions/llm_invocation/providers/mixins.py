@@ -14,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 
 class JSONResponseMixin:
-    """Mixin providing standardized JSON response parsing with error handling."""
+    """Mixin providing standardized JSON response parsing with error handling.
+
+    Returns error dict on parse failure to allow RepromptEngine to attempt repair
+    via JSONRepairStrategy. This is appropriate for providers with variable JSON
+    quality (Groq, Gemini, Cohere, Mistral).
+    """
 
     @staticmethod
     def parse_json_response(
@@ -24,7 +29,10 @@ class JSONResponseMixin:
         model_name: str,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """
-        Parse JSON response with standardized error handling and logging.
+        Parse JSON response with error dict pattern for repair support.
+
+        On parse failure, returns `{"raw_response": ..., "_parse_error": ...}` dict
+        instead of raising, allowing RepromptEngine to attempt JSON repair.
 
         Args:
             response_content: Raw JSON string from API
@@ -33,22 +41,15 @@ class JSONResponseMixin:
             model_name: Model name (for logging)
 
         Returns:
-            Parsed JSON data (dict or list)
-
-        Raises:
-            VendorAPIError: If JSON parsing fails or response is empty
+            Parsed JSON data (dict or list), or error dict on parse failure
         """
         if not response_content:
-            logger.error(
+            logger.warning(
                 "%s returned empty response",
                 vendor_name,
                 extra={"operation": f"{vendor_name}_{operation}", "model": model_name},
             )
-            raise VendorAPIError(
-                f"{vendor_name} returned empty response",
-                vendor=vendor_name,
-                operation=operation,
-            )
+            return [{"raw_response": "", "_parse_error": "Empty response from API"}]
 
         try:
             response_data = json.loads(response_content)
@@ -63,8 +64,8 @@ class JSONResponseMixin:
             )
             return response_data
         except json.JSONDecodeError as e:
-            logger.exception(
-                "%s returned invalid JSON",
+            logger.warning(
+                "%s returned invalid JSON, returning error dict for repair",
                 vendor_name,
                 extra={
                     "operation": f"{vendor_name}_{operation}",
@@ -74,12 +75,7 @@ class JSONResponseMixin:
                     "line": e.lineno if hasattr(e, "lineno") else None,
                 },
             )
-            raise VendorAPIError(
-                f"{vendor_name} returned invalid JSON: {e}",
-                vendor=vendor_name,
-                operation=operation,
-                cause=e,
-            ) from e
+            return [{"raw_response": response_content, "_parse_error": str(e)}]
 
 
 class GenericErrorHandlerMixin:
