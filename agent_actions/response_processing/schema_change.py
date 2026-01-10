@@ -274,6 +274,182 @@ def _inject_functions_into_schema(
     return schema
 
 
+def _prepare_context_data_str(
+    context_data: Optional[Union[Dict, str]],
+    tools_path: Optional[str],
+) -> str:
+    """
+    Prepare context data as JSON string for dispatch_task processing.
+
+    Args:
+        context_data: Context data (dict, list, or string)
+        tools_path: Path to tools directory
+
+    Returns:
+        JSON string representation of context data
+    """
+    if not tools_path:
+        return "{}"
+    if isinstance(context_data, (dict, list)):
+        return json.dumps(context_data, ensure_ascii=False)
+    return str(context_data or "{}")
+
+
+def _resolve_dispatch_in_schema(
+    schema: Any,
+    tools_path: Optional[str],
+    context_data_str: str,
+    agent_config: Dict[str, Any],
+    captured_results: Dict[str, Any],
+) -> Any:
+    """
+    Resolve dispatch_task calls in schema string.
+
+    Args:
+        schema: Schema value (may be string with dispatch_task)
+        tools_path: Path to tools directory
+        context_data_str: Context data as JSON string
+        agent_config: Agent configuration
+        captured_results: Dictionary to collect function outputs
+
+    Returns:
+        Resolved schema (original if not a dispatch call or resolution fails)
+    """
+    if not isinstance(schema, str) or "dispatch_task(" not in schema:
+        return schema
+
+    try:
+        return PromptUtils.process_dispatch_in_text(
+            schema,
+            tools_path=tools_path,
+            context_data_str=context_data_str,
+            agent_config=agent_config,
+            captured_results=captured_results,
+            preserve_type_on_exact_match=True,
+        )
+    except (ValueError, TypeError, KeyError) as e:
+        logger.debug("dispatch_task resolution failed, deferring to downstream: %s", e)
+        return schema
+
+
+def _is_unified_format(schema: Any) -> bool:
+    """Check if schema is already in unified format with 'fields' list."""
+    return isinstance(schema, dict) and "fields" in schema and isinstance(schema["fields"], list)
+
+
+def _load_inline_schema(
+    inline_schema: Any,
+    tools_path: Optional[str],
+    context_data_str: str,
+    agent_config: Dict[str, Any],
+    captured_results: Dict[str, Any],
+) -> Tuple[Dict[str, Any], str]:
+    """
+    Load and prepare inline schema from agent config.
+
+    Args:
+        inline_schema: Raw inline schema from config
+        tools_path: Path to tools directory
+        context_data_str: Context data as JSON string
+        agent_config: Agent configuration
+        captured_results: Dictionary to collect function outputs
+
+    Returns:
+        Tuple of (prepared schema dict, schema name)
+    """
+    # Resolve dispatch if schema is a dispatch call string
+    resolved_schema = _resolve_dispatch_in_schema(
+        inline_schema, tools_path, context_data_str, agent_config, captured_results
+    )
+
+    # Convert to unified format if needed
+    if _is_unified_format(resolved_schema):
+        base_schema = resolved_schema
+    else:
+        base_schema = SchemaLoader.construct_schema_from_dict(resolved_schema)
+
+    schema_name = agent_config.get("name", "inline_schema")
+    return base_schema, schema_name
+
+
+def _load_named_schema(agent_config: Dict[str, Any]) -> Tuple[Optional[Dict[str, Any]], str]:
+    """
+    Load schema by name from schema store.
+
+    Args:
+        agent_config: Agent configuration with schema_name
+
+    Returns:
+        Tuple of (schema dict or None, schema name)
+    """
+    schema_name = agent_config.get(SCHEMA_NAME_KEY)
+    if not schema_name:
+        return None, ""
+    return SchemaLoader.load_schema(schema_name), schema_name
+
+
+def _unwrap_nested_schema(base_schema: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Unwrap nested schema structure if present.
+
+    Handles pattern: {name: '...', schema: {name: '...', fields: [...]}}
+    Converts to: {name: '...', fields: [...]}
+
+    Args:
+        base_schema: Schema dict that may have nested 'schema' key
+
+    Returns:
+        Unwrapped schema dict
+    """
+    if not isinstance(base_schema, dict):
+        return base_schema
+
+    if SCHEMA_KEY not in base_schema:
+        return base_schema
+
+    nested_schema = base_schema[SCHEMA_KEY]
+    if not isinstance(nested_schema, dict):
+        return base_schema
+
+    # Only unwrap if nested schema looks like unified or JSON schema
+    if "fields" not in nested_schema and "type" not in nested_schema:
+        return base_schema
+
+    # Merge top-level name if missing in nested
+    if "name" not in nested_schema and "name" in base_schema:
+        nested_schema["name"] = base_schema["name"]
+
+    return nested_schema
+
+
+def _compile_schema_for_vendor(
+    base_schema: Dict[str, Any],
+    vendor: str,
+    schema_name: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Compile schema for specific vendor with error handling.
+
+    Args:
+        base_schema: Unified schema dict
+        vendor: Target vendor name
+        schema_name: Schema name for logging
+
+    Returns:
+        Compiled schema or None if vendor doesn't support schemas
+    """
+    try:
+        return compile_unified_schema(base_schema, vendor)
+    except ConfigValidationError:
+        logger.warning(
+            "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
+            "For schema support, use one of: openai, anthropic, gemini, ollama",
+            vendor,
+            schema_name,
+        )
+        return None
+
+
 def prepare_schema_unified(
     agent_config: Dict[str, Any],
     vendor: str,
@@ -301,57 +477,28 @@ def prepare_schema_unified(
     Side Effects:
         Logs a WARNING if schema is requested but vendor doesn't support it
     """
-    captured_results = {}
+    captured_results: Dict[str, Any] = {}
 
+    # Tool vendor doesn't use schemas
     if vendor == "tool":
         return None, captured_results
 
-    # Prepare context_data_str if tools_path is provided, as it might be needed early
-    context_data_str = "{}"
-    if tools_path:
-        if isinstance(context_data, (dict, list)):
-            context_data_str = json.dumps(context_data, ensure_ascii=False)
-        else:
-            context_data_str = str(context_data or "{}")
+    # Prepare context string for dispatch resolution
+    context_data_str = _prepare_context_data_str(context_data, tools_path)
 
+    # Load schema (inline or named)
     inline_schema = agent_config.get(SCHEMA_KEY)
-
     if inline_schema:
-        # Resolve dispatch if the top-level schema itself is a dispatch call
-        if isinstance(inline_schema, str) and "dispatch_task(" in inline_schema:
-            try:
-                inline_schema = PromptUtils.process_dispatch_in_text(
-                    inline_schema,
-                    tools_path=tools_path,
-                    context_data_str=context_data_str,
-                    agent_config=agent_config,
-                    captured_results=captured_results,
-                    preserve_type_on_exact_match=True,
-                )
-            except (ValueError, TypeError, KeyError) as e:
-                # Let downstream validation handle it if it fails or returns None
-                logger.debug("dispatch_task resolution failed, deferring to downstream: %s", e)
-
-        # Check if the resolved schema is already in unified format (has 'fields' list)
-        if (
-            isinstance(inline_schema, dict)
-            and "fields" in inline_schema
-            and isinstance(inline_schema["fields"], list)
-        ):
-            base_schema = inline_schema
-        else:
-            base_schema = SchemaLoader.construct_schema_from_dict(inline_schema)
-
-        schema_name = agent_config.get("name", "inline_schema")
+        base_schema, schema_name = _load_inline_schema(
+            inline_schema, tools_path, context_data_str, agent_config, captured_results
+        )
     else:
-        schema_name = agent_config.get(SCHEMA_NAME_KEY)
-        if not schema_name:
+        base_schema, schema_name = _load_named_schema(agent_config)
+        if base_schema is None:
             return None, captured_results
-        base_schema = SchemaLoader.load_schema(schema_name)
 
-    # Inject functions into the constructed schema
-    # (This handles recursion and fields within the loaded/constructed schema)
-    if tools_path:  # Only inject if tools_path is provided
+    # Inject dispatch_task functions into schema fields
+    if tools_path:
         base_schema = _inject_functions_into_schema(
             base_schema,
             tools_path=tools_path,
@@ -360,29 +507,9 @@ def prepare_schema_unified(
             captured_results=captured_results,
         )
 
-    # Unwrap schema if it is nested (common pattern in loaded yaml files with 'schema' key)
-    # E.g. {name: '...', schema: {name: '...', fields: [...]}} -> {name: '...', fields: [...]}
-    if (
-        isinstance(base_schema, dict)
-        and SCHEMA_KEY in base_schema
-        and isinstance(base_schema[SCHEMA_KEY], dict)
-    ):
-        nested_schema = base_schema[SCHEMA_KEY]
-        # Verify if nested schema looks like a unified schema (has fields)
-        # or a JSON schema (type: object/array)
-        if "fields" in nested_schema or "type" in nested_schema:
-            # Merge top-level metadata (name, description) if missing in nested
-            if "name" not in nested_schema and "name" in base_schema:
-                nested_schema["name"] = base_schema["name"]
-            base_schema = nested_schema
+    # Unwrap nested schema structure if present
+    base_schema = _unwrap_nested_schema(base_schema)
 
-    try:
-        return compile_unified_schema(base_schema, vendor), captured_results
-    except ConfigValidationError:
-        logger.warning(
-            "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
-            "For schema support, use one of: openai, anthropic, gemini, ollama",
-            vendor,
-            schema_name,
-        )
-        return None, captured_results
+    # Compile for target vendor
+    compiled = _compile_schema_for_vendor(base_schema, vendor, schema_name)
+    return compiled, captured_results
