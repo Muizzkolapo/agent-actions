@@ -316,10 +316,8 @@ class BatchProcessingService:
             file_name=file_name,
         )
 
-        if not batch_results:
-            return None
-
         # Check for missing records and trigger automatic retry if enabled
+        # Note: Even if batch_results is empty (all records failed), we still try retry/failure records
         batch_results, exhausted_ids, retry_attempts = self._maybe_retry_missing_records(
             batch_id=batch_id,
             batch_results=batch_results,
@@ -405,6 +403,8 @@ class BatchProcessingService:
         )
 
         # Create reconciler to find missing records
+        # Handle None or empty batch_results (all records failed)
+        batch_results = batch_results or []
         reconciler = BatchResultReconciler(context_map)
         for result in batch_results:
             reconciler.mark_processed(result.custom_id)
