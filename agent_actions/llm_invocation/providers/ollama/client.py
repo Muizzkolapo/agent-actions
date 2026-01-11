@@ -4,20 +4,13 @@ Ollama client for agent-actions LLM invocation.
 Supports:
 - Non-JSON mode (plain text responses)
 - JSON mode with structured outputs (via format parameter)
-- Failure injection for testing retry (via environment variables)
 
-SDK errors are wrapped into unified agent-actions error types to enable
-consistent retry handling across all providers.
-
-Failure Injection (for testing retry):
-    OLLAMA_FAILURE_RATE=0.3     # 30% of requests will fail with RateLimitError
-    OLLAMA_FAILURE_SEED=42      # Reproducible failures for testing
+SDK errors are wrapped into unified agent-actions error types.
 """
 
 import json
 import logging
 import os
-import random
 from typing import Any, Dict, List, Optional
 
 from ollama import Client, ResponseError
@@ -28,28 +21,6 @@ from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
 
 logger = logging.getLogger(__name__)
-
-# Failure injection config (loaded once at module level)
-_FAILURE_RATE = float(os.getenv("OLLAMA_FAILURE_RATE", "0"))
-_FAILURE_SEED = os.getenv("OLLAMA_FAILURE_SEED", "")
-_RNG = random.Random(int(_FAILURE_SEED) if _FAILURE_SEED.isdigit() else None)
-
-if _FAILURE_RATE > 0:
-    logger.info("Ollama online failure injection enabled: rate=%.2f", _FAILURE_RATE)
-
-
-def _maybe_inject_failure() -> None:
-    """
-    Maybe raise a transient error for testing retry.
-
-    Raises RateLimitError based on OLLAMA_FAILURE_RATE.
-    """
-    if _FAILURE_RATE > 0 and _RNG.random() < _FAILURE_RATE:
-        logger.info("[INJECTED FAILURE] Simulating rate limit for retry testing")
-        raise RateLimitError(
-            "Simulated rate limit (injected for testing)",
-            context={"vendor": "ollama", "injected": True, "retry_after": 1},
-        )
 
 
 def _wrap_ollama_error(e: Exception, model_name: str) -> Exception:
@@ -92,7 +63,6 @@ class OllamaClient(BaseClient):
     Ollama local LLM client for JSON and non-JSON invocations.
 
     Supports structured outputs via Ollama's `format` parameter.
-    Supports failure injection via environment variables for testing retry.
     """
 
     @staticmethod
@@ -165,9 +135,6 @@ class OllamaClient(BaseClient):
         Returns:
             List with single response dict containing parsed JSON fields
         """
-        # Check for failure injection (for testing retry)
-        _maybe_inject_failure()
-
         model = agent_config[MODEL_NAME_KEY]
         ctx_str = (
             json.dumps(context_data, ensure_ascii=False)
@@ -240,9 +207,6 @@ class OllamaClient(BaseClient):
         Returns:
             List with single response dict containing output_field
         """
-        # Check for failure injection (for testing retry)
-        _maybe_inject_failure()
-
         model = agent_config[MODEL_NAME_KEY]
         ctx_str = (
             json.dumps(context_data, ensure_ascii=False)

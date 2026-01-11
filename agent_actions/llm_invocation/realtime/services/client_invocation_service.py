@@ -1,19 +1,10 @@
 """Client invocation service for agent builder.
 
-Handles client routing, invocation, and recovery for transient errors.
-Uses unified RecoveryConfig for consistent retry handling across all providers.
-Supports retry event tracking for debugging and analysis.
+Handles client routing and invocation for different LLM providers.
 """
 
-import json
 import logging
-import time
-import random
-from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Union, Callable
-
-from agent_actions.errors import RateLimitError, NetworkError
-from agent_actions.recovery.recovery_config import RecoveryConfig, ExhaustedBehavior
+from typing import Dict, Any, Optional, List, Union
 
 from agent_actions.llm_invocation.providers.openai.client import OpenAIClient
 from agent_actions.llm_invocation.providers.ollama.client import OllamaClient
@@ -41,253 +32,9 @@ CLIENT_REGISTRY: Dict[str, Any] = {
 # Clients that return single response (need wrapping in list)
 SINGLE_RESPONSE_CLIENTS: set = {"cohere", "mistral", "anthropic", "groq"}
 
-# Errors that should trigger retry (transient errors)
-RETRYABLE_ERRORS = (RateLimitError, NetworkError)
-
-
-@dataclass
-class InvocationResult:
-    """Result from client invocation including retry state.
-
-    Attributes:
-        data: The response data from the LLM (List[Any])
-        was_retried: Whether a retry occurred (attempt > 1)
-        retry_attempts: Number of retry attempts made (0 = success on first try)
-        error_type: Type of error that triggered retry (if any)
-        error_message: Error message from last retry attempt (if any)
-        exhausted: Whether all retries were exhausted (max attempts reached)
-    """
-
-    data: List[Any]
-    was_retried: bool = False
-    retry_attempts: int = 0
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
-    exhausted: bool = False
-
 
 class ClientInvocationService:
-    """Handles client routing and invocation for agents.
-
-    Uses unified RecoveryConfig for retry configuration, supporting:
-    - retry: true | false | strict | {detailed config}
-    - Exponential backoff with jitter
-    - Configurable exhaustion behavior (continue or fail)
-    """
-
-    @staticmethod
-    def _get_recovery_config(agent_config: Dict[str, Any]) -> RecoveryConfig:
-        """
-        Extract recovery configuration from agent config.
-
-        Supports both legacy and new formats:
-            # Legacy formats
-            retry: true
-            retry: false
-            retry: strict
-            retry:
-              max_attempts: 5
-              on_exhausted: continue  # or 'fail'
-
-            # New unified format
-            recovery:
-              retry:
-                max_attempts: 3
-                on_exhausted: fail
-        """
-        # Check for new unified recovery config
-        recovery_value = agent_config.get("recovery")
-        if recovery_value is not None:
-            logger.debug("Using recovery config from agent_config: %s", recovery_value)
-            return RecoveryConfig.from_yaml(recovery_value=recovery_value)
-
-        # Fall back to legacy retry config
-        retry_value = agent_config.get("retry", True)
-        logger.debug("Using legacy retry config: %s", retry_value)
-        reprompt_value = agent_config.get("reprompt", False)
-        return RecoveryConfig.from_yaml(retry_value=retry_value, reprompt_value=reprompt_value)
-
-    @staticmethod
-    def _calculate_backoff(
-        attempt: int,
-        base_delay: float,
-        max_delay: float,
-        error: Optional[Exception] = None,
-    ) -> float:
-        """Calculate exponential backoff with jitter.
-
-        Args:
-            attempt: Current attempt number (1-indexed)
-            base_delay: Base delay in seconds
-            max_delay: Maximum delay in seconds
-            error: The error (may contain retry_after header)
-
-        Returns:
-            Delay in seconds
-        """
-        # Check for retry_after header from provider
-        if error and hasattr(error, "context") and error.context:
-            retry_after = error.context.get("retry_after")
-            if retry_after:
-                return min(float(retry_after), max_delay)
-
-        # Exponential backoff: base * 2^(attempt-1)
-        delay = base_delay * (2 ** (attempt - 1))
-
-        # Add jitter (0-25%) to avoid thundering herd
-        jitter = delay * random.uniform(0, 0.25)
-        delay += jitter
-
-        return min(delay, max_delay)
-
-    @staticmethod
-    def _invoke_with_retry(
-        invoke_fn: Callable[[], List[Any]],
-        recovery_config: RecoveryConfig,
-        model_vendor: str,
-        action_name: Optional[str] = None,
-    ) -> InvocationResult:
-        """
-        Invoke a function with retry for transient errors.
-
-        Uses exponential backoff with jitter for rate limits and network errors.
-        Handles exhaustion based on recovery_config.retry.on_exhausted.
-
-        Args:
-            invoke_fn: Function to invoke (should return response data)
-            recovery_config: RecoveryConfig with retry settings
-            model_vendor: Vendor name for logging
-            action_name: Action/agent name for logging (optional)
-
-        Returns:
-            InvocationResult with response data and retry state
-
-        Raises:
-            Last exception if all retries exhausted and on_exhausted=fail
-            ProcessingError if on_exhausted=fail
-        """
-        retry_config = recovery_config.retry
-
-        if not retry_config.enabled:
-            return InvocationResult(data=invoke_fn())
-
-        max_attempts = retry_config.max_attempts
-        base_delay = retry_config.backoff_base
-        max_delay = retry_config.backoff_max
-
-        logger.debug(
-            "Retry config: max_attempts=%d, backoff_base=%.1f, backoff_max=%.1f, on_exhausted=%s",
-            max_attempts,
-            base_delay,
-            max_delay,
-            retry_config.on_exhausted.value,
-        )
-
-        last_exception = None
-        first_error_type = None
-        first_error_message = None
-
-        for attempt in range(1, max_attempts + 1):
-            try:
-                result = invoke_fn()
-                # Return with retry state (include error info if retried)
-                return InvocationResult(
-                    data=result,
-                    was_retried=attempt > 1,
-                    retry_attempts=attempt - 1,
-                    error_type=first_error_type,
-                    error_message=first_error_message,
-                )
-
-            except RETRYABLE_ERRORS as e:
-                last_exception = e
-
-                # Capture error info on first failure
-                if first_error_type is None:
-                    first_error_type = type(e).__name__
-                    first_error_message = str(e)
-
-                if attempt >= max_attempts:
-                    logger.warning(
-                        "Retry exhausted for %s after %d attempts: %s",
-                        model_vendor,
-                        max_attempts,
-                        str(e),
-                    )
-
-                    # Handle based on on_exhausted behavior
-                    exhausted_data = ClientInvocationService._handle_exhausted(
-                        retry_config.on_exhausted,
-                        e,
-                        action_name or model_vendor,
-                        max_attempts,
-                    )
-                    return InvocationResult(
-                        data=exhausted_data,
-                        was_retried=True,
-                        retry_attempts=max_attempts,
-                        error_type=first_error_type,
-                        error_message=first_error_message,
-                        exhausted=True,
-                    )
-
-                # Calculate backoff delay
-                wait_time = ClientInvocationService._calculate_backoff(
-                    attempt, base_delay, max_delay, e
-                )
-
-                logger.info(
-                    "Retry %d/%d for %s after %.1fs: %s",
-                    attempt,
-                    max_attempts,
-                    model_vendor,
-                    wait_time,
-                    str(e),
-                )
-
-                time.sleep(wait_time)
-
-        # Should not reach here, but just in case
-        if last_exception:
-            raise last_exception
-        return InvocationResult(data=[])
-
-    @staticmethod
-    def _handle_exhausted(
-        behavior: ExhaustedBehavior,
-        error: Exception,
-        action_name: str,
-        attempts: int,
-    ) -> List[Any]:
-        """Handle exhausted retry attempts based on configured behavior.
-
-        Args:
-            behavior: ExhaustedBehavior (continue or fail)
-            error: The last exception
-            action_name: Name of the action that failed
-            attempts: Number of attempts made
-
-        Returns:
-            Empty list for continue behavior
-
-        Raises:
-            ProcessingError for fail behavior
-        """
-        if behavior == ExhaustedBehavior.FAIL:
-            from agent_actions.errors import ProcessingError
-
-            raise ProcessingError(
-                f"Retry exhausted for '{action_name}' after {attempts} attempts: {error}",
-                context={
-                    "action": action_name,
-                    "attempts": attempts,
-                    "last_error": str(error),
-                    "on_exhausted": "fail",
-                },
-            )
-
-        # CONTINUE - return empty, caller will create failure record with retry metadata
-        return []
+    """Handles client routing and invocation for agents."""
 
     @staticmethod
     def invoke_client(
@@ -301,13 +48,13 @@ class ClientInvocationService:
         tool_args: Optional[Dict[str, Any]] = None,
         source_content: Optional[Any] = None,
         action_name: Optional[str] = None,
-    ) -> InvocationResult:
+    ) -> List[Any]:
         """
         Delegate to the specific client and normalize the response.
 
         Handles client-specific invocation patterns:
         - Groq: Uses formatted_prompt parameter
-        - Tool: Uses tool_args and source_content, early return for file granularity
+        - Tool: Uses tool_args and source_content
         - Others: Standard prompt_config and context_data
 
         Args:
@@ -320,10 +67,10 @@ class ClientInvocationService:
             formatted_prompt: Pre-formatted prompt for groq (optional)
             tool_args: Tool arguments (optional)
             source_content: Source content for tool client (optional)
-            action_name: Action name for retry tracking (optional)
+            action_name: Action name for logging (optional)
 
         Returns:
-            InvocationResult with response data and retry state
+            List of response data from the LLM
 
         Raises:
             ValueError: If client is not supported
@@ -332,34 +79,22 @@ class ClientInvocationService:
             raise ValueError(f"Unsupported model vendor: {model_vendor}")
 
         client = CLIENT_REGISTRY[model_vendor]
-        recovery_config = ClientInvocationService._get_recovery_config(agent_config)
 
-        # Tool client has different parameters and no retry (local execution)
+        # Tool client has different parameters
         if model_vendor == "tool":
-            response_data = client.invoke(
+            return client.invoke(
                 agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
-            # Tool client returns InvocationResult with no retry (local execution)
-            return InvocationResult(data=response_data)
 
-        # Define invoke function for retry wrapper
-        def do_invoke() -> List[Any]:
-            # Groq client has special invocation signature
-            if model_vendor == "groq":
-                return client.invoke(agent_config, formatted_prompt, context_data, schema)
+        # Groq client has special invocation signature
+        if model_vendor == "groq":
+            result = client.invoke(agent_config, formatted_prompt, context_data, schema)
+        else:
             # Standard client invocation
-            return client.invoke(agent_config, prompt_config, context_data, schema)
-
-        # Invoke with retry for transient errors
-        result = ClientInvocationService._invoke_with_retry(
-            do_invoke,
-            recovery_config,
-            model_vendor,
-            action_name=action_name or agent_config.get("agent_type"),
-        )
+            result = client.invoke(agent_config, prompt_config, context_data, schema)
 
         # Single-response clients return single item, wrap in list for consistency
         if model_vendor in SINGLE_RESPONSE_CLIENTS:
-            result.data = [result.data]
+            result = [result]
 
         return result

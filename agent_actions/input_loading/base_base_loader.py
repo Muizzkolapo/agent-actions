@@ -4,14 +4,41 @@
 # super-init-not-called: ProcessorErrorHandlerMixin doesn't require __init__ call
 # unnecessary-pass: Required for abstract methods to satisfy ABC contract
 import asyncio
+import functools
 import logging
+import time
 from abc import ABC, abstractmethod
-from typing import Any, Optional, TypeVar, Generic
+from typing import Any, Optional, TypeVar, Generic, Tuple, Type
 
 from agent_actions.configuration.interfaces import IDataLoader, ProcessingMode
 from agent_actions.response_processing.config_types import AgentEntryDict
 from agent_actions.utilities.processor.error_handling import ProcessorErrorHandlerMixin
-from agent_actions.utilities.retry import retry
+
+
+def retry(
+    max_attempts: int = 3,
+    delay: float = 0.5,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+):
+    """Simple retry decorator for file operations."""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        time.sleep(delay * (attempt + 1))
+            raise last_exception
+
+        return wrapper
+
+    return decorator
+
 
 __version__ = "0.1.0"
 logger = logging.getLogger(__name__)

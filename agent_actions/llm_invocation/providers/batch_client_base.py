@@ -2,12 +2,38 @@
 Base batch client interface for batch processing systems.
 """
 
+import functools
+import time
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Type
 from dataclasses import dataclass
 from pathlib import Path
 import json
-from agent_actions.utilities.retry import retry
+
+
+def retry(
+    max_attempts: int = 3,
+    delay: float = 2.0,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+):
+    """Simple retry decorator for batch operations."""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        time.sleep(delay * (attempt + 1))
+            raise last_exception
+
+        return wrapper
+
+    return decorator
 
 
 @dataclass

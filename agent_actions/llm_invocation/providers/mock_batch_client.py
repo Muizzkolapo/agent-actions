@@ -1,14 +1,15 @@
 """
-Mock Batch Client for Testing Retry Functionality.
+Mock Batch Client for Testing.
+
+Provides a simple mock batch client for testing batch processing
+without hitting real APIs.
 """
 
-import os
 import uuid
 import json
 import logging
-import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 
 from agent_actions.llm_invocation.providers.batch_client_base import (
@@ -28,21 +29,17 @@ class MockBatchState:
     status: str = "in_progress"
     poll_count: int = 0
     polls_until_complete: int = 2
-    failure_ids: Set[str] = field(default_factory=set)
 
 
 class MockBatchClient(BaseBatchClient):
     """
-    Mock batch client for testing retry functionality.
+    Mock batch client for testing batch processing without real APIs.
 
-    Simulates batch processing with configurable failures:
-    - MOCK_BATCH_FAILURE_RATE: Float 0-1, percentage of records to drop
-    - MOCK_BATCH_FAILURE_IDS: Comma-separated list of custom_ids to always fail
-    - MOCK_BATCH_POLLS_UNTIL_COMPLETE: Number of status checks before completing
+    Configuration:
+    - MOCK_BATCH_POLLS_UNTIL_COMPLETE: Number of status checks before completing (default: 2)
 
     Example:
-        export MOCK_BATCH_FAILURE_RATE=0.2
-        export MOCK_BATCH_FAILURE_IDS=record_5,record_10
+        export MOCK_BATCH_POLLS_UNTIL_COMPLETE=3
         agac run my_workflow.yaml --run-mode batch
     """
 
@@ -50,33 +47,15 @@ class MockBatchClient(BaseBatchClient):
     _batches: Dict[str, MockBatchState] = {}
     _tasks_by_batch: Dict[str, List[Dict[str, Any]]] = {}
 
-    def __init__(
-        self,
-        failure_rate: Optional[float] = None,
-        failure_ids: Optional[Set[str]] = None,
-        polls_until_complete: Optional[int] = None,
-    ):
+    def __init__(self, polls_until_complete: Optional[int] = None, **kwargs):
         """
         Initialize mock client.
 
         Args:
-            failure_rate: Fraction of records to drop (0-1).
-                Env: MOCK_BATCH_FAILURE_RATE
-            failure_ids: Specific custom_ids to always fail.
-                Env: MOCK_BATCH_FAILURE_IDS
-            polls_until_complete: Status checks before completing.
-                Env: MOCK_BATCH_POLLS_UNTIL_COMPLETE
+            polls_until_complete: Status checks before completing (default: 2)
+            **kwargs: Ignored for backward compatibility
         """
-        self.failure_rate = failure_rate
-        if self.failure_rate is None:
-            env_rate = os.environ.get("MOCK_BATCH_FAILURE_RATE", "0")
-            self.failure_rate = float(env_rate) if env_rate else 0.0
-
-        self.failure_ids = failure_ids or set()
-        if not self.failure_ids:
-            env_ids = os.environ.get("MOCK_BATCH_FAILURE_IDS", "")
-            if env_ids:
-                self.failure_ids = set(env_ids.split(","))
+        import os
 
         self.polls_until_complete = polls_until_complete
         if self.polls_until_complete is None:
@@ -84,9 +63,7 @@ class MockBatchClient(BaseBatchClient):
             self.polls_until_complete = int(env_polls)
 
         logger.info(
-            "MockBatchClient initialized: failure_rate=%.2f, failure_ids=%s, polls=%d",
-            self.failure_rate,
-            self.failure_ids,
+            "MockBatchClient initialized: polls=%d",
             self.polls_until_complete,
         )
 
@@ -143,10 +120,6 @@ class MockBatchClient(BaseBatchClient):
         for task in tasks:
             custom_id = task.get("custom_id", "unknown")
 
-            if custom_id in state.failure_ids:
-                logger.debug("Simulating failure for %s", custom_id)
-                continue  # Skip - simulates missing record
-
             # Generate mock successful response
             result = {
                 "custom_id": custom_id,
@@ -174,11 +147,9 @@ class MockBatchClient(BaseBatchClient):
             lines.append(json.dumps(result))
 
         logger.info(
-            "Mock batch %s: returning %d/%d results (simulated %d failures)",
+            "Mock batch %s: returning %d results",
             batch_id,
             len(lines),
-            len(tasks),
-            len(state.failure_ids),
         )
 
         return "\n".join(lines).encode("utf-8")
@@ -204,31 +175,20 @@ class MockBatchClient(BaseBatchClient):
                 if line.strip():
                     tasks.append(json.loads(line))
 
-        # Determine which records will "fail"
-        failure_ids = set(self.failure_ids)
-        if self.failure_rate > 0:
-            for task in tasks:
-                if random.random() < self.failure_rate:
-                    failure_ids.add(task.get("custom_id", ""))
-
         # Store state
         state = MockBatchState(
             batch_id=batch_id,
             status="in_progress",
             polls_until_complete=self.polls_until_complete,
-            failure_ids=failure_ids,
         )
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
 
         logger.info(
-            "Mock batch %s submitted: %d tasks, %d will fail",
+            "Mock batch %s submitted: %d tasks",
             batch_id,
             len(tasks),
-            len(failure_ids),
         )
-        if failure_ids:
-            logger.debug("Failing IDs: %s", failure_ids)
 
         return batch_id, "in_progress"
 
@@ -284,15 +244,3 @@ class MockBatchClient(BaseBatchClient):
     def get_batch_state(cls, batch_id: str) -> Optional[MockBatchState]:
         """Get internal state of a batch (for testing/debugging)."""
         return cls._batches.get(batch_id)
-
-    @classmethod
-    def set_failure_ids_for_batch(cls, batch_id: str, failure_ids: Set[str]) -> None:
-        """
-        Manually set which IDs should fail for a specific batch.
-
-        Useful for testing specific retry scenarios.
-        """
-        state = cls._batches.get(batch_id)
-        if state:
-            state.failure_ids = failure_ids
-            logger.debug("Set failure_ids for %s: %s", batch_id, failure_ids)

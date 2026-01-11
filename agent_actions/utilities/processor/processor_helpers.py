@@ -121,7 +121,7 @@ def run_dynamic_agent(
     source_content: Optional[Any] = None,
     llm_context: Optional[Any] = None,
     skip_guard_eval: bool = False,
-) -> tuple[Any, bool, bool, int, Optional[str], Optional[str], bool]:
+) -> tuple[Any, bool]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern guard conditions
@@ -158,23 +158,18 @@ def run_dynamic_agent(
                         Used when guard was evaluated early (before prompt rendering).
 
     Returns:
-        Tuple of (response/context, was_executed, was_retried, retry_attempts, error_type, error_message, exhausted):
+        Tuple of (response/context, was_executed):
             - response/context: The response data or original context if skipped
             - was_executed: Whether the agent actually processed the data
-            - was_retried: Whether a retry occurred during invocation
-            - retry_attempts: Number of retry attempts made
-            - error_type: Type of error that triggered retry (if any)
-            - error_message: Error message from retry (if any)
-            - exhausted: Whether all retries were exhausted
     """
     # Skip guard evaluation if already done by caller (e.g., DataGenerator)
     if not skip_guard_eval:
         if _should_skip_legacy_conditional(agent_config, context):
-            return (context, False, False, 0, None, None, False)
+            return (context, False)
         if _should_skip_guard(agent_config, context):
-            return (context, False, False, 0, None, None, False)
+            return (context, False)
         if _should_filter_guard(agent_config, context):
-            return (None, False, False, 0, None, None, False)
+            return (None, False)
 
     # Extract content from nested structure if needed (for tools/guards)
     if isinstance(context, dict) and "content" in context and isinstance(context["content"], dict):
@@ -189,25 +184,23 @@ def run_dynamic_agent(
     # CRITICAL FIX: Pass both contexts to agent_builder
     # - llm_data: Transformed context for LLM (has context_scope.drop applied)
     # - processed_context: Original context for tools/UDFs (has all fields from previous actions)
-    response, was_retried, retry_attempts, error_type, error_message, exhausted = (
-        agent_builder.create_dynamic_agent(
-            agent_config,
-            agent_name,
-            llm_data,  # Send transformed context to LLM
-            formatted_prompt,
-            tools_path=tools_path,
-            tool_args=tool_args,
-            source_content=source_content,
-            additional_context=None,
-            original_context=processed_context,  # CRITICAL: Pass original context for tools
-        )
+    response = agent_builder.create_dynamic_agent(
+        agent_config,
+        agent_name,
+        llm_data,  # Send transformed context to LLM
+        formatted_prompt,
+        tools_path=tools_path,
+        tool_args=tool_args,
+        source_content=source_content,
+        additional_context=None,
+        original_context=processed_context,  # CRITICAL: Pass original context for tools
     )
 
     # Note: passthrough fields are NOT merged here - they're merged later in
     # transform_with_observe() using the same pathway as observe directive
     # (via DataTransformer.update_schema_objects)
 
-    return (response, True, was_retried, retry_attempts, error_type, error_message, exhausted)
+    return (response, True)
 
 
 def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:
@@ -269,7 +262,6 @@ def transform_with_passthrough(
     idx: int = 0,
     passthrough_fields: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
-    retry_metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data consistently.
 
@@ -281,7 +273,6 @@ def transform_with_passthrough(
         idx: Index for node generation
         passthrough_fields: Optional pre-computed passthrough fields
         metadata: Optional LLM response metadata to add to output items
-        retry_metadata: Optional retry tracking metadata
 
     Returns:
         Transformed data list with passthrough fields and metadata merged
@@ -295,5 +286,4 @@ def transform_with_passthrough(
         idx,
         passthrough_fields=passthrough_fields,
         metadata=metadata,
-        retry_metadata=retry_metadata,
     )

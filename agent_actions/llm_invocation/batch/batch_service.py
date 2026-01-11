@@ -22,7 +22,6 @@ from agent_actions.llm_invocation.batch.infrastructure.batch_context_manager imp
 from agent_actions.llm_invocation.batch.infrastructure.batch_client_resolver import (
     BatchClientResolver,
 )
-from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
 from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient
 
@@ -57,7 +56,6 @@ class BatchService:
         submission_service: Optional[Any] = None,
         retrieval_service: Optional[Any] = None,
         processing_service: Optional[Any] = None,
-        retry_service: Optional[Any] = None,
         # Legacy params for backward compatibility
         provider: Optional[BaseBatchClient] = None,
         agent_indices: Optional[Dict[str, int]] = None,
@@ -69,8 +67,6 @@ class BatchService:
         client_resolver: Optional[BatchClientResolver] = None,
         job_manager: Optional[Any] = None,  # BatchJobManager, uses Any to avoid circular import
         source_handler: Optional[Any] = None,  # BatchSourceHandler
-        retry_orchestrator: Optional[Any] = None,
-        default_retry_config: Optional[RetryConfig] = None,
     ):
         """Initialize batch service facade with optional pre-built services."""
         from agent_actions.llm_invocation.batch.infrastructure.batch_job_manager import (
@@ -84,7 +80,6 @@ class BatchService:
         self._submission_service = submission_service
         self._retrieval_service = retrieval_service
         self._processing_service = processing_service
-        self._retry_service = retry_service
 
         # Store legacy init params for lazy service initialization
         self.data_loader = BatchDataLoader()
@@ -104,7 +99,6 @@ class BatchService:
             client_cache=self._provider_cache, default_client=self.provider
         )
         self._source_handler = source_handler or BatchSourceHandler()
-        self._default_retry_config = default_retry_config or RetryConfig.default()
 
         # Registry manager factory (shared across services)
         self._registry_manager_factory = _create_registry_manager_factory()
@@ -112,9 +106,6 @@ class BatchService:
 
         # Job manager (special case - still used directly for status queries)
         self._job_manager = job_manager or BatchJobManager(client_resolver=self._client_resolver)
-
-        # Legacy: store retry orchestrator if provided
-        self._retry_orchestrator = retry_orchestrator
 
     def _get_registry_manager(self, output_directory: str) -> BatchRegistryManager:
         """Get or create registry manager for output directory."""
@@ -169,22 +160,6 @@ class BatchService:
                 source_handler=self._source_handler,
             )
         return self._processing_service
-
-    def _get_retry_service(self):
-        """Lazy-initialize retry service."""
-        if self._retry_service is None:
-            from agent_actions.llm_invocation.batch.services.batch_retry_service import (
-                BatchRetryService,
-            )
-
-            self._retry_service = BatchRetryService(
-                client_resolver=self._client_resolver,
-                context_manager=self._context_manager,
-                registry_manager_factory=self._registry_manager_factory,
-                default_retry_config=self._default_retry_config,
-                task_preparator=self._task_preparator,
-            )
-        return self._retry_service
 
     # =========================================================================
     # Delegation methods - one-liner delegations to focused services

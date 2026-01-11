@@ -4,22 +4,15 @@ Ollama Local Batch Client - Simple local batch simulation.
 Supports:
 - Synchronous batch processing (simulates async interface)
 - JSON mode with structured outputs
-- Failure injection for testing batch retry (via environment variables)
-
-Failure Injection (for testing batch retry):
-    OLLAMA_FAILURE_RATE=0.3     # 30% of records will fail (trigger retry)
-    OLLAMA_FAILURE_IDS=id1,id2  # Specific custom_ids to fail
-    OLLAMA_FAILURE_SEED=42      # Reproducible failures for testing
 """
 
 import json
 import logging
 import os
-import random
 import time
 import uuid
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Set
+from typing import List, Dict, Any, Optional, Tuple
 
 from ollama import Client
 from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
@@ -34,9 +27,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
     This client processes batches synchronously but maintains
     the same interface as true async clients (OpenAI, Anthropic).
-
-    Supports failure injection via environment variables to test
-    the batch retry infrastructure.
     """
 
     def __init__(self, base_url: Optional[str] = None):
@@ -48,21 +38,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         """
         self.base_url = base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434")
         self.client = Client(host=self.base_url)
-
-        # Failure injection config (for testing retry)
-        self._failure_rate = float(os.getenv("OLLAMA_FAILURE_RATE", "0"))
-        self._failure_ids: Set[str] = set(
-            id.strip() for id in os.getenv("OLLAMA_FAILURE_IDS", "").split(",") if id.strip()
-        )
-        seed_str = os.getenv("OLLAMA_FAILURE_SEED", "")
-        self._rng = random.Random(int(seed_str) if seed_str.isdigit() else None)
-
-        if self._failure_rate > 0 or self._failure_ids:
-            logger.info(
-                "Ollama failure injection enabled: rate=%.2f, ids=%s",
-                self._failure_rate,
-                self._failure_ids or "random",
-            )
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
@@ -133,30 +108,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
 
         return schema
 
-    def _should_inject_failure(self, custom_id: str) -> bool:
-        """
-        Check if this request should fail (for testing retry).
-
-        Failures are injected based on:
-        1. OLLAMA_FAILURE_IDS - specific custom_ids to fail
-        2. OLLAMA_FAILURE_RATE - random percentage of requests to fail
-
-        Args:
-            custom_id: The custom_id of the request
-
-        Returns:
-            True if failure should be injected (record will be missing from results)
-        """
-        # Check specific IDs first
-        if custom_id in self._failure_ids:
-            return True
-
-        # Check random failure rate
-        if self._failure_rate > 0 and self._rng.random() < self._failure_rate:
-            return True
-
-        return False
-
     def _submit_to_provider_api(self, input_file: Path, batch_name: str) -> Tuple[str, str]:
         """Process batch synchronously with Ollama (no actual API submission)."""
         # Generate batch ID
@@ -177,12 +128,6 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         for idx, task in enumerate(tasks, 1):
             custom_id = task["custom_id"]
             print(f"Processing request {idx}/{len(tasks)}: {custom_id}")
-
-            # Check for failure injection (skip record to simulate missing)
-            if self._should_inject_failure(custom_id):
-                print(f"  [INJECTED FAILURE] Skipping {custom_id} to trigger retry")
-                failed += 1
-                continue  # Don't add to results - makes it "missing"
 
             try:
                 # Extract request data

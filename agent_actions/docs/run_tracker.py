@@ -4,15 +4,40 @@ Run tracking for documentation system.
 Records workflow execution data to artefact/runs.json for the docs UI.
 """
 
+import functools
 import json
+import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple, Type
 
 import portalocker
 
-from agent_actions.utilities.retry import retry
+
+def retry(
+    max_attempts: int = 3,
+    backoff: float = 2.0,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+):
+    """Simple retry decorator for file locking operations."""
+
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            last_exception = None
+            for attempt in range(max_attempts):
+                try:
+                    return func(*args, **kwargs)
+                except exceptions as e:
+                    last_exception = e
+                    if attempt < max_attempts - 1:
+                        time.sleep(backoff * (attempt + 1))
+            raise last_exception
+
+        return wrapper
+
+    return decorator
 
 
 @dataclass

@@ -7,7 +7,7 @@ with support for multiple LLM vendors.
 
 import json
 import sys
-from typing import Dict, Any, Optional, List, Union, Tuple
+from typing import Dict, Any, Optional, List, Union
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from .services import (
     PromptService,
@@ -27,7 +27,7 @@ def create_dynamic_agent(
     source_content: Optional[Any] = None,
     additional_context: Optional[Dict] = None,
     original_context: Optional[Union[str, Dict]] = None,
-) -> Tuple[List[Any], bool, int, Optional[str], Optional[str], bool]:
+) -> List[Any]:
     """
     Build and execute a prompt against the selected vendor.
 
@@ -46,13 +46,7 @@ def create_dynamic_agent(
                          If not provided, uses context_data_str for both LLM and tools.
 
     Returns:
-        Tuple of (response_data, was_retried, retry_attempts, error_type, error_message, exhausted):
-            - response_data: List of response items from the LLM
-            - was_retried: Whether a retry occurred
-            - retry_attempts: Number of retry attempts made
-            - error_type: Type of error that triggered retry (if any)
-            - error_message: Error message from retry (if any)
-            - exhausted: Whether all retries were exhausted
+        List of response items from the LLM
     """
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
@@ -124,7 +118,7 @@ def create_dynamic_agent(
     # Get granularity
     granularity = (agent_config.get("granularity") or "record").lower()
 
-    # Invoke client - returns InvocationResult with retry state
+    # Invoke client
     result = ClientInvocationService.invoke_client(
         model_vendor,
         agent_config,
@@ -139,15 +133,8 @@ def create_dynamic_agent(
 
     # Merge captured results if any
     if captured_results:
-        for item in result.data:
+        for item in result:
             if isinstance(item, dict):
                 item.update(captured_results)
 
-    return (
-        result.data,
-        result.was_retried,
-        result.retry_attempts,
-        result.error_type,
-        result.error_message,
-        result.exhausted,
-    )
+    return result

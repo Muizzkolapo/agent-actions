@@ -148,15 +148,9 @@ class BatchClientFactory:
             return MistralBatchClient(api_key=api_key)
 
         if client_type == "mock":
-            # Mock client for testing retry logic without hitting real APIs
-            failure_rate = config.get("failure_rate")
-            failure_ids = config.get("failure_ids")
+            # Mock client for testing batch processing without hitting real APIs
             polls_until_complete = config.get("polls_until_complete")
-            return MockBatchClient(
-                failure_rate=failure_rate,
-                failure_ids=failure_ids,
-                polls_until_complete=polls_until_complete,
-            )
+            return MockBatchClient(polls_until_complete=polls_until_complete)
 
         from agent_actions.errors import ConfigurationError
 

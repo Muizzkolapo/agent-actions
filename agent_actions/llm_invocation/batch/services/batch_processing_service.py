@@ -2,13 +2,11 @@
 
 This service encapsulates all result processing functionality, extracted from
 BatchService to follow Single Responsibility Principle.
-
-Now includes automatic retry support for missing batch records.
 """
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable, Set, Tuple, TYPE_CHECKING
+from typing import Optional, Dict, Any, List, Callable
 
 from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
@@ -31,9 +29,6 @@ from agent_actions.llm_invocation.batch.processing.batch_side_output_handler imp
 from agent_actions.llm_invocation.batch.core.batch_models import BatchJobEntry
 from agent_actions.llm_invocation.providers.batch_client_base import BaseBatchClient, BatchResult
 from agent_actions.errors import ProcessingError
-
-if TYPE_CHECKING:
-    from agent_actions.llm_invocation.batch.retry.batch_retry_config import RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -290,8 +285,6 @@ class BatchProcessingService:
     ) -> Optional[str]:
         """Process a single batch file and return output path.
 
-        Automatically triggers retry for missing records if retry is enabled.
-
         Args:
             batch_id: The batch job ID
             file_name: Original file name
@@ -316,19 +309,6 @@ class BatchProcessingService:
             file_name=file_name,
         )
 
-        # Check for missing records and trigger automatic retry if enabled
-        # Note: Even if batch_results is empty (all records failed), we still try retry/failure records
-        batch_results, exhausted_ids, retry_attempts = self._maybe_retry_missing_records(
-            batch_id=batch_id,
-            batch_results=batch_results,
-            context_map=context_map,
-            output_directory=output_directory,
-            file_name=file_name,
-            agent_config=agent_config,
-            manager=manager,
-            provider=provider,
-        )
-
         # Convert results to workflow format
         processed_data = self._convert_batch_results_to_workflow_format(
             batch_results,
@@ -337,16 +317,6 @@ class BatchProcessingService:
             agent_config=agent_config,
         )
 
-        # Create failure records for exhausted IDs
-        if exhausted_ids:
-            failure_records = self._create_exhausted_failure_records(
-                exhausted_ids=exhausted_ids,
-                context_map=context_map,
-                agent_config=agent_config,
-                retry_attempts=retry_attempts,
-                batch_id=batch_id,
-            )
-            processed_data.extend(failure_records)
         main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
         # Determine output path and write files
@@ -368,300 +338,6 @@ class BatchProcessingService:
         )
 
         return str(output_file)
-
-    def _maybe_retry_missing_records(
-        self,
-        batch_id: str,
-        batch_results: List[BatchResult],
-        context_map: Dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        agent_config: Optional[Dict[str, Any]],
-        manager: BatchRegistryManager,
-        provider: BaseBatchClient,
-    ) -> Tuple[List[BatchResult], Set[str], int]:
-        """Check for missing records and trigger retry if enabled.
-
-        Args:
-            batch_id: Original batch ID
-            batch_results: Current batch results
-            context_map: Context map with expected records
-            output_directory: Output directory path
-            file_name: Original file name
-            agent_config: Agent configuration
-            manager: Registry manager
-            provider: Batch client provider
-
-        Returns:
-            Tuple of:
-                - Combined batch results (original + retry results if any)
-                - Set of exhausted record IDs (still missing after all retries)
-                - Total retry attempts made
-        """
-        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
-            BatchResultReconciler,
-        )
-
-        # Create reconciler to find missing records
-        # Handle None or empty batch_results (all records failed)
-        batch_results = batch_results or []
-        reconciler = BatchResultReconciler(context_map)
-        for result in batch_results:
-            reconciler.mark_processed(result.custom_id)
-        reconciliation = reconciler.reconcile()
-
-        # No missing records - return original results
-        if not reconciliation.missing_ids:
-            return batch_results, set(), 0
-
-        # Check if retry is enabled
-        retry_config = self._get_retry_config(agent_config)
-        if not retry_config or not retry_config.enabled:
-            logger.debug(
-                "Retry disabled, continuing with %d missing records",
-                len(reconciliation.missing_ids),
-            )
-            # No retries attempted, but records are missing (not exhausted, just no retry)
-            return batch_results, set(), 0
-
-        # Trigger automatic retry
-        logger.info(
-            "Triggering automatic retry for %d missing records",
-            len(reconciliation.missing_ids),
-            extra={
-                "batch_id": batch_id,
-                "missing_count": len(reconciliation.missing_ids),
-                "operation": "auto_retry",
-            },
-        )
-
-        try:
-            from agent_actions.llm_invocation.batch.retry.batch_retry_orchestrator import (
-                BatchRetryOrchestrator,
-            )
-            from agent_actions.llm_invocation.batch.processing.batch_task_preparator import (
-                BatchTaskPreparator,
-            )
-
-            # Create task preparator if not available
-            task_preparator = BatchTaskPreparator()
-
-            # Create retry orchestrator
-            orchestrator = BatchRetryOrchestrator(
-                registry_manager=manager,
-                client_resolver=self._client_resolver,
-                task_preparator=task_preparator,
-                context_manager=self._context_manager,
-                retry_config=retry_config,
-            )
-
-            # Run retry chain
-            retry_result = orchestrator.orchestrate_retry_chain(
-                original_batch_id=batch_id,
-                initial_reconciliation=reconciliation,
-                context_map=context_map,
-                agent_config=agent_config or {},
-                output_directory=output_directory,
-                original_file_name=file_name,
-                retry_config=retry_config,
-            )
-
-            # Collect results from retry batches
-            all_results = list(batch_results)
-            for retry_batch_id in retry_result.retry_batch_ids:
-                retry_results = provider.retrieve_results(retry_batch_id, output_directory)
-                all_results.extend(retry_results)
-
-            logger.info(
-                "Automatic retry completed: %d total results (%d from retry)",
-                len(all_results),
-                len(all_results) - len(batch_results),
-                extra={
-                    "batch_id": batch_id,
-                    "retry_attempts": retry_result.total_attempts,
-                    "final_success": retry_result.final_success_count,
-                    "final_missing": retry_result.final_missing_count,
-                },
-            )
-
-            # Re-reconcile to find final missing IDs
-            final_reconciler = BatchResultReconciler(context_map)
-            for result in all_results:
-                final_reconciler.mark_processed(result.custom_id)
-            final_reconciliation = final_reconciler.reconcile()
-            exhausted_ids = final_reconciliation.missing_ids
-
-            # Handle exhausted records based on config
-            if exhausted_ids:
-                self._handle_exhausted_records(
-                    retry_config=retry_config,
-                    retry_result=retry_result,
-                    context_map=context_map,
-                    output_directory=output_directory,
-                    file_name=file_name,
-                    batch_id=batch_id,
-                )
-
-            return all_results, exhausted_ids, retry_result.total_attempts
-
-        except Exception as e:
-            logger.warning(
-                "Automatic retry failed, continuing with original results: %s",
-                e,
-                extra={"batch_id": batch_id, "error": str(e)},
-            )
-            return batch_results, set(), 0
-
-    def _handle_exhausted_records(
-        self,
-        retry_config: "RetryConfig",
-        retry_result: Any,
-        context_map: Dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        batch_id: str,
-    ) -> None:
-        """Handle records that exhausted all retry attempts.
-
-        Args:
-            retry_config: Retry configuration
-            retry_result: Result from retry chain
-            context_map: Context map with record data
-            output_directory: Output directory path
-            file_name: Original file name
-            batch_id: Original batch ID
-
-        Raises:
-            ProcessingError: If on_exhausted is 'fail'
-        """
-        from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
-            ExhaustedBehavior,
-        )
-
-        behavior = retry_config.on_exhausted
-
-        if behavior == ExhaustedBehavior.CONTINUE:
-            # Default: just log and continue
-            logger.warning(
-                "%d records exhausted all retries, continuing with partial data",
-                retry_result.final_missing_count,
-                extra={"batch_id": batch_id, "on_exhausted": "continue"},
-            )
-            return
-
-        if behavior == ExhaustedBehavior.FAIL:
-            # Fail the workflow
-            raise ProcessingError(
-                f"Retry exhausted: {retry_result.final_missing_count} records failed after "
-                f"{retry_result.total_attempts} retry attempts",
-                context={
-                    "batch_id": batch_id,
-                    "missing_count": retry_result.final_missing_count,
-                    "retry_attempts": retry_result.total_attempts,
-                    "on_exhausted": "fail",
-                },
-            )
-
-        # Note: CONTINUE behavior is now the only non-fail option
-        # Exhausted records are marked with _failed: true and _retry_metadata.exhausted: true
-
-    def _create_exhausted_failure_records(
-        self,
-        exhausted_ids: Set[str],
-        context_map: Dict[str, Any],
-        agent_config: Optional[Dict[str, Any]],
-        retry_attempts: int,
-        batch_id: str,
-    ) -> List[Dict[str, Any]]:
-        """Create failure records for exhausted batch records.
-
-        Args:
-            exhausted_ids: Set of custom_ids that exhausted all retries
-            context_map: Context map with original record data
-            agent_config: Agent configuration
-            retry_attempts: Number of retry attempts made
-            batch_id: Original batch ID
-
-        Returns:
-            List of failure records with _failed: true and retry metadata
-        """
-        from agent_actions.utilities.id_generation import IDGenerator
-        from agent_actions.utilities.field_management import FieldManager
-        from agent_actions.utilities.metadata import MetadataExtractor
-
-        failure_records = []
-        idx = agent_config.get("idx", 0) if agent_config else 0
-
-        for custom_id in exhausted_ids:
-            # Get source_guid from context map
-            record_context = context_map.get(custom_id, {})
-            source_guid = record_context.get("source_guid") or custom_id
-
-            # Build retry metadata for exhausted record
-            retry_metadata = MetadataExtractor.build_retry_metadata(
-                was_retried=retry_attempts > 0,
-                retry_attempts=retry_attempts,
-                error_type="BatchExhausted",
-                error_message=f"Record exhausted all {retry_attempts} retry attempts",
-                exhausted=True,
-                original_batch_id=batch_id,
-            ).to_dict()
-
-            # Create failure record
-            failure_record = {
-                "source_guid": source_guid,
-                "content": {},  # Empty content - retries exhausted
-                "_failed": True,  # Mark as failed record
-            }
-
-            # Add required fields
-            failure_record = FieldManager().ensure_required_fields(failure_record, source_guid, idx)
-            node_id = IDGenerator.generate_node_id(idx)
-            failure_record["node_id"] = node_id
-            failure_record["lineage"] = [node_id]
-
-            # Add metadata
-            FieldManager.add_metadata(
-                failure_record,
-                metadata={},  # No LLM response for exhausted retries
-                retry_metadata=retry_metadata,
-            )
-
-            failure_records.append(failure_record)
-
-        logger.info(
-            "Created %d failure records for exhausted batch records",
-            len(failure_records),
-            extra={"batch_id": batch_id, "exhausted_count": len(exhausted_ids)},
-        )
-
-        return failure_records
-
-    def _get_retry_config(self, agent_config: Optional[Dict[str, Any]]) -> Optional["RetryConfig"]:
-        """Get retry configuration from agent config.
-
-        Args:
-            agent_config: Agent configuration dict
-
-        Returns:
-            RetryConfig if enabled, None otherwise
-        """
-        if not agent_config:
-            return None
-
-        retry_setting = agent_config.get("retry")
-        if retry_setting is False:
-            return None
-
-        try:
-            from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
-                RetryConfig,
-                get_retry_config,
-            )
-
-            return get_retry_config(agent_config, RetryConfig.default())
-        except ImportError:
-            return None
 
     def _convert_batch_results_to_workflow_format(
         self,
