@@ -370,6 +370,7 @@ class BatchResultProcessor:
             retry_attempts=ctx.retry_attempt,
             original_batch_id=ctx.original_batch_id,
             final_batch_id=ctx.batch_id,
+            exhausted=False,  # Successful records are not exhausted
         ).to_dict()
 
     def _apply_context_passthrough(
