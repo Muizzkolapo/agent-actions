@@ -27,7 +27,7 @@ def create_dynamic_agent(
     source_content: Optional[Any] = None,
     additional_context: Optional[Dict] = None,
     original_context: Optional[Union[str, Dict]] = None,
-) -> Tuple[List[Any], bool, int, Optional[str]]:
+) -> Tuple[List[Any], bool, int, Optional[str], Optional[str], bool]:
     """
     Build and execute a prompt against the selected vendor.
 
@@ -46,11 +46,13 @@ def create_dynamic_agent(
                          If not provided, uses context_data_str for both LLM and tools.
 
     Returns:
-        Tuple of (response_data, was_retried, retry_attempts, retry_entry_id):
+        Tuple of (response_data, was_retried, retry_attempts, error_type, error_message, exhausted):
             - response_data: List of response items from the LLM
             - was_retried: Whether a retry occurred
             - retry_attempts: Number of retry attempts made
-            - retry_entry_id: ID of the retry entry in the tracker (if any)
+            - error_type: Type of error that triggered retry (if any)
+            - error_message: Error message from retry (if any)
+            - exhausted: Whether all retries were exhausted
     """
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
@@ -141,4 +143,11 @@ def create_dynamic_agent(
             if isinstance(item, dict):
                 item.update(captured_results)
 
-    return (result.data, result.was_retried, result.retry_attempts, result.retry_entry_id)
+    return (
+        result.data,
+        result.was_retried,
+        result.retry_attempts,
+        result.error_type,
+        result.error_message,
+        result.exhausted,
+    )

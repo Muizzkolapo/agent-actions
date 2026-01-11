@@ -61,16 +61,13 @@ class RecoveryEngine:
     def __init__(
         self,
         config: RecoveryConfig,
-        tracker: Optional[Any] = None,  # RetryTracker instance
     ):
         """Initialize recovery engine.
 
         Args:
             config: RecoveryConfig instance
-            tracker: Optional RetryTracker for logging events
         """
         self.recovery_config = config
-        self.tracker = tracker
 
     def execute_with_recovery(
         self,
@@ -109,7 +106,6 @@ class RecoveryEngine:
                 last_response = response
 
                 # Success!
-                self._mark_success(action_name)
                 return RecoveryResult(
                     success=True,
                     response=response,
@@ -119,17 +115,6 @@ class RecoveryEngine:
             except (RateLimitError, NetworkError) as e:
                 last_error = str(e)
                 logger.debug(f"Transient error (attempt {retry_attempt}): {e}")
-
-                # Log retry event
-                self._log_event(
-                    mode=RecoveryMode.RETRY,
-                    action=action_name,
-                    attempt=retry_attempt,
-                    max_attempts=retry_config.max_attempts,
-                    error=str(e),
-                    record=record,
-                    error_type=type(e).__name__,
-                )
 
                 if retry_attempt < max_attempts:
                     # Calculate backoff
@@ -193,33 +178,6 @@ class RecoveryEngine:
 
         return min(delay, max_delay)
 
-    def _log_event(
-        self,
-        mode: RecoveryMode,
-        action: str,
-        attempt: int,
-        max_attempts: int,
-        error: str,
-        record: Any,
-        error_type: str = "TransientError",
-    ) -> None:
-        """Log recovery event to tracker."""
-        if self.tracker:
-            self.tracker.log_retry(
-                action=action,
-                mode=mode.value,
-                attempt=attempt,
-                max_attempts=max_attempts,
-                error_type=error_type,
-                error_message=error,
-                record=record,
-            )
-
-    def _mark_success(self, _action: str) -> None:
-        """Mark the last event as successful."""
-        # Tracker handles this internally
-        pass
-
     def _handle_exhausted(
         self,
         config: RetryConfig,
@@ -255,7 +213,7 @@ class RecoveryEngine:
                 context={"action": action, "attempts": attempts},
             )
 
-        # CONTINUE or DEAD_LETTER - return result for caller to handle
+        # CONTINUE - return result for caller to handle
         return RecoveryResult(
             success=False,
             response=response,

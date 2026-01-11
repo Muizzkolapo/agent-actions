@@ -13,9 +13,8 @@ from pydantic import BaseModel, Field, field_validator
 class ExhaustedBehavior(str, Enum):
     """Behavior when retry attempts are exhausted."""
 
-    CONTINUE = "continue"  # Continue with partial data (default, lossy)
+    CONTINUE = "continue"  # Create failure record, continue workflow
     FAIL = "fail"  # Fail the workflow if any records exhausted
-    DEAD_LETTER = "dead_letter"  # Write failed records to .failed.json
 
 
 # Preset configurations for common retry strategies
@@ -71,7 +70,7 @@ class RetryConfig(BaseModel):
         retry:
           enabled: true
           max_attempts: 5
-          on_exhausted: dead_letter  # write failed to .failed.json
+          on_exhausted: continue  # or 'fail'
     """
 
     enabled: bool = Field(default=True, description="Enable automatic retries")
@@ -83,7 +82,7 @@ class RetryConfig(BaseModel):
     )
     on_exhausted: ExhaustedBehavior = Field(
         default=ExhaustedBehavior.CONTINUE,
-        description="Behavior when retries exhausted: continue, fail, or dead_letter",
+        description="Behavior when retries exhausted: 'continue' or 'fail'",
     )
 
     @field_validator("max_attempts")

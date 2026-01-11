@@ -273,6 +273,9 @@ class MetadataExtractor:
         cls,
         was_retried: bool = False,
         retry_attempts: int = 0,
+        error_type: Optional[str] = None,
+        error_message: Optional[str] = None,
+        exhausted: bool = False,
         original_batch_id: Optional[str] = None,
         final_batch_id: Optional[str] = None,
         retry_reason: Optional[str] = None,
@@ -286,6 +289,9 @@ class MetadataExtractor:
         Args:
             was_retried: Whether this record required retry
             retry_attempts: Number of retry attempts
+            error_type: Type of error that triggered retry (e.g., 'RateLimitError')
+            error_message: Error message from the retry-triggering error
+            exhausted: Whether all retry attempts were exhausted without success
             original_batch_id: ID of the original batch (batch mode)
             final_batch_id: ID of the batch that succeeded (batch mode)
             retry_reason: Reason for retry if applicable
@@ -296,6 +302,9 @@ class MetadataExtractor:
         return RetryMetadata(
             was_retried=was_retried,
             retry_attempts=retry_attempts,
+            error_type=error_type,
+            error_message=error_message,
+            exhausted=exhausted,
             original_batch_id=original_batch_id,
             final_batch_id=final_batch_id,
             retry_reason=retry_reason,

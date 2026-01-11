@@ -412,7 +412,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            # create_agent_with_data now returns 6 values including retry state
+            # create_agent_with_data returns 8 values including retry state with error info and exhausted flag
             if hasattr(self.data_generator, "create_agent_with_data_async"):
                 (
                     generated_data,
@@ -420,7 +420,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     passthrough_fields,
                     was_retried,
                     retry_attempts,
-                    retry_entry_id,
+                    error_type,
+                    error_message,
+                    exhausted,
                 ) = await self.data_generator.create_agent_with_data_async(
                     contents,
                     source_content,
@@ -434,7 +436,9 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     passthrough_fields,
                     was_retried,
                     retry_attempts,
-                    retry_entry_id,
+                    error_type,
+                    error_message,
+                    exhausted,
                 ) = await asyncio.to_thread(
                     self.data_generator.create_agent_with_data,
                     contents,
@@ -443,6 +447,38 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     file_path=file_path,
                 )
             if executed:
+                # Check if retries were exhausted (empty response due to all retries failing)
+                if exhausted and (not generated_data or generated_data == []):
+                    # Create a failure record with retry metadata
+                    base_node_id = IDGenerator.generate_node_id(self.idx)
+                    retry_metadata = MetadataExtractor.build_retry_metadata(
+                        was_retried=was_retried,
+                        retry_attempts=retry_attempts,
+                        error_type=error_type,
+                        error_message=error_message,
+                        exhausted=exhausted,
+                    )
+                    failure_record = {
+                        "source_guid": source_guid,
+                        "content": {},  # Empty content - retries exhausted
+                        "_failed": True,  # Mark as failed record
+                    }
+                    failure_record = FieldManager().ensure_required_fields(
+                        failure_record, source_guid, self.idx
+                    )
+                    failure_record = LineageBuilder.add_lineage_tracking(
+                        failure_record, item, base_node_id
+                    )
+                    failure_record = LoopIdGenerator.add_loop_correlation_id(
+                        failure_record, self.agent_config, record_index=record_index
+                    )
+                    FieldManager.add_metadata(
+                        failure_record,
+                        metadata={},  # No LLM response for exhausted retries
+                        retry_metadata=retry_metadata.to_dict(),
+                    )
+                    return [failure_record]
+
                 if hasattr(self.data_processor, "process_item_async"):
                     processed = await self.data_processor.process_item_async(
                         contents,
@@ -465,10 +501,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
-                # Use actual retry state from invocation
+                # Use actual retry state from invocation (includes error info and exhausted flag)
                 retry_metadata = MetadataExtractor.build_retry_metadata(
                     was_retried=was_retried,
                     retry_attempts=retry_attempts,
+                    error_type=error_type,
+                    error_message=error_message,
+                    exhausted=exhausted,
                 )
 
                 for i, obj in enumerate(processed):
@@ -485,17 +524,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         metadata=response_metadata.to_dict(),
                         retry_metadata=retry_metadata.to_dict(),
                     )
-                    # Update retry tracker with target_id and node_id if we have a retry entry
-                    if retry_entry_id:
-                        from agent_actions.utilities.retry_tracker import get_current_retry_tracker
-
-                        tracker = get_current_retry_tracker()
-                        if tracker:
-                            tracker.update_entry_ids(
-                                entry_id=retry_entry_id,
-                                target_id=obj.get("target_id"),
-                                node_id=node_id,
-                            )
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -648,14 +676,16 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            # create_agent_with_data now returns 6 values including retry state
+            # create_agent_with_data returns 8 values including retry state with error info and exhausted flag
             (
                 generated_data,
                 executed,
                 passthrough_fields,
                 was_retried,
                 retry_attempts,
-                retry_entry_id,
+                error_type,
+                error_message,
+                exhausted,
             ) = self.data_generator.create_agent_with_data(
                 contents,
                 source_content,
@@ -663,6 +693,38 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 file_path=file_path,
             )
             if executed:
+                # Check if retries were exhausted (empty response due to all retries failing)
+                if exhausted and (not generated_data or generated_data == []):
+                    # Create a failure record with retry metadata
+                    base_node_id = IDGenerator.generate_node_id(self.idx)
+                    retry_metadata = MetadataExtractor.build_retry_metadata(
+                        was_retried=was_retried,
+                        retry_attempts=retry_attempts,
+                        error_type=error_type,
+                        error_message=error_message,
+                        exhausted=exhausted,
+                    )
+                    failure_record = {
+                        "source_guid": source_guid,
+                        "content": {},  # Empty content - retries exhausted
+                        "_failed": True,  # Mark as failed record
+                    }
+                    failure_record = FieldManager().ensure_required_fields(
+                        failure_record, source_guid, self.idx
+                    )
+                    failure_record = LineageBuilder.add_lineage_tracking(
+                        failure_record, item, base_node_id
+                    )
+                    failure_record = LoopIdGenerator.add_loop_correlation_id(
+                        failure_record, self.agent_config, record_index=record_index
+                    )
+                    FieldManager.add_metadata(
+                        failure_record,
+                        metadata={},  # No LLM response for exhausted retries
+                        retry_metadata=retry_metadata.to_dict(),
+                    )
+                    return [failure_record]
+
                 processed = self.data_processor.process_item(
                     contents,
                     generated_data,
@@ -676,10 +738,13 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
-                # Use actual retry state from invocation
+                # Use actual retry state from invocation (includes error info and exhausted flag)
                 retry_metadata = MetadataExtractor.build_retry_metadata(
                     was_retried=was_retried,
                     retry_attempts=retry_attempts,
+                    error_type=error_type,
+                    error_message=error_message,
+                    exhausted=exhausted,
                 )
 
                 for i, obj in enumerate(processed):
@@ -696,17 +761,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         metadata=response_metadata.to_dict(),
                         retry_metadata=retry_metadata.to_dict(),
                     )
-                    # Update retry tracker with target_id and node_id if we have a retry entry
-                    if retry_entry_id:
-                        from agent_actions.utilities.retry_tracker import get_current_retry_tracker
-
-                        tracker = get_current_retry_tracker()
-                        if tracker:
-                            tracker.update_entry_ids(
-                                entry_id=retry_entry_id,
-                                target_id=obj.get("target_id"),
-                                node_id=node_id,
-                            )
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)

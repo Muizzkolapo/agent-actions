@@ -20,7 +20,7 @@ defaults:
   # Retry: transient errors (rate limits, network)
   retry:
     max_attempts: 3
-    on_exhausted: continue  # continue | fail | dead_letter
+    on_exhausted: continue  # continue | fail
 
   # Reprompt: validation errors (bad JSON, schema violations)
   # reprompt: false  # Uncomment to enable

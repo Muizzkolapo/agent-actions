@@ -52,7 +52,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
     def _execute_agent(self, enriched_data, formatted_prompt):
         """Execute the dynamic agent and return response with retry state."""
         tools_path = self.agent_config.get("tools", {}).get("path")
-        # run_dynamic_agent now returns (response, executed, was_retried, retry_attempts, retry_entry_id)
+        # run_dynamic_agent returns (response, executed, was_retried, retry_attempts, error_type, error_message, exhausted)
         return run_dynamic_agent(
             self.agent_config,
             self.agent_name,
@@ -67,7 +67,9 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         context_data,
         was_retried: bool = False,
         retry_attempts: int = 0,
-        retry_entry_id=None,
+        error_type: str = None,
+        error_message: str = None,
+        exhausted: bool = False,
     ):
         """Add lineage tracking and metadata to transformed response.
 
@@ -76,7 +78,9 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             context_data: The context data for lineage tracking
             was_retried: Whether a retry occurred during invocation
             retry_attempts: Number of retry attempts made
-            retry_entry_id: ID of the retry entry in the tracker (if any)
+            error_type: Type of error that triggered retry (if any)
+            error_message: Error message from retry (if any)
+            exhausted: Whether all retry attempts were exhausted without success
         """
         idx = self.agent_config.get("idx", 0)
 
@@ -85,10 +89,13 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             response=None,  # Raw response not available at this level
             agent_config=self.agent_config,
         )
-        # Use actual retry state from invocation
+        # Use actual retry state from invocation (includes error info if retried)
         retry_metadata = MetadataExtractor.build_retry_metadata(
             was_retried=was_retried,
             retry_attempts=retry_attempts,
+            error_type=error_type,
+            error_message=error_message,
+            exhausted=exhausted,
         )
 
         for i, node in enumerate(transformed_response):
@@ -102,17 +109,6 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
                 metadata=response_metadata.to_dict(),
                 retry_metadata=retry_metadata.to_dict(),
             )
-            # Update retry tracker with target_id and node_id if we have a retry entry
-            if retry_entry_id:
-                from agent_actions.utilities.retry_tracker import get_current_retry_tracker
-
-                tracker = get_current_retry_tracker()
-                if tracker:
-                    tracker.update_entry_ids(
-                        entry_id=retry_entry_id,
-                        target_id=transformed_response[i].get("target_id"),
-                        node_id=node_id,
-                    )
         return transformed_response
 
     def _transform_response(self, response, executed, enriched_data, source_guid):
@@ -145,10 +141,16 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             # Prepare prompt
             formatted_prompt = self._prepare_prompt(source_content, formatted_prompt)
 
-            # Execute agent - now returns retry state
-            response, executed, was_retried, retry_attempts, retry_entry_id = self._execute_agent(
-                enriched_data, formatted_prompt
-            )
+            # Execute agent - returns retry state with error info and exhausted flag
+            (
+                response,
+                executed,
+                was_retried,
+                retry_attempts,
+                error_type,
+                error_message,
+                exhausted,
+            ) = self._execute_agent(enriched_data, formatted_prompt)
 
             # Ensure source_guid exists
             if not source_guid:
@@ -156,18 +158,51 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
                     enriched_data or context_data
                 )
 
+            # Check if retries were exhausted (empty response due to all retries failing)
+            if exhausted and executed and (not response or response == []):
+                # Create a failure record with retry metadata
+                idx = self.agent_config.get("idx", 0)
+                retry_metadata = MetadataExtractor.build_retry_metadata(
+                    was_retried=was_retried,
+                    retry_attempts=retry_attempts,
+                    error_type=error_type,
+                    error_message=error_message,
+                    exhausted=exhausted,
+                )
+                failure_record = {
+                    "source_guid": source_guid,
+                    "content": {},  # Empty content - retries exhausted
+                    "_failed": True,  # Mark as failed record
+                }
+                failure_record = FieldManager().ensure_required_fields(
+                    failure_record, source_guid, idx
+                )
+                node_id = IDGenerator.generate_node_id(idx)
+                failure_record = LineageBuilder.add_context_lineage_tracking(
+                    failure_record, context_data, node_id
+                )
+                FieldManager.add_metadata(
+                    failure_record,
+                    metadata={},  # No LLM response for exhausted retries
+                    retry_metadata=retry_metadata.to_dict(),
+                )
+                src_text = self._prepare_source_text(source_guid, enriched_data, context_data)
+                return ([failure_record], src_text)
+
             # Transform response
             transformed_response = self._transform_response(
                 response, executed, enriched_data, source_guid
             )
 
-            # Add lineage tracking with actual retry state
+            # Add lineage tracking with actual retry state (includes error info)
             transformed_response = self._add_lineage_tracking(
                 transformed_response,
                 context_data,
                 was_retried=was_retried,
                 retry_attempts=retry_attempts,
-                retry_entry_id=retry_entry_id,
+                error_type=error_type,
+                error_message=error_message,
+                exhausted=exhausted,
             )
 
             # Prepare source text

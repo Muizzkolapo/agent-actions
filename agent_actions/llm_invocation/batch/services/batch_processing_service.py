@@ -540,82 +540,8 @@ class BatchProcessingService:
                 },
             )
 
-        if behavior == ExhaustedBehavior.DEAD_LETTER:
-            # Write failed records to .failed.json
-            self._write_dead_letter_file(
-                context_map=context_map,
-                output_directory=output_directory,
-                file_name=file_name,
-                batch_id=batch_id,
-                retry_result=retry_result,
-            )
-            logger.info(
-                "Wrote %d exhausted records to dead letter file",
-                retry_result.final_missing_count,
-                extra={"batch_id": batch_id, "on_exhausted": "dead_letter"},
-            )
-
-    def _write_dead_letter_file(
-        self,
-        context_map: Dict[str, Any],
-        output_directory: str,
-        file_name: str,
-        batch_id: str,
-        retry_result: Any,
-    ) -> None:
-        """Write exhausted records to a dead letter file.
-
-        Args:
-            context_map: Context map with record data
-            output_directory: Output directory path
-            file_name: Original file name
-            batch_id: Original batch ID
-            retry_result: Result from retry chain
-        """
-        import json
-        from datetime import datetime
-
-        # Get the final missing IDs from retry tracker or context
-        # Since we don't have direct access to missing IDs here, we'll use the retry log
-        try:
-            from agent_actions.utilities.retry_tracker import get_current_retry_tracker
-
-            tracker = get_current_retry_tracker()
-            if tracker:
-                exhausted_entries = tracker.get_entries(outcome="exhausted")
-                failed_records = [entry["record"] for entry in exhausted_entries]
-            else:
-                # Fallback: can't determine which records failed
-                failed_records = []
-                logger.warning("No retry tracker available for dead letter records")
-
-        except Exception as e:
-            logger.warning("Could not get exhausted records for dead letter: %s", e)
-            failed_records = []
-
-        if not failed_records:
-            return
-
-        # Build dead letter file path
-        dead_letter_path = Path(output_directory) / f"{Path(file_name).stem}.failed.json"
-
-        # Write dead letter file
-        dead_letter_data = {
-            "batch_id": batch_id,
-            "exhausted_at": datetime.now().isoformat(),
-            "retry_attempts": retry_result.total_attempts,
-            "records": failed_records,
-        }
-
-        ensure_directory_exists(dead_letter_path, is_file=True)
-        with open(dead_letter_path, "w", encoding="utf-8") as f:
-            json.dump(dead_letter_data, f, indent=2)
-
-        logger.info(
-            "Dead letter file written: %s (%d records)",
-            dead_letter_path,
-            len(failed_records),
-        )
+        # Note: CONTINUE behavior is now the only non-fail option
+        # Exhausted records are marked with _failed: true and _retry_metadata.exhausted: true
 
     def _get_retry_config(self, agent_config: Optional[Dict[str, Any]]) -> Optional["RetryConfig"]:
         """Get retry configuration from agent config.

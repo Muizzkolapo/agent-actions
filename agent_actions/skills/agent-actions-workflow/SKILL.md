@@ -166,7 +166,7 @@ defaults:
   # Retry: transient errors
   retry:
     max_attempts: 3
-    on_exhausted: dead_letter  # continue | fail | dead_letter
+    on_exhausted: continue  # continue | fail
 
   # Reprompt: validation errors (requires explicit config)
   reprompt:

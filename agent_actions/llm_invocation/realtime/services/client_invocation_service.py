@@ -10,13 +10,10 @@ import logging
 import time
 import random
 from dataclasses import dataclass
-from typing import Dict, Any, Optional, List, Union, Callable, TYPE_CHECKING
+from typing import Dict, Any, Optional, List, Union, Callable
 
 from agent_actions.errors import RateLimitError, NetworkError
 from agent_actions.recovery.recovery_config import RecoveryConfig, ExhaustedBehavior
-
-if TYPE_CHECKING:
-    from agent_actions.utilities.retry_tracker import RetryTracker
 
 from agent_actions.llm_invocation.providers.openai.client import OpenAIClient
 from agent_actions.llm_invocation.providers.ollama.client import OllamaClient
@@ -56,13 +53,17 @@ class InvocationResult:
         data: The response data from the LLM (List[Any])
         was_retried: Whether a retry occurred (attempt > 1)
         retry_attempts: Number of retry attempts made (0 = success on first try)
-        retry_entry_id: ID of the retry entry in the tracker (if any)
+        error_type: Type of error that triggered retry (if any)
+        error_message: Error message from last retry attempt (if any)
+        exhausted: Whether all retries were exhausted (max attempts reached)
     """
 
     data: List[Any]
     was_retried: bool = False
     retry_attempts: int = 0
-    retry_entry_id: Optional[str] = None
+    error_type: Optional[str] = None
+    error_message: Optional[str] = None
+    exhausted: bool = False
 
 
 class ClientInvocationService:
@@ -71,8 +72,7 @@ class ClientInvocationService:
     Uses unified RecoveryConfig for retry configuration, supporting:
     - retry: true | false | strict | {detailed config}
     - Exponential backoff with jitter
-    - Configurable exhaustion behavior (continue, fail, dead_letter)
-    - Event tracking via RetryTracker
+    - Configurable exhaustion behavior (continue or fail)
     """
 
     @staticmethod
@@ -87,23 +87,23 @@ class ClientInvocationService:
             retry: strict
             retry:
               max_attempts: 5
-              on_exhausted: dead_letter
+              on_exhausted: continue  # or 'fail'
 
             # New unified format
             recovery:
               retry:
                 max_attempts: 3
                 on_exhausted: fail
-              reprompt:
-                preset: smart
         """
         # Check for new unified recovery config
         recovery_value = agent_config.get("recovery")
         if recovery_value is not None:
+            logger.debug("Using recovery config from agent_config: %s", recovery_value)
             return RecoveryConfig.from_yaml(recovery_value=recovery_value)
 
         # Fall back to legacy retry config
         retry_value = agent_config.get("retry", True)
+        logger.debug("Using legacy retry config: %s", retry_value)
         reprompt_value = agent_config.get("reprompt", False)
         return RecoveryConfig.from_yaml(retry_value=retry_value, reprompt_value=reprompt_value)
 
@@ -146,8 +146,6 @@ class ClientInvocationService:
         recovery_config: RecoveryConfig,
         model_vendor: str,
         action_name: Optional[str] = None,
-        record: Optional[Dict[str, Any]] = None,
-        retry_tracker: Optional["RetryTracker"] = None,
     ) -> InvocationResult:
         """
         Invoke a function with retry for transient errors.
@@ -159,9 +157,7 @@ class ClientInvocationService:
             invoke_fn: Function to invoke (should return response data)
             recovery_config: RecoveryConfig with retry settings
             model_vendor: Vendor name for logging
-            action_name: Action/agent name for tracking (optional)
-            record: Record data being processed for tracking (optional)
-            retry_tracker: RetryTracker instance for persistent logging (optional)
+            action_name: Action/agent name for logging (optional)
 
         Returns:
             InvocationResult with response data and retry state
@@ -179,43 +175,39 @@ class ClientInvocationService:
         base_delay = retry_config.backoff_base
         max_delay = retry_config.backoff_max
 
+        logger.debug(
+            "Retry config: max_attempts=%d, backoff_base=%.1f, backoff_max=%.1f, on_exhausted=%s",
+            max_attempts,
+            base_delay,
+            max_delay,
+            retry_config.on_exhausted.value,
+        )
+
         last_exception = None
-        first_entry_id = None  # Track the FIRST retry entry (not overwritten)
+        first_error_type = None
+        first_error_message = None
 
         for attempt in range(1, max_attempts + 1):
             try:
                 result = invoke_fn()
-                # Mark as success if we had a retry entry
-                if first_entry_id and retry_tracker:
-                    retry_tracker.mark_success(first_entry_id)
-                # Return with retry state
+                # Return with retry state (include error info if retried)
                 return InvocationResult(
                     data=result,
                     was_retried=attempt > 1,
                     retry_attempts=attempt - 1,
-                    retry_entry_id=first_entry_id,
+                    error_type=first_error_type,
+                    error_message=first_error_message,
                 )
 
             except RETRYABLE_ERRORS as e:
                 last_exception = e
 
-                # Log retry event to tracker - only create entry on FIRST failure
-                if retry_tracker and action_name and first_entry_id is None:
-                    first_entry_id = retry_tracker.log_retry(
-                        action=action_name,
-                        mode="online",
-                        attempt=attempt,
-                        max_attempts=max_attempts,
-                        error_type=type(e).__name__,
-                        error_message=str(e),
-                        record=record or {},
-                    )
+                # Capture error info on first failure
+                if first_error_type is None:
+                    first_error_type = type(e).__name__
+                    first_error_message = str(e)
 
                 if attempt >= max_attempts:
-                    # Mark as exhausted
-                    if first_entry_id and retry_tracker:
-                        retry_tracker.mark_exhausted(first_entry_id)
-
                     logger.warning(
                         "Retry exhausted for %s after %d attempts: %s",
                         model_vendor,
@@ -234,7 +226,9 @@ class ClientInvocationService:
                         data=exhausted_data,
                         was_retried=True,
                         retry_attempts=max_attempts,
-                        retry_entry_id=first_entry_id,
+                        error_type=first_error_type,
+                        error_message=first_error_message,
+                        exhausted=True,
                     )
 
                 # Calculate backoff delay
@@ -268,13 +262,13 @@ class ClientInvocationService:
         """Handle exhausted retry attempts based on configured behavior.
 
         Args:
-            behavior: ExhaustedBehavior (continue, fail, dead_letter)
+            behavior: ExhaustedBehavior (continue or fail)
             error: The last exception
             action_name: Name of the action that failed
             attempts: Number of attempts made
 
         Returns:
-            Empty list for continue/dead_letter
+            Empty list for continue behavior
 
         Raises:
             ProcessingError for fail behavior
@@ -292,15 +286,7 @@ class ClientInvocationService:
                 },
             )
 
-        # CONTINUE or DEAD_LETTER - return empty, let caller handle
-        # Dead letter handling happens at a higher level (workflow orchestration)
-        if behavior == ExhaustedBehavior.DEAD_LETTER:
-            logger.info(
-                "Record will be written to dead letter for '%s' after %d attempts",
-                action_name,
-                attempts,
-            )
-
+        # CONTINUE - return empty, caller will create failure record with retry metadata
         return []
 
     @staticmethod
@@ -314,7 +300,6 @@ class ClientInvocationService:
         formatted_prompt: Optional[str] = None,
         tool_args: Optional[Dict[str, Any]] = None,
         source_content: Optional[Any] = None,
-        output_directory: Optional[str] = None,
         action_name: Optional[str] = None,
     ) -> InvocationResult:
         """
@@ -335,7 +320,6 @@ class ClientInvocationService:
             formatted_prompt: Pre-formatted prompt for groq (optional)
             tool_args: Tool arguments (optional)
             source_content: Source content for tool client (optional)
-            output_directory: Output directory for retry tracking (optional)
             action_name: Action name for retry tracking (optional)
 
         Returns:
@@ -366,38 +350,12 @@ class ClientInvocationService:
             # Standard client invocation
             return client.invoke(agent_config, prompt_config, context_data, schema)
 
-        # Get retry tracker - either from explicit output_directory or current context
-        retry_tracker = None
-        if output_directory:
-            from agent_actions.utilities.retry_tracker import get_retry_tracker
-
-            retry_tracker = get_retry_tracker(output_directory)
-        else:
-            # Check for current tracker context (set by workflow orchestration)
-            from agent_actions.utilities.retry_tracker import get_current_retry_tracker
-
-            retry_tracker = get_current_retry_tracker()
-
-        # Prepare record data for tracking
-        record = None
-        if isinstance(context_data, dict):
-            record = context_data
-        elif isinstance(context_data, str):
-            try:
-                record = json.loads(context_data)
-            except (json.JSONDecodeError, TypeError):
-                record = {
-                    "raw_context": context_data[:500] if len(context_data) > 500 else context_data
-                }
-
         # Invoke with retry for transient errors
         result = ClientInvocationService._invoke_with_retry(
             do_invoke,
             recovery_config,
             model_vendor,
             action_name=action_name or agent_config.get("agent_type"),
-            record=record,
-            retry_tracker=retry_tracker,
         )
 
         # Single-response clients return single item, wrap in list for consistency

@@ -10,10 +10,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from agent_actions.utilities.retry_tracker import RetryTracker
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from agent_actions.llm_invocation.batch.retry.batch_retry_config import (
     RetryConfig,
@@ -130,39 +127,6 @@ class BatchRetryOrchestrator:
         self._context_manager = context_manager
         self._default_retry_config = retry_config or RetryConfig.default()
         self._poll_interval = poll_interval
-
-    def _get_retry_tracker(self, output_directory: str) -> Optional["RetryTracker"]:
-        """
-        Get retry tracker for logging retry events.
-
-        First checks for current tracker context (set by workflow orchestration),
-        then falls back to creating one from output_directory.
-
-        Args:
-            output_directory: Output directory for retry log
-
-        Returns:
-            RetryTracker instance if available, None otherwise
-        """
-        try:
-            from agent_actions.utilities.retry_tracker import (
-                get_current_retry_tracker,
-                get_retry_tracker,
-            )
-
-            # Check for current tracker context first
-            tracker = get_current_retry_tracker()
-            if tracker:
-                return tracker
-
-            # Fall back to creating one from output directory
-            if output_directory:
-                return get_retry_tracker(output_directory)
-
-            return None
-        except ImportError:
-            logger.debug("RetryTracker not available, skipping retry tracking")
-            return None
 
     def should_retry(
         self,
@@ -412,30 +376,6 @@ class BatchRetryOrchestrator:
             f"Batch {batch_id} did not complete within {self.MAX_POLL_ATTEMPTS} poll attempts"
         )
 
-    def _log_retry_events(
-        self,
-        retry_tracker: Optional["RetryTracker"],
-        retry_context: Dict[str, Any],
-        action_name: str,
-        current_attempt: int,
-        max_attempts: int,
-        entry_ids: Dict[str, str],
-    ) -> None:
-        """Log retry events for each record in the retry context."""
-        if not retry_tracker:
-            return
-        for custom_id, record_data in retry_context.items():
-            entry_id = retry_tracker.log_retry(
-                action=action_name,
-                mode="batch",
-                attempt=current_attempt,
-                max_attempts=max_attempts,
-                error_type="MissingRecord",
-                error_message=f"Record {custom_id} missing from batch results",
-                record=record_data,
-            )
-            entry_ids[custom_id] = entry_id
-
     def _reconcile_retry_results(
         self, retry_batch_id: str, provider: Any, output_directory: str, prepared_context: Dict
     ) -> Tuple[Set[str], Set[str]]:
@@ -453,32 +393,6 @@ class BatchRetryOrchestrator:
         retry_reconciliation = retry_reconciler.reconcile()
         succeeded_ids = set(prepared_context.keys()) - retry_reconciliation.missing_ids
         return succeeded_ids, retry_reconciliation.missing_ids
-
-    def _mark_successful_retries(
-        self,
-        retry_tracker: Optional["RetryTracker"],
-        succeeded_ids: Set[str],
-        entry_ids: Dict[str, str],
-    ) -> None:
-        """Mark successful retries in the tracker."""
-        if not retry_tracker:
-            return
-        for custom_id in succeeded_ids:
-            if custom_id in entry_ids:
-                retry_tracker.mark_success(entry_ids[custom_id])
-
-    def _mark_exhausted_records(
-        self,
-        retry_tracker: Optional["RetryTracker"],
-        missing_ids: Set[str],
-        entry_ids: Dict[str, str],
-    ) -> None:
-        """Mark exhausted records in the tracker."""
-        if not retry_tracker or not missing_ids:
-            return
-        for custom_id in missing_ids:
-            if custom_id in entry_ids:
-                retry_tracker.mark_exhausted(entry_ids[custom_id])
 
     def _execute_single_retry_iteration(
         self,
@@ -563,12 +477,9 @@ class BatchRetryOrchestrator:
         current_parent_id = original_batch_id
         current_context = context_map
 
-        retry_tracker = self._get_retry_tracker(output_directory)
         provider = self._client_resolver.get_for_batch_id(
             original_batch_id, self._registry_manager, output_directory
         )
-        entry_ids: Dict[str, str] = {}
-        action_name = agent_config.get("agent_type", "unknown")
 
         while self.should_retry(current_missing_ids, current_attempt, config):
             current_attempt += 1
@@ -578,15 +489,6 @@ class BatchRetryOrchestrator:
             if not retry_context:
                 logger.warning("No retry records found in context, stopping retry chain")
                 break
-
-            self._log_retry_events(
-                retry_tracker,
-                retry_context,
-                action_name,
-                current_attempt,
-                config.max_attempts,
-                entry_ids,
-            )
 
             batch_id, prepared_context, new_missing_ids = self._execute_single_retry_iteration(
                 retry_context,
@@ -604,7 +506,6 @@ class BatchRetryOrchestrator:
 
             succeeded_ids = set(prepared_context.keys()) - new_missing_ids
             result.final_success_count += len(succeeded_ids)
-            self._mark_successful_retries(retry_tracker, succeeded_ids, entry_ids)
 
             current_missing_ids = new_missing_ids
             current_parent_id = batch_id
@@ -618,7 +519,6 @@ class BatchRetryOrchestrator:
             )
 
         result.final_missing_count = len(current_missing_ids)
-        self._mark_exhausted_records(retry_tracker, current_missing_ids, entry_ids)
 
         logger.info(
             "Retry chain complete for %s: %d attempts, %d success, %d missing",

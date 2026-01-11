@@ -1,18 +1,19 @@
 """
-Unified recovery module for handling transient errors and validation failures.
+Unified recovery module for handling transient errors.
 
-This module provides a unified approach to:
-- Retry: Handle transient errors (rate limits, network issues)
-- Reprompt: Handle validation errors (bad JSON, schema violations)
+This module provides retry handling for transient errors (rate limits, network issues).
 
-Both share:
+Features:
 - Max attempts configuration
-- Exhaustion behavior (continue, fail, dead_letter)
-- Event tracking via RetryTracker
+- Exhaustion behavior (continue or fail)
+- Retry metadata embedded in output records (_retry_metadata)
 
-Key difference:
-- Retry: Same request, wait with backoff, retry
-- Reprompt: Modify prompt with error feedback, retry
+The retry state is tracked in each output record's _retry_metadata field, including:
+- was_retried: Whether the record was retried
+- retry_attempts: Number of retry attempts made
+- error_type: Type of error that triggered retry
+- error_message: Error message from the retry
+- exhausted: Whether max attempts were reached
 """
 
 from agent_actions.recovery.recovery_config import RecoveryConfig, RecoveryMode

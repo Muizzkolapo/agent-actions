@@ -95,6 +95,9 @@ class RetryMetadata:
     Attributes:
         was_retried: Whether this record required retry
         retry_attempts: Number of retry attempts (0 = succeeded on first try)
+        error_type: Type of error that triggered retry (e.g., 'RateLimitError')
+        error_message: Error message from the retry-triggering error
+        exhausted: Whether all retry attempts were exhausted without success
         original_batch_id: ID of the original batch (batch mode only)
         final_batch_id: ID of the batch that succeeded (batch mode only)
         retry_reason: Reason for retry if applicable
@@ -102,6 +105,9 @@ class RetryMetadata:
 
     was_retried: bool = False
     retry_attempts: int = 0
+    error_type: Optional[str] = None
+    error_message: Optional[str] = None
+    exhausted: bool = False
     original_batch_id: Optional[str] = None
     final_batch_id: Optional[str] = None
     retry_reason: Optional[str] = None
@@ -116,6 +122,12 @@ class RetryMetadata:
             "was_retried": self.was_retried,
             "retry_attempts": self.retry_attempts,
         }
+        if self.error_type is not None:
+            result["error_type"] = self.error_type
+        if self.error_message is not None:
+            result["error_message"] = self.error_message
+        if self.exhausted:
+            result["exhausted"] = self.exhausted
         if self.original_batch_id is not None:
             result["original_batch_id"] = self.original_batch_id
         if self.final_batch_id is not None:
@@ -137,6 +149,9 @@ class RetryMetadata:
         return cls(
             was_retried=data.get("was_retried", False),
             retry_attempts=data.get("retry_attempts", 0),
+            error_type=data.get("error_type"),
+            error_message=data.get("error_message"),
+            exhausted=data.get("exhausted", False),
             original_batch_id=data.get("original_batch_id"),
             final_batch_id=data.get("final_batch_id"),
             retry_reason=data.get("retry_reason"),
