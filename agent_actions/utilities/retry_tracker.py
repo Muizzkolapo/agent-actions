@@ -57,6 +57,8 @@ class RetryEntry:
         entry_id: Optional[str] = None,
         timestamp: Optional[str] = None,
         outcome: str = "pending",
+        target_id: Optional[str] = None,
+        node_id: Optional[str] = None,
     ):
         """
         Initialize retry entry.
@@ -72,6 +74,8 @@ class RetryEntry:
             entry_id: Unique ID (auto-generated if not provided)
             timestamp: ISO timestamp (auto-generated if not provided)
             outcome: "pending", "success", or "exhausted"
+            target_id: Target ID of the output record (set after processing)
+            node_id: Node ID of the output record (set after processing)
         """
         self.id = entry_id or str(uuid.uuid4())[:8]
         self.timestamp = timestamp or datetime.now().isoformat()
@@ -83,10 +87,12 @@ class RetryEntry:
         self.error_message = error_message
         self.record = record
         self.outcome = outcome
+        self.target_id = target_id
+        self.node_id = node_id
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             "id": self.id,
             "timestamp": self.timestamp,
             "action": self.action,
@@ -98,6 +104,12 @@ class RetryEntry:
             "record": self.record,
             "outcome": self.outcome,
         }
+        # Only include target_id and node_id if set
+        if self.target_id is not None:
+            result["target_id"] = self.target_id
+        if self.node_id is not None:
+            result["node_id"] = self.node_id
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "RetryEntry":
@@ -113,6 +125,8 @@ class RetryEntry:
             error_message=data["error_message"],
             record=data["record"],
             outcome=data.get("outcome", "pending"),
+            target_id=data.get("target_id"),
+            node_id=data.get("node_id"),
         )
 
 
@@ -329,6 +343,43 @@ class RetryTracker:
                     entry.outcome = "exhausted"
                     self._save()
                     logger.debug("Retry entry %s marked as exhausted", entry_id)
+                    return True
+        return False
+
+    def update_entry_ids(
+        self,
+        entry_id: str,
+        target_id: Optional[str] = None,
+        node_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Update an entry with target_id and node_id after they are known.
+
+        This is called after LLM response is processed and IDs are generated,
+        enabling correlation between retry log entries and output records.
+
+        Args:
+            entry_id: Entry ID to update
+            target_id: The target_id of the output record
+            node_id: The node_id of the output record
+
+        Returns:
+            True if entry was found and updated
+        """
+        with self._lock:
+            for entry in self._entries:
+                if entry.id == entry_id:
+                    if target_id is not None:
+                        entry.target_id = target_id
+                    if node_id is not None:
+                        entry.node_id = node_id
+                    self._save()
+                    logger.debug(
+                        "Retry entry %s updated with target_id=%s, node_id=%s",
+                        entry_id,
+                        target_id,
+                        node_id,
+                    )
                     return True
         return False
 

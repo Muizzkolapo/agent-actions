@@ -50,8 +50,9 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         return prep_result.formatted_prompt
 
     def _execute_agent(self, enriched_data, formatted_prompt):
-        """Execute the dynamic agent and return response."""
+        """Execute the dynamic agent and return response with retry state."""
         tools_path = self.agent_config.get("tools", {}).get("path")
+        # run_dynamic_agent now returns (response, executed, was_retried, retry_attempts, retry_entry_id)
         return run_dynamic_agent(
             self.agent_config,
             self.agent_name,
@@ -60,8 +61,23 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             tools_path=tools_path,
         )
 
-    def _add_lineage_tracking(self, transformed_response, context_data):
-        """Add lineage tracking and metadata to transformed response."""
+    def _add_lineage_tracking(
+        self,
+        transformed_response,
+        context_data,
+        was_retried: bool = False,
+        retry_attempts: int = 0,
+        retry_entry_id=None,
+    ):
+        """Add lineage tracking and metadata to transformed response.
+
+        Args:
+            transformed_response: The response to add lineage tracking to
+            context_data: The context data for lineage tracking
+            was_retried: Whether a retry occurred during invocation
+            retry_attempts: Number of retry attempts made
+            retry_entry_id: ID of the retry entry in the tracker (if any)
+        """
         idx = self.agent_config.get("idx", 0)
 
         # Build metadata for online mode output consistency
@@ -69,9 +85,10 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             response=None,  # Raw response not available at this level
             agent_config=self.agent_config,
         )
+        # Use actual retry state from invocation
         retry_metadata = MetadataExtractor.build_retry_metadata(
-            was_retried=False,
-            retry_attempts=0,
+            was_retried=was_retried,
+            retry_attempts=retry_attempts,
         )
 
         for i, node in enumerate(transformed_response):
@@ -85,6 +102,17 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
                 metadata=response_metadata.to_dict(),
                 retry_metadata=retry_metadata.to_dict(),
             )
+            # Update retry tracker with target_id and node_id if we have a retry entry
+            if retry_entry_id:
+                from agent_actions.utilities.retry_tracker import get_current_retry_tracker
+
+                tracker = get_current_retry_tracker()
+                if tracker:
+                    tracker.update_entry_ids(
+                        entry_id=retry_entry_id,
+                        target_id=transformed_response[i].get("target_id"),
+                        node_id=node_id,
+                    )
         return transformed_response
 
     def _transform_response(self, response, executed, enriched_data, source_guid):
@@ -117,8 +145,10 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             # Prepare prompt
             formatted_prompt = self._prepare_prompt(source_content, formatted_prompt)
 
-            # Execute agent
-            response, executed = self._execute_agent(enriched_data, formatted_prompt)
+            # Execute agent - now returns retry state
+            response, executed, was_retried, retry_attempts, retry_entry_id = self._execute_agent(
+                enriched_data, formatted_prompt
+            )
 
             # Ensure source_guid exists
             if not source_guid:
@@ -131,8 +161,14 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
                 response, executed, enriched_data, source_guid
             )
 
-            # Add lineage tracking
-            transformed_response = self._add_lineage_tracking(transformed_response, context_data)
+            # Add lineage tracking with actual retry state
+            transformed_response = self._add_lineage_tracking(
+                transformed_response,
+                context_data,
+                was_retried=was_retried,
+                retry_attempts=retry_attempts,
+                retry_entry_id=retry_entry_id,
+            )
 
             # Prepare source text
             src_text = self._prepare_source_text(source_guid, enriched_data, context_data)

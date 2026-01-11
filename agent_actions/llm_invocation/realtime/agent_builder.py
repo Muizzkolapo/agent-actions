@@ -7,7 +7,7 @@ with support for multiple LLM vendors.
 
 import json
 import sys
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List, Union, Tuple
 from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from .services import (
     PromptService,
@@ -27,7 +27,7 @@ def create_dynamic_agent(
     source_content: Optional[Any] = None,
     additional_context: Optional[Dict] = None,
     original_context: Optional[Union[str, Dict]] = None,
-) -> List[Any]:
+) -> Tuple[List[Any], bool, int, Optional[str]]:
     """
     Build and execute a prompt against the selected vendor.
 
@@ -46,7 +46,11 @@ def create_dynamic_agent(
                          If not provided, uses context_data_str for both LLM and tools.
 
     Returns:
-        List of response items from the LLM
+        Tuple of (response_data, was_retried, retry_attempts, retry_entry_id):
+            - response_data: List of response items from the LLM
+            - was_retried: Whether a retry occurred
+            - retry_attempts: Number of retry attempts made
+            - retry_entry_id: ID of the retry entry in the tracker (if any)
     """
     # IMPORTANT: formatted_prompt MUST be prepared using PromptPreparationService
     # before calling create_dynamic_agent(). This ensures:
@@ -118,8 +122,8 @@ def create_dynamic_agent(
     # Get granularity
     granularity = (agent_config.get("granularity") or "record").lower()
 
-    # Invoke client
-    response_data = ClientInvocationService.invoke_client(
+    # Invoke client - returns InvocationResult with retry state
+    result = ClientInvocationService.invoke_client(
         model_vendor,
         agent_config,
         prompt_config,
@@ -133,8 +137,8 @@ def create_dynamic_agent(
 
     # Merge captured results if any
     if captured_results:
-        for item in response_data:
+        for item in result.data:
             if isinstance(item, dict):
                 item.update(captured_results)
 
-    return response_data
+    return (result.data, result.was_retried, result.retry_attempts, result.retry_entry_id)

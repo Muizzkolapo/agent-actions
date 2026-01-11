@@ -121,7 +121,7 @@ def run_dynamic_agent(
     source_content: Optional[Any] = None,
     llm_context: Optional[Any] = None,
     skip_guard_eval: bool = False,
-) -> tuple[Any, bool]:
+) -> tuple[Any, bool, bool, int, Optional[str]]:
     """Execute an agent with conditional guard processing and data filtering.
 
     Handles both legacy conditional clauses (UDF-based) and modern guard conditions
@@ -158,17 +158,21 @@ def run_dynamic_agent(
                         Used when guard was evaluated early (before prompt rendering).
 
     Returns:
-        Tuple of (response/context, was_executed) where was_executed indicates
-        whether the agent actually processed the data or was skipped.
+        Tuple of (response/context, was_executed, was_retried, retry_attempts, retry_entry_id):
+            - response/context: The response data or original context if skipped
+            - was_executed: Whether the agent actually processed the data
+            - was_retried: Whether a retry occurred during invocation
+            - retry_attempts: Number of retry attempts made
+            - retry_entry_id: ID of the retry entry in the tracker (if any)
     """
     # Skip guard evaluation if already done by caller (e.g., DataGenerator)
     if not skip_guard_eval:
         if _should_skip_legacy_conditional(agent_config, context):
-            return (context, False)
+            return (context, False, False, 0, None)
         if _should_skip_guard(agent_config, context):
-            return (context, False)
+            return (context, False, False, 0, None)
         if _should_filter_guard(agent_config, context):
-            return (None, False)
+            return (None, False, False, 0, None)
 
     # Extract content from nested structure if needed (for tools/guards)
     if isinstance(context, dict) and "content" in context and isinstance(context["content"], dict):
@@ -183,7 +187,7 @@ def run_dynamic_agent(
     # CRITICAL FIX: Pass both contexts to agent_builder
     # - llm_data: Transformed context for LLM (has context_scope.drop applied)
     # - processed_context: Original context for tools/UDFs (has all fields from previous actions)
-    response = agent_builder.create_dynamic_agent(
+    response, was_retried, retry_attempts, retry_entry_id = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
         llm_data,  # Send transformed context to LLM
@@ -199,7 +203,7 @@ def run_dynamic_agent(
     # transform_with_observe() using the same pathway as observe directive
     # (via DataTransformer.update_schema_objects)
 
-    return (response, True)
+    return (response, True, was_retried, retry_attempts, retry_entry_id)
 
 
 def _should_skip_legacy_conditional(agent_config: Dict, context: Any) -> bool:

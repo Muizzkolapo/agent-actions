@@ -412,11 +412,15 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            # create_agent_with_data now returns 6 values including retry state
             if hasattr(self.data_generator, "create_agent_with_data_async"):
                 (
                     generated_data,
                     executed,
                     passthrough_fields,
+                    was_retried,
+                    retry_attempts,
+                    retry_entry_id,
                 ) = await self.data_generator.create_agent_with_data_async(
                     contents,
                     source_content,
@@ -424,7 +428,14 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     file_path=file_path,
                 )
             else:
-                generated_data, executed, passthrough_fields = await asyncio.to_thread(
+                (
+                    generated_data,
+                    executed,
+                    passthrough_fields,
+                    was_retried,
+                    retry_attempts,
+                    retry_entry_id,
+                ) = await asyncio.to_thread(
                     self.data_generator.create_agent_with_data,
                     contents,
                     source_content,
@@ -454,9 +465,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
+                # Use actual retry state from invocation
                 retry_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
+                    was_retried=was_retried,
+                    retry_attempts=retry_attempts,
                 )
 
                 for i, obj in enumerate(processed):
@@ -473,6 +485,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         metadata=response_metadata.to_dict(),
                         retry_metadata=retry_metadata.to_dict(),
                     )
+                    # Update retry tracker with target_id and node_id if we have a retry entry
+                    if retry_entry_id:
+                        from agent_actions.utilities.retry_tracker import get_current_retry_tracker
+
+                        tracker = get_current_retry_tracker()
+                        if tracker:
+                            tracker.update_entry_ids(
+                                entry_id=retry_entry_id,
+                                target_id=obj.get("target_id"),
+                                node_id=node_id,
+                            )
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -497,7 +520,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     else:
                         processed_item.update(passthrough_fields)
 
-                # Add metadata to skipped item for consistency
+                # Add metadata to skipped item for consistency (no retry for skipped items)
                 skip_metadata = MetadataExtractor.build_retry_metadata(
                     was_retried=False,
                     retry_attempts=0,
@@ -625,13 +648,19 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            generated_data, executed, passthrough_fields = (
-                self.data_generator.create_agent_with_data(
-                    contents,
-                    source_content,
-                    current_item=item,
-                    file_path=file_path,
-                )
+            # create_agent_with_data now returns 6 values including retry state
+            (
+                generated_data,
+                executed,
+                passthrough_fields,
+                was_retried,
+                retry_attempts,
+                retry_entry_id,
+            ) = self.data_generator.create_agent_with_data(
+                contents,
+                source_content,
+                current_item=item,
+                file_path=file_path,
             )
             if executed:
                 processed = self.data_processor.process_item(
@@ -647,9 +676,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
+                # Use actual retry state from invocation
                 retry_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
+                    was_retried=was_retried,
+                    retry_attempts=retry_attempts,
                 )
 
                 for i, obj in enumerate(processed):
@@ -666,6 +696,17 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         metadata=response_metadata.to_dict(),
                         retry_metadata=retry_metadata.to_dict(),
                     )
+                    # Update retry tracker with target_id and node_id if we have a retry entry
+                    if retry_entry_id:
+                        from agent_actions.utilities.retry_tracker import get_current_retry_tracker
+
+                        tracker = get_current_retry_tracker()
+                        if tracker:
+                            tracker.update_entry_ids(
+                                entry_id=retry_entry_id,
+                                target_id=obj.get("target_id"),
+                                node_id=node_id,
+                            )
                     processed[i] = obj
             else:
                 # Agent was not executed (skipped by guard or filtered out)
@@ -694,7 +735,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     processed_item, self.agent_config, record_index=record_index
                 )
 
-                # Add metadata to skipped item for consistency
+                # Add metadata to skipped item for consistency (no retry for skipped items)
                 skip_metadata = MetadataExtractor.build_retry_metadata(
                     was_retried=False,
                     retry_attempts=0,

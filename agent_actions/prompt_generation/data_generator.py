@@ -172,7 +172,7 @@ class DataGenerator(IGenerator):
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
-    ) -> Tuple[List[Dict], bool, Dict]:
+    ) -> Tuple[List[Dict], bool, Dict, bool, int, Optional[str]]:
         """
         Create an agent with the provided data and generate results.
 
@@ -190,6 +190,9 @@ class DataGenerator(IGenerator):
             - generated data (List[Dict])
             - flag indicating if agent was executed (bool)
             - passthrough_fields extracted from field_context (Dict)
+            - was_retried: Whether a retry occurred during invocation (bool)
+            - retry_attempts: Number of retry attempts made (int)
+            - retry_entry_id: ID of the retry entry in the tracker (Optional[str])
 
         Raises:
             RuntimeError: If agent creation or data generation fails
@@ -216,12 +219,12 @@ class DataGenerator(IGenerator):
                         logger.debug(
                             "Guard filter: '%s' returning None (filtered out)", self.agent_name
                         )
-                        return (None, False, {})
+                        return (None, False, {}, False, 0, None)
                     # Skip behavior: return original contents as passthrough
                     logger.debug(
                         "Guard skip: '%s' returning contents as passthrough", self.agent_name
                     )
-                    return (contents, False, {})
+                    return (contents, False, {}, False, 0, None)
 
             # Guard passed (or no guard) - proceed with prompt preparation
             # Resolve tools_path for dispatch_task() injection
@@ -251,7 +254,7 @@ class DataGenerator(IGenerator):
             # - llm_context: Transformed data for LLM (has context_scope.drop applied)
             # Also pass skip_guard_eval=True since we already evaluated guards above
             tool_args = self.agent_config.get("tool_args", {})
-            response, executed = run_dynamic_agent(
+            response, executed, was_retried, retry_attempts, retry_entry_id = run_dynamic_agent(
                 self.agent_config,
                 self.agent_name,
                 contents,  # Original contents for guards/tools/UDFs
@@ -263,6 +266,13 @@ class DataGenerator(IGenerator):
                 skip_guard_eval=self._has_guard_condition(),  # Skip if already evaluated
             )
 
-            return (response, executed, prep_result.passthrough_fields)
+            return (
+                response,
+                executed,
+                prep_result.passthrough_fields,
+                was_retried,
+                retry_attempts,
+                retry_entry_id,
+            )
         except (ValueError, KeyError, TypeError, RuntimeError) as e:
             raise GenerationError(f"Failed to create agent with data: {str(e)}", cause=e) from e

@@ -9,6 +9,7 @@ import json
 import logging
 import time
 import random
+from dataclasses import dataclass
 from typing import Dict, Any, Optional, List, Union, Callable, TYPE_CHECKING
 
 from agent_actions.errors import RateLimitError, NetworkError
@@ -45,6 +46,23 @@ SINGLE_RESPONSE_CLIENTS: set = {"cohere", "mistral", "anthropic", "groq"}
 
 # Errors that should trigger retry (transient errors)
 RETRYABLE_ERRORS = (RateLimitError, NetworkError)
+
+
+@dataclass
+class InvocationResult:
+    """Result from client invocation including retry state.
+
+    Attributes:
+        data: The response data from the LLM (List[Any])
+        was_retried: Whether a retry occurred (attempt > 1)
+        retry_attempts: Number of retry attempts made (0 = success on first try)
+        retry_entry_id: ID of the retry entry in the tracker (if any)
+    """
+
+    data: List[Any]
+    was_retried: bool = False
+    retry_attempts: int = 0
+    retry_entry_id: Optional[str] = None
 
 
 class ClientInvocationService:
@@ -130,7 +148,7 @@ class ClientInvocationService:
         action_name: Optional[str] = None,
         record: Optional[Dict[str, Any]] = None,
         retry_tracker: Optional["RetryTracker"] = None,
-    ) -> List[Any]:
+    ) -> InvocationResult:
         """
         Invoke a function with retry for transient errors.
 
@@ -146,7 +164,7 @@ class ClientInvocationService:
             retry_tracker: RetryTracker instance for persistent logging (optional)
 
         Returns:
-            Response data from successful invocation
+            InvocationResult with response data and retry state
 
         Raises:
             Last exception if all retries exhausted and on_exhausted=fail
@@ -155,29 +173,35 @@ class ClientInvocationService:
         retry_config = recovery_config.retry
 
         if not retry_config.enabled:
-            return invoke_fn()
+            return InvocationResult(data=invoke_fn())
 
         max_attempts = retry_config.max_attempts
         base_delay = retry_config.backoff_base
         max_delay = retry_config.backoff_max
 
         last_exception = None
-        entry_id = None
+        first_entry_id = None  # Track the FIRST retry entry (not overwritten)
 
         for attempt in range(1, max_attempts + 1):
             try:
                 result = invoke_fn()
                 # Mark as success if we had a retry entry
-                if entry_id and retry_tracker:
-                    retry_tracker.mark_success(entry_id)
-                return result
+                if first_entry_id and retry_tracker:
+                    retry_tracker.mark_success(first_entry_id)
+                # Return with retry state
+                return InvocationResult(
+                    data=result,
+                    was_retried=attempt > 1,
+                    retry_attempts=attempt - 1,
+                    retry_entry_id=first_entry_id,
+                )
 
             except RETRYABLE_ERRORS as e:
                 last_exception = e
 
-                # Log retry event to tracker
-                if retry_tracker and action_name:
-                    entry_id = retry_tracker.log_retry(
+                # Log retry event to tracker - only create entry on FIRST failure
+                if retry_tracker and action_name and first_entry_id is None:
+                    first_entry_id = retry_tracker.log_retry(
                         action=action_name,
                         mode="online",
                         attempt=attempt,
@@ -189,8 +213,8 @@ class ClientInvocationService:
 
                 if attempt >= max_attempts:
                     # Mark as exhausted
-                    if entry_id and retry_tracker:
-                        retry_tracker.mark_exhausted(entry_id)
+                    if first_entry_id and retry_tracker:
+                        retry_tracker.mark_exhausted(first_entry_id)
 
                     logger.warning(
                         "Retry exhausted for %s after %d attempts: %s",
@@ -200,11 +224,17 @@ class ClientInvocationService:
                     )
 
                     # Handle based on on_exhausted behavior
-                    return ClientInvocationService._handle_exhausted(
+                    exhausted_data = ClientInvocationService._handle_exhausted(
                         retry_config.on_exhausted,
                         e,
                         action_name or model_vendor,
                         max_attempts,
+                    )
+                    return InvocationResult(
+                        data=exhausted_data,
+                        was_retried=True,
+                        retry_attempts=max_attempts,
+                        retry_entry_id=first_entry_id,
                     )
 
                 # Calculate backoff delay
@@ -226,7 +256,7 @@ class ClientInvocationService:
         # Should not reach here, but just in case
         if last_exception:
             raise last_exception
-        return []
+        return InvocationResult(data=[])
 
     @staticmethod
     def _handle_exhausted(
@@ -286,7 +316,7 @@ class ClientInvocationService:
         source_content: Optional[Any] = None,
         output_directory: Optional[str] = None,
         action_name: Optional[str] = None,
-    ) -> List[Any]:
+    ) -> InvocationResult:
         """
         Delegate to the specific client and normalize the response.
 
@@ -309,7 +339,7 @@ class ClientInvocationService:
             action_name: Action name for retry tracking (optional)
 
         Returns:
-            List of response items from the client
+            InvocationResult with response data and retry state
 
         Raises:
             ValueError: If client is not supported
@@ -325,10 +355,8 @@ class ClientInvocationService:
             response_data = client.invoke(
                 agent_config, context_data, tool_args=tool_args, source_content=source_content
             )
-            # Tool client with file granularity returns immediately
-            if granularity == "file":
-                return response_data
-            return response_data
+            # Tool client returns InvocationResult with no retry (local execution)
+            return InvocationResult(data=response_data)
 
         # Define invoke function for retry wrapper
         def do_invoke() -> List[Any]:
@@ -363,7 +391,7 @@ class ClientInvocationService:
                 }
 
         # Invoke with retry for transient errors
-        response_data = ClientInvocationService._invoke_with_retry(
+        result = ClientInvocationService._invoke_with_retry(
             do_invoke,
             recovery_config,
             model_vendor,
@@ -374,6 +402,6 @@ class ClientInvocationService:
 
         # Single-response clients return single item, wrap in list for consistency
         if model_vendor in SINGLE_RESPONSE_CLIENTS:
-            return [response_data]
+            result.data = [result.data]
 
-        return response_data
+        return result
