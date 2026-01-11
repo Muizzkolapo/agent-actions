@@ -165,15 +165,39 @@ class AgentRunner:
     def _resolve_dependency_directories(
         self, agent_folder: Path, dependencies: List[str]
     ) -> List[Path]:
-        """Resolve upstream directories from explicit dependencies (DAG/Diamond pattern)."""
+        """Resolve upstream directories from explicit dependencies (DAG/Diamond pattern).
+
+        For robustness, searches for existing directories matching the dependency name
+        pattern rather than relying solely on agent_indices, which may be stale.
+        """
         upstream_dirs: List[Path] = []
+        target_dir = agent_folder / "target"
+
         for dep_name in dependencies:
+            # First try exact match from agent_indices
             dep_idx = self.agent_indices.get(dep_name)
             if dep_idx is not None:
-                indexed_dep_type = f"node_{dep_idx}_{dep_name}"
-                upstream_dirs.append(agent_folder / "target" / indexed_dep_type)
-            else:
-                logger.warning("Dependency %s index not found.", dep_name)
+                exact_path = target_dir / f"node_{dep_idx}_{dep_name}"
+                if exact_path.exists():
+                    upstream_dirs.append(exact_path)
+                    continue
+
+            # Fallback: search for directory matching pattern node_*_{dep_name}
+            if target_dir.exists():
+                matching_dirs = list(target_dir.glob(f"node_*_{dep_name}"))
+                if matching_dirs:
+                    # Use the most recently modified if multiple exist
+                    matching_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                    upstream_dirs.append(matching_dirs[0])
+                    logger.debug(
+                        "Found dependency %s at %s (index mismatch recovered)",
+                        dep_name,
+                        matching_dirs[0].name,
+                    )
+                    continue
+
+            logger.warning("Dependency directory not found for %s (idx=%s)", dep_name, dep_idx)
+
         return upstream_dirs
 
     def _resolve_linear_directory(
@@ -262,6 +286,180 @@ class AgentRunner:
             return True
         return False
 
+    def _merge_json_contents(
+        self, file_paths: List[Path], reduce_key: Optional[str] = None
+    ) -> List:
+        """
+        Merge JSON contents from multiple files by correlating on a key field.
+
+        Used when processing files from multiple parallel branches that have
+        the same filename. Records with the same correlation key are merged into
+        a single record with all fields combined (MapReduce pattern).
+
+        For example, if validator_1 outputs {"parent_target_id": "x", "answer_1": "A"}
+        and validator_2 outputs {"parent_target_id": "x", "answer_2": "B"},
+        the merged result is {"parent_target_id": "x", "answer_1": "A", "answer_2": "B"}.
+
+        Args:
+            file_paths: List of paths to JSON files to merge
+            reduce_key: Field name to use for correlation (e.g., "parent_target_id").
+                       Falls back to: parent_target_id -> source_guid if not specified.
+
+        Returns:
+            List of merged records, correlated by the reduce key
+        """
+        import json
+
+        # Collect all records from all files
+        all_records = []
+        for file_path in file_paths:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        all_records.extend(data)
+                    else:
+                        all_records.append(data)
+            except (json.JSONDecodeError, OSError, IOError) as e:
+                logger.warning(
+                    "Could not read JSON file for merging: %s - %s",
+                    file_path,
+                    e,
+                )
+
+        # Group records by correlation key and merge their contents
+        records_by_key: Dict[str, Dict] = {}
+        records_without_key = []
+
+        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
+        key_candidates = []
+        if reduce_key:
+            key_candidates.append(reduce_key)
+        key_candidates.extend(["parent_target_id", "source_guid"])
+
+        for record in all_records:
+            if not isinstance(record, dict):
+                records_without_key.append(record)
+                continue
+
+            # Try to find correlation key using fallback chain
+            correlation_value = None
+            for key_name in key_candidates:
+                correlation_value = record.get(key_name)
+                if not correlation_value:
+                    # Try nested in content
+                    content = record.get("content", {})
+                    if isinstance(content, dict):
+                        correlation_value = content.get(key_name)
+                if correlation_value:
+                    break
+
+            if correlation_value:
+                if correlation_value not in records_by_key:
+                    records_by_key[correlation_value] = {}
+
+                # Merge this record into the existing one
+                existing = records_by_key[correlation_value]
+                self._deep_merge_record(existing, record)
+            else:
+                # No correlation key found - can't correlate, just include as-is
+                records_without_key.append(record)
+
+        # Return merged records plus any that couldn't be correlated
+        merged = list(records_by_key.values()) + records_without_key
+
+        logger.debug(
+            "Merged %d records from %d files into %d correlated records (key=%s)",
+            len(all_records),
+            len(file_paths),
+            len(merged),
+            reduce_key or "auto",
+        )
+
+        return merged
+
+    def _deep_merge_record(self, existing: Dict, new_record: Dict) -> None:
+        """
+        Deep merge a new record into an existing record.
+
+        Handles special cases for content (dict merge) and lineage (array merge with dedup).
+
+        Args:
+            existing: Target record to merge into (modified in place)
+            new_record: Source record to merge from
+        """
+        for key, value in new_record.items():
+            if key == "content" and isinstance(value, dict):
+                # Deep merge content dictionaries
+                if "content" not in existing:
+                    existing["content"] = {}
+                if isinstance(existing["content"], dict):
+                    existing["content"].update(value)
+                else:
+                    existing["content"] = value
+            elif key == "lineage" and isinstance(value, list):
+                # Merge lineage arrays with deduplication
+                # Lineage entries can be strings (node_ids) or dicts with node_id
+                if "lineage" not in existing:
+                    existing["lineage"] = []
+                if isinstance(existing["lineage"], list):
+                    # Build set of existing node_ids for dedup
+                    existing_node_ids = set()
+                    for entry in existing["lineage"]:
+                        if isinstance(entry, str):
+                            existing_node_ids.add(entry)
+                        elif isinstance(entry, dict) and "node_id" in entry:
+                            existing_node_ids.add(entry["node_id"])
+
+                    # Add new entries that aren't duplicates
+                    for entry in value:
+                        if isinstance(entry, str):
+                            if entry not in existing_node_ids:
+                                existing["lineage"].append(entry)
+                                existing_node_ids.add(entry)
+                        elif isinstance(entry, dict) and "node_id" in entry:
+                            if entry["node_id"] not in existing_node_ids:
+                                existing["lineage"].append(entry)
+                                existing_node_ids.add(entry["node_id"])
+            elif key not in existing:
+                # First occurrence wins for non-mergeable fields
+                existing[key] = value
+
+    def _collect_files_from_upstream(self, upstream_data_dirs: List[str]) -> Dict[Path, List[Path]]:
+        """
+        Collect all files from upstream directories, grouped by relative path.
+
+        This is used to identify files that need to be merged when processing
+        outputs from multiple parallel branches.
+
+        Args:
+            upstream_data_dirs: List of upstream directory paths
+
+        Returns:
+            Dict mapping relative path -> list of absolute file paths
+        """
+        files_by_relative_path: Dict[Path, List[Path]] = {}
+
+        for input_directory in upstream_data_dirs:
+            input_path = Path(input_directory)
+            if not input_path.exists():
+                continue
+
+            for item in input_path.rglob("*"):
+                if "batch" in item.parts:
+                    continue
+                if not item.is_file():
+                    continue
+                if item.name.startswith("."):
+                    continue
+
+                relative_path = item.relative_to(input_path)
+                if relative_path not in files_by_relative_path:
+                    files_by_relative_path[relative_path] = []
+                files_by_relative_path[relative_path].append(item)
+
+        return files_by_relative_path
+
     def _process_directory_files(
         self,
         input_path: Path,
@@ -312,6 +510,113 @@ class AgentRunner:
                 },
             )
 
+    def _process_merged_files(self, params: FileProcessParams) -> int:
+        """
+        Process files from multiple upstream directories with content merging.
+
+        When the same file exists in multiple upstream directories (parallel branches),
+        merge their JSON contents before processing. This ensures downstream actions
+        receive ALL data from ALL parallel branches.
+
+        Args:
+            params: FileProcessParams with processing configuration
+
+        Returns:
+            Count of files processed
+        """
+        import json
+
+        output_path = Path(params.output_directory)
+        files_by_path = self._collect_files_from_upstream(params.upstream_data_dirs)
+        files_processed_count = 0
+
+        for relative_path, file_paths in files_by_path.items():
+            if len(file_paths) == 1:
+                # Single source - process normally
+                file_path = file_paths[0]
+                input_path = file_path.parent
+                while input_path.name != "target" and input_path.parent != input_path:
+                    input_path = input_path.parent
+                if input_path.name == "target":
+                    input_path = file_path.parent
+
+                # Find the upstream directory this file belongs to
+                for upstream_dir in params.upstream_data_dirs:
+                    upstream_path = Path(upstream_dir)
+                    if file_path.is_relative_to(upstream_path):
+                        input_path = upstream_path
+                        break
+
+                self._process_single_file(
+                    SingleFileProcessParams(
+                        locations=FileLocationParams(
+                            item=file_path,
+                            input_path=input_path,
+                            output_path=output_path,
+                            input_directory=str(input_path),
+                        ),
+                        agent_config=params.agent_config,
+                        agent_name=params.agent_name,
+                        strategy=params.strategy,
+                        idx=params.idx,
+                    )
+                )
+            else:
+                # Multiple sources - merge contents (MapReduce pattern)
+                # Get reduce_key from agent config for correlation
+                reduce_key = params.agent_config.get("reduce_key")
+                logger.debug(
+                    "Merging %d files for %s from parallel branches (reduce_key=%s)",
+                    len(file_paths),
+                    relative_path,
+                    reduce_key or "auto",
+                )
+                merged_data = self._merge_json_contents(file_paths, reduce_key=reduce_key)
+
+                # Use the first upstream directory as the base for path structure
+                # This ensures the path contains 'agent_io' which source_loader expects
+                # The source_loader expects: agent_io/target/{node_name}/{filename}
+                # So we write the merged file to the first upstream directory
+                first_upstream = Path(params.upstream_data_dirs[0])
+                merged_file = first_upstream / relative_path
+
+                # Save original content if file exists (to restore after processing)
+                original_content = None
+                if merged_file.exists():
+                    with open(merged_file, "r", encoding="utf-8") as f:
+                        original_content = f.read()
+
+                # Write merged data
+                merged_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(merged_file, "w", encoding="utf-8") as f:
+                    json.dump(merged_data, f)
+
+                try:
+                    self._process_single_file(
+                        SingleFileProcessParams(
+                            locations=FileLocationParams(
+                                item=merged_file,
+                                input_path=first_upstream,
+                                output_path=output_path,
+                                input_directory=str(first_upstream),
+                            ),
+                            agent_config=params.agent_config,
+                            agent_name=params.agent_name,
+                            strategy=params.strategy,
+                            idx=params.idx,
+                        )
+                    )
+                finally:
+                    # Restore original content if we had one
+                    if original_content is not None:
+                        with open(merged_file, "w", encoding="utf-8") as f:
+                            f.write(original_content)
+                    # Don't delete the file - it's a real upstream output
+
+            files_processed_count += 1
+
+        return files_processed_count
+
     def process_files(self, params: FileProcessParams) -> None:
         """
         Walks through the upstream data directories, processing each file with the given strategy,
@@ -319,7 +624,20 @@ class AgentRunner:
         - Any directory named 'batch'
         - Hidden files (starting with '.')
         - Marker files (e.g., .passthrough_processed)
+
+        When processing files from multiple upstream directories (parallel branches),
+        files with the same relative path will have their JSON contents merged to ensure
+        downstream actions receive all data from all branches.
         """
+        # Use merging approach when there are multiple upstream directories
+        # This handles parallel branch outputs correctly
+        if len(params.upstream_data_dirs) > 1:
+            files_processed_count = self._process_merged_files(params)
+            if files_processed_count == 0:
+                self._warn_no_files_found(params)
+            return
+
+        # Single upstream directory - use original logic (more efficient)
         files_processed_count = 0
         output_path = Path(params.output_directory)
         processed_relative_paths: set = set()

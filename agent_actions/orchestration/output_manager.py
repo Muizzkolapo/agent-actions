@@ -195,42 +195,185 @@ class AgentOutputManager:
         """
         Create passthrough output for a skipped agent.
 
-        Copies input files to output directory and creates skip marker.
+        Copies input files from ALL upstream directories to output directory
+        and creates skip marker. When the same JSON file exists in multiple
+        upstream directories (parallel branches), merges records by reduce_key.
 
         Args:
             idx: Index of the agent
             agent_type: Type/name of the agent
         """
         upstream_dirs = self.get_upstream_directories(idx)
-        input_dir = upstream_dirs[0] if upstream_dirs else None
         output_dir = self.agent_folder / "target" / f"node_{idx}_{agent_type}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy input files to output
-        if os.path.exists(input_dir):
+        # Get reduce_key from agent config for JSON merging
+        agent_config = self.agent_configs.get(agent_type, {})
+        reduce_key = agent_config.get("reduce_key")
+
+        # Collect files by name to detect duplicates that need merging
+        files_by_name: Dict[str, List[str]] = {}
+        for input_dir in upstream_dirs:
+            if not input_dir or not os.path.exists(input_dir):
+                continue
             for item in os.listdir(input_dir):
+                if item.startswith("."):
+                    continue
                 src = os.path.join(input_dir, item)
-                dst = output_dir / item
+                if os.path.isfile(src):
+                    if item not in files_by_name:
+                        files_by_name[item] = []
+                    files_by_name[item].append(src)
+
+        # Process each file - copy or merge as needed
+        for filename, source_paths in files_by_name.items():
+            dst = output_dir / filename
+
+            if len(source_paths) == 1:
+                # Single source - just copy
                 try:
-                    shutil.copy2(src, dst)
+                    shutil.copy2(source_paths[0], dst)
                 except (OSError, IOError, shutil.Error) as e:
                     logger.warning(
                         "Could not copy %s to %s: %s",
-                        item,
+                        filename,
                         dst,
                         e,
                         exc_info=True,
                         extra={
-                            "source": src,
+                            "source": source_paths[0],
                             "destination": str(dst),
                             "operation": "passthrough_file_copy",
                         },
+                    )
+            elif filename.endswith(".json"):
+                # Multiple JSON sources - merge by reduce_key
+                try:
+                    merged_data = self._merge_json_files(source_paths, reduce_key)
+                    with open(dst, "w", encoding="utf-8") as f:
+                        json.dump(merged_data, f)
+                    logger.debug(
+                        "Merged %d JSON files into %s (reduce_key=%s)",
+                        len(source_paths),
+                        filename,
+                        reduce_key or "auto",
+                    )
+                except (OSError, IOError, json.JSONDecodeError) as e:
+                    logger.warning(
+                        "Could not merge JSON files for %s: %s",
+                        filename,
+                        e,
+                    )
+            else:
+                # Multiple non-JSON sources - copy first (first occurrence wins)
+                try:
+                    shutil.copy2(source_paths[0], dst)
+                except (OSError, IOError, shutil.Error) as e:
+                    logger.warning(
+                        "Could not copy %s to %s: %s",
+                        filename,
+                        dst,
+                        e,
                     )
 
         # Create skip marker
         skip_marker = output_dir / ".agent_skipped"
         with open(skip_marker, "w", encoding="utf-8") as f:
             f.write(f"Agent {agent_type} skipped due to WHERE clause condition")
+
+    def _merge_json_files(
+        self, file_paths: List[str], reduce_key: Optional[str] = None
+    ) -> List[Dict]:
+        """
+        Merge JSON files from multiple parallel branches by correlation key.
+
+        Args:
+            file_paths: List of JSON file paths to merge
+            reduce_key: Field to correlate records by (falls back to parent_target_id -> source_guid)
+
+        Returns:
+            List of merged records
+        """
+        all_records = []
+        for file_path in file_paths:
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, list):
+                        all_records.extend(data)
+                    else:
+                        all_records.append(data)
+            except (json.JSONDecodeError, OSError, IOError):
+                continue
+
+        # Key resolution order: explicit reduce_key -> parent_target_id -> source_guid
+        key_candidates = []
+        if reduce_key:
+            key_candidates.append(reduce_key)
+        key_candidates.extend(["parent_target_id", "source_guid"])
+
+        records_by_key: Dict[str, Dict] = {}
+        records_without_key = []
+
+        for record in all_records:
+            if not isinstance(record, dict):
+                records_without_key.append(record)
+                continue
+
+            # Find correlation value
+            correlation_value = None
+            for key_name in key_candidates:
+                correlation_value = record.get(key_name)
+                if not correlation_value:
+                    content = record.get("content", {})
+                    if isinstance(content, dict):
+                        correlation_value = content.get(key_name)
+                if correlation_value:
+                    break
+
+            if correlation_value:
+                if correlation_value not in records_by_key:
+                    records_by_key[correlation_value] = {}
+                # Deep merge
+                existing = records_by_key[correlation_value]
+                for key, value in record.items():
+                    if key == "content" and isinstance(value, dict):
+                        if "content" not in existing:
+                            existing["content"] = {}
+                        if isinstance(existing["content"], dict):
+                            existing["content"].update(value)
+                        else:
+                            existing["content"] = value
+                    elif key == "lineage" and isinstance(value, list):
+                        # Merge lineage arrays with deduplication
+                        # Lineage entries can be strings (node_ids) or dicts
+                        if "lineage" not in existing:
+                            existing["lineage"] = []
+                        if isinstance(existing["lineage"], list):
+                            existing_ids = set()
+                            for entry in existing["lineage"]:
+                                if isinstance(entry, str):
+                                    existing_ids.add(entry)
+                                elif isinstance(entry, dict) and "node_id" in entry:
+                                    existing_ids.add(entry["node_id"])
+
+                            for entry in value:
+                                if isinstance(entry, str):
+                                    if entry not in existing_ids:
+                                        existing["lineage"].append(entry)
+                                        existing_ids.add(entry)
+                                elif (
+                                    isinstance(entry, dict)
+                                    and entry.get("node_id") not in existing_ids
+                                ):
+                                    existing["lineage"].append(entry)
+                                    existing_ids.add(entry.get("node_id"))
+                    elif key not in existing:
+                        existing[key] = value
+            else:
+                records_without_key.append(record)
+
+        return list(records_by_key.values()) + records_without_key
 
     def _resolve_upstream_from_manifest(self) -> Optional[List[str]]:
         """
@@ -275,20 +418,41 @@ class AgentOutputManager:
         dependencies = agent_config.get("dependencies", [])
         if dependencies:
             upstream_dirs = []
+            target_dir = self.agent_folder / "target"
+
             for dep_name in dependencies:
-                # Find the index of the dependency
+                found = False
+
+                # First try exact match from execution_order index
                 if dep_name in self.execution_order:
                     dep_idx = self.execution_order.index(dep_name)
-                    # Construct output path for that dependency
-                    dep_output = self.agent_folder / "target" / f"node_{dep_idx}_{dep_name}"
-                    upstream_dirs.append(str(dep_output))
-                else:
+                    dep_output = target_dir / f"node_{dep_idx}_{dep_name}"
+                    if dep_output.exists():
+                        upstream_dirs.append(str(dep_output))
+                        found = True
+
+                # Fallback: search for directory matching pattern
+                if not found and target_dir.exists():
+                    matching_dirs = list(target_dir.glob(f"node_*_{dep_name}"))
+                    if matching_dirs:
+                        # Use most recently modified if multiple exist
+                        matching_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                        upstream_dirs.append(str(matching_dirs[0]))
+                        found = True
+                        logger.debug(
+                            "Found dependency %s at %s (index mismatch recovered)",
+                            dep_name,
+                            matching_dirs[0].name,
+                        )
+
+                if not found:
                     logger.warning(
                         "Dependency %s for agent %s not found in execution order.",
                         dep_name,
                         current_agent,
                         extra={"agent": current_agent, "dependency": dep_name},
                     )
+
             if upstream_dirs:
                 return upstream_dirs
 
