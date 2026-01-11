@@ -156,6 +156,11 @@ class WorkflowParser:
             if "loop_consumption" in action_data:
                 action["loop_consumption"] = action_data["loop_consumption"]
 
+            # Parallel merge configuration (MapReduce pattern)
+            # reduce_key specifies field to correlate records from parallel branches
+            if "reduce_key" in action_data:
+                action["reduce_key"] = action_data["reduce_key"]
+
             workflow["actions"][action_name] = action
 
         return workflow
