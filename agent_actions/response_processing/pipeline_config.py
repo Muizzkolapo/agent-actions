@@ -21,7 +21,6 @@ class ErrorHandlingStrategy(str, Enum):
     FAIL_FAST = "fail_fast"
     SKIP_ERRORS = "skip_errors"
     COLLECT_ERRORS = "collect_errors"
-    RETRY_FAILED = "retry_failed"
 
 
 class StageType(str, Enum):
@@ -44,8 +43,6 @@ class StageConfig(BaseModel):
     description: str = Field(default="", description="Stage description")
     enabled: bool = Field(default=True, description="Whether stage is enabled")
     timeout: Optional[int] = Field(default=None, ge=1, description="Stage timeout in seconds")
-    retry_attempts: int = Field(default=0, ge=0, description="Number of retry attempts")
-    retry_delay: float = Field(default=1.0, ge=0.0, description="Delay between retries")
     depends_on: List[str] = Field(default_factory=list, description="Stages this stage depends on")
     run_condition: Optional[str] = Field(
         default=None, description="Condition for running this stage"

@@ -52,6 +52,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
     def _execute_agent(self, enriched_data, formatted_prompt):
         """Execute the dynamic agent and return response."""
         tools_path = self.agent_config.get("tools", {}).get("path")
+        # run_dynamic_agent returns (response, executed)
         return run_dynamic_agent(
             self.agent_config,
             self.agent_name,
@@ -61,17 +62,18 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         )
 
     def _add_lineage_tracking(self, transformed_response, context_data):
-        """Add lineage tracking and metadata to transformed response."""
+        """Add lineage tracking and metadata to transformed response.
+
+        Args:
+            transformed_response: The response to add lineage tracking to
+            context_data: The context data for lineage tracking
+        """
         idx = self.agent_config.get("idx", 0)
 
         # Build metadata for online mode output consistency
         response_metadata = MetadataExtractor.extract_from_response(
             response=None,  # Raw response not available at this level
             agent_config=self.agent_config,
-        )
-        retry_metadata = MetadataExtractor.build_retry_metadata(
-            was_retried=False,
-            retry_attempts=0,
         )
 
         for i, node in enumerate(transformed_response):
@@ -83,7 +85,6 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             FieldManager.add_metadata(
                 transformed_response[i],
                 metadata=response_metadata.to_dict(),
-                retry_metadata=retry_metadata.to_dict(),
             )
         return transformed_response
 
@@ -117,7 +118,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             # Prepare prompt
             formatted_prompt = self._prepare_prompt(source_content, formatted_prompt)
 
-            # Execute agent
+            # Execute agent - returns (response, executed)
             response, executed = self._execute_agent(enriched_data, formatted_prompt)
 
             # Ensure source_guid exists
@@ -132,7 +133,10 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             )
 
             # Add lineage tracking
-            transformed_response = self._add_lineage_tracking(transformed_response, context_data)
+            transformed_response = self._add_lineage_tracking(
+                transformed_response,
+                context_data,
+            )
 
             # Prepare source text
             src_text = self._prepare_source_text(source_guid, enriched_data, context_data)

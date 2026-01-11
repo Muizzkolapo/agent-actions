@@ -105,3 +105,59 @@ If re-implementing, consider:
 
 - [Retry & Error Handling](reference/execution/retry.md) - Still supported for transient errors
 - [Recovery Module](../agent_actions/recovery/) - Contains retry logic that remains
+
+---
+
+## dead_letter Exhaustion Behavior (Removed: January 2026)
+
+### What It Was
+
+`dead_letter` was an exhaustion behavior option for retry configuration. When retries were exhausted:
+- `continue` - Drop the failed record, continue workflow
+- `fail` - Raise error, entire workflow fails
+- `dead_letter` - Write failed records to a separate `.dead_letter.json` file, continue workflow
+
+### Why Removed
+
+1. **Redundant with failure records** - Failed records now have `_failed: true` flag and full `_retry_metadata` embedded directly in output files
+2. **Simplification** - Two behaviors (`continue` and `fail`) are sufficient for most use cases
+3. **Inconsistency** - Online and batch modes handled dead_letter differently, causing confusion
+
+### What to Use Instead
+
+Use `on_exhausted: continue` - failed records will be created in the normal output with:
+- `_failed: true` marker
+- `_retry_metadata.exhausted: true`
+- Full error information in `_retry_metadata.error_type` and `_retry_metadata.error_message`
+
+---
+
+## RetryTracker / .retry_log.json (Removed: January 2026)
+
+### What It Was
+
+`RetryTracker` was a centralized tracking system that persisted retry events to a `.retry_log.json` file in the output directory. It tracked:
+- Every retry attempt with full record data
+- Success/failure/exhausted outcomes
+- Timestamp and error information
+
+### Why Removed
+
+1. **Redundancy** - Retry metadata is now embedded in each output record's `_retry_metadata` field
+2. **Correlation complexity** - The separate log file made it hard to correlate retries with output records
+3. **File management** - An extra file to track and manage per workflow run
+
+### What to Use Instead
+
+Check the `_retry_metadata` field on each output record:
+```json
+{
+  "_retry_metadata": {
+    "was_retried": true,
+    "retry_attempts": 2,
+    "error_type": "RateLimitError",
+    "error_message": "Rate limit exceeded",
+    "exhausted": false
+  }
+}
+```

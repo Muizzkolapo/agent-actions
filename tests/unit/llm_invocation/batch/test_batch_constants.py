@@ -151,19 +151,12 @@ class TestContextMetaKeys:
 
         assert ContextMetaKeys.PASSTHROUGH_FIELDS == "_passthrough_fields"
 
-    def test_retry_metadata_key(self):
-        """RETRY_METADATA should be the internal metadata key."""
-        from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
-
-        assert ContextMetaKeys.RETRY_METADATA == "_retry_metadata"
-
     def test_all_keys_are_internal(self):
         """All meta keys should start with underscore (internal convention)."""
         from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
 
         assert ContextMetaKeys.FILTER_STATUS.startswith("_")
         assert ContextMetaKeys.PASSTHROUGH_FIELDS.startswith("_")
-        assert ContextMetaKeys.RETRY_METADATA.startswith("_")
 
     def test_all_internal_keys_method(self):
         """all_internal_keys() should return set of all internal keys."""
@@ -173,7 +166,6 @@ class TestContextMetaKeys:
         assert isinstance(keys, set)
         assert "_batch_filter_status" in keys
         assert "_passthrough_fields" in keys
-        assert "_retry_metadata" in keys
 
 
 class TestEnumComparison:

@@ -19,7 +19,6 @@ from agent_actions.llm_invocation.batch.processing.batch_passthrough_builder imp
 from agent_actions.llm_invocation.providers.batch_client_base import BatchResult
 from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
-from agent_actions.utilities.metadata import MetadataExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -54,11 +53,6 @@ class BatchProcessingContext:
     success_count: int = 0
     error_count: int = 0
     passthrough_count: int = 0
-
-    # Retry tracking
-    batch_id: Optional[str] = None
-    retry_attempt: int = 0  # 0 = original batch
-    original_batch_id: Optional[str] = None  # Set if this is a retry batch
 
 
 class BatchResultProcessor:
@@ -99,9 +93,6 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
-        batch_id: Optional[str] = None,
-        retry_attempt: int = 0,
-        original_batch_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Process batch results through the pipeline.
@@ -111,9 +102,6 @@ class BatchResultProcessor:
             context_map: Map of custom_id -> original row data
             output_directory: Output directory path (for node extraction)
             agent_config: Agent configuration
-            batch_id: ID of the batch being processed
-            retry_attempt: Retry attempt number (0 = original batch)
-            original_batch_id: ID of original batch (if this is a retry)
 
         Returns:
             List of processed data in workflow format
@@ -124,9 +112,6 @@ class BatchResultProcessor:
             context_map,
             output_directory,
             agent_config,
-            batch_id=batch_id,
-            retry_attempt=retry_attempt,
-            original_batch_id=original_batch_id,
         )
 
         # Stage 2: Reconcile requests with responses
@@ -153,9 +138,6 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         agent_config: Optional[Dict[str, Any]],
-        batch_id: Optional[str] = None,
-        retry_attempt: int = 0,
-        original_batch_id: Optional[str] = None,
     ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
@@ -182,9 +164,6 @@ class BatchResultProcessor:
             node_idx=node_idx,
             json_mode=json_mode,
             output_field=output_field,
-            batch_id=batch_id,
-            retry_attempt=retry_attempt,
-            original_batch_id=original_batch_id or batch_id,
         )
 
         logger.debug(
@@ -347,30 +326,7 @@ class BatchResultProcessor:
                         item, ctx.agent_config, record_index=record_index
                     )
 
-            # Add retry metadata
-            BatchContextMetadata.set_retry_metadata(item, self._build_retry_metadata(ctx))
-
         return structured_items
-
-    def _build_retry_metadata(self, ctx: BatchProcessingContext) -> Dict[str, Any]:
-        """
-        Build retry metadata dict for a processed record.
-
-        Uses the unified MetadataExtractor to ensure consistent structure
-        between batch and online modes.
-
-        Args:
-            ctx: Processing context with retry tracking info
-
-        Returns:
-            Retry metadata dictionary
-        """
-        return MetadataExtractor.build_retry_metadata(
-            was_retried=ctx.retry_attempt > 0,
-            retry_attempts=ctx.retry_attempt,
-            original_batch_id=ctx.original_batch_id,
-            final_batch_id=ctx.batch_id,
-        ).to_dict()
 
     def _apply_context_passthrough(
         self,
@@ -459,7 +415,6 @@ class BatchResultProcessor:
             "error": error_message,
             "metadata": metadata or {},
         }
-        BatchContextMetadata.set_retry_metadata(error_item, self._build_retry_metadata(ctx))
 
         # Include raw_content for processing errors (helps debugging)
         if raw_content is not None:

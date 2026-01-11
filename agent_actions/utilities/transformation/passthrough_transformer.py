@@ -60,7 +60,6 @@ class PassthroughTransformer:
         idx: int = 0,
         passthrough_fields: Optional[Dict] = None,
         metadata: Optional[Dict] = None,
-        retry_metadata: Optional[Dict] = None,
     ) -> List:
         """
         Apply context_scope.passthrough logic to generated data.
@@ -83,7 +82,6 @@ class PassthroughTransformer:
                                from ANY previous action (not just immediate
                                predecessor).
             metadata: Optional LLM response metadata to add to output items
-            retry_metadata: Optional retry tracking metadata
 
         Returns:
             Transformed data list with passthrough fields merged
@@ -106,9 +104,7 @@ class PassthroughTransformer:
 
         # Step 4: Ensure all items have required fields and add metadata
         return [
-            self.field_manager.ensure_required_fields(
-                obj, source_guid, idx, metadata=metadata, retry_metadata=retry_metadata
-            )
+            self.field_manager.ensure_required_fields(obj, source_guid, idx, metadata=metadata)
             for obj in output
         ]
 

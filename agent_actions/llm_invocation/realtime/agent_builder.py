@@ -119,7 +119,7 @@ def create_dynamic_agent(
     granularity = (agent_config.get("granularity") or "record").lower()
 
     # Invoke client
-    response_data = ClientInvocationService.invoke_client(
+    result = ClientInvocationService.invoke_client(
         model_vendor,
         agent_config,
         prompt_config,
@@ -133,8 +133,8 @@ def create_dynamic_agent(
 
     # Merge captured results if any
     if captured_results:
-        for item in response_data:
+        for item in result:
             if isinstance(item, dict):
                 item.update(captured_results)
 
-    return response_data
+    return result

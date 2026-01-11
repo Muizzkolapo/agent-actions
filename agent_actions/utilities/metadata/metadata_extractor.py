@@ -8,7 +8,7 @@ ensuring consistent output structure across all processing pipelines.
 import time
 from typing import Any, Dict, Optional
 
-from .metadata_types import ResponseMetadata, RetryMetadata, UnifiedMetadata
+from .metadata_types import ResponseMetadata, UnifiedMetadata
 
 
 class MetadataExtractor:
@@ -269,58 +269,20 @@ class MetadataExtractor:
         return agent_config.get("model_name") or agent_config.get("model")
 
     @classmethod
-    def build_retry_metadata(
-        cls,
-        was_retried: bool = False,
-        retry_attempts: int = 0,
-        original_batch_id: Optional[str] = None,
-        final_batch_id: Optional[str] = None,
-        retry_reason: Optional[str] = None,
-    ) -> RetryMetadata:
-        """
-        Build retry metadata for a record.
-
-        This method ensures consistent retry metadata structure across
-        both batch and online modes.
-
-        Args:
-            was_retried: Whether this record required retry
-            retry_attempts: Number of retry attempts
-            original_batch_id: ID of the original batch (batch mode)
-            final_batch_id: ID of the batch that succeeded (batch mode)
-            retry_reason: Reason for retry if applicable
-
-        Returns:
-            RetryMetadata instance
-        """
-        return RetryMetadata(
-            was_retried=was_retried,
-            retry_attempts=retry_attempts,
-            original_batch_id=original_batch_id,
-            final_batch_id=final_batch_id,
-            retry_reason=retry_reason,
-        )
-
-    @classmethod
     def build_unified_metadata(
         cls,
         response_metadata: Optional[ResponseMetadata] = None,
-        retry_metadata: Optional[RetryMetadata] = None,
     ) -> UnifiedMetadata:
         """
         Build unified metadata container.
 
         Args:
             response_metadata: LLM response metadata
-            retry_metadata: Retry tracking metadata
 
         Returns:
             UnifiedMetadata instance
         """
-        return UnifiedMetadata(
-            response=response_metadata,
-            retry=retry_metadata,
-        )
+        return UnifiedMetadata(response=response_metadata)
 
 
 class MetadataTimer:

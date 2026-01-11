@@ -135,32 +135,6 @@ class BatchContextMetadata:
         return record.pop(ContextMetaKeys.PASSTHROUGH_FIELDS, {})
 
     # =========================================================================
-    # Retry Metadata Methods
-    # =========================================================================
-
-    @staticmethod
-    def set_retry_metadata(record: Dict[str, Any], metadata: Dict[str, Any]) -> None:
-        """Set retry metadata on a record.
-
-        Args:
-            record: The record dict to modify
-            metadata: Dictionary of retry metadata
-        """
-        record[ContextMetaKeys.RETRY_METADATA] = metadata
-
-    @staticmethod
-    def get_retry_metadata(record: Dict[str, Any]) -> Dict[str, Any]:
-        """Get retry metadata from a record.
-
-        Args:
-            record: The record dict to read from
-
-        Returns:
-            Dictionary of retry metadata, or empty dict if not set
-        """
-        return record.get(ContextMetaKeys.RETRY_METADATA, {})
-
-    # =========================================================================
     # Utility Methods
     # =========================================================================
 

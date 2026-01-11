@@ -412,6 +412,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            # create_agent_with_data returns (generated_data, executed, passthrough_fields)
             if hasattr(self.data_generator, "create_agent_with_data_async"):
                 (
                     generated_data,
@@ -454,10 +455,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
-                retry_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
-                )
 
                 for i, obj in enumerate(processed):
                     obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
@@ -471,7 +468,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     FieldManager.add_metadata(
                         obj,
                         metadata=response_metadata.to_dict(),
-                        retry_metadata=retry_metadata.to_dict(),
                     )
                     processed[i] = obj
             else:
@@ -496,17 +492,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         processed_item["content"].update(passthrough_fields)
                     else:
                         processed_item.update(passthrough_fields)
-
-                # Add metadata to skipped item for consistency
-                skip_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
-                )
-                FieldManager.add_metadata(
-                    processed_item,
-                    metadata={},  # No LLM response for skipped items
-                    retry_metadata=skip_metadata.to_dict(),
-                )
 
                 processed = [processed_item]
             return processed
@@ -625,6 +610,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         try:
             contents, source_guid = (item["content"], item["source_guid"])
             source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
+            # create_agent_with_data returns (generated_data, executed, passthrough_fields)
             generated_data, executed, passthrough_fields = (
                 self.data_generator.create_agent_with_data(
                     contents,
@@ -647,10 +633,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     response=None,  # Raw response not available at this level
                     agent_config=self.agent_config,
                 )
-                retry_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
-                )
 
                 for i, obj in enumerate(processed):
                     obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
@@ -664,7 +646,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     FieldManager.add_metadata(
                         obj,
                         metadata=response_metadata.to_dict(),
-                        retry_metadata=retry_metadata.to_dict(),
                     )
                     processed[i] = obj
             else:
@@ -692,17 +673,6 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
                 processed_item = LoopIdGenerator.add_loop_correlation_id(
                     processed_item, self.agent_config, record_index=record_index
-                )
-
-                # Add metadata to skipped item for consistency
-                skip_metadata = MetadataExtractor.build_retry_metadata(
-                    was_retried=False,
-                    retry_attempts=0,
-                )
-                FieldManager.add_metadata(
-                    processed_item,
-                    metadata={},  # No LLM response for skipped items
-                    retry_metadata=skip_metadata.to_dict(),
                 )
 
                 processed = [processed_item]

@@ -216,45 +216,6 @@ class TestPassthroughFields:
         assert result == {}
 
 
-class TestRetryMetadata:
-    """Tests for retry metadata methods."""
-
-    def test_set_retry_metadata(self):
-        """Should set retry metadata on record."""
-        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
-            BatchContextMetadata,
-        )
-
-        record: Dict[str, Any] = {"id": "test"}
-        metadata = {"attempt": 1, "original_batch_id": "batch_123"}
-        BatchContextMetadata.set_retry_metadata(record, metadata)
-
-        assert record.get("_retry_metadata") == metadata
-
-    def test_get_retry_metadata_returns_metadata(self):
-        """Should return retry metadata when present."""
-        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
-            BatchContextMetadata,
-        )
-
-        metadata = {"attempt": 1}
-        record = {"id": "test", "_retry_metadata": metadata}
-        result = BatchContextMetadata.get_retry_metadata(record)
-
-        assert result == metadata
-
-    def test_get_retry_metadata_returns_empty_when_missing(self):
-        """Should return empty dict when no retry metadata."""
-        from agent_actions.llm_invocation.batch.core.batch_context_metadata import (
-            BatchContextMetadata,
-        )
-
-        record = {"id": "test"}
-        result = BatchContextMetadata.get_retry_metadata(record)
-
-        assert result == {}
-
-
 class TestStripInternalFields:
     """Tests for strip_internal_fields method."""
 
@@ -269,7 +230,6 @@ class TestStripInternalFields:
             "content": "data",
             "_batch_filter_status": "included",
             "_passthrough_fields": {"key": "value"},
-            "_retry_metadata": {"attempt": 1},
         }
 
         result = BatchContextMetadata.strip_internal_fields(record)

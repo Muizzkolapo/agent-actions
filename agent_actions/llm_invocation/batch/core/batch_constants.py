@@ -101,7 +101,6 @@ class ContextMetaKeys:
 
     FILTER_STATUS = "_batch_filter_status"
     PASSTHROUGH_FIELDS = "_passthrough_fields"
-    RETRY_METADATA = "_retry_metadata"
 
     @classmethod
     def all_internal_keys(cls) -> Set[str]:
@@ -110,4 +109,4 @@ class ContextMetaKeys:
         Returns:
             Set of all internal key names used in context maps.
         """
-        return {cls.FILTER_STATUS, cls.PASSTHROUGH_FIELDS, cls.RETRY_METADATA}
+        return {cls.FILTER_STATUS, cls.PASSTHROUGH_FIELDS}

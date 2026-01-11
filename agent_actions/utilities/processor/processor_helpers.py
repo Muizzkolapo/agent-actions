@@ -158,8 +158,9 @@ def run_dynamic_agent(
                         Used when guard was evaluated early (before prompt rendering).
 
     Returns:
-        Tuple of (response/context, was_executed) where was_executed indicates
-        whether the agent actually processed the data or was skipped.
+        Tuple of (response/context, was_executed):
+            - response/context: The response data or original context if skipped
+            - was_executed: Whether the agent actually processed the data
     """
     # Skip guard evaluation if already done by caller (e.g., DataGenerator)
     if not skip_guard_eval:
@@ -261,7 +262,6 @@ def transform_with_passthrough(
     idx: int = 0,
     passthrough_fields: Optional[Dict[str, Any]] = None,
     metadata: Optional[Dict[str, Any]] = None,
-    retry_metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Any]:
     """Apply ``context_scope.passthrough`` logic to generated data consistently.
 
@@ -273,7 +273,6 @@ def transform_with_passthrough(
         idx: Index for node generation
         passthrough_fields: Optional pre-computed passthrough fields
         metadata: Optional LLM response metadata to add to output items
-        retry_metadata: Optional retry tracking metadata
 
     Returns:
         Transformed data list with passthrough fields and metadata merged
@@ -287,5 +286,4 @@ def transform_with_passthrough(
         idx,
         passthrough_fields=passthrough_fields,
         metadata=metadata,
-        retry_metadata=retry_metadata,
     )

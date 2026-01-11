@@ -135,10 +135,6 @@ class BatchRegistryManager:
                         timestamp=entry.timestamp,
                         provider=entry.provider,
                         record_count=entry.record_count,
-                        parent_batch_id=entry.parent_batch_id,
-                        retry_attempt=entry.retry_attempt,
-                        retry_for_records=entry.retry_for_records,
-                        has_retry_batch=entry.has_retry_batch,
                     )
                     self._cache[file_name] = updated_entry
                     self._persist_registry(self._cache)
@@ -229,10 +225,6 @@ class BatchRegistryManager:
                                 timestamp=entry.timestamp,
                                 provider=entry.provider,
                                 record_count=entry.record_count,
-                                parent_batch_id=entry.parent_batch_id,
-                                retry_attempt=entry.retry_attempt,
-                                retry_for_records=entry.retry_for_records,
-                                has_retry_batch=entry.has_retry_batch,
                             )
                             self._cache[file_name] = updated_entry
                             cache_modified = True

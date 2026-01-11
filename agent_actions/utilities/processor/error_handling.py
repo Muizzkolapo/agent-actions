@@ -12,7 +12,6 @@ patterns across all processor modules.
 # Unused-argument: Interface consistency
 import json
 import logging
-import time
 import traceback
 from datetime import datetime
 from functools import wraps
@@ -215,88 +214,6 @@ class ProcessorErrorHandlerMixin:
         context = self.get_error_context(operation, **context_kwargs)
         log_entry = {"level": "INFO", "message": message, "context": context}
         self.logger.info(json.dumps(log_entry, default=str))
-
-    def with_retry(
-        self,
-        max_attempts: int = 3,
-        delay: float = 1.0,
-        backoff: float = 2.0,
-        max_delay: float = 60.0,
-        exceptions: tuple = (IOError, OSError, ConnectionError),
-    ) -> Callable:
-        """
-        Decorator for adding retry logic to methods.
-
-        DEPRECATED: Use agent_actions.utilities.retry.retry instead.
-
-        Args:
-            max_attempts: Maximum number of retry attempts
-            delay: Initial delay between retries in seconds
-            backoff: Multiplier for delay after each retry
-            max_delay: Maximum delay between retries (prevents unbounded backoff)
-            exceptions: Tuple of exceptions to catch and retry
-
-        Returns:
-            Decorated function with retry logic
-        """
-        import warnings
-
-        warnings.warn(
-            "ProcessorErrorHandlerMixin.with_retry is deprecated. Use agent_actions.utilities.retry.retry instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-
-        def decorator(func: Callable) -> Callable:
-            @wraps(func)
-            def wrapper(*args, **kwargs):
-                last_exception = None
-                current_delay = delay
-                for attempt in range(max_attempts):
-                    try:
-                        return func(*args, **kwargs)
-                    except exceptions as e:
-                        last_exception = e
-                        if attempt < max_attempts - 1:
-                            # Log retry attempt with configuration and wait time
-                            self.logger.warning(
-                                "Retry attempt %s/%s after failure",
-                                attempt + 1,
-                                max_attempts,
-                                extra={
-                                    "operation": "retry_attempt",
-                                    "function": func.__name__,
-                                    "attempt": attempt + 1,
-                                    "max_attempts": max_attempts,
-                                    "wait_time": current_delay,
-                                    "backoff_multiplier": backoff,
-                                    "max_delay": max_delay,
-                                    "error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                            )
-                            time.sleep(current_delay)
-                            current_delay = min(current_delay * backoff, max_delay)
-                        else:
-                            # Log final failure after all retries exhausted
-                            self.logger.error(
-                                "All retry attempts exhausted for %s",
-                                func.__name__,
-                                extra={
-                                    "operation": "retry_exhausted",
-                                    "function": func.__name__,
-                                    "total_attempts": max_attempts,
-                                    "final_error": str(e),
-                                    "error_type": type(e).__name__,
-                                },
-                            )
-                if last_exception:
-                    raise last_exception
-                return None  # Unreachable, but satisfies type checker
-
-            return wrapper
-
-        return decorator
 
     def with_fallback(
         self,
