@@ -37,10 +37,6 @@ class ProcessorConfig(BaseModel):
         default=None, ge=1, le=100, description="Maximum number of worker threads/processes"
     )
     timeout: int = Field(default=300, ge=1, description="Processing timeout in seconds")
-    retry_attempts: int = Field(
-        default=3, ge=0, le=10, description="Number of retry attempts on failure"
-    )
-    retry_delay: float = Field(default=1.0, ge=0.0, description="Delay between retries in seconds")
     model_config = {"extra": "allow"}
 
 

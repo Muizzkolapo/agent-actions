@@ -30,9 +30,6 @@ SIMPLE_CONFIG_FIELDS = {
     # Reprompt configuration
     "reprompt": False,  # Default: False (reprompting disabled)
     "constraints": [],  # Default: empty list (no constraints)
-    # Recovery configuration (retry for transient errors)
-    "recovery": None,  # Default: None (uses RecoveryConfig defaults: retry enabled, 3 attempts)
-    "retry": None,  # Legacy retry config (superseded by recovery)
 }
 
 

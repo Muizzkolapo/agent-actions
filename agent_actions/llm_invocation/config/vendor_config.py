@@ -37,7 +37,6 @@ class BaseVendorConfig(BaseModel):
     api_key_env_name: str = Field(..., description="Environment variable name for API key")
     model_name: str = Field(..., description="Model name to use")
     default_timeout: int = Field(default=60, ge=1, description="Default request timeout in seconds")
-    max_retries: int = Field(default=3, ge=0, description="Maximum retry attempts")
     json_mode: bool = Field(default=True, description="Enable JSON mode by default")
     max_tokens: Optional[int] = Field(default=None, ge=1, description="Maximum tokens in response")
     temperature: Optional[float] = Field(

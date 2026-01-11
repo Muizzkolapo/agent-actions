@@ -184,12 +184,10 @@ class ProcessingContext:
         mode: ProcessingMode = ProcessingMode.AUTO,
         concurrency_limit: Optional[int] = None,
         timeout: Optional[float] = None,
-        retry_count: int = 0,
     ):
         self.mode = mode
         self.concurrency_limit = concurrency_limit
         self.timeout = timeout
-        self.retry_count = retry_count
 
     def should_use_async(self, data_size: int = 0) -> bool:
         """

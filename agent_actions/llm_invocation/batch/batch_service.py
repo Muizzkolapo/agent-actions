@@ -208,18 +208,6 @@ class BatchService:
             output_directory, agent_config
         )
 
-    def retry_batch_job(
-        self,
-        batch_id: str,
-        output_directory: str,
-        agent_config: Optional[Dict[str, Any]] = None,
-        max_attempts: Optional[int] = None,
-    ) -> Optional[str]:
-        """Retry a batch job (delegates to retry service)."""
-        return self._get_retry_service().retry_batch_job(
-            batch_id, output_directory, agent_config, max_attempts
-        )
-
     # =========================================================================
     # Job manager methods (still used directly for status queries)
     # =========================================================================

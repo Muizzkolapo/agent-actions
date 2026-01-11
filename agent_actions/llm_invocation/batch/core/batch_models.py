@@ -22,10 +22,6 @@ class BatchJobEntry:
         timestamp: ISO format timestamp of creation
         provider: Provider type ('openai', 'gemini', 'anthropic')
         record_count: Number of records submitted in this batch
-        parent_batch_id: ID of parent batch (for retry batches)
-        retry_attempt: Retry attempt number (0 = original)
-        retry_for_records: List of custom_ids being retried
-        has_retry_batch: Whether this batch has a retry batch
     """
 
     batch_id: str
@@ -33,10 +29,6 @@ class BatchJobEntry:
     timestamp: str
     provider: str
     record_count: Optional[int] = None
-    parent_batch_id: Optional[str] = None
-    retry_attempt: int = 0
-    retry_for_records: Optional[List[str]] = None
-    has_retry_batch: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> "BatchJobEntry":
