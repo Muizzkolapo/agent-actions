@@ -40,10 +40,12 @@ class LineageEnricher(Enricher):
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
 
-            # Use unified lineage method (to be created in Phase 5)
-            # For now, manually add lineage fields
-            item["node_id"] = node_id
-            item["lineage"] = LineageBuilder.build_lineage({}, node_id)
+            # Use unified lineage method
+            # Note: parent_item would come from context.source_data lookup in future enhancement
+            enriched = LineageBuilder.add_unified_lineage(
+                obj=item, node_id=node_id, parent_item=None
+            )
+            result.data[i] = enriched
 
         result.node_id = base_node_id
         return result
