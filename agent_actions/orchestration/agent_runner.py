@@ -1,9 +1,14 @@
 """Module for managing and executing agents with different strategies in a workflow."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Dict, Optional, List
+from typing import TYPE_CHECKING, Tuple, Dict, Optional, List
+
+if TYPE_CHECKING:
+    from agent_actions.orchestration.manifest_manager import ManifestManager
 from agent_actions.errors import FileSystemError
 from agent_actions.file_io.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import (
@@ -84,6 +89,7 @@ class AgentRunner:
         self.processor_factory = processor_factory
         self.agent_configs: Optional[Dict[str, Dict]] = None
         self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
+        self.manifest_manager: Optional[ManifestManager] = None  # Set by AgentWorkflow
         self.strategies: Dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
@@ -175,7 +181,7 @@ class AgentRunner:
 
         for dep_name in dependencies:
             # Try manifest-based resolution first
-            if hasattr(self, "manifest_manager") and self.manifest_manager:
+            if self.manifest_manager:
                 try:
                     dep_path = self.manifest_manager.get_output_directory(dep_name)
                     if dep_path.exists():
@@ -195,11 +201,16 @@ class AgentRunner:
         return upstream_dirs
 
     def _resolve_linear_directory(
-        self, agent_folder: Path, previous_agent_type: str, idx: int
+        self, agent_folder: Path, previous_agent_type: str, _idx: int
     ) -> Path:
         """Resolve upstream directory for linear workflow (default behavior).
 
         Uses simple directory name (action name) without index prefix.
+
+        Args:
+            agent_folder: Path to agent folder
+            previous_agent_type: Name of previous action
+            _idx: Unused - kept for API compatibility
         """
         # Use simple name without index prefix
         return agent_folder / "target" / previous_agent_type

@@ -5,10 +5,14 @@ This module provides a mixin class that standardizes lineage tracking
 operations across different processor implementations.
 """
 
+import logging
 from typing import Dict, List, Any, Optional
+
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
+
+logger = logging.getLogger(__name__)
 
 
 class LineageTrackingMixin:
@@ -24,7 +28,12 @@ class LineageTrackingMixin:
         super().__init__(*args, **kwargs)
         # Get action_name from agent_config if available
         agent_config = getattr(self, "agent_config", {})
-        self._action_name = agent_config.get("agent_type", "unknown_action")
+        self._action_name = agent_config.get("agent_type")
+        if not self._action_name:
+            self._action_name = "unknown_action"
+            logger.warning(
+                "No agent_type found in agent_config, using 'unknown_action' for lineage tracking"
+            )
 
     def _get_action_name(self) -> str:
         """

@@ -92,7 +92,6 @@ class CoreServices:
 class SupportServices:
     """Supporting services for workflow execution."""
 
-    output_processor: Any
     batch_service: Any
     loop_correlator: Any
     skip_evaluator: Any

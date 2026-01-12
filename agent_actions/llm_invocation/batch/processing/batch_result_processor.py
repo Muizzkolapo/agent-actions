@@ -306,7 +306,13 @@ class BatchResultProcessor:
 
             # Lineage tracking (use action_name from agent_config)
             if ctx.agent_config:
-                action_name = ctx.agent_config.get("agent_type", "unknown_action")
+                action_name = ctx.agent_config.get("agent_type")
+                if not action_name:
+                    action_name = "unknown_action"
+                    logger.warning(
+                        "No agent_type in agent_config for batch result processing, "
+                        "using 'unknown_action' for lineage"
+                    )
                 item_node_id = IDGenerator.generate_node_id(action_name)
                 item["node_id"] = item_node_id
                 item["lineage"] = LineageBuilder.build_lineage(original_row, item_node_id)

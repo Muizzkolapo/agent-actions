@@ -11,11 +11,19 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
+
+
+class DuplicateActionError(ValueError):
+    """Raised when duplicate action names are detected in workflow configuration."""
+
+    pass
+
 
 MANIFEST_SCHEMA_VERSION = "1.0"
 MANIFEST_FILENAME = ".manifest.json"
@@ -45,6 +53,7 @@ class ManifestManager:
         self.target_dir = self.agent_io_path / "target"
         self.manifest_path = self.target_dir / MANIFEST_FILENAME
         self._manifest: Optional[Dict[str, Any]] = None
+        self._lock = threading.Lock()
 
     @property
     def manifest(self) -> Dict[str, Any]:
@@ -70,50 +79,68 @@ class ManifestManager:
             levels: List of levels, each containing action names that run in parallel
             agent_configs: Dictionary of action configurations
             workflow_run_id: Optional run ID (generated if not provided)
+
+        Raises:
+            DuplicateActionError: If duplicate action names are detected
         """
+        # Validate no duplicate action names
+        seen = set()
+        duplicates = []
+        for action_name in execution_order:
+            if action_name in seen:
+                duplicates.append(action_name)
+            seen.add(action_name)
+
+        if duplicates:
+            raise DuplicateActionError(
+                f"Duplicate action names detected: {duplicates}. "
+                "Each action must have a unique name."
+            )
+
         if workflow_run_id is None:
             workflow_run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-        self._manifest = {
-            "schema_version": MANIFEST_SCHEMA_VERSION,
-            "workflow_name": workflow_name,
-            "workflow_run_id": workflow_run_id,
-            "started_at": datetime.now().isoformat(),
-            "completed_at": None,
-            "status": "running",
-            "execution_order": execution_order,
-            "levels": levels,
-            "actions": {},
-        }
-
-        # Initialize action entries
-        for idx, action_name in enumerate(execution_order):
-            action_config = agent_configs.get(action_name, {})
-            dependencies = action_config.get("dependencies", [])
-
-            # Find which level this action belongs to
-            action_level = 0
-            for level_idx, level_actions in enumerate(levels):
-                if action_name in level_actions:
-                    action_level = level_idx
-                    break
-
-            self._manifest["actions"][action_name] = {
-                "index": idx,
-                "level": action_level,
-                "status": "pending",
-                "started_at": None,
+        with self._lock:
+            self._manifest = {
+                "schema_version": MANIFEST_SCHEMA_VERSION,
+                "workflow_name": workflow_name,
+                "workflow_run_id": workflow_run_id,
+                "started_at": datetime.now().isoformat(),
                 "completed_at": None,
-                "output_dir": action_name,  # Simple name, no index prefix
-                "dependencies": dependencies,
-                "record_count": None,
-                "error": None,
+                "status": "running",
+                "execution_order": execution_order,
+                "levels": levels,
+                "actions": {},
             }
 
-        # Ensure target directory exists and save
-        self.target_dir.mkdir(parents=True, exist_ok=True)
-        self._save_manifest()
-        logger.info("Initialized manifest for workflow %s", workflow_name)
+            # Initialize action entries
+            for idx, action_name in enumerate(execution_order):
+                action_config = agent_configs.get(action_name, {})
+                dependencies = action_config.get("dependencies", [])
+
+                # Find which level this action belongs to
+                action_level = 0
+                for level_idx, level_actions in enumerate(levels):
+                    if action_name in level_actions:
+                        action_level = level_idx
+                        break
+
+                self._manifest["actions"][action_name] = {
+                    "index": idx,
+                    "level": action_level,
+                    "status": "pending",
+                    "started_at": None,
+                    "completed_at": None,
+                    "output_dir": action_name,  # Simple name, no index prefix
+                    "dependencies": dependencies,
+                    "record_count": None,
+                    "error": None,
+                }
+
+            # Ensure target directory exists and save
+            self.target_dir.mkdir(parents=True, exist_ok=True)
+            self._save_manifest()
+            logger.info("Initialized manifest for workflow %s", workflow_name)
 
     def load_manifest(self) -> Dict[str, Any]:
         """
@@ -291,14 +318,17 @@ class ManifestManager:
 
         Args:
             action_name: Name of the action
-        """
-        if action_name not in self.manifest.get("actions", {}):
-            logger.warning("Cannot mark unknown action '%s' as started", action_name)
-            return
 
-        self._manifest["actions"][action_name]["status"] = "running"
-        self._manifest["actions"][action_name]["started_at"] = datetime.now().isoformat()
-        self._save_manifest()
+        Raises:
+            KeyError: If action not found in manifest
+        """
+        with self._lock:
+            if action_name not in self.manifest.get("actions", {}):
+                raise KeyError(f"Cannot mark unknown action '{action_name}' as started")
+
+            self._manifest["actions"][action_name]["status"] = "running"
+            self._manifest["actions"][action_name]["started_at"] = datetime.now().isoformat()
+            self._save_manifest()
 
     def mark_action_completed(
         self,
@@ -311,16 +341,19 @@ class ManifestManager:
         Args:
             action_name: Name of the action
             record_count: Optional count of records processed
-        """
-        if action_name not in self.manifest.get("actions", {}):
-            logger.warning("Cannot mark unknown action '%s' as completed", action_name)
-            return
 
-        self._manifest["actions"][action_name]["status"] = "completed"
-        self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
-        if record_count is not None:
-            self._manifest["actions"][action_name]["record_count"] = record_count
-        self._save_manifest()
+        Raises:
+            KeyError: If action not found in manifest
+        """
+        with self._lock:
+            if action_name not in self.manifest.get("actions", {}):
+                raise KeyError(f"Cannot mark unknown action '{action_name}' as completed")
+
+            self._manifest["actions"][action_name]["status"] = "completed"
+            self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
+            if record_count is not None:
+                self._manifest["actions"][action_name]["record_count"] = record_count
+            self._save_manifest()
 
     def mark_action_skipped(self, action_name: str, reason: Optional[str] = None) -> None:
         """
@@ -329,16 +362,19 @@ class ManifestManager:
         Args:
             action_name: Name of the action
             reason: Optional reason for skipping
-        """
-        if action_name not in self.manifest.get("actions", {}):
-            logger.warning("Cannot mark unknown action '%s' as skipped", action_name)
-            return
 
-        self._manifest["actions"][action_name]["status"] = "skipped"
-        self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
-        if reason:
-            self._manifest["actions"][action_name]["skip_reason"] = reason
-        self._save_manifest()
+        Raises:
+            KeyError: If action not found in manifest
+        """
+        with self._lock:
+            if action_name not in self.manifest.get("actions", {}):
+                raise KeyError(f"Cannot mark unknown action '{action_name}' as skipped")
+
+            self._manifest["actions"][action_name]["status"] = "skipped"
+            self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
+            if reason:
+                self._manifest["actions"][action_name]["skip_reason"] = reason
+            self._save_manifest()
 
     def mark_action_failed(self, action_name: str, error: str) -> None:
         """
@@ -347,28 +383,33 @@ class ManifestManager:
         Args:
             action_name: Name of the action
             error: Error message
-        """
-        if action_name not in self.manifest.get("actions", {}):
-            logger.warning("Cannot mark unknown action '%s' as failed", action_name)
-            return
 
-        self._manifest["actions"][action_name]["status"] = "failed"
-        self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
-        self._manifest["actions"][action_name]["error"] = error
-        self._save_manifest()
+        Raises:
+            KeyError: If action not found in manifest
+        """
+        with self._lock:
+            if action_name not in self.manifest.get("actions", {}):
+                raise KeyError(f"Cannot mark unknown action '{action_name}' as failed")
+
+            self._manifest["actions"][action_name]["status"] = "failed"
+            self._manifest["actions"][action_name]["completed_at"] = datetime.now().isoformat()
+            self._manifest["actions"][action_name]["error"] = error
+            self._save_manifest()
 
     def mark_workflow_completed(self) -> None:
         """Mark the entire workflow as completed."""
-        self._manifest["status"] = "completed"
-        self._manifest["completed_at"] = datetime.now().isoformat()
-        self._save_manifest()
+        with self._lock:
+            self._manifest["status"] = "completed"
+            self._manifest["completed_at"] = datetime.now().isoformat()
+            self._save_manifest()
 
     def mark_workflow_failed(self, error: str) -> None:
         """Mark the entire workflow as failed."""
-        self._manifest["status"] = "failed"
-        self._manifest["completed_at"] = datetime.now().isoformat()
-        self._manifest["error"] = error
-        self._save_manifest()
+        with self._lock:
+            self._manifest["status"] = "failed"
+            self._manifest["completed_at"] = datetime.now().isoformat()
+            self._manifest["error"] = error
+            self._save_manifest()
 
     def get_completed_actions(self) -> List[str]:
         """
@@ -412,9 +453,15 @@ class ManifestManager:
 
     def clear_manifest(self) -> None:
         """Remove the manifest file."""
-        if self.manifest_path.exists():
-            self.manifest_path.unlink()
-        self._manifest = None
+        with self._lock:
+            if self.manifest_path.exists():
+                self.manifest_path.unlink()
+            self._manifest = None
 
 
-__all__ = ["ManifestManager", "MANIFEST_FILENAME", "MANIFEST_SCHEMA_VERSION"]
+__all__ = [
+    "ManifestManager",
+    "DuplicateActionError",
+    "MANIFEST_FILENAME",
+    "MANIFEST_SCHEMA_VERSION",
+]

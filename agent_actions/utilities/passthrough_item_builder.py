@@ -66,12 +66,12 @@ class PassthroughItemBuilder:
             >>> row = {
             ...     'target_id': 'tgt_123',
             ...     'content': {'text': 'data'},
-            ...     'lineage': ['node_0']
+            ...     'lineage': ['extract_0']
             ... }
             >>> result = PassthroughItemBuilder.build_item(
             ...     row=row,
             ...     reason='where_clause_not_matched',
-            ...     idx=1,
+            ...     action_name='transform',
             ...     mode='batch'
             ... )
             >>> print(result['metadata'])
@@ -85,7 +85,7 @@ class PassthroughItemBuilder:
             >>> result = PassthroughItemBuilder.build_item(
             ...     row=row,
             ...     reason='where_clause_not_matched',
-            ...     idx=1,
+            ...     action_name='transform',
             ...     source_guid='src_456',
             ...     mode='online'
             ... )

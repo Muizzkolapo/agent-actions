@@ -42,7 +42,6 @@ from agent_actions.orchestration.workflow_models import (
     SupportServices,
     WorkflowServices,
 )
-from agent_actions.prompt_generation.output_processor import OutputProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +155,6 @@ class AgentWorkflow:
         agent_runner.agent_configs = self.agent_configs
         agent_runner.workflow_name = self.agent_name
 
-        # Initialize supporting services
-        output_processor = OutputProcessor(
-            self.config.paths.parent_output, self.config.paths.constructor_path
-        )
         # Import here to avoid circular dependency
         from agent_actions.llm_invocation.batch.batch_service import BatchService
 
@@ -231,7 +226,6 @@ class AgentWorkflow:
                 action_level_orchestrator=action_level_orchestrator,
             ),
             support=SupportServices(
-                output_processor=output_processor,
                 batch_service=batch_service,
                 loop_correlator=loop_correlator,
                 skip_evaluator=skip_evaluator,

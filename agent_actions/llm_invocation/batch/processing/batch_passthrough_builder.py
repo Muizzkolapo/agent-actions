@@ -2,7 +2,9 @@
 Passthrough Data Builder.
 """
 
+from pathlib import Path
 from typing import Dict, List, Optional, Any
+
 from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
@@ -56,8 +58,6 @@ class BatchPassthroughBuilder:
         """
         if not output_directory:
             return "unknown_action"
-        from pathlib import Path
-
         return Path(output_directory).name
 
     def from_data(self, data: List[Dict[str, Any]], reason: str) -> Dict[str, Any]:
