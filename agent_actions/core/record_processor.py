@@ -88,17 +88,31 @@ class RecordProcessor:
         """
         Process multiple records.
 
+        Handles exceptions gracefully - if one item fails, it creates a
+        ProcessingResult.failed() for that item and continues processing
+        remaining items.
+
         Args:
             items: List of input items
             context: Base ProcessingContext
 
         Returns:
-            List of ProcessingResults
+            List of ProcessingResults (includes both successes and failures)
         """
         results = []
         for idx, item in enumerate(items):
-            item_context = self._create_item_context(context, idx, item)
-            results.append(self.process(item, item_context))
+            try:
+                item_context = self._create_item_context(context, idx, item)
+                result = self.process(item, item_context)
+                results.append(result)
+            except Exception as e:
+                # Create failed result instead of propagating exception
+                # This allows batch processing to continue
+                failed_result = ProcessingResult.failed(
+                    error=f"Error processing item {idx}: {str(e)}",
+                    source_guid=item.get("source_guid") if isinstance(item, dict) else None,
+                )
+                results.append(failed_result)
         return results
 
     # Private helper methods

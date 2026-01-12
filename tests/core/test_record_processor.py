@@ -255,6 +255,68 @@ class TestBatchProcessing:
         assert call_contexts[0].record_index == 0
         assert call_contexts[1].record_index == 1
 
+    @patch.object(RecordProcessor, "process")
+    def test_handles_exception_creates_failed_result(self, mock_process):
+        """Exception in process() creates ProcessingResult.failed()."""
+        mock_process.side_effect = [
+            ProcessingResult.success(data=[{"item": 1}]),
+            Exception("Processing failed"),
+            ProcessingResult.success(data=[{"item": 3}]),
+        ]
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test")
+
+        results = processor.process_batch(
+            [{"key": "val1"}, {"key": "val2"}, {"key": "val3"}], context
+        )
+
+        assert len(results) == 3
+        assert results[0].status == ProcessingStatus.SUCCESS
+        assert results[1].status == ProcessingStatus.FAILED
+        assert "Error processing item 1" in results[1].error
+        assert "Processing failed" in results[1].error
+        assert results[2].status == ProcessingStatus.SUCCESS
+
+    @patch.object(RecordProcessor, "process")
+    def test_continues_processing_after_failure(self, mock_process):
+        """Batch continues processing remaining items after failure."""
+        mock_process.side_effect = [
+            Exception("First item failed"),
+            ProcessingResult.success(data=[{"item": 2}]),
+            Exception("Third item failed"),
+            ProcessingResult.success(data=[{"item": 4}]),
+        ]
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test")
+
+        results = processor.process_batch(
+            [{"key": "val1"}, {"key": "val2"}, {"key": "val3"}, {"key": "val4"}],
+            context,
+        )
+
+        # All 4 items processed despite failures
+        assert len(results) == 4
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[1].status == ProcessingStatus.SUCCESS
+        assert results[2].status == ProcessingStatus.FAILED
+        assert results[3].status == ProcessingStatus.SUCCESS
+
+    @patch.object(RecordProcessor, "process")
+    def test_captures_source_guid_in_failed_result(self, mock_process):
+        """Failed result includes source_guid if available."""
+        mock_process.side_effect = Exception("Processing failed")
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test")
+
+        results = processor.process_batch([{"source_guid": "guid-123", "content": "data"}], context)
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        assert results[0].source_guid == "guid-123"
+
 
 class TestEndToEndProcessing:
     """Test full process() flow."""
