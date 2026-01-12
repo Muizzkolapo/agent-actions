@@ -2,7 +2,30 @@
 Lineage Tracking Service.
 """
 
+import re
 from typing import Dict, List, Any
+
+# Pattern for valid node IDs: {action_name}_{identifier}
+# action_name: valid Python identifier (starts with letter/underscore)
+# identifier: any non-empty alphanumeric/dash sequence (UUID or simple ID)
+# Examples: "extract_abc123", "node_2_a_0", "transform_a1b2c3d4-e5f6-7890"
+_NODE_ID_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*_[a-zA-Z0-9_-]+$")
+
+
+def _is_valid_node_id(value: str) -> bool:
+    """
+    Check if a string is a valid node ID.
+
+    Valid node IDs have format: {action_name}_{identifier}
+    where action_name is a valid identifier and the suffix is non-empty.
+
+    Args:
+        value: String to check
+
+    Returns:
+        True if valid node ID format
+    """
+    return bool(_NODE_ID_PATTERN.match(value))
 
 
 class LineageBuilder:
@@ -23,8 +46,7 @@ class LineageBuilder:
         """
         if not isinstance(lineage, list):
             return []
-        # Node IDs are strings containing an underscore (action_name_uuid format)
-        return [nid for nid in lineage if isinstance(nid, str) and "_" in nid]
+        return [nid for nid in lineage if isinstance(nid, str) and _is_valid_node_id(nid)]
 
     @staticmethod
     def build_lineage(item: Dict, node_id: str) -> List[str]:
