@@ -98,6 +98,7 @@ class SupportServices:
     skip_evaluator: Any
     batch_manager: Any
     output_manager: Any
+    manifest_manager: Any = None
 
 
 @dataclass

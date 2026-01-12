@@ -91,7 +91,8 @@ class LoopOutputCorrelator:
             loop_idx = self._find_agent_index(loop_agent)
             if loop_idx is None:
                 continue
-            loop_output_dir = self.agent_folder / "target" / f"node_{loop_idx}_{loop_agent}"
+            # Use simple directory name (no index prefix)
+            loop_output_dir = self.agent_folder / "target" / loop_agent
             if loop_output_dir.exists():
                 outputs, filenames = self._load_agent_outputs_with_filenames(loop_output_dir)
                 loop_outputs[loop_agent] = outputs
@@ -116,7 +117,7 @@ class LoopOutputCorrelator:
                 self._write_correlated_data(correlation_dir, correlated_data, filename)
 
     def prepare_correlated_input(
-        self, agent_name: str, loop_sources: List[str], current_idx: int
+        self, agent_name: str, loop_sources: List[str], _current_idx: int
     ) -> Optional[str]:
         """
         Prepare correlated input directory for an agent that depends on loop outputs.
@@ -124,14 +125,14 @@ class LoopOutputCorrelator:
         Args:
             agent_name: Name of the agent that needs correlated input
             loop_sources: List of loop agent names this agent depends on
-            current_idx: Current execution index
-            pattern: Merge pattern to use (only 'merge' supported)
+            _current_idx: Unused - kept for API compatibility
 
         Returns:
             Path to correlated input directory, or None if correlation failed
         """
         try:
-            correlation_dir = self.agent_folder / "target" / f"node_{current_idx}_{agent_name}"
+            # Use simple directory name (no index prefix)
+            correlation_dir = self.agent_folder / "target" / agent_name
             correlation_dir.mkdir(parents=True, exist_ok=True)
 
             loop_outputs, loop_filenames = self._load_loop_outputs(loop_sources)
@@ -145,15 +146,18 @@ class LoopOutputCorrelator:
             return None
 
     def _find_agent_index(self, agent_name: str) -> Optional[int]:
-        """Find the execution index of an agent by scanning target directories."""
+        """Find the execution index of an agent.
+
+        With simple directory naming, we check if the directory exists.
+        Returns 0 if found (index no longer matters for path construction).
+        """
         target_dir = self.agent_folder / "target"
         if not target_dir.exists():
             return None
-        for subdir in target_dir.iterdir():
-            if subdir.is_dir() and subdir.name.endswith(f"_{agent_name}"):
-                parts = subdir.name.split("_")
-                if len(parts) >= 2 and parts[0] == "node" and parts[1].isdigit():
-                    return int(parts[1])
+        # Simple directory name check
+        agent_dir = target_dir / agent_name
+        if agent_dir.exists() and agent_dir.is_dir():
+            return 0  # Index no longer used for path construction
         return None
 
     def _load_json_from_file(self, params: JsonLoadParams):

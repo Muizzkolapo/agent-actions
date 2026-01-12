@@ -25,7 +25,7 @@ class PassthroughItemBuilder:
     def build_item(
         row: Dict[str, Any],
         reason: str,
-        idx: int,
+        action_name: str,
         source_guid: Optional[str] = None,
         custom_id: Optional[str] = None,
         mode: str = "batch",
@@ -41,7 +41,7 @@ class PassthroughItemBuilder:
                 is used as content)
             reason: Passthrough reason (e.g., 'where_clause_not_matched',
                 'conditional_clause_failed')
-            idx: Node index for ID generation (used to create node_id)
+            action_name: Action name for node ID generation
             source_guid: Optional source GUID (if not provided, uses
                 row['source_guid'] or target_id)
             custom_id: Optional custom ID for target_id (batch mode fallback)
@@ -96,7 +96,7 @@ class PassthroughItemBuilder:
         # Generate IDs
         target_id = row.get("target_id") or custom_id or IDGenerator.generate_target_id()
         resolved_source_guid = source_guid or row.get("source_guid", target_id)
-        node_id = IDGenerator.generate_node_id(idx)
+        node_id = IDGenerator.generate_node_id(action_name)
 
         # Build lineage (preserve existing lineage chain)
         lineage = LineageBuilder.build_lineage(row, node_id)

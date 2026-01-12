@@ -304,9 +304,10 @@ class BatchResultProcessor:
             # Metadata
             item["metadata"] = batch_result.metadata or {}
 
-            # Lineage tracking (if node_idx available)
-            if ctx.node_idx is not None:
-                item_node_id = IDGenerator.generate_node_id(ctx.node_idx)
+            # Lineage tracking (use action_name from agent_config)
+            if ctx.agent_config:
+                action_name = ctx.agent_config.get("agent_type", "unknown_action")
+                item_node_id = IDGenerator.generate_node_id(action_name)
                 item["node_id"] = item_node_id
                 item["lineage"] = LineageBuilder.build_lineage(original_row, item_node_id)
 

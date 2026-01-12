@@ -24,6 +24,7 @@ from agent_actions.orchestration.agent_executor import AgentExecutor, ExecutorDe
 from agent_actions.orchestration.artifact_linker import ArtifactLinker
 from agent_actions.orchestration.batch_manager import BatchLifecycleManager
 from agent_actions.orchestration.loop_correlator import LoopOutputCorrelator
+from agent_actions.orchestration.manifest_manager import ManifestManager
 from agent_actions.orchestration.output_manager import AgentOutputManager, OutputManagerConfig
 from agent_actions.orchestration.skip_evaluator import SkipEvaluator
 from agent_actions.orchestration.state_manager import AgentStateManager
@@ -206,6 +207,22 @@ class AgentWorkflow:
             self.execution_order, self.agent_configs, self.console
         )
 
+        # Initialize manifest manager
+        agent_io_path = agent_folder
+        manifest_manager = ManifestManager(agent_io_path)
+
+        # Compute execution levels and initialize manifest
+        levels = action_level_orchestrator.compute_execution_levels()
+        manifest_manager.initialize_manifest(
+            workflow_name=self.agent_name,
+            execution_order=self.execution_order,
+            levels=levels,
+            agent_configs=self.agent_configs,
+        )
+
+        # Store manifest manager for use by other components
+        agent_runner.manifest_manager = manifest_manager
+
         return WorkflowServices(
             core=CoreServices(
                 agent_runner=agent_runner,
@@ -220,6 +237,7 @@ class AgentWorkflow:
                 skip_evaluator=skip_evaluator,
                 batch_manager=batch_manager,
                 output_manager=output_manager,
+                manifest_manager=manifest_manager,
             ),
         )
 
@@ -662,9 +680,9 @@ class AgentWorkflow:
             color = "green" if status == "completed" else "red" if status == "failed" else "yellow"
             self.console.print(f"- {agent_name}: [{color}]{status}[/{color}]")
 
-        # Process final output
-        output_proc = self.services.support.output_processor
-        output_proc.process_final_output(self.state.ephemeral_directories)
+        # Mark workflow as completed in manifest
+        if self.services.support.manifest_manager:
+            self.services.support.manifest_manager.mark_workflow_completed()
 
         self.console.print("\n🎉 [bold green]Workflow Complete[/bold green]")
         self.console.print("Done.")
@@ -674,6 +692,10 @@ class AgentWorkflow:
         from agent_actions.errors.preflight import PreFlightValidationError
 
         self.state.failed = True
+
+        # Mark workflow as failed in manifest
+        if self.services.support.manifest_manager:
+            self.services.support.manifest_manager.mark_workflow_failed(str(error))
 
         # Print structured error header
         self.console.print("\n❌ [bold red]Workflow failed[/bold red]")

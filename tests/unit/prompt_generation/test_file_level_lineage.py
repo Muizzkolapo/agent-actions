@@ -30,7 +30,7 @@ from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
 
 def process_file_level_tool_fixed(
-    generated_data, data: List[Dict], source_guid: Optional[str], idx: int = 3
+    generated_data, data: List[Dict], source_guid: Optional[str], action_name: str = "test_action"
 ) -> List[Dict]:
     """
     Implementation of the fixed _process_file_level_tool logic.
@@ -52,14 +52,14 @@ def process_file_level_tool_fixed(
     # Fallback source for records without preserved lineage
     fallback_source = data[0] if data else {}
 
-    base_node_id = IDGenerator.generate_node_id(idx)
+    base_node_id = IDGenerator.generate_node_id(action_name)
     tracked_data = []
     field_manager = FieldManager()
 
     for i, item in enumerate(data_list):
         if isinstance(item, dict):
             item_copy = item.copy()
-            item_copy = field_manager.ensure_required_fields(item_copy, source_guid, idx)
+            item_copy = field_manager.ensure_required_fields(item_copy, source_guid, action_name)
             node_id = f"{base_node_id}_{i}"
 
             # Priority 1: Explicit source_mapping from FileUDFResult
@@ -93,7 +93,7 @@ def process_file_level_tool_fixed(
 
 
 def process_file_level_tool_buggy(
-    generated_data, data: List[Dict], source_guid: Optional[str], idx: int = 3
+    generated_data, data: List[Dict], source_guid: Optional[str], action_name: str = "test_action"
 ) -> List[Dict]:
     """
     The BUGGY implementation before the fix.
@@ -104,14 +104,14 @@ def process_file_level_tool_buggy(
     # THE BUG: Always uses first input for ALL records
     source_item = data[0] if data else {}
 
-    base_node_id = IDGenerator.generate_node_id(idx)
+    base_node_id = IDGenerator.generate_node_id(action_name)
     tracked_data = []
     field_manager = FieldManager()
 
     for i, item in enumerate(data_list):
         if isinstance(item, dict):
             item_copy = item.copy()
-            item_copy = field_manager.ensure_required_fields(item_copy, source_guid, idx)
+            item_copy = field_manager.ensure_required_fields(item_copy, source_guid, action_name)
             node_id = f"{base_node_id}_{i}"
             # BUG: source_item is always data[0]
             item_copy = LineageBuilder.add_lineage_tracking(item_copy, source_item, node_id)
@@ -337,7 +337,7 @@ class TestFileLevelLineagePreservation:
         assert len(result) == 1
         # With empty input, lineage should just be the new node_id
         assert len(result[0]["lineage"]) == 1
-        assert result[0]["lineage"][0].startswith("node_3_")
+        assert result[0]["lineage"][0].startswith("test_action_")
 
     def test_single_item_not_list(self):
         """Test that single dict output (not list) is handled."""

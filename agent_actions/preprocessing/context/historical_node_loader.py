@@ -182,28 +182,24 @@ class HistoricalNodeDataLoader:
         Args:
             action_name: Name of the action/agent
             lineage: List of node_ids
-            agent_indices: Mapping of agent names to node indices
+            agent_indices: Mapping of agent names to node indices (kept for API compatibility)
 
         Returns:
             The matching node_id or None if not found
 
         Example:
             action_name = "fact_extractor"
-            lineage = ["node_0_abc123", "node_1_def456", "node_2_ghi789"]
-            agent_indices = {"fact_extractor": 0, "flatten_facts": 1}
+            lineage = ["fact_extractor_abc123", "flatten_facts_def456"]
 
-            Returns: "node_0_abc123" (matches node_0 prefix)
+            Returns: "fact_extractor_abc123" (matches action name prefix)
         """
         if not lineage:
             return None
 
-        node_idx = agent_indices.get(action_name)
-        if node_idx is None:
-            return None
+        # Node IDs now use format: {action_name}_{uuid}
+        node_prefix = f"{action_name}_"
 
-        node_prefix = f"node_{node_idx}_"
-
-        # Find the node_id that starts with the expected prefix
+        # Find the node_id that starts with the action name
         for node_id in lineage:
             if isinstance(node_id, str) and node_id.startswith(node_prefix):
                 return node_id
@@ -217,7 +213,7 @@ class HistoricalNodeDataLoader:
 
         Args:
             action_name: Name of the action/agent
-            node_idx: Node index of the action
+            node_idx: Node index (kept for API compatibility, not used for path)
             current_file_path: Current file being processed
 
         Returns:
@@ -225,20 +221,19 @@ class HistoricalNodeDataLoader:
 
         Example:
             action_name = "fact_extractor"
-            node_idx = 0
-            current_file_path = "target/node_2_cluster/file.json"
+            current_file_path = "target/cluster/file.json"
 
-            Returns: Path("target/node_0_fact_extractor/file.json")
+            Returns: Path("target/fact_extractor/file.json")
         """
         current_path = Path(current_file_path)
         file_name = current_path.name
 
         # Navigate to the target directory root
-        # Assuming structure: target/node_X_action/file.json
+        # Structure: target/{action_name}/file.json
         target_root = current_path.parent.parent
 
-        # Construct the path to the historical node directory
-        target_dir = target_root / f"node_{node_idx}_{action_name}"
+        # Use simple directory name (no index prefix)
+        target_dir = target_root / action_name
         target_file = target_dir / file_name
 
         return target_file

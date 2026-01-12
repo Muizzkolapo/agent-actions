@@ -13,6 +13,8 @@ class LineageBuilder:
         """
         Filter lineage to only include valid node IDs.
 
+        Node IDs are in format: {action_name}_{uuid}
+
         Args:
             lineage: Raw lineage list
 
@@ -21,7 +23,8 @@ class LineageBuilder:
         """
         if not isinstance(lineage, list):
             return []
-        return [nid for nid in lineage if isinstance(nid, str) and nid.startswith("node_")]
+        # Node IDs are strings containing an underscore (action_name_uuid format)
+        return [nid for nid in lineage if isinstance(nid, str) and "_" in nid]
 
     @staticmethod
     def build_lineage(item: Dict, node_id: str) -> List[str]:

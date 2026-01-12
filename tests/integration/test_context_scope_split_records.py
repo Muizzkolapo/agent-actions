@@ -61,7 +61,7 @@ def split_record_temp_dir(split_records_data):
             ├── source/
             │   └── test_file.json (source data)
             └── target/
-                └── node_5_split_operation/
+                └── split_operation/
                     └── test_file.json (contains 3 split records)
 
     This mimics the real workflow directory structure where historical
@@ -80,7 +80,7 @@ def split_record_temp_dir(split_records_data):
 
         # Create target directory with split records
         target_dir = agent_io_dir / "target"
-        node_5_dir = target_dir / "node_5_split_operation"
+        node_5_dir = target_dir / "split_operation"
         node_5_dir.mkdir(parents=True)
 
         # Write split records to target file
@@ -142,7 +142,7 @@ class TestContextScopeWithSplitRecords:
         # Construct file path to current processing location
         # NOTE: Points to downstream node, not historical node
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         # Call build_field_context_with_history
@@ -193,7 +193,7 @@ class TestContextScopeWithSplitRecords:
 
         # Construct file path to current processing location
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         # Call build_field_context_with_history
@@ -247,7 +247,7 @@ class TestContextScopeWithSplitRecords:
 
         # Construct file path to current processing location
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         # Call build_field_context_with_history
@@ -290,7 +290,7 @@ class TestContextScopeWithSplitRecords:
         agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         loaded_statuses = []
@@ -355,7 +355,7 @@ class TestContextScopeSplitRecordsEdgeCases:
         agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         # Should not crash
@@ -389,7 +389,7 @@ class TestContextScopeSplitRecordsEdgeCases:
         agent_config = {"idx": 23, "dependencies": ["split_operation"]}
 
         file_path = str(
-            split_record_temp_dir / "agent_io" / "target" / "node_23_downstream" / "test_file.json"
+            split_record_temp_dir / "agent_io" / "target" / "downstream" / "test_file.json"
         )
 
         field_context = ContextScopeProcessor.build_field_context_with_history(

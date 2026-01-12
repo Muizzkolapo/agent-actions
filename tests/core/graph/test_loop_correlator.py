@@ -104,7 +104,8 @@ class TestLoopOutputCorrelator:
         loop_dirs = []
         test_filename = "Azure_AI_Questions.json"
         for i in range(1, 4):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_generate_distractors_{i}"
+            # Use simple directory names (no node_X_ prefix)
+            loop_dir = temp_agent_folder / "target" / f"generate_distractors_{i}"
             loop_dir.mkdir(parents=True)
             loop_dirs.append(loop_dir)
             test_data = [
@@ -129,9 +130,10 @@ class TestLoopOutputCorrelator:
 
     def test_partial_record_handling(self, correlator, temp_agent_folder):
         """Test that records missing from some loops are still included."""
-        loop1_dir = temp_agent_folder / "target" / "node_1_distractor_1"
-        loop2_dir = temp_agent_folder / "target" / "node_2_distractor_2"
-        loop3_dir = temp_agent_folder / "target" / "node_3_distractor_3"
+        # Use simple directory names (no node_X_ prefix)
+        loop1_dir = temp_agent_folder / "target" / "distractor_1"
+        loop2_dir = temp_agent_folder / "target" / "distractor_2"
+        loop3_dir = temp_agent_folder / "target" / "distractor_3"
         for dir in [loop1_dir, loop2_dir, loop3_dir]:
             dir.mkdir(parents=True)
         data_loop1 = [
@@ -198,8 +200,9 @@ class TestLoopOutputCorrelator:
 
     def test_multiple_file_correlation(self, correlator, temp_agent_folder):
         """Test correlation when loop agents produce multiple files."""
-        loop1_dir = temp_agent_folder / "target" / "node_1_processor_1"
-        loop2_dir = temp_agent_folder / "target" / "node_2_processor_2"
+        # Use simple directory names (no node_X_ prefix)
+        loop1_dir = temp_agent_folder / "target" / "processor_1"
+        loop2_dir = temp_agent_folder / "target" / "processor_2"
         loop1_dir.mkdir(parents=True)
         loop2_dir.mkdir(parents=True)
         files = ["questions.json", "answers.json", "metadata.json"]
@@ -235,13 +238,15 @@ class TestLoopOutputCorrelator:
                 assert "loop2_data" in data[0]["content"]
 
     def test_find_agent_index(self, correlator, temp_agent_folder):
-        """Test finding agent index from directory structure."""
-        (temp_agent_folder / "target" / "node_0_extract").mkdir(parents=True)
-        (temp_agent_folder / "target" / "node_5_process").mkdir(parents=True)
-        (temp_agent_folder / "target" / "node_10_validate").mkdir(parents=True)
+        """Test finding agent by checking directory existence."""
+        # Use simple directory names (no node_X_ prefix)
+        (temp_agent_folder / "target" / "extract").mkdir(parents=True)
+        (temp_agent_folder / "target" / "process").mkdir(parents=True)
+        (temp_agent_folder / "target" / "validate").mkdir(parents=True)
+        # _find_agent_index now returns 0 if directory exists (index no longer matters)
         assert correlator._find_agent_index("extract") == 0
-        assert correlator._find_agent_index("process") == 5
-        assert correlator._find_agent_index("validate") == 10
+        assert correlator._find_agent_index("process") == 0
+        assert correlator._find_agent_index("validate") == 0
         assert correlator._find_agent_index("nonexistent") is None
 
     def test_load_agent_outputs_with_filenames(self, correlator, temp_agent_folder):
@@ -287,7 +292,8 @@ class TestLoopOutputCorrelator:
 
     def test_write_correlated_data(self, correlator, temp_agent_folder):
         """Test writing correlated data and source file creation."""
-        output_dir = temp_agent_folder / "target" / "node_5_consumer"
+        # Use simple directory names (no node_X_ prefix)
+        output_dir = temp_agent_folder / "target" / "consumer"
         output_dir.mkdir(parents=True)
         test_data = [
             {"source_guid": "g1", "content": {"field": "value"}},
@@ -312,7 +318,8 @@ class TestLoopOutputCorrelator:
 
     def test_error_handling_in_correlation(self, correlator, temp_agent_folder):
         """Test error handling during correlation."""
-        loop_dir = temp_agent_folder / "target" / "node_1_loop_1"
+        # Use simple directory names (no node_X_ prefix)
+        loop_dir = temp_agent_folder / "target" / "loop_1"
         loop_dir.mkdir(parents=True)
         with open(loop_dir / "invalid.json", "w") as f:
             f.write("not valid json {")
@@ -355,7 +362,8 @@ class TestLoopOutputCorrelatorIntegration:
         correlator = LoopOutputCorrelator(agent_folder)
         workflow.loop_correlator = correlator
         for i in range(1, 4):
-            loop_dir = agent_folder / "target" / f"node_{i}_loop_{i}"
+            # Use simple directory names (no node_X_ prefix)
+            loop_dir = agent_folder / "target" / f"loop_{i}"
             loop_dir.mkdir(parents=True)
             data = [
                 {
@@ -395,7 +403,8 @@ class TestLoopCorrelatorWithSequentialMode:
     def test_sequential_loop_correlation_works(self, correlator, temp_agent_folder):
         """Test that correlator works correctly with sequential loop outputs."""
         for i in range(1, 4):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_refine_{i}"
+            # Use simple directory names (no node_X_ prefix)
+            loop_dir = temp_agent_folder / "target" / f"refine_{i}"
             loop_dir.mkdir(parents=True)
             test_data = [
                 {
@@ -421,7 +430,7 @@ class TestLoopCorrelatorWithSequentialMode:
     def test_partial_sequential_failure_correlation(self, correlator, temp_agent_folder):
         """Test correlation when some sequential iterations fail."""
         for i in range(1, 3):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_process_{i}"
+            loop_dir = temp_agent_folder / "target" / f"process_{i}"
             loop_dir.mkdir(parents=True)
             test_data = [
                 {
@@ -447,7 +456,7 @@ class TestLoopCorrelatorWithSequentialMode:
     def test_sequential_loop_with_mixed_metadata(self, correlator, temp_agent_folder):
         """Test correlation when sequential loop agents have loop_mode metadata."""
         for i in range(1, 4):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_step_{i}"
+            loop_dir = temp_agent_folder / "target" / f"step_{i}"
             loop_dir.mkdir(parents=True)
             test_data = [
                 {
@@ -472,7 +481,7 @@ class TestLoopCorrelatorWithSequentialMode:
     def test_sequential_vs_parallel_correlation_same_behavior(self, correlator, temp_agent_folder):
         """Test that correlation behavior is identical for sequential and parallel loops."""
         for i in range(1, 3):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_seq_{i}"
+            loop_dir = temp_agent_folder / "target" / f"seq_{i}"
             loop_dir.mkdir(parents=True)
             test_data = [
                 {
@@ -485,7 +494,7 @@ class TestLoopCorrelatorWithSequentialMode:
             with open(loop_dir / "output.json", "w") as f:
                 json.dump(test_data, f)
         for i in range(3, 5):
-            loop_dir = temp_agent_folder / "target" / f"node_{i}_par_{i - 2}"
+            loop_dir = temp_agent_folder / "target" / f"par_{i - 2}"
             loop_dir.mkdir(parents=True)
             test_data = [
                 {

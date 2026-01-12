@@ -23,7 +23,7 @@ class FieldManager:
         self,
         obj: Dict,
         source_guid: str,
-        idx: int = 0,
+        action_name: str = "unknown_action",
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict:
         """
@@ -35,7 +35,7 @@ class FieldManager:
         Args:
             obj: Object to update
             source_guid: Source GUID to use if missing
-            idx: Index for node_id generation
+            action_name: Action name for node_id generation
             metadata: Optional LLM response metadata to add
 
         Returns:
@@ -47,7 +47,7 @@ class FieldManager:
         if "source_guid" not in obj or not obj["source_guid"]:
             obj["source_guid"] = source_guid
         if "node_id" not in obj or not obj["node_id"]:
-            obj["node_id"] = self.id_generator.generate_node_id(idx)
+            obj["node_id"] = self.id_generator.generate_node_id(action_name)
 
         # Add metadata field if provided and not already present
         if metadata is not None and "metadata" not in obj:
@@ -63,6 +63,7 @@ class FieldManager:
         node_id: Optional[str] = None,
         lineage: Optional[List[str]] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        action_name: str = "unknown_action",
     ) -> Dict:
         """
         Create a standard processed item with all required fields.
@@ -74,6 +75,7 @@ class FieldManager:
             node_id: Optional node ID (will generate if not provided)
             lineage: Optional lineage (will create empty if not provided)
             metadata: Optional LLM response metadata
+            action_name: Action name for node_id generation if node_id not provided
 
         Returns:
             Standard processed item dictionary
@@ -82,7 +84,7 @@ class FieldManager:
             "source_guid": source_guid,
             "content": content,
             "target_id": target_id or self.id_generator.generate_target_id(),
-            "node_id": node_id or self.id_generator.generate_node_id(0),
+            "node_id": node_id or self.id_generator.generate_node_id(action_name),
             "lineage": lineage or [],
         }
 

@@ -96,22 +96,16 @@ class TestNodeMappingService:
 
         assert result is None
 
-    def test_get_node_prefix(self):
-        """Test generating node prefix from index."""
-        assert NodeMappingService.get_node_prefix(0) == "node_0"
-        assert NodeMappingService.get_node_prefix(1) == "node_1"
-        assert NodeMappingService.get_node_prefix(10) == "node_10"
-
     def test_get_node_directory_name(self):
-        """Test generating full node directory name."""
-        result = NodeMappingService.get_node_directory_name("fact_extractor", 0)
-        assert result == "node_0_fact_extractor"
+        """Test generating node directory name (just returns agent name)."""
+        result = NodeMappingService.get_node_directory_name("fact_extractor")
+        assert result == "fact_extractor"
 
-        result = NodeMappingService.get_node_directory_name("flatten_facts", 1)
-        assert result == "node_1_flatten_facts"
+        result = NodeMappingService.get_node_directory_name("flatten_facts")
+        assert result == "flatten_facts"
 
-        result = NodeMappingService.get_node_directory_name("cluster_list", 2)
-        assert result == "node_2_cluster_list"
+        result = NodeMappingService.get_node_directory_name("cluster_list")
+        assert result == "cluster_list"
 
     def test_build_agent_index_map_with_non_integer_idx(self):
         """Test handling of non-integer idx values."""

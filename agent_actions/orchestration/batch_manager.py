@@ -136,7 +136,8 @@ class BatchLifecycleManager:
         Returns:
             Status string: 'batch_submitted', 'passthrough', 'no_batches', or None
         """
-        node_output_dir = agent_io_path / "target" / f"node_{agent_idx}_{agent_name}"
+        # Use simple directory name (no index prefix)
+        node_output_dir = agent_io_path / "target" / agent_name
         registry_file = node_output_dir / "batch" / ".batch_registry.json"
         passthrough_marker = node_output_dir / ".passthrough_processed"
 

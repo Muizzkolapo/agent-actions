@@ -2,14 +2,10 @@
 Passthrough Data Builder.
 """
 
-import re
 from typing import Dict, List, Optional, Any
 from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 from agent_actions.llm_invocation.batch.core.batch_context_metadata import BatchContextMetadata
 from agent_actions.llm_invocation.batch.core.batch_constants import ContextMetaKeys
-
-# Import the constant from batch_service (or define here if needed)
-NODE_DIRECTORY_PATTERN = r"node_(\d+)_(\w+)"
 
 
 class BatchPassthroughBuilder:
@@ -41,27 +37,28 @@ class BatchPassthroughBuilder:
         Initialize passthrough builder.
 
         Args:
-            output_directory: Path to output directory (e.g., '.../target/node_4_AgentName')
-                            Used to extract node index for lineage tracking
+            output_directory: Path to output directory (e.g., '.../target/AgentName')
+                            Used to extract action name for lineage tracking
         """
         self.output_directory = output_directory
-        self.node_idx = self._extract_node_index(output_directory)
+        self.action_name = self._extract_action_name(output_directory)
 
     @staticmethod
-    def _extract_node_index(output_directory: Optional[str]) -> Optional[int]:
+    def _extract_action_name(output_directory: Optional[str]) -> str:
         """
-        Extract node index from output directory path.
+        Extract action name from output directory path.
 
         Args:
-            output_directory: Path like '.../target/node_4_AgentName'
+            output_directory: Path like '.../target/AgentName'
 
         Returns:
-            Node index (e.g., 4) or None if pattern doesn't match
+            Action name extracted from the last path component
         """
         if not output_directory:
-            return None
-        match = re.search(NODE_DIRECTORY_PATTERN, str(output_directory))
-        return int(match.group(1)) if match else None
+            return "unknown_action"
+        from pathlib import Path
+
+        return Path(output_directory).name
 
     def from_data(self, data: List[Dict[str, Any]], reason: str) -> Dict[str, Any]:
         """
@@ -135,7 +132,7 @@ class BatchPassthroughBuilder:
         return PassthroughItemBuilder.build_item(
             row=row,
             reason=reason,
-            idx=self.node_idx if self.node_idx is not None else 0,
+            action_name=self.action_name,
             source_guid=row.get("source_guid"),
             custom_id=custom_id,
             mode="batch",
