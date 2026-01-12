@@ -147,7 +147,9 @@ class BatchResultProcessor:
         context_map = context_map or {}
 
         # Extract node index from output_directory
-        node_idx = BatchPassthroughBuilder._extract_node_index(output_directory)
+        # Note: node_idx is not currently used in the processing pipeline
+        # Setting to None until node-based lineage tracking is implemented
+        node_idx = None
 
         # Extract agent config values
         json_mode = True
