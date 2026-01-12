@@ -195,6 +195,46 @@ class LineageBuilder:
         return obj
 
     @staticmethod
+    def add_unified_lineage(obj: Dict, node_id: str, parent_item: Dict = None) -> Dict:
+        """
+        Unified lineage method for both first-stage and subsequent-stage.
+
+        Replaces:
+        - add_lineage_tracking() (subsequent-stage)
+        - add_context_lineage_tracking() (first-stage)
+
+        This method adds lineage tracking, node_id, and ancestry chain fields
+        to an object based on an optional parent item.
+
+        Args:
+            obj: Object to add lineage to
+            node_id: Node ID for this processing step
+            parent_item: Optional parent item for lineage chain
+
+        Returns:
+            Object with lineage, node_id, and ancestry chain added
+        """
+        obj = obj.copy()
+        obj["node_id"] = node_id
+
+        # Build lineage chain
+        if parent_item and "lineage" in parent_item:
+            obj["lineage"] = LineageBuilder.build_lineage(parent_item, node_id)
+        else:
+            obj["lineage"] = [node_id]
+
+        # Ancestry chain propagation
+        if parent_item:
+            if "target_id" in parent_item:
+                obj["parent_target_id"] = parent_item["target_id"]
+            if "root_target_id" in parent_item:
+                obj["root_target_id"] = parent_item["root_target_id"]
+            elif "target_id" in parent_item:
+                obj["root_target_id"] = parent_item["target_id"]
+
+        return obj
+
+    @staticmethod
     def create_conditional_response(
         source_guid: str, content: Any, node_id: str, item: Dict = None
     ) -> Dict:
