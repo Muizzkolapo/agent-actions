@@ -1,7 +1,7 @@
 """Enrichment pipeline for processing results."""
 
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List, Optional
 
 from .types import ProcessingContext, ProcessingResult, ProcessingStatus
 
@@ -37,18 +37,52 @@ class LineageEnricher(Enricher):
 
         base_node_id = IDGenerator.generate_node_id(context.action_name)
 
+        # Look up parent item for subsequent-stage lineage chaining
+        parent_item = self._get_parent_item(result.source_guid, context)
+
         for i, item in enumerate(result.data):
             node_id = f"{base_node_id}_{i}" if len(result.data) > 1 else base_node_id
 
-            # Use unified lineage method
-            # Note: parent_item would come from context.source_data lookup in future enhancement
+            # Use unified lineage method with parent lookup
             enriched = LineageBuilder.add_unified_lineage(
-                obj=item, node_id=node_id, parent_item=None
+                obj=item, node_id=node_id, parent_item=parent_item
             )
             result.data[i] = enriched
 
         result.node_id = base_node_id
         return result
+
+    def _get_parent_item(
+        self, source_guid: Optional[str], context: ProcessingContext
+    ) -> Optional[Dict]:
+        """
+        Get parent item for lineage chaining.
+
+        In subsequent-stage processing, looks up the parent item from source_data
+        using the source_guid to enable proper lineage chain propagation.
+
+        Args:
+            source_guid: Source GUID to lookup
+            context: ProcessingContext with source_data
+
+        Returns:
+            Parent item dict if found, None otherwise
+            None for first-stage processing (no parent)
+        """
+        # First-stage has no parent
+        if context.is_first_stage or not source_guid:
+            return None
+
+        # Look up parent in source_data
+        if not context.source_data:
+            return None
+
+        for source_item in context.source_data:
+            if source_item.get("source_guid") == source_guid:
+                return source_item
+
+        # Parent not found - graceful fallback
+        return None
 
 
 class MetadataEnricher(Enricher):

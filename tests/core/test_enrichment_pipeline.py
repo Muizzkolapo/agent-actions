@@ -81,6 +81,127 @@ class TestLineageEnricher:
         assert enriched.data[0]["node_id"] == "node_base_0"
         assert enriched.data[1]["node_id"] == "node_base_1"
 
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_node_id")
+    @patch("agent_actions.utilities.lineage.LineageBuilder.add_unified_lineage")
+    def test_first_stage_passes_none_parent(self, mock_add_lineage, mock_gen):
+        """First-stage: parent_item=None (no parent to chain)."""
+        mock_gen.return_value = "node_123"
+        mock_add_lineage.return_value = {"node_id": "node_123", "lineage": ["node_123"]}
+
+        enricher = LineageEnricher()
+        result = ProcessingResult.success(
+            data=[{"content": {"text": "output"}}], source_guid="guid-123"
+        )
+        context = ProcessingContext(agent_config={}, agent_name="extract", is_first_stage=True)
+
+        enriched = enricher.enrich(result, context)
+
+        # Should call add_unified_lineage with parent_item=None
+        mock_add_lineage.assert_called_once()
+        call_args = mock_add_lineage.call_args
+        assert call_args[1]["parent_item"] is None
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_node_id")
+    @patch("agent_actions.utilities.lineage.LineageBuilder.add_unified_lineage")
+    def test_subsequent_stage_chains_parent_lineage(self, mock_add_lineage, mock_gen):
+        """Subsequent-stage: Looks up parent and chains lineage."""
+        mock_gen.return_value = "transform_xyz"
+        mock_add_lineage.return_value = {
+            "node_id": "transform_xyz",
+            "lineage": ["extract_abc", "transform_xyz"],
+        }
+
+        enricher = LineageEnricher()
+        result = ProcessingResult.success(
+            data=[{"content": {"text": "output"}}], source_guid="guid-123"
+        )
+
+        # Parent item in source_data
+        parent_item = {
+            "source_guid": "guid-123",
+            "node_id": "extract_abc",
+            "lineage": ["extract_abc"],
+        }
+
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="transform",
+            is_first_stage=False,
+            source_data=[parent_item],
+        )
+
+        enriched = enricher.enrich(result, context)
+
+        # Should call add_unified_lineage with parent_item from source_data
+        mock_add_lineage.assert_called_once()
+        call_args = mock_add_lineage.call_args
+        assert call_args[1]["parent_item"] == parent_item
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_node_id")
+    @patch("agent_actions.utilities.lineage.LineageBuilder.add_unified_lineage")
+    def test_missing_parent_graceful_fallback(self, mock_add_lineage, mock_gen):
+        """Subsequent-stage with missing parent: Falls back to parent_item=None."""
+        mock_gen.return_value = "transform_xyz"
+        mock_add_lineage.return_value = {
+            "node_id": "transform_xyz",
+            "lineage": ["transform_xyz"],
+        }
+
+        enricher = LineageEnricher()
+        result = ProcessingResult.success(
+            data=[{"content": {"text": "output"}}],
+            source_guid="guid-999",  # Not in source_data
+        )
+
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="transform",
+            is_first_stage=False,
+            source_data=[
+                {
+                    "source_guid": "guid-123",
+                    "node_id": "extract_abc",
+                    "lineage": ["extract_abc"],
+                }
+            ],
+        )
+
+        enriched = enricher.enrich(result, context)
+
+        # Should call add_unified_lineage with parent_item=None (graceful fallback)
+        mock_add_lineage.assert_called_once()
+        call_args = mock_add_lineage.call_args
+        assert call_args[1]["parent_item"] is None
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_node_id")
+    @patch("agent_actions.utilities.lineage.LineageBuilder.add_unified_lineage")
+    def test_empty_source_data_graceful_fallback(self, mock_add_lineage, mock_gen):
+        """Subsequent-stage with empty source_data: Falls back to parent_item=None."""
+        mock_gen.return_value = "transform_xyz"
+        mock_add_lineage.return_value = {
+            "node_id": "transform_xyz",
+            "lineage": ["transform_xyz"],
+        }
+
+        enricher = LineageEnricher()
+        result = ProcessingResult.success(
+            data=[{"content": {"text": "output"}}], source_guid="guid-123"
+        )
+
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="transform",
+            is_first_stage=False,
+            source_data=[],  # Empty source_data
+        )
+
+        enriched = enricher.enrich(result, context)
+
+        # Should call add_unified_lineage with parent_item=None
+        mock_add_lineage.assert_called_once()
+        call_args = mock_add_lineage.call_args
+        assert call_args[1]["parent_item"] is None
+
 
 class TestMetadataEnricher:
     """Test MetadataEnricher."""
