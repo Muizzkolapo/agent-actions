@@ -39,7 +39,6 @@ class BatchProcessingContext:
     agent_config: Optional[Dict[str, Any]]
 
     # Extracted configuration
-    node_idx: Optional[int] = None
     json_mode: bool = True
     output_field: str = "content"
 
@@ -146,11 +145,6 @@ class BatchResultProcessor:
         """
         context_map = context_map or {}
 
-        # Extract node index from output_directory
-        # Note: node_idx is not currently used in the processing pipeline
-        # Setting to None until node-based lineage tracking is implemented
-        node_idx = None
-
         # Extract agent config values
         json_mode = True
         output_field = "content"
@@ -163,7 +157,6 @@ class BatchResultProcessor:
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
-            node_idx=node_idx,
             json_mode=json_mode,
             output_field=output_field,
         )
