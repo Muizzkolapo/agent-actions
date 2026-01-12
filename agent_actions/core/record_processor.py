@@ -112,10 +112,17 @@ class RecordProcessor:
             return guard_result
 
         # Step 3: Get source content for prompt
-        source_content = self._get_source_content(source_guid, context)
+        # For first-stage: input content IS the source content (template {{ source.* }})
+        # For subsequent-stage: lookup source from source_data by source_guid
+        if context.is_first_stage:
+            source_content = content
+        else:
+            source_content = self._get_source_content(source_guid, context)
 
         # Step 4: Prepare prompt
-        prep_result = self._prepare_prompt(content, source_content, context)
+        # For subsequent-stage, pass the full item as current_item for historical data loading
+        current_item = item if isinstance(item, dict) else None
+        prep_result = self._prepare_prompt(content, source_content, context, current_item)
 
         # Step 5: Execute LLM (with optional retry)
         response, executed, passthrough_fields, recovery_metadata = self._execute_llm(
@@ -135,8 +142,12 @@ class RecordProcessor:
                         source_guid=source_guid,
                         error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
                         recovery_metadata=recovery_metadata,
+                        source_snapshot=source_snapshot,  # Preserve for source saving
                     )
-                return ProcessingResult.filtered(source_guid=source_guid)
+                return ProcessingResult.filtered(
+                    source_guid=source_guid,
+                    source_snapshot=source_snapshot,  # Preserve for source saving
+                )
             return ProcessingResult.skipped(
                 passthrough_data=response,
                 reason="guard_skip",
@@ -187,9 +198,26 @@ class RecordProcessor:
             except Exception as e:
                 # Create failed result instead of propagating exception
                 # This allows batch processing to continue
+                # Log the error for debugging
+                import logging
+
+                logging.getLogger(__name__).error(
+                    f"[{context.agent_name}] Error processing item {idx}: {str(e)}"
+                )
+                # Preserve source_snapshot and source_guid for first-stage source saving
+                source_snapshot = None
+                source_guid = None
+                if context.is_first_stage:
+                    from agent_actions.utilities.id_generation import IDGenerator
+
+                    source_guid = IDGenerator.generate_deterministic_source_guid(item)
+                    source_snapshot = self._prepare_source_snapshot(item)
+                else:
+                    source_guid = item.get("source_guid") if isinstance(item, dict) else None
                 failed_result = ProcessingResult.failed(
                     error=f"Error processing item {idx}: {str(e)}",
-                    source_guid=item.get("source_guid") if isinstance(item, dict) else None,
+                    source_guid=source_guid,
+                    source_snapshot=source_snapshot,
                 )
                 results.append(failed_result)
         return results
@@ -319,7 +347,13 @@ class RecordProcessor:
 
         return DataTransformer.get_content_by_source_guid(context.source_data, source_guid)
 
-    def _prepare_prompt(self, content: Any, source_content: Any, context: ProcessingContext):
+    def _prepare_prompt(
+        self,
+        content: Any,
+        source_content: Any,
+        context: ProcessingContext,
+        current_item: Optional[Dict] = None,
+    ):
         """
         Prepare prompt using PromptPreparationService.
 
@@ -327,6 +361,7 @@ class RecordProcessor:
             content: Current content
             source_content: Source content for context
             context: ProcessingContext
+            current_item: Optional full item dict with lineage, source_guid for historical data loading
 
         Returns:
             PromptPreparationService result
@@ -340,9 +375,13 @@ class RecordProcessor:
             agent_name=context.agent_name,
             contents=content if isinstance(content, dict) else {},
             mode="realtime" if context.mode.value == "online" else "batch",
+            agent_indices=context.agent_indices,
+            dependency_configs=context.dependency_configs,
             source_content=source_content,
             loop_context=context.loop_context,
             workflow_metadata=context.workflow_metadata,
+            current_item=current_item,
+            file_path=context.file_path,
         )
 
     def _execute_llm(
@@ -497,4 +536,6 @@ class RecordProcessor:
             loop_context=base_context.loop_context,
             workflow_metadata=base_context.workflow_metadata,
             record_index=index,
+            agent_indices=base_context.agent_indices,
+            dependency_configs=base_context.dependency_configs,
         )

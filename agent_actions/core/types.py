@@ -172,6 +172,10 @@ class ProcessingContext:
     # Current record position (for loop correlation)
     record_index: int = 0
 
+    # Workflow context for historical data loading
+    agent_indices: Optional[Dict[str, int]] = None
+    dependency_configs: Optional[Dict[str, Any]] = None
+
     @property
     def action_name(self) -> str:
         """Get action name from config or agent_name."""
