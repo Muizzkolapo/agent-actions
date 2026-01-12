@@ -18,12 +18,9 @@ from agent_actions.preprocessing.filtering.guard_handler import (
     get_guard_handler,
 )
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
-from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.metadata import MetadataExtractor
-from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
 logger = logging.getLogger(__name__)

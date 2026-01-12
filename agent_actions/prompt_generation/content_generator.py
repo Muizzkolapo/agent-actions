@@ -1,7 +1,6 @@
 """Module for generating content using prompt processors and LLMs.
 
-This module has been updated to use RecordProcessor for unified processing
-with retry support. The legacy StagingProcessor is no longer called directly.
+This module uses RecordProcessor for unified processing with retry support.
 """
 
 from typing import Any, Dict, List, Union, Optional, Tuple
@@ -18,16 +17,20 @@ class ContentGenerator:
     Uses RecordProcessor internally for unified processing with retry support.
     """
 
-    def __init__(self, prompt_processor: Any):
+    def __init__(
+        self,
+        agent_config: Dict[str, Any],
+        agent_name: str,
+    ):
         """
         Initialize ContentGenerator.
 
         Args:
-            prompt_processor: Legacy StagingProcessor instance (used to extract config)
+            agent_config: Agent configuration dictionary
+            agent_name: Name of the agent
         """
-        # Extract config from legacy processor for RecordProcessor
-        self.agent_config = prompt_processor.agent_config
-        self.agent_name = prompt_processor.agent_name
+        self.agent_config = agent_config
+        self.agent_name = agent_name
 
         # Create RecordProcessor for unified processing with retry
         self._record_processor = RecordProcessor(
