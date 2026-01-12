@@ -32,6 +32,50 @@ class RetryState:
 
 
 @dataclass
+class RetryMetadata:
+    """
+    Metadata for retry recovery, stored in output _recovery.retry field.
+
+    Attributes:
+        attempts: Number of retry attempts made
+        reason: Why retry was needed (timeout, api_error, missing, rate_limit)
+    """
+
+    attempts: int
+    reason: str  # "timeout", "api_error", "missing", "rate_limit"
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {"attempts": self.attempts, "reason": self.reason}
+
+
+@dataclass
+class RecoveryMetadata:
+    """
+    Container for all recovery-related metadata.
+
+    Stored in output records under the _recovery key when recovery occurred.
+    Only present if retry or reprompt was actually triggered.
+    """
+
+    retry: Optional[RetryMetadata] = None
+    # reprompt: Optional[RepromptMetadata] = None  # Future: Phase 2
+
+    def to_dict(self) -> Optional[Dict[str, Any]]:
+        """Convert to dictionary for JSON serialization. Returns None if empty."""
+        result: Dict[str, Any] = {}
+        if self.retry:
+            result["retry"] = self.retry.to_dict()
+        # if self.reprompt:
+        #     result["reprompt"] = self.reprompt.to_dict()
+        return result if result else None
+
+    def is_empty(self) -> bool:
+        """Check if any recovery occurred."""
+        return self.retry is None  # and self.reprompt is None
+
+
+@dataclass
 class ProcessingResult:
     """
     Unified result type replacing tuple/list returns.
@@ -60,6 +104,9 @@ class ProcessingResult:
     # Error handling
     error: Optional[str] = None
     retry_state: RetryState = field(default_factory=RetryState)
+
+    # Recovery metadata (populated when retry/reprompt occurred)
+    recovery_metadata: Optional[RecoveryMetadata] = None
 
     # LLM response (for metadata extraction)
     raw_response: Optional[Any] = None

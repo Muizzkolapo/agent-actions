@@ -1,7 +1,7 @@
 """Schema definitions for the new workflow format."""
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -54,6 +54,22 @@ class LoopConsumptionConfig(BaseModel):
     )
 
 
+class RetryConfig(BaseModel):
+    """Configuration for retry behavior on transport-layer failures."""
+
+    enabled: bool = Field(default=True, description="Whether retry is enabled")
+    max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description="Maximum number of retry attempts (1-10)",
+    )
+    on_exhausted: Literal["return_last", "raise"] = Field(
+        default="return_last",
+        description="Behavior when max_attempts exhausted: return_last or raise",
+    )
+
+
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
 
@@ -85,6 +101,9 @@ class ActionConfig(BaseModel):
     loop: Optional[LoopConfig] = Field(default=None, description="Loop configuration")
     loop_consumption: Optional[LoopConsumptionConfig] = Field(
         default=None, description="Loop output consumption configuration"
+    )
+    retry: Optional[RetryConfig] = Field(
+        default=None, description="Retry configuration for transport-layer failures"
     )
     idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
     prompt: Optional[str] = Field(default=None, description="Prompt template or reference")
@@ -168,6 +187,7 @@ __all__ = [
     "ActionKind",
     "Granularity",
     "LoopConfig",
+    "RetryConfig",
     "ActionConfig",
     "DefaultsConfig",
     "DependencyEdge",

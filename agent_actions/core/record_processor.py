@@ -1,9 +1,19 @@
 """Unified record processor replacing StagingProcessor and TargetContentProcessor."""
 
+import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from .enrichment import EnrichmentPipeline
-from .types import ProcessingContext, ProcessingResult, ProcessingStatus
+from .retry_service import RetryService, create_retry_service_from_config
+from .types import (
+    ProcessingContext,
+    ProcessingResult,
+    ProcessingStatus,
+    RecoveryMetadata,
+    RetryMetadata,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class RecordProcessor:
@@ -105,15 +115,25 @@ class RecordProcessor:
         # Step 4: Prepare prompt
         prep_result = self._prepare_prompt(content, source_content, context)
 
-        # Step 5: Execute LLM
-        response, executed, passthrough_fields = self._execute_llm(content, prep_result, context)
+        # Step 5: Execute LLM (with optional retry)
+        response, executed, passthrough_fields, recovery_metadata = self._execute_llm(
+            content, prep_result, context
+        )
 
-        # Step 6: Handle non-execution (SECOND guard check at LLM layer)
+        # Step 6: Handle non-execution (SECOND guard check at LLM layer or retry exhausted)
         # run_dynamic_agent() returns executed=False if guards skipped execution
         # This happens when guards reference passthrough fields or source content
         # that's only available after prompt preparation (Step 4)
         if not executed:
             if response is None:
+                # Check if this is a retry exhaustion vs guard filter
+                if recovery_metadata and recovery_metadata.retry:
+                    return ProcessingResult(
+                        status=ProcessingStatus.EXHAUSTED,
+                        source_guid=source_guid,
+                        error=f"Retry exhausted after {recovery_metadata.retry.attempts} attempts",
+                        recovery_metadata=recovery_metadata,
+                    )
                 return ProcessingResult.filtered(source_guid=source_guid)
             return ProcessingResult.skipped(
                 passthrough_data=response,
@@ -128,13 +148,14 @@ class RecordProcessor:
             response, content, source_guid, passthrough_fields, context
         )
 
-        # Step 8: Create success result
+        # Step 8: Create success result (with recovery metadata if retry occurred)
         result = ProcessingResult.success(
             data=transformed,
             source_guid=source_guid,
             passthrough_fields=passthrough_fields,
             source_snapshot=source_snapshot,
             raw_response=response,
+            recovery_metadata=recovery_metadata,
         )
 
         # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
@@ -324,13 +345,18 @@ class RecordProcessor:
 
     def _execute_llm(
         self, content: Any, prep_result, context: ProcessingContext
-    ) -> Tuple[Any, bool, Dict]:
+    ) -> Tuple[Any, bool, Dict, Optional[RecoveryMetadata]]:
         """
-        Execute LLM invocation (includes SECOND guard check).
+        Execute LLM invocation with optional retry (includes SECOND guard check).
 
         run_dynamic_agent() internally evaluates guards that need prompt-prepared
         context (passthrough fields, {source.*} references). If guard blocks
         execution, returns executed=False.
+
+        Retry Behavior:
+        - If retry is enabled in agent_config, wraps LLM call with RetryService
+        - Retries on NetworkError, RateLimitError (transient failures)
+        - Returns recovery_metadata tracking retry attempts
 
         Args:
             content: Current content
@@ -338,10 +364,11 @@ class RecordProcessor:
             context: ProcessingContext
 
         Returns:
-            Tuple of (response, executed, passthrough_fields)
+            Tuple of (response, executed, passthrough_fields, recovery_metadata)
             - response: LLM response or passthrough data if guard skipped
             - executed: False if LLM layer guard blocked execution
             - passthrough_fields: Fields to merge into output
+            - recovery_metadata: Retry tracking info (None if no retry occurred)
         """
         from agent_actions.utilities.processor.processor_helpers import (
             run_dynamic_agent,
@@ -349,15 +376,65 @@ class RecordProcessor:
 
         tools_path = context.agent_config.get("tools", {}).get("path")
 
-        response, executed = run_dynamic_agent(
-            context.agent_config,
-            context.agent_name,
-            content,
-            prep_result.formatted_prompt,
-            tools_path=tools_path,
-        )
+        # Check for retry configuration
+        retry_config = context.agent_config.get("retry")
+        retry_service = create_retry_service_from_config(retry_config)
 
-        return response, executed, prep_result.passthrough_fields
+        if retry_service:
+            # Execute with retry
+            def llm_operation():
+                return run_dynamic_agent(
+                    context.agent_config,
+                    context.agent_name,
+                    content,
+                    prep_result.formatted_prompt,
+                    tools_path=tools_path,
+                )
+
+            retry_result = retry_service.execute(
+                llm_operation,
+                context=f"action={context.agent_name}",
+            )
+
+            # Build recovery metadata if retry was triggered
+            recovery_metadata = None
+            if retry_result.needed_retry:
+                recovery_metadata = RecoveryMetadata(
+                    retry=RetryMetadata(
+                        attempts=retry_result.attempts,
+                        reason=retry_result.reason or "unknown",
+                    )
+                )
+
+            # Handle exhausted case
+            if retry_result.exhausted:
+                logger.warning(
+                    "Retry exhausted for action %s after %d attempts: %s",
+                    context.agent_name,
+                    retry_result.attempts,
+                    retry_result.last_error,
+                )
+                # Return None response with recovery metadata
+                return None, False, prep_result.passthrough_fields, recovery_metadata
+
+            # Unpack the response tuple from run_dynamic_agent
+            if retry_result.response:
+                response, executed = retry_result.response
+            else:
+                response, executed = None, False
+
+            return response, executed, prep_result.passthrough_fields, recovery_metadata
+        else:
+            # No retry - direct execution
+            response, executed = run_dynamic_agent(
+                context.agent_config,
+                context.agent_name,
+                content,
+                prep_result.formatted_prompt,
+                tools_path=tools_path,
+            )
+
+            return response, executed, prep_result.passthrough_fields, None
 
     def _transform_response(
         self,
