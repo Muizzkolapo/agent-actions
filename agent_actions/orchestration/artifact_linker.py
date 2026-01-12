@@ -120,19 +120,20 @@ class ArtifactLinker:
 
     def find_latest_node_dir(self, target_dir: Path) -> Optional[Path]:
         """
-        Find the most recent node directory in target.
+        Find the most recent action output directory in target.
 
         Args:
-            target_dir: Directory to search for node_* subdirectories.
+            target_dir: Directory to search for action subdirectories.
 
         Returns:
-            Path to the most recently modified node directory, or None if not found.
+            Path to the most recently modified action directory, or None if not found.
         """
-        nodes = [p for p in target_dir.iterdir() if p.is_dir() and p.name.startswith("node_")]
-        if not nodes:
+        # Get all directories (excluding hidden ones)
+        action_dirs = [p for p in target_dir.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        if not action_dirs:
             return None
         # Sort by modification time to get the latest run
-        return max(nodes, key=lambda p: p.stat().st_mtime)
+        return max(action_dirs, key=lambda p: p.stat().st_mtime)
 
     def validate_safe_path(self, path: Path, base_dir: Path) -> bool:
         """

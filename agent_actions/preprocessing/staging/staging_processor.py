@@ -68,7 +68,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
             transformed_response: The response to add lineage tracking to
             context_data: The context data for lineage tracking
         """
-        idx = self.agent_config.get("idx", 0)
+        action_name = self.agent_config.get("agent_type", self.agent_name)
 
         # Build metadata for online mode output consistency
         response_metadata = MetadataExtractor.extract_from_response(
@@ -77,7 +77,7 @@ class StagingProcessor(ProcessorErrorHandlerMixin):
         )
 
         for i, node in enumerate(transformed_response):
-            node_id = IDGenerator.generate_node_id(idx)
+            node_id = IDGenerator.generate_node_id(action_name)
             transformed_response[i] = LineageBuilder.add_context_lineage_tracking(
                 node, context_data, node_id
             )

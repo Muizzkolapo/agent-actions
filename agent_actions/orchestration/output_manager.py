@@ -160,7 +160,8 @@ class AgentOutputManager:
 
         for i in range(current_idx):
             prev_agent_name = self.execution_order[i]
-            output_dir = self.agent_folder / "target" / f"node_{i}_{prev_agent_name}"
+            # Use simple directory name (no index prefix)
+            output_dir = self.agent_folder / "target" / prev_agent_name
 
             try:
                 agent_output = self._process_agent_output(output_dir, prev_agent_name)
@@ -204,7 +205,8 @@ class AgentOutputManager:
             agent_type: Type/name of the agent
         """
         upstream_dirs = self.get_upstream_directories(idx)
-        output_dir = self.agent_folder / "target" / f"node_{idx}_{agent_type}"
+        # Use simple directory name (no index prefix)
+        output_dir = self.agent_folder / "target" / agent_type
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Get reduce_key from agent config for JSON merging
@@ -421,33 +423,13 @@ class AgentOutputManager:
             target_dir = self.agent_folder / "target"
 
             for dep_name in dependencies:
-                found = False
-
-                # First try exact match from execution_order index
-                if dep_name in self.execution_order:
-                    dep_idx = self.execution_order.index(dep_name)
-                    dep_output = target_dir / f"node_{dep_idx}_{dep_name}"
-                    if dep_output.exists():
-                        upstream_dirs.append(str(dep_output))
-                        found = True
-
-                # Fallback: search for directory matching pattern
-                if not found and target_dir.exists():
-                    matching_dirs = list(target_dir.glob(f"node_*_{dep_name}"))
-                    if matching_dirs:
-                        # Use most recently modified if multiple exist
-                        matching_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                        upstream_dirs.append(str(matching_dirs[0]))
-                        found = True
-                        logger.debug(
-                            "Found dependency %s at %s (index mismatch recovered)",
-                            dep_name,
-                            matching_dirs[0].name,
-                        )
-
-                if not found:
+                # Use simple directory name (no index prefix)
+                dep_output = target_dir / dep_name
+                if dep_output.exists():
+                    upstream_dirs.append(str(dep_output))
+                else:
                     logger.warning(
-                        "Dependency %s for agent %s not found in execution order.",
+                        "Dependency %s for agent %s not found.",
                         dep_name,
                         current_agent,
                         extra={"agent": current_agent, "dependency": dep_name},
@@ -484,7 +466,8 @@ class AgentOutputManager:
 
         # Standard case: use previous agent's output (Linear Chain Default)
         prev_agent = self.execution_order[idx - 1]
-        return [str(self.agent_folder / "target" / f"node_{idx - 1}_{prev_agent}")]
+        # Use simple directory name (no index prefix)
+        return [str(self.agent_folder / "target" / prev_agent)]
 
     def setup_correlation_wrapper(
         self, idx: int, original_setup_directories: Callable
@@ -526,9 +509,9 @@ class AgentOutputManager:
                     f"{len(loop_sources)} loop sources (pattern: {pattern})[/blue]"
                 )
                 input_directory = correlated_dir
-                # Setup output directory
-                indexed_agent_type = f"node_{agent_idx}_{agent_config['agent_type']}"
-                output_directory = Path(agent_folder) / "target" / indexed_agent_type
+                # Setup output directory (simple name, no index prefix)
+                agent_type = agent_config["agent_type"]
+                output_directory = Path(agent_folder) / "target" / agent_type
                 output_directory.mkdir(parents=True, exist_ok=True)
                 return (str(input_directory), str(output_directory))
 
@@ -541,9 +524,9 @@ class AgentOutputManager:
             )
             input_directory = input_dir
 
-            # Setup output directory
-            indexed_agent_type = f"node_{agent_idx}_{agent_config['agent_type']}"
-            output_directory = Path(agent_folder) / "target" / indexed_agent_type
+            # Setup output directory (simple name, no index prefix)
+            agent_type = agent_config["agent_type"]
+            output_directory = Path(agent_folder) / "target" / agent_type
             output_directory.mkdir(parents=True, exist_ok=True)
 
             return (str(input_directory), str(output_directory))

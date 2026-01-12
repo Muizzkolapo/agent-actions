@@ -301,7 +301,8 @@ class AgentExecutor:
         self.deps.state_manager.update_status(agent_name, "checking_batch")
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / f"node_{agent_idx}_{agent_name}")
+        # Use simple directory name (no index prefix)
+        output_directory = str(agent_io_path / "target" / agent_name)
 
         output_folder, batch_status = self.deps.batch_manager.handle_batch_agent(
             agent_name, output_directory, agent_config
@@ -337,7 +338,8 @@ class AgentExecutor:
         self.deps.state_manager.update_status(agent_name, "checking_batch")
         workflow_name = self.deps.agent_runner.workflow_name
         agent_io_path = Path(self.deps.agent_runner.get_agent_folder(workflow_name))
-        output_directory = str(agent_io_path / "target" / f"node_{agent_idx}_{agent_name}")
+        # Use simple directory name (no index prefix)
+        output_directory = str(agent_io_path / "target" / agent_name)
 
         output_folder, batch_status = await asyncio.to_thread(
             self.deps.batch_manager.handle_batch_agent,

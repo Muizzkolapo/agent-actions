@@ -5,10 +5,14 @@ This module provides a mixin class that standardizes lineage tracking
 operations across different processor implementations.
 """
 
+import logging
 from typing import Dict, List, Any, Optional
+
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.lineage import LineageBuilder
+
+logger = logging.getLogger(__name__)
 
 
 class LineageTrackingMixin:
@@ -22,26 +26,32 @@ class LineageTrackingMixin:
     def __init__(self, *args, **kwargs):
         """Initialize the mixin."""
         super().__init__(*args, **kwargs)
-        # Get idx from agent_config if available
-        self._idx = getattr(self, "idx", None) or (getattr(self, "agent_config", {}).get("idx", 0))
+        # Get action_name from agent_config if available
+        agent_config = getattr(self, "agent_config", {})
+        self._action_name = agent_config.get("agent_type")
+        if not self._action_name:
+            self._action_name = "unknown_action"
+            logger.warning(
+                "No agent_type found in agent_config, using 'unknown_action' for lineage tracking"
+            )
 
-    def _get_processor_idx(self) -> int:
+    def _get_action_name(self) -> str:
         """
-        Get the processor index for node ID generation.
+        Get the action name for node ID generation.
 
         Returns:
-            Processor index
+            Action name
         """
-        return self._idx
+        return self._action_name
 
     def generate_node_id(self) -> str:
         """
         Generate a node ID for this processor.
 
         Returns:
-            Generated node ID
+            Generated node ID in format {action_name}_{uuid}
         """
-        return IDGenerator.generate_node_id(self._get_processor_idx())
+        return IDGenerator.generate_node_id(self._get_action_name())
 
     def add_lineage_to_item(self, item: Dict, source_item: Dict) -> Dict:
         """

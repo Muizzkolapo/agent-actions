@@ -1,9 +1,14 @@
 """Module for managing and executing agents with different strategies in a workflow."""
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple, Dict, Optional, List
+from typing import TYPE_CHECKING, Tuple, Dict, Optional, List
+
+if TYPE_CHECKING:
+    from agent_actions.orchestration.manifest_manager import ManifestManager
 from agent_actions.errors import FileSystemError
 from agent_actions.file_io.file_handler import FileHandler
 from agent_actions.orchestration.agent_strategies import (
@@ -84,6 +89,7 @@ class AgentRunner:
         self.processor_factory = processor_factory
         self.agent_configs: Optional[Dict[str, Dict]] = None
         self.workflow_name: Optional[str] = None  # Set by AgentWorkflow for agent_io folder lookups
+        self.manifest_manager: Optional[ManifestManager] = None  # Set by AgentWorkflow
         self.strategies: Dict[str, AgentStrategy] = {
             "initial": InitialStrategy(processor_factory),
             "intermediate": StandardStrategy(processor_factory),
@@ -167,46 +173,47 @@ class AgentRunner:
     ) -> List[Path]:
         """Resolve upstream directories from explicit dependencies (DAG/Diamond pattern).
 
-        For robustness, searches for existing directories matching the dependency name
-        pattern rather than relying solely on agent_indices, which may be stale.
+        Uses simple directory names (action names) without index prefixes.
+        The manifest is the source of truth for directory locations.
         """
         upstream_dirs: List[Path] = []
         target_dir = agent_folder / "target"
 
         for dep_name in dependencies:
-            # First try exact match from agent_indices
-            dep_idx = self.agent_indices.get(dep_name)
-            if dep_idx is not None:
-                exact_path = target_dir / f"node_{dep_idx}_{dep_name}"
-                if exact_path.exists():
-                    upstream_dirs.append(exact_path)
-                    continue
+            # Try manifest-based resolution first
+            if self.manifest_manager:
+                try:
+                    dep_path = self.manifest_manager.get_output_directory(dep_name)
+                    if dep_path.exists():
+                        upstream_dirs.append(dep_path)
+                        continue
+                except KeyError:
+                    pass
 
-            # Fallback: search for directory matching pattern node_*_{dep_name}
-            if target_dir.exists():
-                matching_dirs = list(target_dir.glob(f"node_*_{dep_name}"))
-                if matching_dirs:
-                    # Use the most recently modified if multiple exist
-                    matching_dirs.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-                    upstream_dirs.append(matching_dirs[0])
-                    logger.debug(
-                        "Found dependency %s at %s (index mismatch recovered)",
-                        dep_name,
-                        matching_dirs[0].name,
-                    )
-                    continue
+            # Direct path using simple name (no index prefix)
+            simple_path = target_dir / dep_name
+            if simple_path.exists():
+                upstream_dirs.append(simple_path)
+                continue
 
-            logger.warning("Dependency directory not found for %s (idx=%s)", dep_name, dep_idx)
+            logger.warning("Dependency directory not found for %s", dep_name)
 
         return upstream_dirs
 
     def _resolve_linear_directory(
-        self, agent_folder: Path, previous_agent_type: str, idx: int
+        self, agent_folder: Path, previous_agent_type: str, _idx: int
     ) -> Path:
-        """Resolve upstream directory for linear workflow (default behavior)."""
-        prev_idx = idx - 1
-        indexed_previous_type = f"node_{prev_idx}_{previous_agent_type}"
-        return agent_folder / "target" / indexed_previous_type
+        """Resolve upstream directory for linear workflow (default behavior).
+
+        Uses simple directory name (action name) without index prefix.
+
+        Args:
+            agent_folder: Path to agent folder
+            previous_agent_type: Name of previous action
+            _idx: Unused - kept for API compatibility
+        """
+        # Use simple name without index prefix
+        return agent_folder / "target" / previous_agent_type
 
     def setup_directories(
         self, agent_folder: str, agent_config: Dict, previous_agent_type: Optional[str], idx: int
@@ -218,13 +225,14 @@ class AgentRunner:
             agent_folder (str): Path to the agent folder.
             agent_config (dict): Configuration for the agent.
             previous_agent_type (Optional[str]): Type of the previous agent in workflow.
-            idx (int): Numeric index to prefix folder names.
+            idx (int): Numeric index (used for execution order, not directory naming).
 
         Returns:
             Tuple[List[str], str]: (upstream_data_dirs, output_directory)
         """
         agent_folder_path = Path(agent_folder)
-        indexed_agent_type = f"node_{idx}_{agent_config['agent_type']}"
+        # Use simple name without index prefix
+        agent_type = agent_config["agent_type"]
         dependencies = agent_config.get("dependencies", [])
 
         # Determine upstream directories based on workflow position
@@ -241,7 +249,8 @@ class AgentRunner:
         else:
             upstream_data_dirs = [agent_folder_path / "staging"]
 
-        output_directory = agent_folder_path / "target" / indexed_agent_type
+        # Output directory uses simple name (no index prefix)
+        output_directory = agent_folder_path / "target" / agent_type
         output_directory.mkdir(parents=True, exist_ok=True)
         return ([str(d) for d in upstream_data_dirs], str(output_directory))
 

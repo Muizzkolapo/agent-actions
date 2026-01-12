@@ -21,17 +21,17 @@ class IDGenerator:
         return str(uuid.uuid4())
 
     @staticmethod
-    def generate_node_id(idx: int) -> str:
+    def generate_node_id(action_name: str) -> str:
         """
-        Generate a unique node ID with index prefix.
+        Generate a unique node ID for an action.
 
         Args:
-            idx: Index to include in the node ID
+            action_name: Name of the action
 
         Returns:
-            A node ID in the format "node_{idx}_{uuid}"
+            A node ID in the format "{action_name}_{uuid}"
         """
-        return f"node_{idx}_{uuid.uuid4()}"
+        return f"{action_name}_{uuid.uuid4()}"
 
     @staticmethod
     def generate_deterministic_source_guid(content: Any) -> str:

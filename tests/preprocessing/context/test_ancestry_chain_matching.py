@@ -60,11 +60,11 @@ def parallel_branch_temp_dir(parallel_branch_records):
         tmp_dir/
         └── agent_io/
             └── target/
-                ├── node_4_generate_seo/
+                ├── generate_seo/
                 │   └── test.json (branch A records)
-                ├── node_5_generate_recommendations/
+                ├── generate_recommendations/
                 │   └── test.json (branch B records)
-                └── node_6_assess_reading_level/
+                └── assess_reading_level/
                     └── test.json (branch C records)
     """
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,9 +79,9 @@ def parallel_branch_temp_dir(parallel_branch_records):
 
         # Create directories and write records
         for node_name, records in [
-            ("node_4_generate_seo", [branch_a]),
-            ("node_5_generate_recommendations", [branch_b]),
-            ("node_6_assess_reading_level", [branch_c]),
+            ("generate_seo", [branch_a]),
+            ("generate_recommendations", [branch_b]),
+            ("assess_reading_level", [branch_c]),
         ]:
             node_dir = target_dir / node_name
             node_dir.mkdir(parents=True)
@@ -199,12 +199,12 @@ class TestParallelBranchMerge:
         branch_a = parallel_branch_records[1]
 
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
-            lineage=["node_0_extract", "node_1_enrich", "node_3_validate", "node_7_score"],
+            lineage=["extract_0", "enrich_1", "validate_3", "score_7"],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_seo": 4},
@@ -222,12 +222,12 @@ class TestParallelBranchMerge:
     ):
         """Merge action should be able to load Branch B (recommendations) by parent_target_id."""
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="generate_recommendations",
-            lineage=["node_0_extract", "node_1_enrich", "node_3_validate", "node_7_score"],
+            lineage=["extract_0", "enrich_1", "validate_3", "score_7"],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_recommendations": 5},
@@ -245,12 +245,12 @@ class TestParallelBranchMerge:
     ):
         """Merge action should be able to load Branch C (reading level) by parent_target_id."""
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="assess_reading_level",
-            lineage=["node_0_extract", "node_1_enrich", "node_3_validate", "node_7_score"],
+            lineage=["extract_0", "enrich_1", "validate_3", "score_7"],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"assess_reading_level": 6},
@@ -272,8 +272,8 @@ class TestParallelBranchMerge:
                 "target_id": "branch-a-002",
                 "parent_target_id": "parent-002",  # DIFFERENT parent
                 "root_target_id": "parent-002",
-                "node_id": "node_4_generate_seo",
-                "lineage": ["node_0_extract", "node_3_validate", "node_4_seo"],
+                "node_id": "generate_seo_abc123",
+                "lineage": ["extract_0", "validate_3", "seo_4"],
                 "content": {
                     "primary_keywords": ["different", "keywords"],
                     "seo_score": 50,
@@ -282,7 +282,7 @@ class TestParallelBranchMerge:
         ]
 
         # Write second parent's branch to the same node directory
-        node_dir = parallel_branch_temp_dir / "agent_io" / "target" / "node_4_generate_seo"
+        node_dir = parallel_branch_temp_dir / "agent_io" / "target" / "generate_seo"
 
         # Load existing and append
         with open(node_dir / "test.json") as f:
@@ -295,12 +295,12 @@ class TestParallelBranchMerge:
 
         # Query for parent-001's branch - should NOT get parent-002's data
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
-            lineage=["node_0_extract", "node_3_validate", "node_7_score"],
+            lineage=["extract_0", "validate_3", "score_7"],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_seo": 4},
@@ -359,7 +359,7 @@ class TestBackwardCompatibility:
             {
                 "source_guid": "legacy-001",
                 "target_id": "old-record",
-                "node_id": "node_5_old_action",
+                "node_id": "old_action_abc123",
                 # No parent_target_id
                 # No root_target_id
                 "content": {"legacy_field": "value"},
@@ -393,7 +393,7 @@ class TestConditionalMerge:
     def test_missing_branch_returns_none_gracefully(self, parallel_branch_temp_dir):
         """When a conditional branch didn't run, should return None, not crash."""
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         # Request a branch that doesn't exist
@@ -431,28 +431,28 @@ class TestMatchingAlgorithmPriority:
 
         # Create request where node IS in lineage (normal dependency, not parallel sibling)
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
             # Include node_4 in lineage - this means it's a direct ancestor
             lineage=[
-                "node_0_extract",
-                "node_1_enrich",
-                "node_3_validate",
-                "node_4_seo",  # In lineage!
-                "node_7_score",
+                "extract_0",
+                "enrich_1",
+                "validate_3",
+                "generate_seo_4",  # In lineage!
+                "score_7",
             ],
             source_guid="book-001-catalog",
             file_path=file_path,
             agent_indices={"generate_seo": 4},
             caller_lineage=[
-                "node_0_extract",
-                "node_1_enrich",
-                "node_3_validate",
-                "node_4_seo",
-                "node_7_score",
+                "extract_0",
+                "enrich_1",
+                "validate_3",
+                "generate_seo_4",
+                "score_7",
             ],
             parent_target_id="parent-001",
         )
@@ -466,18 +466,18 @@ class TestMatchingAlgorithmPriority:
     def test_parent_match_used_when_not_in_lineage(self, parallel_branch_temp_dir):
         """When dependency node is NOT in lineage (parallel sibling), use parent_target_id."""
         file_path = str(
-            parallel_branch_temp_dir / "agent_io" / "target" / "node_7_score_quality" / "test.json"
+            parallel_branch_temp_dir / "agent_io" / "target" / "score_quality" / "test.json"
         )
 
         request = HistoricalDataRequest(
             action_name="generate_seo",
-            # node_4 is NOT in this lineage - we went through node_5 instead
+            # generate_seo is NOT in this lineage - we went through recs instead
             lineage=[
-                "node_0_extract",
-                "node_1_enrich",
-                "node_3_validate",
-                "node_5_recs",  # Different path!
-                "node_7_score",
+                "extract_0",
+                "enrich_1",
+                "validate_3",
+                "recs_5",  # Different path!
+                "score_7",
             ],
             source_guid="book-001-catalog",
             file_path=file_path,

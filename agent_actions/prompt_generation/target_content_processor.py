@@ -322,7 +322,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             data_list = generated_data if isinstance(generated_data, list) else [generated_data]
 
         fallback_source = data[0] if data else {}
-        base_node_id = IDGenerator.generate_node_id(self.idx)
+        base_node_id = IDGenerator.generate_node_id(self.agent_name)
         field_manager = FieldManager()
 
         return [
@@ -355,7 +355,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             return item
 
         item_copy = item.copy()
-        item_copy = field_manager.ensure_required_fields(item_copy, source_guid, self.idx)
+        item_copy = field_manager.ensure_required_fields(item_copy, source_guid, self.agent_name)
         node_id = f"{base_node_id}_{index}"
 
         # Priority 1: Explicit source_mapping from FileUDFResult
@@ -448,7 +448,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                         source_guid,
                         passthrough_fields=passthrough_fields,
                     )
-                base_node_id = IDGenerator.generate_node_id(self.idx)
+                base_node_id = IDGenerator.generate_node_id(self.agent_name)
 
                 # Build metadata for online mode output consistency
                 response_metadata = MetadataExtractor.extract_from_response(
@@ -479,7 +479,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_item = PassthroughItemBuilder.build_item(
                     row={**item, "content": generated_data, "source_guid": source_guid},
                     reason="where_clause_not_matched",
-                    idx=self.idx,
+                    action_name=self.agent_name,
                     source_guid=source_guid,
                     mode="online",
                 )
@@ -626,7 +626,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                     source_guid,
                     passthrough_fields=passthrough_fields,
                 )
-                base_node_id = IDGenerator.generate_node_id(self.idx)
+                base_node_id = IDGenerator.generate_node_id(self.agent_name)
 
                 # Build metadata for online mode output consistency
                 response_metadata = MetadataExtractor.extract_from_response(
@@ -657,7 +657,7 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
                 processed_item = PassthroughItemBuilder.build_item(
                     row={**item, "content": generated_data, "source_guid": source_guid},
                     reason="where_clause_not_matched",
-                    idx=self.idx,
+                    action_name=self.agent_name,
                     source_guid=source_guid,
                     mode="online",
                 )
