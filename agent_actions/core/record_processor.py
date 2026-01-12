@@ -25,12 +25,14 @@ class RecordProcessor:
         self.agent_name = agent_name
         self.enrichment_pipeline = EnrichmentPipeline()
 
-    def process(self, item: Dict, context: ProcessingContext) -> ProcessingResult:
+    def process(self, item: Any, context: ProcessingContext) -> ProcessingResult:
         """
         Process single record (first-stage or subsequent-stage).
 
         Args:
-            item: Input item (raw or structured)
+            item: Input item
+                - First-stage: any type (str, list, dict, etc.)
+                - Subsequent-stage: dict with {content, source_guid} (recommended)
             context: ProcessingContext with config and state
 
         Returns:
@@ -82,9 +84,7 @@ class RecordProcessor:
         # Step 9: Enrich (lineage, metadata, loop IDs, etc.)
         return self.enrichment_pipeline.enrich(result, context)
 
-    def process_batch(
-        self, items: List[Dict], context: ProcessingContext
-    ) -> List[ProcessingResult]:
+    def process_batch(self, items: List[Any], context: ProcessingContext) -> List[ProcessingResult]:
         """
         Process multiple records.
 
@@ -118,16 +118,18 @@ class RecordProcessor:
     # Private helper methods
 
     def _normalize_input(
-        self, item: Dict, context: ProcessingContext
-    ) -> Tuple[Any, str, Optional[Dict]]:
+        self, item: Any, context: ProcessingContext
+    ) -> Tuple[Any, str, Optional[Any]]:
         """
         Normalize input format.
 
         First-stage: raw input → generate source_guid, preserve snapshot
+          - Accepts any type: str, list, dict, etc.
         Subsequent-stage: structured {content, source_guid} → extract fields
+          - Expects dict with 'content' and 'source_guid' keys
 
         Args:
-            item: Input item
+            item: Input item (any type for first-stage, dict for subsequent-stage)
             context: ProcessingContext
 
         Returns:
@@ -141,23 +143,28 @@ class RecordProcessor:
             snapshot = self._prepare_source_snapshot(item)
             return item, source_guid, snapshot
         else:
-            content = item.get("content", item)
-            source_guid = item.get("source_guid")
-            return content, source_guid, None
+            # Subsequent-stage expects dict with content/source_guid
+            if isinstance(item, dict):
+                content = item.get("content", item)
+                source_guid = item.get("source_guid")
+                return content, source_guid, None
+            else:
+                # Non-dict input in subsequent-stage: treat as raw content
+                return item, None, None
 
-    def _prepare_source_snapshot(self, item: Dict) -> Dict:
+    def _prepare_source_snapshot(self, item: Any) -> Any:
         """
         Prepare source snapshot for first-stage processing.
 
         Preserves StagingProcessor._prepare_source_text() logic:
-        - Filters out chunk_info metadata keys
-        - Ensures source_guid is present
+        - Filters out chunk_info metadata keys for dicts
+        - Returns item as-is for non-dict types (str, list, etc.)
 
         Args:
-            item: Input item
+            item: Input item (any type)
 
         Returns:
-            Filtered snapshot dict
+            Filtered snapshot (dict) or original item (for non-dict types)
         """
         if isinstance(item, dict) and "chunk_info" in item:
             excluded_keys = ["target_id", "record_index", "chunk_index"]
@@ -308,7 +315,7 @@ class RecordProcessor:
         return transform_with_passthrough(response, content, source_guid, context.agent_config)
 
     def _create_item_context(
-        self, base_context: ProcessingContext, index: int, item: Dict
+        self, base_context: ProcessingContext, index: int, item: Any
     ) -> ProcessingContext:
         """
         Create per-item context with updated record_index.

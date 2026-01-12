@@ -445,6 +445,119 @@ class TestSourceContentLookup:
         assert result == {"source": "content"}
 
 
+class TestNonDictInputValidation:
+    """Test handling of non-dict inputs."""
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_deterministic_source_guid")
+    def test_first_stage_accepts_string_input(self, mock_guid):
+        """First-stage accepts string input."""
+        mock_guid.return_value = "guid-string"
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=True)
+
+        content, source_guid, snapshot = processor._normalize_input(
+            "This is a plain string", context
+        )
+
+        assert content == "This is a plain string"
+        assert source_guid == "guid-string"
+        assert snapshot == "This is a plain string"
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_deterministic_source_guid")
+    def test_first_stage_accepts_list_input(self, mock_guid):
+        """First-stage accepts list input."""
+        mock_guid.return_value = "guid-list"
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=True)
+
+        content, source_guid, snapshot = processor._normalize_input([1, 2, 3], context)
+
+        assert content == [1, 2, 3]
+        assert source_guid == "guid-list"
+        assert snapshot == [1, 2, 3]
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_deterministic_source_guid")
+    def test_first_stage_accepts_none_input(self, mock_guid):
+        """First-stage accepts None input."""
+        mock_guid.return_value = "guid-none"
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=True)
+
+        content, source_guid, snapshot = processor._normalize_input(None, context)
+
+        assert content is None
+        assert source_guid == "guid-none"
+        assert snapshot is None
+
+    def test_subsequent_stage_handles_non_dict_input(self):
+        """Subsequent-stage handles non-dict input gracefully."""
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=False)
+
+        # Non-dict in subsequent-stage treated as raw content
+        content, source_guid, snapshot = processor._normalize_input("unexpected string", context)
+
+        assert content == "unexpected string"
+        assert source_guid is None
+        assert snapshot is None
+
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_deterministic_source_guid")
+    @patch("agent_actions.utilities.id_generation.IDGenerator.generate_node_id")
+    @patch("agent_actions.utilities.lineage.LineageBuilder.build_lineage")
+    @patch("agent_actions.utilities.processor.processor_helpers.evaluate_guard_condition")
+    @patch(
+        "agent_actions.prompt_generation.prompt_preparation_service.PromptPreparationService.prepare_prompt_with_context"
+    )
+    @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
+    @patch("agent_actions.utilities.processor.processor_helpers.transform_with_passthrough")
+    @patch("agent_actions.utilities.metadata.MetadataExtractor.extract_from_response")
+    @patch("agent_actions.utilities.field_management.FieldManager.add_metadata")
+    @patch("agent_actions.utilities.correlation.LoopIdGenerator.add_loop_correlation_id")
+    @patch("agent_actions.utilities.field_management.FieldManager")
+    def test_end_to_end_with_string_input(
+        self,
+        mock_field_mgr,
+        mock_loop_id,
+        mock_add_meta,
+        mock_extract_meta,
+        mock_transform,
+        mock_run,
+        mock_prep,
+        mock_guard,
+        mock_lineage,
+        mock_node_id,
+        mock_guid,
+    ):
+        """End-to-end processing with string input."""
+        mock_guid.return_value = "guid-str"
+        mock_node_id.return_value = "node-str"
+        mock_lineage.return_value = ["node-str"]
+        mock_guard.return_value = (True, "skip")
+        mock_prep.return_value = MagicMock(formatted_prompt="prompt", passthrough_fields={})
+        mock_run.return_value = ({"result": "processed"}, True)
+        mock_transform.return_value = [{"content": "processed"}]
+        mock_extract_meta.return_value = MagicMock(to_dict=lambda: {"tokens": 10})
+        mock_loop_id.side_effect = lambda item, *args, **kwargs: {
+            **item,
+            "loop_id": "loop-123",
+        }
+        mock_field_mgr_inst = MagicMock()
+        mock_field_mgr.return_value = mock_field_mgr_inst
+        mock_field_mgr_inst.ensure_required_fields.side_effect = lambda item, *args: item
+
+        processor = RecordProcessor(agent_config={}, agent_name="test")
+        context = ProcessingContext(agent_config={}, agent_name="test", is_first_stage=True)
+
+        result = processor.process("Plain text string", context)
+
+        assert result.status == ProcessingStatus.SUCCESS
+        assert result.source_guid == "guid-str"
+        assert result.source_snapshot == "Plain text string"
+
+
 class TestItemContextCreation:
     """Test _create_item_context method."""
 
