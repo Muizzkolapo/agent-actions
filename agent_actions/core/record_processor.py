@@ -11,6 +11,43 @@ class RecordProcessor:
     Unified processor replacing StagingProcessor + TargetContentProcessor._process_single_item().
 
     Handles both first-stage (raw input) and subsequent-stage (structured input) processing.
+
+    Guard Evaluation Strategy (Two-Phase):
+    ---------------------------------------
+    Guards are evaluated in TWO places for optimization and flexibility:
+
+    1. **Early Guard Evaluation (Step 2)**: _evaluate_guard()
+       - Evaluates guards based on input content BEFORE expensive operations
+       - Avoids unnecessary prompt preparation and LLM calls
+       - Guards evaluated: guard.clause, conditional_clause
+       - Context: Input content only (no passthrough fields yet)
+       - Use case: Filter/skip records based on input fields
+
+    2. **LLM Layer Guard (Step 6)**: Handled by run_dynamic_agent()
+       - Evaluates guards AFTER prompt preparation, WITH passthrough fields
+       - Guards can reference {source.*} and passthrough fields
+       - Returns (response, executed) where executed=False means guard skipped
+       - Use case: Guards that need enriched context or source data lookups
+
+    Why Two Phases?
+    ---------------
+    - Performance: Early evaluation avoids expensive LLM calls (~100ms+ saved)
+    - Flexibility: LLM layer can access prompt-prepared passthrough fields
+    - Backwards compatibility: Matches old StagingProcessor/TargetContentProcessor behavior
+
+    Example:
+    --------
+    # Early guard (evaluated on raw input):
+    guard:
+      clause: "status == 'active'"
+      behavior: "skip"
+    # → Skipped at Step 2, no LLM call made
+
+    # LLM layer guard (needs passthrough fields):
+    guard:
+      clause: "{source.priority} == 'high' and length > 100"
+      behavior: "skip"
+    # → Skipped at Step 6, after prompt preparation adds passthrough fields
     """
 
     def __init__(self, agent_config: Dict, agent_name: str):
@@ -29,6 +66,20 @@ class RecordProcessor:
         """
         Process single record (first-stage or subsequent-stage).
 
+        Processing Pipeline (9 steps):
+        1. Normalize input format
+        2. Early guard evaluation (on input content)
+        3. Get source content for prompt
+        4. Prepare prompt (adds passthrough fields)
+        5. Execute LLM
+        6. Handle non-execution (LLM layer guard check)
+        7. Transform response
+        8. Create success result
+        9. Enrich (lineage, metadata, loop IDs, etc.)
+
+        Note: Guards evaluated TWICE - see class docstring for details on two-phase
+        guard evaluation strategy.
+
         Args:
             item: Input item
                 - First-stage: any type (str, list, dict, etc.)
@@ -41,7 +92,9 @@ class RecordProcessor:
         # Step 1: Normalize input format
         content, source_guid, source_snapshot = self._normalize_input(item, context)
 
-        # Step 2: Early guard evaluation
+        # Step 2: Early guard evaluation (FIRST guard check)
+        # Evaluates guards on input content to avoid expensive operations
+        # if record should be filtered/skipped early
         guard_result = self._evaluate_guard(content, source_guid, context)
         if guard_result is not None:
             return guard_result
@@ -55,7 +108,10 @@ class RecordProcessor:
         # Step 5: Execute LLM
         response, executed, passthrough_fields = self._execute_llm(content, prep_result, context)
 
-        # Step 6: Handle non-execution (guard skip at LLM layer)
+        # Step 6: Handle non-execution (SECOND guard check at LLM layer)
+        # run_dynamic_agent() returns executed=False if guards skipped execution
+        # This happens when guards reference passthrough fields or source content
+        # that's only available after prompt preparation (Step 4)
         if not executed:
             if response is None:
                 return ProcessingResult.filtered(source_guid=source_guid)
@@ -177,7 +233,15 @@ class RecordProcessor:
         self, content: Any, source_guid: str, context: ProcessingContext
     ) -> Optional[ProcessingResult]:
         """
-        Evaluate guard conditions early.
+        Evaluate guard conditions early (FIRST guard check).
+
+        This is the performance optimization layer - evaluates guards based on
+        input content BEFORE expensive prompt preparation and LLM calls.
+
+        Limitations:
+        - Cannot access passthrough fields (added in Step 4)
+        - Cannot access {source.*} references (requires prompt preparation)
+        - Guards referencing these will be evaluated at LLM layer (Step 6)
 
         Args:
             content: Content to evaluate
@@ -186,6 +250,7 @@ class RecordProcessor:
 
         Returns:
             ProcessingResult if guard blocks execution, None otherwise
+            None means "proceed to prompt preparation and LLM execution"
         """
         from agent_actions.utilities.processor.processor_helpers import (
             evaluate_guard_condition,
@@ -261,7 +326,11 @@ class RecordProcessor:
         self, content: Any, prep_result, context: ProcessingContext
     ) -> Tuple[Any, bool, Dict]:
         """
-        Execute LLM invocation.
+        Execute LLM invocation (includes SECOND guard check).
+
+        run_dynamic_agent() internally evaluates guards that need prompt-prepared
+        context (passthrough fields, {source.*} references). If guard blocks
+        execution, returns executed=False.
 
         Args:
             content: Current content
@@ -270,6 +339,9 @@ class RecordProcessor:
 
         Returns:
             Tuple of (response, executed, passthrough_fields)
+            - response: LLM response or passthrough data if guard skipped
+            - executed: False if LLM layer guard blocked execution
+            - passthrough_fields: Fields to merge into output
         """
         from agent_actions.utilities.processor.processor_helpers import (
             run_dynamic_agent,
