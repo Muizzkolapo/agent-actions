@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
+from agent_actions.core.types import RecoveryMetadata
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
@@ -44,6 +45,9 @@ class BatchProcessingContext:
 
     # Reconciliation
     reconciler: Optional[BatchResultReconciler] = None
+
+    # Recovery
+    recovery_metadata: Optional[RecoveryMetadata] = None
 
     # Accumulated output
     processed_data: List[Dict[str, Any]] = field(default_factory=list)
@@ -92,6 +96,7 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
+        recovery_metadata: Optional[RecoveryMetadata] = None,
     ) -> List[Dict[str, Any]]:
         """
         Process batch results through the pipeline.
@@ -101,6 +106,7 @@ class BatchResultProcessor:
             context_map: Map of custom_id -> original row data
             output_directory: Output directory path (for node extraction)
             agent_config: Agent configuration
+            recovery_metadata: Optional recovery metadata (from retry)
 
         Returns:
             List of processed data in workflow format
@@ -111,6 +117,7 @@ class BatchResultProcessor:
             context_map,
             output_directory,
             agent_config,
+            recovery_metadata,
         )
 
         # Stage 2: Reconcile requests with responses
@@ -137,6 +144,7 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         agent_config: Optional[Dict[str, Any]],
+        recovery_metadata: Optional[RecoveryMetadata] = None,
     ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
@@ -159,6 +167,7 @@ class BatchResultProcessor:
             agent_config=agent_config,
             json_mode=json_mode,
             output_field=output_field,
+            recovery_metadata=recovery_metadata,
         )
 
         logger.debug(
@@ -216,6 +225,7 @@ class BatchResultProcessor:
                         f"Processing error: {str(e)}",
                         batch_result.metadata,
                         batch_result.content,
+                        recovery_metadata=getattr(batch_result, "recovery_metadata", None),
                     )
                     ctx.processed_data.append(error_item)
                     ctx.error_count += 1
@@ -239,6 +249,7 @@ class BatchResultProcessor:
                     custom_id,
                     batch_result.error or "Batch processing failed",
                     batch_result.metadata,
+                    recovery_metadata=getattr(batch_result, "recovery_metadata", None),
                 )
                 ctx.processed_data.append(error_item)
                 ctx.error_count += 1
@@ -298,6 +309,10 @@ class BatchResultProcessor:
         for idx, item in enumerate(structured_items):
             # Metadata
             item["metadata"] = batch_result.metadata or {}
+
+            # Recovery Metadata (per-record)
+            if hasattr(batch_result, "recovery_metadata") and batch_result.recovery_metadata:
+                item["_recovery"] = batch_result.recovery_metadata.to_dict()
 
             # Lineage tracking (use action_name from agent_config)
             if ctx.agent_config:
@@ -396,6 +411,7 @@ class BatchResultProcessor:
         error_message: str,
         metadata: Optional[Dict[str, Any]] = None,
         raw_content: Any = None,
+        recovery_metadata: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Create an error item for failed batch results.
@@ -406,6 +422,7 @@ class BatchResultProcessor:
             error_message: Error message
             metadata: Optional metadata from batch result
             raw_content: Optional raw content (for processing errors)
+            recovery_metadata: Optional recovery metadata (from retry)
 
         Returns:
             Error item dict
@@ -421,6 +438,10 @@ class BatchResultProcessor:
         # Include raw_content for processing errors (helps debugging)
         if raw_content is not None:
             error_item["raw_content"] = raw_content
+
+        # Include recovery metadata (per-record)
+        if recovery_metadata:
+            error_item["_recovery"] = recovery_metadata.to_dict()
 
         return error_item
 
@@ -447,6 +468,10 @@ class BatchResultProcessor:
                 passthrough_item = builder._build_item(original_row, reason, custom_id)
                 # Remove internal tracking field
                 passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
+
+                # Apply recovery metadata if retry occurred and record is still missing
+                if ctx.recovery_metadata and "_recovery" not in passthrough_item:
+                    passthrough_item["_recovery"] = ctx.recovery_metadata.to_dict()
 
                 ctx.processed_data.append(passthrough_item)
                 ctx.passthrough_count += 1

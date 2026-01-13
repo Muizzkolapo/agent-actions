@@ -57,6 +57,7 @@ class BatchResult:
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     usage: Optional[Dict[str, Any]] = None
+    recovery_metadata: Optional[Any] = None
 
 
 class BaseBatchClient(ABC):

@@ -336,14 +336,13 @@ class BatchProcessingService:
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
+            recovery_metadata=recovery_metadata,
         )
 
-        # Add recovery metadata to processed records if retry occurred
-        if recovery_metadata and not recovery_metadata.is_empty():
-            recovery_dict = recovery_metadata.to_dict()
-            for item in processed_data:
-                if isinstance(item, dict):
-                    item["_recovery"] = recovery_dict
+        # Recovery metadata is now handled per-record:
+        # - Retried records: _process_successful_result adds _recovery from BatchResult.recovery_metadata
+        # - Missing/passthrough records: _stage_6_merge_passthroughs adds _recovery from ctx.recovery_metadata
+        # - First-try successes: No _recovery (correct - they didn't need retry)
 
         main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
@@ -374,6 +373,7 @@ class BatchProcessingService:
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
+        recovery_metadata: Optional[RecoveryMetadata] = None,
     ) -> List[Dict[str, Any]]:
         """Convert batch results to workflow format.
 
@@ -382,6 +382,7 @@ class BatchProcessingService:
             context_map: Context map for processing
             output_directory: Output directory path
             agent_config: Agent configuration
+            recovery_metadata: Optional recovery metadata (from retry)
 
         Returns:
             Processed results in workflow format
@@ -391,6 +392,7 @@ class BatchProcessingService:
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
+            recovery_metadata=recovery_metadata,
         )
 
     def _retrieve_results(
@@ -516,6 +518,18 @@ class BatchProcessingService:
             )
 
             if retry_results:
+                # Attach record-level recovery metadata
+                for res in retry_results:
+                    if res.success:
+                        res.recovery_metadata = RecoveryMetadata(
+                            retry=RetryMetadata(
+                                attempts=retry_attempts + 1,
+                                failures=retry_attempts,
+                                succeeded=True,
+                                reason="missing",
+                            )
+                        )
+
                 # Merge results
                 all_results.extend(retry_results)
 

@@ -172,7 +172,10 @@ class TargetGenerator:
                     "agent_name": params.agent_name,
                 },
             )
-        if params.agent_config.get("run_mode") == "batch":
+        # Tool actions run synchronously regardless of run_mode (they're Python functions, not LLM calls)
+        is_tool_action = params.agent_config.get("model_vendor") == TOOL_VENDOR
+
+        if params.agent_config.get("run_mode") == "batch" and not is_tool_action:
             return TargetGenerator._handle_batch_generation(
                 BatchGenerationParams(
                     generator_agent_config=params.agent_config,
@@ -274,7 +277,8 @@ class TargetGenerator:
         Select and apply the appropriate processing strategy based on
         configuration. Async for record granularity.
         """
-        if self.config.agent_config.get("run_mode") == "batch":
+        # Tool actions run synchronously regardless of run_mode
+        if self.config.agent_config.get("run_mode") == "batch" and self.model_vendor != TOOL_VENDOR:
             self._handle_batch_mode(data, file_path, base_directory, output_directory)
             return
 
