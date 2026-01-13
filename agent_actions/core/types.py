@@ -37,16 +37,25 @@ class RetryMetadata:
     Metadata for retry recovery, stored in output _recovery.retry field.
 
     Attributes:
-        attempts: Number of retry attempts made
-        reason: Why retry was needed (timeout, api_error, missing, rate_limit)
+        attempts: Total number of attempts made (failures + 1 if succeeded)
+        failures: Number of failed attempts before success (or total if exhausted)
+        succeeded: Whether the operation ultimately succeeded
+        reason: Why retry was needed (timeout, api_error, missing, rate_limit, network_error)
     """
 
     attempts: int
-    reason: str  # "timeout", "api_error", "missing", "rate_limit"
+    failures: int
+    succeeded: bool
+    reason: str  # "timeout", "api_error", "missing", "rate_limit", "network_error"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {"attempts": self.attempts, "reason": self.reason}
+        return {
+            "attempts": self.attempts,
+            "failures": self.failures,
+            "succeeded": self.succeeded,
+            "reason": self.reason,
+        }
 
 
 @dataclass

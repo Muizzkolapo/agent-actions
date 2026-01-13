@@ -525,9 +525,12 @@ class BatchProcessingService:
 
         # Build recovery metadata if retry occurred
         if retry_attempts > 0:
+            succeeded = len(missing_ids) == 0
             recovery_metadata = RecoveryMetadata(
                 retry=RetryMetadata(
-                    attempts=retry_attempts,
+                    attempts=retry_attempts + 1,  # Initial + retries
+                    failures=retry_attempts,
+                    succeeded=succeeded,
                     reason="missing",
                 )
             )
@@ -586,6 +589,7 @@ class BatchProcessingService:
             prepared = preparator.prepare_tasks(
                 agent_config=agent_config or {},
                 data=missing_records,
+                provider=provider,
                 output_directory=output_directory,
                 batch_name=f"{file_name}_retry" if file_name else "retry",
             )
@@ -595,7 +599,12 @@ class BatchProcessingService:
                 return []
 
             # Submit retry batch
-            retry_batch_id = provider.submit_batch(prepared.tasks)
+            batch_name = f"{file_name}_retry" if file_name else "retry"
+            retry_batch_id, _ = provider.submit_batch(
+                tasks=prepared.tasks,
+                batch_name=batch_name,
+                output_directory=output_directory,
+            )
             logger.info(
                 "Retry batch submitted: %s with %d records",
                 retry_batch_id,
@@ -640,7 +649,7 @@ class BatchProcessingService:
         start_time = time.time()
         while (time.time() - start_time) < timeout_seconds:
             status = provider.check_status(batch_id)
-            if status in (BatchStatus.COMPLETED, BatchStatus.FAILED, BatchStatus.EXPIRED):
+            if status in (BatchStatus.COMPLETED, BatchStatus.FAILED, BatchStatus.CANCELLED):
                 return status
             logger.debug("Retry batch %s status: %s, waiting...", batch_id, status)
             time.sleep(poll_interval)

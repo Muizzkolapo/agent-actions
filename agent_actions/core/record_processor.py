@@ -438,9 +438,13 @@ class RecordProcessor:
             # Build recovery metadata if retry was triggered
             recovery_metadata = None
             if retry_result.needed_retry:
+                succeeded = not retry_result.exhausted
+                failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
                 recovery_metadata = RecoveryMetadata(
                     retry=RetryMetadata(
                         attempts=retry_result.attempts,
+                        failures=failures,
+                        succeeded=succeeded,
                         reason=retry_result.reason or "unknown",
                     )
                 )
