@@ -10,6 +10,7 @@ from .enrichment import (
     RequiredFieldsEnricher,
 )
 from .record_processor import RecordProcessor
+from .result_adapters import ProcessingResultAdapter
 from .types import (
     ProcessingContext,
     ProcessingMode,
@@ -35,4 +36,6 @@ __all__ = [
     "RequiredFieldsEnricher",
     # Processing
     "RecordProcessor",
+    # Adapters
+    "ProcessingResultAdapter",
 ]

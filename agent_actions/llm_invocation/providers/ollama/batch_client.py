@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from ollama import Client
 from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
+from ..failure_injection import should_skip_record
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,12 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         for idx, task in enumerate(tasks, 1):
             custom_id = task["custom_id"]
             print(f"Processing request {idx}/{len(tasks)}: {custom_id}")
+
+            # Failure injection: skip record to simulate missing result
+            if should_skip_record(custom_id):
+                print(f"  [INJECTED] Skipping {custom_id}")
+                failed += 1
+                continue
 
             try:
                 # Extract request data

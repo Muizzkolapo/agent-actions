@@ -2,12 +2,16 @@
 
 This service encapsulates all result processing functionality, extracted from
 BatchService to follow Single Responsibility Principle.
+
+Includes retry support for missing records in batch results.
 """
 
 import logging
+import time
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Callable
+from typing import Optional, Dict, Any, List, Callable, Set
 
+from agent_actions.core.types import RecoveryMetadata, RetryMetadata
 from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.utilities.path_utils import ensure_directory_exists, create_side_output_directory
 from agent_actions.llm_invocation.batch.core.batch_constants import BatchStatus
@@ -285,12 +289,14 @@ class BatchProcessingService:
     ) -> Optional[str]:
         """Process a single batch file and return output path.
 
+        Supports retry for missing records if retry is enabled in agent_config.
+
         Args:
             batch_id: The batch job ID
             file_name: Original file name
             entry: Batch job registry entry
             output_directory: Output directory path
-            agent_config: Agent configuration
+            agent_config: Agent configuration (may include retry settings)
             manager: Registry manager instance
 
         Returns:
@@ -300,14 +306,29 @@ class BatchProcessingService:
             output_directory, file_name or "default"
         )
         provider = self._client_resolver.get_for_batch_id(batch_id, manager, output_directory)
-        batch_results = self._retrieve_results(
-            provider,
-            batch_id,
-            output_directory,
-            context_map=context_map,
-            record_count=entry.record_count,
-            file_name=file_name,
-        )
+
+        # Use retry-aware retrieval if agent_config has retry enabled
+        retry_config = (agent_config or {}).get("retry")
+        if retry_config and retry_config.get("enabled", True):
+            batch_results, recovery_metadata = self._retrieve_results_with_retry(
+                provider,
+                batch_id,
+                output_directory,
+                context_map=context_map,
+                record_count=entry.record_count,
+                file_name=file_name,
+                agent_config=agent_config,
+            )
+        else:
+            batch_results = self._retrieve_results(
+                provider,
+                batch_id,
+                output_directory,
+                context_map=context_map,
+                record_count=entry.record_count,
+                file_name=file_name,
+            )
+            recovery_metadata = None
 
         # Convert results to workflow format
         processed_data = self._convert_batch_results_to_workflow_format(
@@ -316,6 +337,13 @@ class BatchProcessingService:
             output_directory=output_directory,
             agent_config=agent_config,
         )
+
+        # Add recovery metadata to processed records if retry occurred
+        if recovery_metadata and not recovery_metadata.is_empty():
+            recovery_dict = recovery_metadata.to_dict()
+            for item in processed_data:
+                if isinstance(item, dict):
+                    item["_recovery"] = recovery_dict
 
         main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
 
@@ -405,3 +433,217 @@ class BatchProcessingService:
         )
 
         return batch_results
+
+    def _retrieve_results_with_retry(
+        self,
+        provider: BaseBatchClient,
+        batch_id: str,
+        output_directory: str,
+        *,
+        context_map: Dict[str, Any],
+        record_count: Optional[int] = None,
+        file_name: Optional[str] = None,
+        agent_config: Optional[Dict[str, Any]] = None,
+    ) -> tuple[List[BatchResult], Optional[RecoveryMetadata]]:
+        """Retrieve batch results with retry for missing records.
+
+        If retry is enabled and records are missing, resubmits missing records
+        as a new batch and consolidates results.
+
+        Args:
+            provider: Batch API client
+            batch_id: Batch job ID
+            output_directory: Output directory path
+            context_map: Context map for reconciliation and record lookup
+            record_count: Expected record count
+            file_name: Original file name
+            agent_config: Agent configuration with retry settings
+
+        Returns:
+            Tuple of (consolidated batch results, recovery metadata if retry occurred)
+        """
+        from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
+            BatchResultReconciler,
+        )
+
+        # Get retry config
+        retry_config = (agent_config or {}).get("retry")
+        retry_enabled = retry_config and retry_config.get("enabled", True)
+        max_attempts = retry_config.get("max_attempts", 3) if retry_config else 3
+
+        # Initial retrieval
+        all_results = self._retrieve_results(
+            provider,
+            batch_id,
+            output_directory,
+            context_map=context_map,
+            record_count=record_count,
+            file_name=file_name,
+        )
+
+        if not retry_enabled:
+            return all_results, None
+
+        # Check for missing records
+        expected_ids = BatchResultReconciler.collect_expected_custom_ids(context_map)
+        received_ids = BatchResultReconciler.collect_result_custom_ids(all_results)
+        missing_ids = expected_ids - received_ids
+
+        if not missing_ids:
+            return all_results, None
+
+        # Retry loop for missing records
+        retry_attempts = 0
+        recovery_metadata = None
+
+        while missing_ids and retry_attempts < max_attempts:
+            retry_attempts += 1
+            logger.info(
+                "Batch retry attempt %d/%d: resubmitting %d missing records",
+                retry_attempts,
+                max_attempts,
+                len(missing_ids),
+            )
+
+            # Resubmit missing records
+            retry_results = self._resubmit_missing_records(
+                provider=provider,
+                missing_ids=missing_ids,
+                context_map=context_map,
+                output_directory=output_directory,
+                file_name=file_name,
+                agent_config=agent_config,
+            )
+
+            if retry_results:
+                # Merge results
+                all_results.extend(retry_results)
+
+                # Update missing IDs
+                new_received = BatchResultReconciler.collect_result_custom_ids(retry_results)
+                missing_ids = missing_ids - new_received
+
+        # Build recovery metadata if retry occurred
+        if retry_attempts > 0:
+            recovery_metadata = RecoveryMetadata(
+                retry=RetryMetadata(
+                    attempts=retry_attempts,
+                    reason="missing",
+                )
+            )
+            if missing_ids:
+                logger.warning(
+                    "Batch retry exhausted: %d records still missing after %d attempts",
+                    len(missing_ids),
+                    retry_attempts,
+                )
+
+        return all_results, recovery_metadata
+
+    def _resubmit_missing_records(
+        self,
+        provider: BaseBatchClient,
+        missing_ids: Set[str],
+        context_map: Dict[str, Any],
+        output_directory: str,
+        file_name: Optional[str],
+        agent_config: Optional[Dict[str, Any]],
+    ) -> List[BatchResult]:
+        """Resubmit missing records as a new batch and wait for completion.
+
+        Args:
+            provider: Batch API client
+            missing_ids: Set of custom_ids that are missing
+            context_map: Context map with original record data
+            output_directory: Output directory path
+            file_name: Original file name
+            agent_config: Agent configuration
+
+        Returns:
+            List of batch results from retry batch
+        """
+        from agent_actions.llm_invocation.batch.processing.batch_task_preparator import (
+            BatchTaskPreparator,
+        )
+
+        # Extract missing records from context_map
+        missing_records = []
+        for custom_id in missing_ids:
+            if custom_id in context_map:
+                record = context_map[custom_id].copy()
+                # Ensure target_id is set for task preparation
+                if "target_id" not in record:
+                    record["target_id"] = custom_id
+                missing_records.append(record)
+
+        if not missing_records:
+            logger.warning("No records found in context_map for missing IDs")
+            return []
+
+        try:
+            # Prepare tasks for missing records
+            preparator = BatchTaskPreparator()
+            prepared = preparator.prepare_tasks(
+                agent_config=agent_config or {},
+                data=missing_records,
+                output_directory=output_directory,
+                batch_name=f"{file_name}_retry" if file_name else "retry",
+            )
+
+            if not prepared.tasks:
+                logger.warning("No tasks prepared for retry batch")
+                return []
+
+            # Submit retry batch
+            retry_batch_id = provider.submit_batch(prepared.tasks)
+            logger.info(
+                "Retry batch submitted: %s with %d records",
+                retry_batch_id,
+                len(prepared.tasks),
+            )
+
+            # Wait for completion (simple polling)
+            status = self._wait_for_batch_completion(provider, retry_batch_id)
+            if status != BatchStatus.COMPLETED:
+                logger.warning(
+                    "Retry batch %s did not complete successfully: %s",
+                    retry_batch_id,
+                    status,
+                )
+                return []
+
+            # Retrieve results
+            return provider.retrieve_results(retry_batch_id, output_directory)
+
+        except Exception as e:
+            logger.warning("Failed to resubmit missing records: %s", e)
+            return []
+
+    def _wait_for_batch_completion(
+        self,
+        provider: BaseBatchClient,
+        batch_id: str,
+        timeout_seconds: int = 3600,
+        poll_interval: int = 30,
+    ) -> BatchStatus:
+        """Wait for batch to complete with polling.
+
+        Args:
+            provider: Batch API client
+            batch_id: Batch job ID
+            timeout_seconds: Maximum time to wait (default 1 hour)
+            poll_interval: Seconds between status checks
+
+        Returns:
+            Final batch status
+        """
+        start_time = time.time()
+        while (time.time() - start_time) < timeout_seconds:
+            status = provider.check_status(batch_id)
+            if status in (BatchStatus.COMPLETED, BatchStatus.FAILED, BatchStatus.EXPIRED):
+                return status
+            logger.debug("Retry batch %s status: %s, waiting...", batch_id, status)
+            time.sleep(poll_interval)
+
+        logger.warning("Retry batch %s timed out after %d seconds", batch_id, timeout_seconds)
+        return provider.check_status(batch_id)

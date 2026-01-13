@@ -168,13 +168,14 @@ class TestLLMExecution:
         prep_result.formatted_prompt = "test prompt"
         prep_result.passthrough_fields = {"field": "value"}
 
-        response, executed, passthrough = processor._execute_llm(
+        response, executed, passthrough, recovery_metadata = processor._execute_llm(
             {"content": "test"}, prep_result, context
         )
 
         assert response == {"generated": "data"}
         assert executed is True
         assert passthrough == {"field": "value"}
+        assert recovery_metadata is None  # No retry occurred
 
     @patch("agent_actions.utilities.processor.processor_helpers.run_dynamic_agent")
     def test_handles_non_execution(self, mock_run):
@@ -188,12 +189,13 @@ class TestLLMExecution:
         prep_result.formatted_prompt = "test prompt"
         prep_result.passthrough_fields = {}
 
-        response, executed, passthrough = processor._execute_llm(
+        response, executed, passthrough, recovery_metadata = processor._execute_llm(
             {"content": "test"}, prep_result, context
         )
 
         assert response is None
         assert executed is False
+        assert recovery_metadata is None
 
 
 class TestResponseTransformation:

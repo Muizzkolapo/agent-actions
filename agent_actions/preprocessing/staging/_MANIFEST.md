@@ -15,6 +15,3 @@
 | `DataPreparationContext` | Class | Context for data preparation. | - |
 | `BatchProcessingContext` | Class | Context for batch mode processing. | - |
 | `generate_staging` | Function | Processes a file by splitting its content into chunks or looping through its objects/rows, | - |
-| `staging_processor.py` | Module | Module for orchestrating prompt processing workflow. | `errors`, `preprocessing`, `prompt_generation`, `utilities` |
-| `StagingProcessor` | Class | Orchestrates the prompt processing workflow (Open/Closed principle). | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `staging_dynamic_creator` | Method | Create a dynamic agent for processing input documentation. | - |

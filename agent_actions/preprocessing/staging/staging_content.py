@@ -13,8 +13,6 @@ from agent_actions.preprocessing.chunking.field_chunking import FieldAnalyzer, F
 from agent_actions.prompt_generation.content_generator import ContentGenerator
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
 
-from .staging_processor import StagingProcessor
-
 logger = logging.getLogger(__name__)
 
 
@@ -23,8 +21,9 @@ class StagingContentLoader:
 
     def __init__(self, agent_config, agent_name):
         """Initialize with agent configuration and name."""
-        self.prompt_processor = StagingProcessor(agent_config, agent_name)
-        self.content_generator = ContentGenerator(self.prompt_processor)
+        self.agent_config = agent_config
+        self.agent_name = agent_name
+        self.content_generator = ContentGenerator(agent_config, agent_name)
         self.text_loader = TextLoader(agent_config, agent_name)
         self.json_loader = JsonLoader(agent_config, agent_name)
         self.tabular_loader = TabularLoader(agent_config, agent_name)
@@ -56,7 +55,7 @@ class StagingContentLoader:
     def _apply_field_chunking_if_enabled(self, processed_content, agent_config=None):
         """Apply field chunking if enabled and return processed content."""
         if agent_config is None:
-            agent_config = getattr(self.prompt_processor, "agent_config", {})
+            agent_config = self.agent_config
         chunk_config = agent_config.get(CHUNK_CONFIG_KEY, {})
         field_chunking_config = chunk_config.get("field_chunking", {})
         if not (field_chunking_config.get("enabled") and isinstance(processed_content, list)):

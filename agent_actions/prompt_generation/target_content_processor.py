@@ -18,12 +18,9 @@ from agent_actions.preprocessing.filtering.guard_handler import (
     get_guard_handler,
 )
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
-from agent_actions.utilities.correlation import LoopIdGenerator
 from agent_actions.utilities.field_management import FieldManager
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.utilities.lineage import LineageBuilder
-from agent_actions.utilities.metadata import MetadataExtractor
-from agent_actions.utilities.passthrough_item_builder import PassthroughItemBuilder
 from agent_actions.utilities.udf_management.udf_registry import FileUDFResult
 
 logger = logging.getLogger(__name__)
@@ -392,7 +389,10 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
 
     async def _process_single_item_async(self, item: Dict, *args, **kwargs) -> List[Dict]:
         """
-        Process a single data item asynchronously using proper async patterns.
+        Process a single data item asynchronously via RecordProcessor.
+
+        Delegates to RecordProcessor in a thread pool for unified processing
+        with retry support.
 
         Args:
             item: Data item to process
@@ -403,98 +403,44 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             Processed data item
 
         Raises:
-            ValueError: If item processing fails
+            ProcessingError: If item processing fails
         """
         source_data = args[0] if args else []
         file_path = kwargs.get("file_path")
         record_index = kwargs.get("record_index")
 
         try:
-            contents, source_guid = (item["content"], item["source_guid"])
-            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            # create_agent_with_data returns (generated_data, executed, passthrough_fields)
-            if hasattr(self.data_generator, "create_agent_with_data_async"):
-                (
-                    generated_data,
-                    executed,
-                    passthrough_fields,
-                ) = await self.data_generator.create_agent_with_data_async(
-                    contents,
-                    source_content,
-                    current_item=item,
-                    file_path=file_path,
+            # Run sync RecordProcessor in thread pool
+            def process_item():
+                from agent_actions.core.record_processor import RecordProcessor
+                from agent_actions.core.types import (
+                    ProcessingContext,
+                    ProcessingMode,
+                    ProcessingStatus,
                 )
-            else:
-                generated_data, executed, passthrough_fields = await asyncio.to_thread(
-                    self.data_generator.create_agent_with_data,
-                    contents,
-                    source_content,
-                    current_item=item,
-                    file_path=file_path,
-                )
-            if executed:
-                if hasattr(self.data_processor, "process_item_async"):
-                    processed = await self.data_processor.process_item_async(
-                        contents,
-                        generated_data,
-                        source_guid,
-                        passthrough_fields=passthrough_fields,
-                    )
-                else:
-                    processed = await asyncio.to_thread(
-                        self.data_processor.process_item,
-                        contents,
-                        generated_data,
-                        source_guid,
-                        passthrough_fields=passthrough_fields,
-                    )
-                base_node_id = IDGenerator.generate_node_id(self.agent_name)
 
-                # Build metadata for online mode output consistency
-                response_metadata = MetadataExtractor.extract_from_response(
-                    response=None,  # Raw response not available at this level
+                record_processor = RecordProcessor(
                     agent_config=self.agent_config,
+                    agent_name=self.agent_name,
                 )
+                context = ProcessingContext(
+                    agent_config=self.agent_config,
+                    agent_name=self.agent_name,
+                    mode=ProcessingMode.ONLINE,
+                    is_first_stage=False,
+                    source_data=source_data,
+                    file_path=file_path,
+                    record_index=record_index or 0,
+                )
+                result = record_processor.process(item, context)
 
-                for i, obj in enumerate(processed):
-                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
-                    # For split records, append sub-index to node_id
-                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
-                    obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
-                    obj = LoopIdGenerator.add_loop_correlation_id(
-                        obj, self.agent_config, record_index=record_index
-                    )
-                    # Add metadata fields for consistency with batch mode
-                    FieldManager.add_metadata(
-                        obj,
-                        metadata=response_metadata.to_dict(),
-                    )
-                    processed[i] = obj
-            else:
-                # Agent was not executed (skipped by guard or filtered out)
-                if generated_data is None:
-                    # Filtered out entirely (behavior: 'filter')
+                if result.status == ProcessingStatus.FILTERED:
                     return []
-                # Skipped but passed through (behavior: 'skip')
-                processed_item = PassthroughItemBuilder.build_item(
-                    row={**item, "content": generated_data, "source_guid": source_guid},
-                    reason="where_clause_not_matched",
-                    action_name=self.agent_name,
-                    source_guid=source_guid,
-                    mode="online",
-                )
 
-                # CRITICAL: Merge passthrough fields into skipped item
-                # This ensures fields from context_scope.passthrough are
-                # carried forward
-                if passthrough_fields:
-                    if "content" in processed_item and isinstance(processed_item["content"], dict):
-                        processed_item["content"].update(passthrough_fields)
-                    else:
-                        processed_item.update(passthrough_fields)
+                return result.data
 
-                processed = [processed_item]
-            return processed
+            return await asyncio.to_thread(process_item)
+
         except Exception as ex:
             raise ProcessingError(
                 "Failed to process item",
@@ -591,12 +537,12 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
         record_index: Optional[int] = None,
     ) -> List[Dict]:
         """
-        Process a single data item synchronously.
+        Process a single data item synchronously via RecordProcessor.
 
-        Kept for backward compatibility.
+        Delegates to RecordProcessor for unified processing with retry support.
 
         Args:
-            item: Data item to process
+            item: Data item to process (dict with content/source_guid)
             source_data: Source data for reference
             file_path: Optional file path for historical node data loading
             record_index: Optional record index for loop correlation
@@ -605,78 +551,45 @@ class TargetContentProcessor(BaseAsyncProcessor, IContentProcessor):
             Processed data item
 
         Raises:
-            ValueError: If item processing fails
+            ProcessingError: If item processing fails
         """
+        from agent_actions.core.record_processor import RecordProcessor
+        from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
+
         try:
-            contents, source_guid = (item["content"], item["source_guid"])
-            source_content = DataTransformer.get_content_by_source_guid(source_data, source_guid)
-            # create_agent_with_data returns (generated_data, executed, passthrough_fields)
-            generated_data, executed, passthrough_fields = (
-                self.data_generator.create_agent_with_data(
-                    contents,
-                    source_content,
-                    current_item=item,
-                    file_path=file_path,
-                )
+            # Create RecordProcessor for this agent
+            record_processor = RecordProcessor(
+                agent_config=self.agent_config,
+                agent_name=self.agent_name,
             )
-            if executed:
-                processed = self.data_processor.process_item(
-                    contents,
-                    generated_data,
-                    source_guid,
-                    passthrough_fields=passthrough_fields,
-                )
-                base_node_id = IDGenerator.generate_node_id(self.agent_name)
 
-                # Build metadata for online mode output consistency
-                response_metadata = MetadataExtractor.extract_from_response(
-                    response=None,  # Raw response not available at this level
-                    agent_config=self.agent_config,
-                )
+            # Extract agent_indices and dependency_configs from data_generator
+            # These are needed for historical data loading (previous action outputs)
+            agent_indices = getattr(self.data_generator, "agent_indices", None)
+            dependency_configs = getattr(self.data_generator, "dependency_configs", None)
 
-                for i, obj in enumerate(processed):
-                    obj = FieldManager().ensure_required_fields(obj, source_guid, self.idx)
-                    # For split records, append sub-index to node_id
-                    node_id = f"{base_node_id}_{i}" if len(processed) > 1 else base_node_id
-                    obj = LineageBuilder.add_lineage_tracking(obj, item, node_id)
-                    obj = LoopIdGenerator.add_loop_correlation_id(
-                        obj, self.agent_config, record_index=record_index
-                    )
-                    # Add metadata fields for consistency with batch mode
-                    FieldManager.add_metadata(
-                        obj,
-                        metadata=response_metadata.to_dict(),
-                    )
-                    processed[i] = obj
-            else:
-                # Agent was not executed (skipped by guard or filtered out)
-                if generated_data is None:
-                    # Filtered out entirely (behavior: 'filter')
-                    return []
-                # Skipped but passed through (behavior: 'skip')
-                processed_item = PassthroughItemBuilder.build_item(
-                    row={**item, "content": generated_data, "source_guid": source_guid},
-                    reason="where_clause_not_matched",
-                    action_name=self.agent_name,
-                    source_guid=source_guid,
-                    mode="online",
-                )
+            # Build ProcessingContext for subsequent-stage processing
+            context = ProcessingContext(
+                agent_config=self.agent_config,
+                agent_name=self.agent_name,
+                mode=ProcessingMode.ONLINE,
+                is_first_stage=False,
+                source_data=source_data,
+                file_path=file_path,
+                record_index=record_index or 0,
+                agent_indices=agent_indices,
+                dependency_configs=dependency_configs,
+            )
 
-                # CRITICAL: Merge passthrough fields into skipped item
-                # This ensures fields from context_scope.passthrough are
-                # carried forward
-                if passthrough_fields:
-                    if "content" in processed_item and isinstance(processed_item["content"], dict):
-                        processed_item["content"].update(passthrough_fields)
-                    else:
-                        processed_item.update(passthrough_fields)
+            # Process via RecordProcessor (has retry support)
+            result = record_processor.process(item, context)
 
-                processed_item = LoopIdGenerator.add_loop_correlation_id(
-                    processed_item, self.agent_config, record_index=record_index
-                )
+            # Handle different statuses
+            if result.status == ProcessingStatus.FILTERED:
+                return []
 
-                processed = [processed_item]
-            return processed
+            return result.data
+
         except Exception as ex:
             raise ProcessingError(
                 "Failed to process item",
