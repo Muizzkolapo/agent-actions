@@ -411,7 +411,7 @@ class BatchResultProcessor:
         error_message: str,
         metadata: Optional[Dict[str, Any]] = None,
         raw_content: Any = None,
-        recovery_metadata: Optional[Any] = None,
+        recovery_metadata: Optional[RecoveryMetadata] = None,
     ) -> Dict[str, Any]:
         """
         Create an error item for failed batch results.
@@ -475,6 +475,8 @@ class BatchResultProcessor:
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
         # Get empty schema from agent_config if available
+        # TODO: This simple heuristic doesn't handle $ref, anyOf/oneOf, or nested required fields.
+        #       Consider using a proper schema-to-empty-value converter if complex schemas are needed.
         empty_content = {}
         if ctx.agent_config:
             schema = ctx.agent_config.get("schema")
@@ -545,6 +547,20 @@ class BatchResultProcessor:
                 is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
 
                 if is_exhausted:
+                    # Check on_exhausted behavior from retry config
+                    on_exhausted = "return_last"  # default
+                    if ctx.agent_config:
+                        retry_config = ctx.agent_config.get("retry", {})
+                        on_exhausted = retry_config.get("on_exhausted", "return_last")
+
+                    if on_exhausted == "raise":
+                        # Raise exception as configured - fail the action
+                        recovery_meta = ctx.exhausted_recovery[custom_id]
+                        raise RuntimeError(
+                            f"Retry exhausted for record {custom_id} after "
+                            f"{recovery_meta.retry.attempts} attempts (on_exhausted=raise)"
+                        )
+
                     # Exhausted retry: Create record with empty schema fields + _recovery
                     # This gives downstream actions the expected structure but empty values
                     recovery_meta = ctx.exhausted_recovery[custom_id]
