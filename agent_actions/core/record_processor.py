@@ -11,6 +11,7 @@ from .types import (
     ProcessingResult,
     ProcessingStatus,
     RecoveryMetadata,
+    RepromptMetadata,
     RetryMetadata,
 )
 
@@ -387,16 +388,17 @@ class RecordProcessor:
         self, content: Any, prep_result, context: ProcessingContext
     ) -> Tuple[Any, bool, Dict, Optional[RecoveryMetadata]]:
         """
-        Execute LLM invocation with optional retry (includes SECOND guard check).
+        Execute LLM invocation with optional reprompt and retry (includes SECOND guard check).
 
         run_dynamic_agent() internally evaluates guards that need prompt-prepared
         context (passthrough fields, {source.*} references). If guard blocks
         execution, returns executed=False.
 
-        Retry Behavior:
-        - If retry is enabled in agent_config, wraps LLM call with RetryService
-        - Retries on NetworkError, RateLimitError (transient failures)
-        - Returns recovery_metadata tracking retry attempts
+        Recovery Behavior:
+        - Reprompt wraps retry (each reprompt attempt gets independent retry protection)
+        - If reprompt is enabled, validates LLM response with UDF and re-executes with feedback
+        - If retry is enabled, wraps each LLM call with RetryService for transient failures
+        - Returns recovery_metadata tracking both reprompt and retry attempts
 
         Args:
             content: Current content
@@ -408,11 +410,12 @@ class RecordProcessor:
             - response: LLM response or passthrough data if guard skipped
             - executed: False if LLM layer guard blocked execution
             - passthrough_fields: Fields to merge into output
-            - recovery_metadata: Retry tracking info (None if no retry occurred)
+            - recovery_metadata: Recovery tracking info (None if no recovery occurred)
         """
         from agent_actions.utilities.processor.processor_helpers import (
             run_dynamic_agent,
         )
+        from agent_actions.core.reprompt_service import create_reprompt_service_from_config
 
         tools_path = context.agent_config.get("tools", {}).get("path")
 
@@ -420,8 +423,123 @@ class RecordProcessor:
         retry_config = context.agent_config.get("retry")
         retry_service = create_retry_service_from_config(retry_config)
 
-        if retry_service:
-            # Execute with retry
+        # Check for reprompt configuration
+        reprompt_config = context.agent_config.get("reprompt")
+        reprompt_service = create_reprompt_service_from_config(reprompt_config)
+
+        # Initialize recovery metadata container
+        recovery_metadata = RecoveryMetadata()
+
+        # Branch 1: Both reprompt and retry enabled (reprompt wraps retry)
+        if reprompt_service and retry_service:
+            # Mutable prompt holder for reprompt iterations
+            current_prompt = [prep_result.formatted_prompt]
+
+            def llm_with_retry():
+                """LLM execution with retry protection."""
+
+                def llm_call():
+                    return run_dynamic_agent(
+                        context.agent_config,
+                        context.agent_name,
+                        content,
+                        current_prompt[0],  # Read from mutable holder
+                        tools_path=tools_path,
+                    )
+
+                retry_result = retry_service.execute(
+                    llm_call,
+                    context=f"action={context.agent_name}",
+                )
+
+                # Track retry metadata
+                if retry_result.needed_retry:
+                    succeeded = not retry_result.exhausted
+                    failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
+                    recovery_metadata.retry = RetryMetadata(
+                        attempts=retry_result.attempts,
+                        failures=failures,
+                        succeeded=succeeded,
+                        reason=retry_result.reason or "unknown",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    )
+
+                if retry_result.exhausted:
+                    return None, False
+
+                return retry_result.response
+
+            # Execute with reprompt (wraps retry)
+            reprompt_result = reprompt_service.execute(
+                llm_operation=llm_with_retry,
+                original_prompt=prep_result.formatted_prompt,
+                context=f"action={context.agent_name}",
+            )
+
+            # Track reprompt metadata
+            if reprompt_result.attempts > 0:
+                recovery_metadata.reprompt = RepromptMetadata(
+                    attempts=reprompt_result.attempts,
+                    passed=reprompt_result.passed,
+                    validation=reprompt_result.validation_name,
+                )
+
+            # Handle exhausted reprompt
+            if reprompt_result.exhausted:
+                logger.warning(
+                    "Reprompt exhausted for action %s after %d attempts",
+                    context.agent_name,
+                    reprompt_result.attempts,
+                )
+
+            response, executed = reprompt_result.response
+            return (
+                response,
+                executed,
+                prep_result.passthrough_fields,
+                recovery_metadata if not recovery_metadata.is_empty() else None,
+            )
+
+        # Branch 2: Only reprompt enabled (no retry)
+        elif reprompt_service:
+            # Mutable prompt holder for reprompt iterations
+            current_prompt = [prep_result.formatted_prompt]
+
+            def llm_direct():
+                """Direct LLM execution without retry."""
+                return run_dynamic_agent(
+                    context.agent_config,
+                    context.agent_name,
+                    content,
+                    current_prompt[0],
+                    tools_path=tools_path,
+                )
+
+            reprompt_result = reprompt_service.execute(
+                llm_operation=llm_direct,
+                original_prompt=prep_result.formatted_prompt,
+                context=f"action={context.agent_name}",
+            )
+
+            # Track reprompt metadata
+            if reprompt_result.attempts > 0:
+                recovery_metadata.reprompt = RepromptMetadata(
+                    attempts=reprompt_result.attempts,
+                    passed=reprompt_result.passed,
+                    validation=reprompt_result.validation_name,
+                )
+
+            response, executed = reprompt_result.response
+            return (
+                response,
+                executed,
+                prep_result.passthrough_fields,
+                recovery_metadata if not recovery_metadata.is_empty() else None,
+            )
+
+        # Branch 3: Only retry enabled (no reprompt) - existing logic
+        elif retry_service:
+
             def llm_operation():
                 return run_dynamic_agent(
                     context.agent_config,
@@ -437,18 +555,15 @@ class RecordProcessor:
             )
 
             # Build recovery metadata if retry was triggered
-            recovery_metadata = None
             if retry_result.needed_retry:
                 succeeded = not retry_result.exhausted
                 failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
-                recovery_metadata = RecoveryMetadata(
-                    retry=RetryMetadata(
-                        attempts=retry_result.attempts,
-                        failures=failures,
-                        succeeded=succeeded,
-                        reason=retry_result.reason or "unknown",
-                        timestamp=datetime.now(timezone.utc).isoformat(),
-                    )
+                recovery_metadata.retry = RetryMetadata(
+                    attempts=retry_result.attempts,
+                    failures=failures,
+                    succeeded=succeeded,
+                    reason=retry_result.reason or "unknown",
+                    timestamp=datetime.now(timezone.utc).isoformat(),
                 )
 
             # Handle exhausted case
@@ -459,8 +574,12 @@ class RecordProcessor:
                     retry_result.attempts,
                     retry_result.last_error,
                 )
-                # Return None response with recovery metadata
-                return None, False, prep_result.passthrough_fields, recovery_metadata
+                return (
+                    None,
+                    False,
+                    prep_result.passthrough_fields,
+                    recovery_metadata if not recovery_metadata.is_empty() else None,
+                )
 
             # Unpack the response tuple from run_dynamic_agent
             if retry_result.response:
@@ -468,9 +587,15 @@ class RecordProcessor:
             else:
                 response, executed = None, False
 
-            return response, executed, prep_result.passthrough_fields, recovery_metadata
+            return (
+                response,
+                executed,
+                prep_result.passthrough_fields,
+                recovery_metadata if not recovery_metadata.is_empty() else None,
+            )
+
+        # Branch 4: No recovery enabled - direct execution
         else:
-            # No retry - direct execution
             response, executed = run_dynamic_agent(
                 context.agent_config,
                 context.agent_name,
