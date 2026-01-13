@@ -30,6 +30,8 @@ SIMPLE_CONFIG_FIELDS = {
     # Reprompt configuration
     "reprompt": False,  # Default: False (reprompting disabled)
     "constraints": [],  # Default: empty list (no constraints)
+    # Retry configuration (transport-layer failure handling)
+    "retry": None,  # Default: None (retry disabled unless configured)
 }
 
 

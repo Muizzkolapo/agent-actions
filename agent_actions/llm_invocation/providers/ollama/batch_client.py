@@ -17,7 +17,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from ollama import Client
 from ..batch_client_base import BaseBatchClient, BatchTask, BatchResult
 from ..mixins import OpenAICompatibleResponseMixin
-from ..failure_injection import should_skip_record
 
 logger = logging.getLogger(__name__)
 
@@ -126,15 +125,9 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
         completed = 0
         failed = 0
 
-        for idx, task in enumerate(tasks, 1):
+        for idx, task in enumerate(tasks):
             custom_id = task["custom_id"]
-            print(f"Processing request {idx}/{len(tasks)}: {custom_id}")
-
-            # Failure injection: skip record to simulate missing result
-            if should_skip_record(custom_id):
-                print(f"  [INJECTED] Skipping {custom_id}")
-                failed += 1
-                continue
+            logger.info("Processing request %d/%d: %s", idx + 1, len(tasks), custom_id)
 
             try:
                 # Extract request data
@@ -175,7 +168,7 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
                 completed += 1
 
             except Exception as e:
-                print(f"Error processing {custom_id}: {e}")
+                logger.error("Error processing %s: %s", custom_id, e)
                 error_response = {
                     "custom_id": custom_id,
                     "response": None,
@@ -192,8 +185,8 @@ class OllamaBatchClient(OpenAICompatibleResponseMixin, BaseBatchClient):
             for result in results:
                 f.write(json.dumps(result) + "\n")
 
-        print(f"Ollama batch output file: {output_file_path}")
-        print(f"Batch completed: {completed} succeeded, {failed} failed")
+        logger.info("Ollama batch output file: %s", output_file_path)
+        logger.info("Batch completed: %d succeeded, %d failed", completed, failed)
 
         # Return 'submitted' to mimic async providers
         return (batch_id, "submitted")

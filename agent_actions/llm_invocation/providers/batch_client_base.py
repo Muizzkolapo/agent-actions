@@ -57,6 +57,7 @@ class BatchResult:
     error: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     usage: Optional[Dict[str, Any]] = None
+    recovery_metadata: Optional["RecoveryMetadata"] = None  # From agent_actions.core.types
 
 
 class BaseBatchClient(ABC):

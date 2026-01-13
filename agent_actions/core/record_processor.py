@@ -1,12 +1,11 @@
 """Unified record processor replacing StagingProcessor and TargetContentProcessor."""
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .enrichment import EnrichmentPipeline
 from .retry_service import RetryService, create_retry_service_from_config
-from agent_actions.llm_invocation.providers.failure_injection import maybe_raise_error
-from agent_actions.errors import RateLimitError
 from .types import (
     ProcessingContext,
     ProcessingResult,
@@ -424,13 +423,6 @@ class RecordProcessor:
         if retry_service:
             # Execute with retry
             def llm_operation():
-                # Failure injection for testing retry (only in new path)
-                maybe_raise_error(
-                    RateLimitError,
-                    "Injected rate limit",
-                    vendor="record_processor",
-                    agent=context.agent_name,
-                )
                 return run_dynamic_agent(
                     context.agent_config,
                     context.agent_name,
@@ -447,10 +439,15 @@ class RecordProcessor:
             # Build recovery metadata if retry was triggered
             recovery_metadata = None
             if retry_result.needed_retry:
+                succeeded = not retry_result.exhausted
+                failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
                 recovery_metadata = RecoveryMetadata(
                     retry=RetryMetadata(
                         attempts=retry_result.attempts,
+                        failures=failures,
+                        succeeded=succeeded,
                         reason=retry_result.reason or "unknown",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
                     )
                 )
 
