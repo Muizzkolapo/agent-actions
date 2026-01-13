@@ -432,18 +432,16 @@ class RecordProcessor:
 
         # Branch 1: Both reprompt and retry enabled (reprompt wraps retry)
         if reprompt_service and retry_service:
-            # Mutable prompt holder for reprompt iterations
-            current_prompt = [prep_result.formatted_prompt]
 
-            def llm_with_retry():
-                """LLM execution with retry protection."""
+            def llm_with_retry(prompt: str):
+                """LLM execution with retry protection, using provided prompt."""
 
                 def llm_call():
                     return run_dynamic_agent(
                         context.agent_config,
                         context.agent_name,
                         content,
-                        current_prompt[0],  # Read from mutable holder
+                        prompt,  # Use prompt parameter (includes feedback on reprompt)
                         tools_path=tools_path,
                     )
 
@@ -492,26 +490,23 @@ class RecordProcessor:
                     reprompt_result.attempts,
                 )
 
-            response, executed = reprompt_result.response
             return (
-                response,
-                executed,
+                reprompt_result.response,
+                reprompt_result.executed,
                 prep_result.passthrough_fields,
                 recovery_metadata if not recovery_metadata.is_empty() else None,
             )
 
         # Branch 2: Only reprompt enabled (no retry)
         elif reprompt_service:
-            # Mutable prompt holder for reprompt iterations
-            current_prompt = [prep_result.formatted_prompt]
 
-            def llm_direct():
-                """Direct LLM execution without retry."""
+            def llm_direct(prompt: str):
+                """Direct LLM execution without retry, using provided prompt."""
                 return run_dynamic_agent(
                     context.agent_config,
                     context.agent_name,
                     content,
-                    current_prompt[0],
+                    prompt,  # Use prompt parameter (includes feedback on reprompt)
                     tools_path=tools_path,
                 )
 
@@ -529,10 +524,9 @@ class RecordProcessor:
                     validation=reprompt_result.validation_name,
                 )
 
-            response, executed = reprompt_result.response
             return (
-                response,
-                executed,
+                reprompt_result.response,
+                reprompt_result.executed,
                 prep_result.passthrough_fields,
                 recovery_metadata if not recovery_metadata.is_empty() else None,
             )

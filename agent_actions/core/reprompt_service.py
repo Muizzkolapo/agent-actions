@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 class RepromptResult:
     """Result of reprompt execution."""
 
-    response: Any
+    response: Any  # The actual LLM response content
+    executed: bool  # Whether LLM was executed (False if guard skipped)
     attempts: int
     passed: bool  # Whether validation ultimately passed
     validation_name: str
@@ -63,7 +64,7 @@ class RepromptService:
 
     def execute(
         self,
-        llm_operation: Callable[[], Tuple[Any, bool]],
+        llm_operation: Callable[[str], Tuple[Any, bool]],
         original_prompt: str,
         context: str = "",
         on_exhausted: Optional[str] = None,
@@ -72,7 +73,8 @@ class RepromptService:
         Execute LLM operation with reprompt loop.
 
         Args:
-            llm_operation: Callable that executes LLM (returns (response, executed))
+            llm_operation: Callable that executes LLM with prompt parameter.
+                          Signature: (prompt: str) -> (response, executed)
             original_prompt: Original prompt (for appending feedback)
             context: Context string for logging
             on_exhausted: Override on_exhausted behavior (optional)
@@ -84,7 +86,8 @@ class RepromptService:
             RuntimeError: If on_exhausted="raise" and validation exhausted
 
         Note:
-            The llm_operation callable should return a tuple of (response, executed).
+            The llm_operation callable receives the prompt (with feedback appended
+            on reprompt attempts) and returns a tuple of (response, executed).
             If executed=False (guard skip), validation is bypassed.
         """
         # Use override or instance default
@@ -97,14 +100,15 @@ class RepromptService:
         while attempts < self.max_attempts:
             attempts += 1
 
-            # Execute LLM (may return executed=False if guards skip)
-            response, executed = llm_operation()
+            # Execute LLM with current prompt (may include feedback from previous attempts)
+            response, executed = llm_operation(current_prompt)
 
             # If guard skipped execution, return immediately
             if not executed:
                 logger.info(f"[{context}] Guard skipped execution, bypassing reprompt")
                 return RepromptResult(
                     response=response,
+                    executed=False,
                     attempts=0,  # No validation attempts
                     passed=True,  # Treat as pass
                     validation_name=self.validation_name,
@@ -126,6 +130,7 @@ class RepromptService:
                 )
                 return RepromptResult(
                     response=response,
+                    executed=True,
                     attempts=attempts,
                     passed=True,
                     validation_name=self.validation_name,
@@ -145,10 +150,6 @@ class RepromptService:
             feedback = self._build_feedback_message(response)
             current_prompt = f"{original_prompt}\n\n{feedback}"
 
-            # TODO: Update llm_operation to use current_prompt for next iteration
-            # This requires refactoring how we pass prompts to LLM operations
-            # For now, the validation loop continues but prompt is not updated
-
         # Exhausted all attempts
         logger.error(
             f"[{context}] Reprompt exhausted after {attempts} attempts "
@@ -164,6 +165,7 @@ class RepromptService:
         # on_exhausted = "return_last"
         return RepromptResult(
             response=last_response,
+            executed=True,  # LLM was executed, validation just failed
             attempts=attempts,
             passed=False,
             validation_name=self.validation_name,
