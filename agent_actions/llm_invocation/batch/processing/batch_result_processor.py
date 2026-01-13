@@ -475,8 +475,7 @@ class BatchResultProcessor:
         source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
 
         # Get empty schema from agent_config if available
-        # TODO: This simple heuristic doesn't handle $ref, anyOf/oneOf, or nested required fields.
-        #       Consider using a proper schema-to-empty-value converter if complex schemas are needed.
+        # See #719 for limitations of this simple heuristic
         empty_content = {}
         if ctx.agent_config:
             schema = ctx.agent_config.get("schema")
