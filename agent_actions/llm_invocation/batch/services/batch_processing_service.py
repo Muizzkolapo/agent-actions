@@ -8,6 +8,7 @@ Includes retry support for missing records in batch results.
 
 import logging
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable, Set
 
@@ -535,6 +536,7 @@ class BatchProcessingService:
                                 failures=failures,
                                 succeeded=True,
                                 reason="missing",
+                                timestamp=datetime.now(timezone.utc).isoformat(),
                             )
                         )
 
@@ -563,6 +565,7 @@ class BatchProcessingService:
                         failures=failures,
                         succeeded=False,
                         reason="missing",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
                     )
                 )
             logger.warning(

@@ -225,7 +225,7 @@ class BatchResultProcessor:
                         f"Processing error: {str(e)}",
                         batch_result.metadata,
                         batch_result.content,
-                        recovery_metadata=getattr(batch_result, "recovery_metadata", None),
+                        recovery_metadata=batch_result.recovery_metadata,
                     )
                     ctx.processed_data.append(error_item)
                     ctx.error_count += 1
@@ -249,7 +249,7 @@ class BatchResultProcessor:
                     custom_id,
                     batch_result.error or "Batch processing failed",
                     batch_result.metadata,
-                    recovery_metadata=getattr(batch_result, "recovery_metadata", None),
+                    recovery_metadata=batch_result.recovery_metadata,
                 )
                 ctx.processed_data.append(error_item)
                 ctx.error_count += 1

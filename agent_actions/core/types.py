@@ -41,21 +41,26 @@ class RetryMetadata:
         failures: Number of failed attempts before success (or total if exhausted)
         succeeded: Whether the operation ultimately succeeded
         reason: Why retry was needed (timeout, api_error, missing, rate_limit, network_error)
+        timestamp: ISO format timestamp when retry completed
     """
 
     attempts: int
     failures: int
     succeeded: bool
     reason: str  # "timeout", "api_error", "missing", "rate_limit", "network_error"
+    timestamp: Optional[str] = None  # ISO format (e.g., "2024-01-13T12:30:45Z")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
-        return {
+        result = {
             "attempts": self.attempts,
             "failures": self.failures,
             "succeeded": self.succeeded,
             "reason": self.reason,
         }
+        if self.timestamp:
+            result["timestamp"] = self.timestamp
+        return result
 
 
 @dataclass

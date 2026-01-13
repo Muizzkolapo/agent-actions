@@ -438,6 +438,8 @@ class RecordProcessor:
             # Build recovery metadata if retry was triggered
             recovery_metadata = None
             if retry_result.needed_retry:
+                from datetime import datetime, timezone
+
                 succeeded = not retry_result.exhausted
                 failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
                 recovery_metadata = RecoveryMetadata(
@@ -446,6 +448,7 @@ class RecordProcessor:
                         failures=failures,
                         succeeded=succeeded,
                         reason=retry_result.reason or "unknown",
+                        timestamp=datetime.now(timezone.utc).isoformat(),
                     )
                 )
 

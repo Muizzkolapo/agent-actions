@@ -19,9 +19,6 @@ import httpx
 from agent_actions.llm_invocation.providers.client_base import BaseClient
 from agent_actions.utilities.constants import MODEL_NAME_KEY
 from agent_actions.errors import RateLimitError, NetworkError, VendorAPIError
-from agent_actions.llm_invocation.providers.ollama.failure_injection import (
-    maybe_inject_online_failure,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +167,6 @@ class OllamaClient(BaseClient):
         ) as e:
             raise _wrap_ollama_error(e, model) from e
 
-        # Failure injection AFTER successful call - simulates "got nothing back"
-        maybe_inject_online_failure(model)
-
         # Parse JSON response
         content = response.message.content
 
@@ -232,9 +226,6 @@ class OllamaClient(BaseClient):
             ResponseError,
         ) as e:
             raise _wrap_ollama_error(e, model) from e
-
-        # Failure injection AFTER successful call - simulates "got nothing back"
-        maybe_inject_online_failure(model)
 
         output_field = agent_config.get("output_field", "raw_response")
         response_content = {output_field: response.message.content}
