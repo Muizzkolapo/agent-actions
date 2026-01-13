@@ -46,8 +46,8 @@ class BatchProcessingContext:
     # Reconciliation
     reconciler: Optional[BatchResultReconciler] = None
 
-    # Recovery
-    recovery_metadata: Optional[RecoveryMetadata] = None
+    # Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
+    exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
 
     # Accumulated output
     processed_data: List[Dict[str, Any]] = field(default_factory=list)
@@ -96,7 +96,7 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
-        recovery_metadata: Optional[RecoveryMetadata] = None,
+        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Process batch results through the pipeline.
@@ -106,7 +106,7 @@ class BatchResultProcessor:
             context_map: Map of custom_id -> original row data
             output_directory: Output directory path (for node extraction)
             agent_config: Agent configuration
-            recovery_metadata: Optional recovery metadata (from retry)
+            exhausted_recovery: Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
 
         Returns:
             List of processed data in workflow format
@@ -117,7 +117,7 @@ class BatchResultProcessor:
             context_map,
             output_directory,
             agent_config,
-            recovery_metadata,
+            exhausted_recovery,
         )
 
         # Stage 2: Reconcile requests with responses
@@ -144,7 +144,7 @@ class BatchResultProcessor:
         context_map: Optional[Dict[str, Any]],
         output_directory: Optional[str],
         agent_config: Optional[Dict[str, Any]],
-        recovery_metadata: Optional[RecoveryMetadata] = None,
+        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
     ) -> BatchProcessingContext:
         """
         Stage 1: Initialize processing context.
@@ -167,7 +167,7 @@ class BatchResultProcessor:
             agent_config=agent_config,
             json_mode=json_mode,
             output_field=output_field,
-            recovery_metadata=recovery_metadata,
+            exhausted_recovery=exhausted_recovery,
         )
 
         logger.debug(
@@ -445,12 +445,82 @@ class BatchResultProcessor:
 
         return error_item
 
+    def _create_exhausted_item(
+        self,
+        ctx: BatchProcessingContext,
+        custom_id: str,
+        original_row: Dict[str, Any],
+        recovery_metadata: RecoveryMetadata,
+    ) -> Dict[str, Any]:
+        """
+        Create an exhausted retry item with empty schema fields.
+
+        For records where retry was exhausted, we create a record with:
+        - The expected output schema fields, but with empty/null values
+        - The _recovery metadata indicating retry exhaustion
+        - Preserved source_guid, target_id, lineage for tracking
+
+        This allows downstream actions to see the expected structure
+        rather than old content from the previous action.
+
+        Args:
+            ctx: Processing context
+            custom_id: The custom ID for this record
+            original_row: Original row data (for source_guid, lineage, etc.)
+            recovery_metadata: Recovery metadata with retry info
+
+        Returns:
+            Exhausted item dict with empty content + _recovery
+        """
+        source_guid = ctx.reconciler.get_source_guid(custom_id, fallback=custom_id or "unknown")
+
+        # Get empty schema from agent_config if available
+        empty_content = {}
+        if ctx.agent_config:
+            schema = ctx.agent_config.get("schema")
+            if schema and isinstance(schema, dict):
+                # Create empty values for each schema field
+                properties = schema.get("properties", {})
+                for field_name, field_spec in properties.items():
+                    field_type = field_spec.get("type", "string")
+                    if field_type == "array":
+                        empty_content[field_name] = []
+                    elif field_type == "object":
+                        empty_content[field_name] = {}
+                    elif field_type == "boolean":
+                        empty_content[field_name] = False
+                    elif field_type in ("number", "integer"):
+                        empty_content[field_name] = 0
+                    else:
+                        empty_content[field_name] = None
+
+        exhausted_item: Dict[str, Any] = {
+            "source_guid": source_guid,
+            "content": empty_content,
+            "metadata": {"retry_exhausted": True},
+            "_recovery": recovery_metadata.to_dict(),
+        }
+
+        # Preserve target_id if available
+        if original_row.get("target_id"):
+            exhausted_item["target_id"] = original_row["target_id"]
+
+        # Preserve lineage if available
+        if original_row.get("lineage"):
+            exhausted_item["lineage"] = original_row["lineage"]
+
+        return exhausted_item
+
     def _stage_6_merge_passthroughs(self, ctx: BatchProcessingContext) -> BatchProcessingContext:
         """
         Stage 6: Merge passthrough records for missing/skipped items.
 
         Uses BatchResultReconciler to find records that need passthrough treatment,
         then uses BatchPassthroughBuilder to create properly formatted passthrough items.
+
+        IMPORTANT: Exhausted retry records are treated differently from skipped records:
+        - Skipped records (guard/conditional): Passthrough with original content
+        - Exhausted retry records: Error record WITHOUT old content (matches online behavior)
         """
         # Get reconciliation result
         reconciliation = ctx.reconciler.reconcile()
@@ -460,20 +530,30 @@ class BatchResultProcessor:
             builder = BatchPassthroughBuilder(ctx.output_directory)
 
             for custom_id, original_row in reconciliation.passthrough_records:
-                # Legacy behavior: Always use 'conditional_clause_failed' reason
-                # This ensures 'skipped_by_conditional' metadata flag (matches legacy)
-                reason = "conditional_clause_failed"
+                # Check if this is an exhausted retry record
+                is_exhausted = ctx.exhausted_recovery and custom_id in ctx.exhausted_recovery
 
-                # Build passthrough item
-                passthrough_item = builder._build_item(original_row, reason, custom_id)
-                # Remove internal tracking field
-                passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
+                if is_exhausted:
+                    # Exhausted retry: Create record with empty schema fields + _recovery
+                    # This gives downstream actions the expected structure but empty values
+                    recovery_meta = ctx.exhausted_recovery[custom_id]
+                    exhausted_item = self._create_exhausted_item(
+                        ctx, custom_id, original_row, recovery_meta
+                    )
+                    ctx.processed_data.append(exhausted_item)
+                    ctx.error_count += 1
+                else:
+                    # Regular passthrough (guard/conditional skip): Keep old content
+                    # Legacy behavior: Always use 'conditional_clause_failed' reason
+                    # This ensures 'skipped_by_conditional' metadata flag (matches legacy)
+                    reason = "conditional_clause_failed"
 
-                # Apply recovery metadata if retry occurred and record is still missing
-                if ctx.recovery_metadata and "_recovery" not in passthrough_item:
-                    passthrough_item["_recovery"] = ctx.recovery_metadata.to_dict()
+                    # Build passthrough item
+                    passthrough_item = builder._build_item(original_row, reason, custom_id)
+                    # Remove internal tracking field
+                    passthrough_item.pop(ContextMetaKeys.FILTER_STATUS, None)
 
-                ctx.processed_data.append(passthrough_item)
-                ctx.passthrough_count += 1
+                    ctx.processed_data.append(passthrough_item)
+                    ctx.passthrough_count += 1
 
         return ctx

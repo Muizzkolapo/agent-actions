@@ -310,7 +310,7 @@ class BatchProcessingService:
         # Use retry-aware retrieval if agent_config has retry enabled
         retry_config = (agent_config or {}).get("retry")
         if retry_config and retry_config.get("enabled", True):
-            batch_results, recovery_metadata = self._retrieve_results_with_retry(
+            batch_results, exhausted_recovery = self._retrieve_results_with_retry(
                 provider,
                 batch_id,
                 output_directory,
@@ -328,20 +328,21 @@ class BatchProcessingService:
                 record_count=entry.record_count,
                 file_name=file_name,
             )
-            recovery_metadata = None
+            exhausted_recovery = None
 
         # Convert results to workflow format
+        # exhausted_recovery is a dict mapping custom_id -> RecoveryMetadata for records that never succeeded
         processed_data = self._convert_batch_results_to_workflow_format(
             batch_results,
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
-            recovery_metadata=recovery_metadata,
+            exhausted_recovery=exhausted_recovery,
         )
 
         # Recovery metadata is now handled per-record:
         # - Retried records: _process_successful_result adds _recovery from BatchResult.recovery_metadata
-        # - Missing/passthrough records: _stage_6_merge_passthroughs adds _recovery from ctx.recovery_metadata
+        # - Missing/passthrough records: _stage_6_merge_passthroughs adds _recovery from exhausted_recovery dict
         # - First-try successes: No _recovery (correct - they didn't need retry)
 
         main_output, side_output_data = BatchSideOutputHandler.separate(processed_data)
@@ -373,7 +374,7 @@ class BatchProcessingService:
         context_map: Optional[Dict[str, Any]] = None,
         output_directory: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
-        recovery_metadata: Optional[RecoveryMetadata] = None,
+        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None,
     ) -> List[Dict[str, Any]]:
         """Convert batch results to workflow format.
 
@@ -382,7 +383,7 @@ class BatchProcessingService:
             context_map: Context map for processing
             output_directory: Output directory path
             agent_config: Agent configuration
-            recovery_metadata: Optional recovery metadata (from retry)
+            exhausted_recovery: Per-record recovery metadata for exhausted records (custom_id -> RecoveryMetadata)
 
         Returns:
             Processed results in workflow format
@@ -392,7 +393,7 @@ class BatchProcessingService:
             context_map=context_map,
             output_directory=output_directory,
             agent_config=agent_config,
-            recovery_metadata=recovery_metadata,
+            exhausted_recovery=exhausted_recovery,
         )
 
     def _retrieve_results(
@@ -446,7 +447,7 @@ class BatchProcessingService:
         record_count: Optional[int] = None,
         file_name: Optional[str] = None,
         agent_config: Optional[Dict[str, Any]] = None,
-    ) -> tuple[List[BatchResult], Optional[RecoveryMetadata]]:
+    ) -> tuple[List[BatchResult], Optional[Dict[str, RecoveryMetadata]]]:
         """Retrieve batch results with retry for missing records.
 
         If retry is enabled and records are missing, resubmits missing records
@@ -462,7 +463,8 @@ class BatchProcessingService:
             agent_config: Agent configuration with retry settings
 
         Returns:
-            Tuple of (consolidated batch results, recovery metadata if retry occurred)
+            Tuple of (consolidated batch results, per-record recovery metadata for exhausted records)
+            The dict maps custom_id -> RecoveryMetadata for records that never succeeded.
         """
         from agent_actions.llm_invocation.batch.processing.batch_result_reconciler import (
             BatchResultReconciler,
@@ -494,6 +496,10 @@ class BatchProcessingService:
         if not missing_ids:
             return all_results, None
 
+        # Per-record failure tracking: each record tracks its own failure count
+        # Initial failure = 1 (the initial batch didn't return this record)
+        record_failure_counts: Dict[str, int] = {rid: 1 for rid in missing_ids}
+
         # Retry loop for missing records
         retry_attempts = 0
         recovery_metadata = None
@@ -518,13 +524,15 @@ class BatchProcessingService:
             )
 
             if retry_results:
-                # Attach record-level recovery metadata
+                # Attach per-record recovery metadata based on individual failure counts
                 for res in retry_results:
                     if res.success:
+                        custom_id = res.custom_id
+                        failures = record_failure_counts.get(custom_id, 1)
                         res.recovery_metadata = RecoveryMetadata(
                             retry=RetryMetadata(
-                                attempts=retry_attempts + 1,
-                                failures=retry_attempts,
+                                attempts=failures + 1,  # failures + 1 success
+                                failures=failures,
                                 succeeded=True,
                                 reason="missing",
                             )
@@ -533,29 +541,37 @@ class BatchProcessingService:
                 # Merge results
                 all_results.extend(retry_results)
 
-                # Update missing IDs
+                # Update missing IDs and increment failure counts for still-missing records
                 new_received = BatchResultReconciler.collect_result_custom_ids(retry_results)
                 missing_ids = missing_ids - new_received
 
-        # Build recovery metadata if retry occurred
-        if retry_attempts > 0:
-            succeeded = len(missing_ids) == 0
-            recovery_metadata = RecoveryMetadata(
-                retry=RetryMetadata(
-                    attempts=retry_attempts + 1,  # Initial + retries
-                    failures=retry_attempts,
-                    succeeded=succeeded,
-                    reason="missing",
-                )
-            )
-            if missing_ids:
-                logger.warning(
-                    "Batch retry exhausted: %d records still missing after %d attempts",
-                    len(missing_ids),
-                    retry_attempts,
-                )
+            # Increment failure count for records that are still missing after this retry
+            for rid in missing_ids:
+                record_failure_counts[rid] = record_failure_counts.get(rid, 0) + 1
 
-        return all_results, recovery_metadata
+        # Build per-record recovery metadata for exhausted records (still missing after all retries)
+        # This is used by passthrough processing for records that never succeeded
+        exhausted_recovery: Optional[Dict[str, RecoveryMetadata]] = None
+        if retry_attempts > 0 and missing_ids:
+            exhausted_recovery = {}
+            for rid in missing_ids:
+                failures = record_failure_counts.get(rid, 1)
+                # For exhausted records: attempts = failures (no successful attempt to add)
+                exhausted_recovery[rid] = RecoveryMetadata(
+                    retry=RetryMetadata(
+                        attempts=failures,
+                        failures=failures,
+                        succeeded=False,
+                        reason="missing",
+                    )
+                )
+            logger.warning(
+                "Batch retry exhausted: %d records still missing after %d attempts",
+                len(missing_ids),
+                retry_attempts,
+            )
+
+        return all_results, exhausted_recovery
 
     def _resubmit_missing_records(
         self,
