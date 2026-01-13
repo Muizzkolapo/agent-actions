@@ -381,15 +381,18 @@ class TestEnrichmentPipeline:
     """Test EnrichmentPipeline."""
 
     def test_default_enricher_order(self):
-        """Default order: Lineage → Metadata → LoopId → Passthrough → RequiredFields."""
+        """Default order: Lineage → Metadata → LoopId → Passthrough → RequiredFields → Recovery."""
+        from agent_actions.core.enrichment import RecoveryEnricher
+
         pipeline = EnrichmentPipeline()
 
-        assert len(pipeline.enrichers) == 5
+        assert len(pipeline.enrichers) == 6
         assert isinstance(pipeline.enrichers[0], LineageEnricher)
         assert isinstance(pipeline.enrichers[1], MetadataEnricher)
         assert isinstance(pipeline.enrichers[2], LoopIdEnricher)
         assert isinstance(pipeline.enrichers[3], PassthroughEnricher)
         assert isinstance(pipeline.enrichers[4], RequiredFieldsEnricher)
+        assert isinstance(pipeline.enrichers[5], RecoveryEnricher)
 
     def test_custom_enricher_list(self):
         """Can construct pipeline with custom enricher list."""

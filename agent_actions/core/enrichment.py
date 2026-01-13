@@ -157,6 +157,32 @@ class RequiredFieldsEnricher(Enricher):
         return result
 
 
+class RecoveryEnricher(Enricher):
+    """Add recovery metadata (_recovery) to output records."""
+
+    def enrich(self, result: ProcessingResult, context: ProcessingContext) -> ProcessingResult:
+        """
+        Add _recovery field to each output item when recovery occurred.
+
+        Per RFC_recovery.md, the _recovery field contains:
+        - retry: {attempts, reason} when retry was triggered
+        - reprompt: {attempts, passed, validation} when reprompt was triggered (future)
+        """
+        if result.status == ProcessingStatus.FILTERED:
+            return result
+
+        # Only add _recovery if recovery actually occurred
+        if result.recovery_metadata is None or result.recovery_metadata.is_empty():
+            return result
+
+        recovery_dict = result.recovery_metadata.to_dict()
+        if recovery_dict:
+            for item in result.data:
+                item["_recovery"] = recovery_dict
+
+        return result
+
+
 class EnrichmentPipeline:
     """Pipeline of enrichers applied in sequence."""
 
@@ -176,6 +202,7 @@ class EnrichmentPipeline:
                 LoopIdEnricher(),
                 PassthroughEnricher(),
                 RequiredFieldsEnricher(),
+                RecoveryEnricher(),
             ]
         )
 

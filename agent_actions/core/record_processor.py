@@ -5,8 +5,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .enrichment import EnrichmentPipeline
 from .retry_service import RetryService, create_retry_service_from_config
-from agent_actions.llm_invocation.providers.failure_injection import maybe_raise_error
-from agent_actions.errors import RateLimitError
 from .types import (
     ProcessingContext,
     ProcessingResult,
@@ -424,13 +422,6 @@ class RecordProcessor:
         if retry_service:
             # Execute with retry
             def llm_operation():
-                # Failure injection for testing retry (only in new path)
-                maybe_raise_error(
-                    RateLimitError,
-                    "Injected rate limit",
-                    vendor="record_processor",
-                    agent=context.agent_name,
-                )
                 return run_dynamic_agent(
                     context.agent_config,
                     context.agent_name,

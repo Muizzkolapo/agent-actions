@@ -20,7 +20,7 @@ class TestRecordProcessorInitialization:
         processor = RecordProcessor(agent_config={}, agent_name="test")
 
         assert processor.enrichment_pipeline is not None
-        assert len(processor.enrichment_pipeline.enrichers) == 5
+        assert len(processor.enrichment_pipeline.enrichers) == 6
 
 
 class TestInputNormalization:
