@@ -72,8 +72,11 @@ Each record follows this structure. Recovery metadata goes in `_recovery`:
   "target_id": "ea312272-e902-4860-ad6d-fa3e7647eda0",
   "_recovery": {
     "retry": {
-      "attempts": 1,
-      "reason": "timeout"
+      "attempts": 2,
+      "failures": 1,
+      "succeeded": true,
+      "reason": "timeout",
+      "timestamp": "2024-01-13T12:30:45+00:00"
     },
     "reprompt": {
       "attempts": 2,
@@ -100,10 +103,13 @@ Each record follows this structure. Recovery metadata goes in `_recovery`:
 
 `_recovery.retry` (present if retried):
 
-| Field | Description |
-|-------|-------------|
-| `attempts` | Number of retry attempts |
-| `reason` | Why retry was needed (`timeout`, `api_error`, `missing`) |
+| Field | Type | Description |
+|-------|------|-------------|
+| `attempts` | int | Total number of attempts made (failures + 1 if succeeded) |
+| `failures` | int | Number of failed attempts before success (or total if exhausted) |
+| `succeeded` | bool | Whether the operation ultimately succeeded |
+| `reason` | str | Why retry was needed (`timeout`, `api_error`, `missing`, `rate_limit`, `network_error`) |
+| `timestamp` | str | ISO format timestamp when retry completed (e.g., `2024-01-13T12:30:45+00:00`) |
 
 `_recovery.reprompt` (present if reprompted):
 
