@@ -474,8 +474,10 @@ class RecordProcessor:
                 context=f"action={context.agent_name}",
             )
 
-            # Track reprompt metadata
-            if reprompt_result.attempts > 0:
+            # Track reprompt metadata (only if reprompting actually occurred)
+            # attempts=1 means it passed on first try (no reprompt needed)
+            # attempts>1 means validation failed at least once and reprompting happened
+            if reprompt_result.attempts > 1:
                 recovery_metadata.reprompt = RepromptMetadata(
                     attempts=reprompt_result.attempts,
                     passed=reprompt_result.passed,
@@ -516,8 +518,10 @@ class RecordProcessor:
                 context=f"action={context.agent_name}",
             )
 
-            # Track reprompt metadata
-            if reprompt_result.attempts > 0:
+            # Track reprompt metadata (only if reprompting actually occurred)
+            # attempts=1 means it passed on first try (no reprompt needed)
+            # attempts>1 means validation failed at least once and reprompting happened
+            if reprompt_result.attempts > 1:
                 recovery_metadata.reprompt = RepromptMetadata(
                     attempts=reprompt_result.attempts,
                     passed=reprompt_result.passed,
