@@ -494,9 +494,18 @@ class BatchResultProcessor:
                     else:
                         empty_content[field_name] = None
 
+        # Generate node_id for this exhausted record
+        action_name = "unknown_action"
+        if ctx.agent_config:
+            action_name = ctx.agent_config.get(
+                "agent_type", ctx.agent_config.get("name", "unknown_action")
+            )
+        node_id = IDGenerator.generate_node_id(action_name)
+
         exhausted_item: Dict[str, Any] = {
             "source_guid": source_guid,
             "content": empty_content,
+            "node_id": node_id,
             "metadata": {"retry_exhausted": True},
             "_recovery": recovery_metadata.to_dict(),
         }
@@ -505,9 +514,11 @@ class BatchResultProcessor:
         if original_row.get("target_id"):
             exhausted_item["target_id"] = original_row["target_id"]
 
-        # Preserve lineage if available
+        # Preserve lineage and extend with this node
         if original_row.get("lineage"):
-            exhausted_item["lineage"] = original_row["lineage"]
+            exhausted_item["lineage"] = original_row["lineage"] + [node_id]
+        else:
+            exhausted_item["lineage"] = [node_id]
 
         return exhausted_item
 
