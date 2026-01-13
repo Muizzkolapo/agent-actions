@@ -503,7 +503,6 @@ class BatchProcessingService:
 
         # Retry loop for missing records
         retry_attempts = 0
-        recovery_metadata = None
 
         while missing_ids and retry_attempts < max_attempts:
             retry_attempts += 1

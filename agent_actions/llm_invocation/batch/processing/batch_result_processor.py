@@ -311,7 +311,7 @@ class BatchResultProcessor:
             item["metadata"] = batch_result.metadata or {}
 
             # Recovery Metadata (per-record)
-            if hasattr(batch_result, "recovery_metadata") and batch_result.recovery_metadata:
+            if batch_result.recovery_metadata:
                 item["_recovery"] = batch_result.recovery_metadata.to_dict()
 
             # Lineage tracking (use action_name from agent_config)

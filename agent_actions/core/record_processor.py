@@ -1,6 +1,7 @@
 """Unified record processor replacing StagingProcessor and TargetContentProcessor."""
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from .enrichment import EnrichmentPipeline
@@ -438,8 +439,6 @@ class RecordProcessor:
             # Build recovery metadata if retry was triggered
             recovery_metadata = None
             if retry_result.needed_retry:
-                from datetime import datetime, timezone
-
                 succeeded = not retry_result.exhausted
                 failures = retry_result.attempts - 1 if succeeded else retry_result.attempts
                 recovery_metadata = RecoveryMetadata(
