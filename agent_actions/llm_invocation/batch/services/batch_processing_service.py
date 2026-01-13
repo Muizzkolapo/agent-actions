@@ -865,11 +865,17 @@ class BatchProcessingService:
             # Submit reprompt batch
             try:
                 reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
-                preparator = BatchTaskPreparator(provider, agent_config or {})
-                tasks = preparator.prepare_tasks(reprompt_records)
+                preparator = BatchTaskPreparator()
+                result = preparator.prepare_tasks(
+                    agent_config=agent_config or {},
+                    data=reprompt_records,
+                    provider=provider,
+                    output_directory=output_directory,
+                    batch_name=reprompt_batch_name,
+                )
 
                 batch_id, status = provider.submit_batch(
-                    tasks=tasks,
+                    tasks=result.tasks,
                     batch_name=reprompt_batch_name,
                     output_directory=output_directory,
                 )
@@ -877,7 +883,7 @@ class BatchProcessingService:
                 logger.info(
                     "Submitted reprompt batch %s with %d records",
                     batch_id,
-                    len(tasks),
+                    len(result.tasks),
                 )
 
                 # Wait for completion
@@ -894,8 +900,17 @@ class BatchProcessingService:
                 # Retrieve reprompt results
                 reprompt_results = provider.retrieve_results(batch_id, output_directory)
 
-                # Replace failed results with reprompt results
+                # Replace failed results with reprompt results, preserving existing recovery metadata
                 for reprompt_result in reprompt_results:
+                    # Preserve existing recovery metadata (e.g., retry metadata)
+                    if reprompt_result.custom_id in result_map:
+                        existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
+                        if existing_recovery and not reprompt_result.recovery_metadata:
+                            reprompt_result.recovery_metadata = existing_recovery
+                        elif existing_recovery and reprompt_result.recovery_metadata:
+                            # Merge: preserve retry, will add reprompt later
+                            reprompt_result.recovery_metadata.retry = existing_recovery.retry
+
                     result_map[reprompt_result.custom_id] = reprompt_result
 
             except Exception as e:
