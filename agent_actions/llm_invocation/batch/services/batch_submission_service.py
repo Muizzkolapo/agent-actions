@@ -64,6 +64,7 @@ class BatchSubmissionService:
         data: List[Dict[str, Any]],
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
+        source_data: Optional[Any] = None,
     ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
         """Prepare batch tasks from data.
 
@@ -83,6 +84,7 @@ class BatchSubmissionService:
             provider=provider,
             output_directory=output_directory,
             batch_name=batch_name,
+            source_data=source_data,
         )
         logger.debug(
             "Task preparation complete: %d tasks, %d filtered, %d skipped",
@@ -123,6 +125,7 @@ class BatchSubmissionService:
         data: List[Dict[str, Any]],
         output_directory: Optional[str] = None,
         force: bool = False,
+        source_data: Optional[Any] = None,
     ) -> Union[str, Dict[str, Any]]:
         """Submit a batch job for processing.
 
@@ -160,7 +163,7 @@ class BatchSubmissionService:
 
         # Prepare tasks
         tasks, context_map = self.prepare_batch_tasks(
-            agent_config, data, output_directory, batch_name
+            agent_config, data, output_directory, batch_name, source_data
         )
 
         # Handle empty tasks

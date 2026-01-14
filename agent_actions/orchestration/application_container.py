@@ -151,55 +151,6 @@ class ApplicationContainer:
         except (KeyError, ValueError, AttributeError, TypeError, DependencyError):
             return DataProcessor(agent_config)
 
-    def create_target_content_processor(
-        self,
-        agent_config: Dict,
-        agent_name: str,
-        idx: int,
-        agent_configs: Optional[Dict[str, Dict]] = None,
-    ):
-        """
-        Create a TargetContentProcessor with all dependencies injected.
-
-        Args:
-            agent_config: Configuration for the agent
-            agent_name: Name of the agent
-            idx: Index of the config being processed
-            agent_configs: Optional dict mapping agent names to their configs
-
-        Returns:
-            TargetContentProcessor instance with injected dependencies.
-        """
-        source_loader = self._get_source_loader(agent_name, idx)
-
-        agent_indices = (
-            NodeMappingService.build_agent_index_map(agent_configs) if agent_configs else {}
-        )
-
-        data_generator = self._get_data_generator(
-            agent_config, agent_name, idx, agent_configs, agent_indices
-        )
-        data_processor = self._get_data_processor(agent_config)
-
-        dependency_configs = self._get_dependency_configs_for_agent(agent_config, agent_configs)
-        # Import here to avoid circular dependency
-        from agent_actions.llm_invocation.batch.batch_service import BatchService
-
-        batch_service = BatchService(
-            agent_indices=agent_indices, dependency_configs=dependency_configs or agent_configs
-        )
-
-        return self.processor_factory.create_processor(
-            "target_content",
-            agent_config=agent_config,
-            agent_name=agent_name,
-            idx=idx,
-            source_loader=source_loader,
-            data_generator=data_generator,
-            data_processor=data_processor,
-            batch_service=batch_service,
-        )
-
     @classmethod
     def create_for_environment(cls, environment: str) -> "ApplicationContainer":
         """

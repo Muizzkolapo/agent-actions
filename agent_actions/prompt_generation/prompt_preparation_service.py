@@ -556,11 +556,11 @@ class PromptPreparationService:
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:
         """
-        Determine seed_data/ directory for loading static data files.
+        Determine seed_data/ directory using unified PathManager.
 
         Args:
             workflow_config_path: Path to workflow config file
-                (from agent_config['workflow_config_path'])
+                (used as a hint for project root discovery)
 
         Returns:
             Path to seed_data/ directory
@@ -568,45 +568,74 @@ class PromptPreparationService:
         Raises:
             StaticDataLoadError: If seed_data/ folder doesn't exist
         """
-        # Determine workflow root directory
-        if not workflow_config_path:
-            base_dir = Path.cwd()
-        else:
-            file_path_obj = Path(workflow_config_path).resolve()
+        from agent_actions.state_management.path_manager import (
+            PathManager,
+            PathType,
+            ProjectRootNotFoundError,
+        )
 
-            # Traverse up to find the directory containing agent_config/
-            # This ensures we're at workflow root regardless of nesting
-            current = file_path_obj.parent
-            while current != current.parent:  # Stop at filesystem root
-                if (current / "agent_config").exists():
-                    base_dir = current
-                    break
-                # Also check if current directory name is 'agent_config'
-                if current.name == "agent_config" and current.parent != current:
-                    base_dir = current.parent
-                    break
-                current = current.parent
-            else:
-                # Fallback: use parent directory of config file
-                base_dir = file_path_obj.parent
+        try:
+            # LEVEL 1: Workflow-specific seed data (Priority)
+            if workflow_config_path:
+                file_path_obj = Path(workflow_config_path).resolve()
+                # Heuristic: Find workflow root by looking for 'agent_config'
+                current = file_path_obj.parent
+                workflow_root = None
 
-        logger.debug("Determined workflow base directory: %s", base_dir)
+                # Traverse up to find directory containing agent_config
+                search_up = current
+                while search_up != search_up.parent:
+                    if (search_up / "agent_config").exists():
+                        workflow_root = search_up
+                        break
+                    if search_up.name == "agent_config":  # In case we are inside it
+                        workflow_root = search_up.parent
+                        break
+                    search_up = search_up.parent
 
-        # Check for seed_data/ folder at workflow root
-        seed_data_dir = base_dir / "seed_data"
-        if seed_data_dir.exists() and seed_data_dir.is_dir():
-            logger.debug("Found seed_data/ folder: %s", seed_data_dir)
-            return seed_data_dir
+                # Fallback to config file's parent if heuristic fails
+                if not workflow_root:
+                    workflow_root = current
+
+                workflow_seed_dir = workflow_root / "seed_data"
+                if workflow_seed_dir.exists() and workflow_seed_dir.is_dir():
+                    logger.debug("Found workflow-level seed_data: %s", workflow_seed_dir)
+                    return workflow_seed_dir
+
+            # LEVEL 2: Project-level seed data (Fallback via PathManager)
+            pm = PathManager()
+
+            # Hint PathManager with workflow path if available
+            start_path = Path(workflow_config_path).parent if workflow_config_path else None
+            if start_path:
+                try:
+                    pm.get_project_root(start_path=start_path)
+                except ProjectRootNotFoundError:
+                    pass
+
+            project_seed_dir = pm.get_standard_path(PathType.SEED_DATA)
+
+            if project_seed_dir.exists() and project_seed_dir.is_dir():
+                logger.debug("Found project-level seed_data via PathManager: %s", project_seed_dir)
+                return project_seed_dir
+
+            logger.warning(
+                "Could not find seed_data at workflow level (%s) or project level (%s)",
+                workflow_seed_dir if "workflow_seed_dir" in locals() else "unknown",
+                project_seed_dir,
+            )
+
+        except Exception as e:
+            logger.debug("Error during seed data resolution: %s", e)
+            # Fall through to error raising
 
         # Not found - raise error
-        logger.error("Seed data directory not found. Checked: %s", seed_data_dir)
         raise StaticDataLoadError(
-            f"Seed data directory not found. Create '{seed_data_dir}' folder "
+            f"Seed data directory not found. Create 'seed_data' folder "
             f"at workflow root (same level as agent_config/, schema/, prompt_store/) "
             f"to store static reference data files.",
             context={
-                "workflow_dir": str(base_dir),
-                "checked_path": str(seed_data_dir),
+                "workflow_config_path": str(workflow_config_path),
                 "error_type": "missing_seed_data_directory",
             },
         )

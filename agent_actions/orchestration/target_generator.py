@@ -3,7 +3,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 import json
-from typing import Optional, Dict, Any
+import logging
+from typing import Optional, Dict, Any, List
 
 from agent_actions.input_loading.file_reader import FileReader
 from agent_actions.file_io.file_writer import FileWriter
@@ -13,10 +14,12 @@ from agent_actions.utilities.constants import MODEL_VENDOR_KEY
 from agent_actions.llm_invocation.batch.batch_service import BatchService
 from agent_actions.orchestration.dependency_injection import ProcessorFactory
 from agent_actions.utilities.safe_format import safe_format_error
-from agent_actions.configuration.factory import create_target_content_processor
+from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
 
 TOOL_VENDOR = "tool"
 SOURCE_FOLDER = "source"
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -39,6 +42,7 @@ class BatchGenerationParams:
     batch_base_directory: str
     batch_output_directory: str
     batch_agent_configs: Optional[Dict[str, Any]] = None
+    source_data: Optional[Any] = None
 
 
 @dataclass
@@ -102,11 +106,11 @@ class TargetGenerator:
                     "agent_name": config.agent_name,
                 },
             )
-        self.content_processor = create_target_content_processor(
+
+        # Initialize RecordProcessor directly
+        self.record_processor = RecordProcessor(
             agent_config=config.agent_config,
             agent_name=config.agent_name,
-            idx=config.idx,
-            agent_configs=config.agent_configs,
         )
         self.output_handler = OutputHandler()
 
@@ -127,9 +131,15 @@ class TargetGenerator:
         file_reader = FileReader(params.batch_file_path)
         data = file_reader.read()
         file_name = Path(params.batch_file_path).name
+
         result = batch_service.submit_batch_job(
-            params.generator_agent_config, file_name, data, params.batch_output_directory
+            params.generator_agent_config,
+            file_name,
+            data,
+            params.batch_output_directory,
+            source_data=params.source_data,
         )
+
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
         output_file_path = Path(params.batch_output_directory) / relative_path
         output_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -244,7 +254,12 @@ class TargetGenerator:
         return file_reader.read()
 
     def _handle_batch_mode(
-        self, _data: Any, file_path: str, base_directory: str, output_directory: str
+        self,
+        _data: Any,
+        file_path: str,
+        base_directory: str,
+        output_directory: str,
+        source_data: Optional[Any] = None,
     ):
         """Handle batch mode processing.
 
@@ -262,6 +277,7 @@ class TargetGenerator:
                 batch_base_directory=base_directory,
                 batch_output_directory=output_directory,
                 batch_agent_configs=self.config.agent_configs,
+                source_data=source_data,
             )
         )
         return result_path
@@ -275,38 +291,97 @@ class TargetGenerator:
     ):
         """
         Select and apply the appropriate processing strategy based on
-        configuration. Async for record granularity.
+        configuration. Uses RecordProcessor for unified processing.
         """
-        # Tool actions run synchronously regardless of run_mode
+        # Initialize source_data with the input data as a fallback
+        source_data = data
+
+        try:
+            # Architectural Fix: Delegate source loading to SourceDataLoader
+            # which encapsulates standard path knowledge and validation logic.
+            # This is more robust than ad-hoc path traversal.
+            from agent_actions.state_management.path_manager import PathManager
+            from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
+
+            # Initialize PathManager. We allow it to auto-discover project root if needed.
+            path_manager = PathManager()
+
+            # Using SourceDataLoader ensures we follow the rigorous path logic
+            # (e.g. handling 'agent_io/target/NODE/file' -> 'agent_io/source/file')
+            source_loader = SourceDataLoader(self.config.agent_name, path_manager)
+
+            # Load the source data for the given input file
+            loaded_source = source_loader.load_source_data(file_path)
+
+            if isinstance(loaded_source, list):
+                source_data = loaded_source
+            else:
+                # Should be a list, but handle single dict if returned
+                source_data = [loaded_source] if loaded_source else []
+
+            logger.info(f"Loaded source data via SourceDataLoader for {file_path}")
+
+        except Exception as e:
+            logger.error(
+                f"SourceDataLoader failed to resolve source for '{file_path}': {e}. "
+                f"Agent: {self.config.agent_name}. "
+                "Falling back to using input data as source context. "
+                "This will likely cause 'undefined variable' errors if templates expect source fields."
+            )
+            # source_data remains 'data' (the fallback)
+
+        # Batch mode check
         if self.config.agent_config.get("run_mode") == "batch" and self.model_vendor != TOOL_VENDOR:
-            self._handle_batch_mode(data, file_path, base_directory, output_directory)
+            self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 
-        if (
-            self.model_vendor == TOOL_VENDOR
-            and self.granularity == "record"
-            and self.side_output_enabled
-        ):
-            main_output, side_output_data = self.content_processor.process_for_side_output(
-                data, file_path, output_directory
-            )
-            self.output_handler.save_main_output(
-                main_output, file_path, base_directory, output_directory
-            )
-            if side_output_data:
-                self.output_handler.save_side_output(
-                    side_output_data, file_path, base_directory, output_directory
-                )
-        elif self.model_vendor == TOOL_VENDOR and self.granularity == "file":
-            output = self.content_processor.process_file_level(data, file_path, output_directory)
-            self.output_handler.save_main_output(
-                output, file_path, base_directory, output_directory
-            )
-        elif self.granularity == "record":
-            output = self.content_processor.process(data, file_path, output_directory)
-            self.output_handler.save_main_output(
-                output, file_path, base_directory, output_directory
-            )
+        # Prepare agent indices and dependency configs for context
+        # (These might be needed if RecordProcessor does historical lookups)
+        agent_indices = None
+        dependency_configs = None
+        if self.config.agent_configs:
+            agent_indices = {
+                name: kconf.get("idx", 999)
+                for name, kconf in self.config.agent_configs.items()
+                if kconf is not None and "idx" in kconf
+            }
+            dependency_configs = self.config.agent_configs
+
+        agent_ids = agent_indices
+
+        # Create processing context
+        context = ProcessingContext(
+            agent_config=self.config.agent_config,
+            agent_name=self.config.agent_name,
+            mode=ProcessingMode.ONLINE,
+            is_first_stage=False,
+            source_data=source_data,  # Pass the loaded source data
+            file_path=file_path,
+            output_directory=output_directory,
+            agent_indices=agent_indices,
+            dependency_configs=dependency_configs,
+        )
+
+        # Process via RecordProcessor
+        # process_batch handles looping and calls process() which handles retries
+        results = self.record_processor.process_batch(data, context)
+
+        # Collect success results
+        output = []
+        for result in results:
+            if result.status == ProcessingStatus.SUCCESS:
+                output.extend(result.data)
+            elif result.status == ProcessingStatus.SKIPPED:
+                # Depending on how SKIPPED behavior should work for StandardStrategy
+                # usually means passthrough data
+                output.extend(result.data)
+            elif result.status == ProcessingStatus.FAILED:
+                # Log error but continue
+                logger.error(f"Failed to process record: {result.error}")
+
+        # Determine output type (Main vs Side Output)
+        # Note: Side output logic removed as per cleanup.
+        self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
 
 def create_target_generator(

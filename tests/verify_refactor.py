@@ -1,0 +1,104 @@
+import unittest
+from unittest.mock import MagicMock, patch, ANY
+import os
+import shutil
+from pathlib import Path
+
+# Mock dependencies before importing modules that use them
+import sys
+
+# Ensure we can import from root
+sys.path.append(os.getcwd())
+
+from agent_actions.orchestration.target_generator import TargetGenerator, GeneratorConfig
+from agent_actions.preprocessing.staging.staging_loader import generate_staging, StagingContext
+from agent_actions.orchestration.dependency_injection import ProcessorFactory
+from agent_actions.core.record_processor import RecordProcessor
+from agent_actions.core.types import ProcessingResult, ProcessingStatus
+
+
+class TestRefactor(unittest.TestCase):
+    def setUp(self):
+        self.test_dir = Path("test_output")
+        self.test_dir.mkdir(exist_ok=True)
+        self.source_dir = self.test_dir / "source"
+        self.source_dir.mkdir(exist_ok=True)
+        self.output_dir = self.test_dir / "output"
+        self.output_dir.mkdir(exist_ok=True)
+
+        # Create dummy input file
+        self.input_file = self.test_dir / "input.txt"
+        self.input_file.write_text("dummy content")
+
+        # Create dummy JSON input
+        self.json_file = self.test_dir / "input.json"
+        self.json_file.write_text('[{"content": "dummy", "source_guid": "123"}]')
+
+    def tearDown(self):
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir)
+
+    @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
+    @patch("agent_actions.preprocessing.staging.staging_loader.PreFlightValidator")
+    def test_initial_strategy_calls_record_processor(self, mock_validator, MockRecordProcessor):
+        """Verify generate_staging uses RecordProcessor."""
+        # Setup mock calls
+        mock_instance = MockRecordProcessor.return_value
+        mock_instance.process_batch.return_value = [
+            ProcessingResult.success(data=[{"content": "processed"}])
+        ]
+
+        validator_instance = mock_validator.return_value
+        validator_instance.validate.return_value.raise_if_invalid.return_value = None
+
+        # Added model_vendor to satisfy preflight validation
+        ctx = StagingContext(
+            agent_config={"run_mode": "online", "model_vendor": "openai"},
+            agent_name="test_agent",
+            file_path=str(self.input_file),
+            base_directory=str(self.test_dir),
+            output_directory=str(self.output_dir),
+        )
+
+        generate_staging(ctx)
+
+        # Verify RecordProcessor was instantiated and called
+        # Note: RecordProcessor init might verify keys, but we mock it.
+        # Check matching call arguments (kwargs)
+        MockRecordProcessor.assert_called_with(
+            {"run_mode": "online", "model_vendor": "openai"}, "test_agent"
+        )
+        mock_instance.process_batch.assert_called_once()
+        print("InitialStrategy verified to use RecordProcessor!")
+
+    @patch("agent_actions.orchestration.target_generator.RecordProcessor")
+    def test_standard_strategy_calls_record_processor(self, MockRecordProcessor):
+        """Verify TargetGenerator uses RecordProcessor."""
+        mock_instance = MockRecordProcessor.return_value
+        mock_instance.process_batch.return_value = [
+            ProcessingResult.success(data=[{"content": "processed"}])
+        ]
+
+        config = GeneratorConfig(
+            agent_config={"run_mode": "online", "model_vendor": "openai"},
+            agent_name="test_agent",
+            idx=0,
+        )
+
+        # Processor factory mock (not used for RecordProcessor creation anymore but needed for init)
+        mock_factory = MagicMock(spec=ProcessorFactory)
+
+        generator = TargetGenerator(config, mock_factory)
+
+        generator.process(str(self.json_file), str(self.test_dir), str(self.output_dir))
+
+        # Fixed assertion to match keyword arguments used in implementation
+        MockRecordProcessor.assert_called_with(
+            agent_config=config.agent_config, agent_name="test_agent"
+        )
+        mock_instance.process_batch.assert_called_once()
+        print("StandardStrategy verified to use RecordProcessor!")
+
+
+if __name__ == "__main__":
+    unittest.main()
