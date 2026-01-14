@@ -8,6 +8,7 @@ from .file_formatter import FileErrorFormatter
 from .api_formatter import APIErrorFormatter
 from .yaml_formatter import YAMLSyntaxErrorFormatter
 from .function_formatter import FunctionNotFoundFormatter
+from .template_formatter import TemplateErrorFormatter
 from .generic_formatter import GenericErrorFormatter
 
 __all__ = [
@@ -19,5 +20,6 @@ __all__ = [
     "APIErrorFormatter",
     "YAMLSyntaxErrorFormatter",
     "FunctionNotFoundFormatter",
+    "TemplateErrorFormatter",
     "GenericErrorFormatter",
 ]

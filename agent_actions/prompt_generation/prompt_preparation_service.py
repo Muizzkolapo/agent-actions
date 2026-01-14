@@ -297,7 +297,10 @@ class PromptPreparationService:
 
         # Step 5: Render template with Jinja2 ({{ action.field }})
         formatted_prompt = PromptPreparationService._render_prompt_template(
-            raw_prompt, prompt_context
+            raw_prompt,
+            prompt_context,
+            agent_name=request.agent_name,
+            mode=request.mode,
         )
 
         # Step 6: Inject function outputs (all modes)
@@ -344,13 +347,21 @@ class PromptPreparationService:
         )
 
     @staticmethod
-    def _render_prompt_template(raw_prompt: str, prompt_context: Dict[str, Any]) -> str:
+    def _render_prompt_template(
+        raw_prompt: str,
+        prompt_context: Dict[str, Any],
+        *,
+        agent_name: Optional[str] = None,
+        mode: Optional[str] = None,
+    ) -> str:
         """
         Render Jinja2 template with the given context.
 
         Args:
             raw_prompt: Raw prompt template string
             prompt_context: Context dict for template rendering
+            agent_name: Optional agent name for error context
+            mode: Optional execution mode for error context
 
         Returns:
             Rendered prompt string
@@ -383,36 +394,41 @@ class PromptPreparationService:
                 missing_variables=[],
                 available_variables=list(prompt_context.keys()),
                 template_line=e.lineno,
+                agent_name=agent_name,
+                mode=mode,
                 cause=e,
             ) from e
         except Exception as e:
             logger.debug("Error rendering prompt template: %s", e)
-            # Build available refs including nested fields from source/seed
-            available_refs = list(prompt_context.keys())
-            # Add nested fields from 'source' to show what's in staged data
-            source_data = prompt_context.get("source")
-            if isinstance(source_data, dict):
-                for key in source_data.keys():
-                    available_refs.append(f"source.{key}")
-            # Add nested fields from 'seed' if present
-            seed_data = prompt_context.get("seed")
-            if isinstance(seed_data, dict):
-                for key in seed_data.keys():
-                    available_refs.append(f"seed.{key}")
+            available_refs = []
 
-            # Extract missing variable from error message if possible
+            def _collect_available_refs(prefix: str, value: Any) -> None:
+                if prefix:
+                    available_refs.append(prefix)
+                if isinstance(value, dict):
+                    for child_key, child_value in value.items():
+                        child_prefix = f"{prefix}.{child_key}" if prefix else child_key
+                        _collect_available_refs(child_prefix, child_value)
+
+            _collect_available_refs("", prompt_context)
+
             error_str = str(e)
             missing = []
             if "has no attribute" in error_str or "is undefined" in error_str:
-                # Try to extract the missing variable name
                 import re
 
-                match = re.search(r"'(\w+)'", error_str)
-                if match:
-                    missing.append(match.group(1))
+                attribute_match = re.search(r"has no attribute '([^']+)'", error_str)
+                if attribute_match:
+                    missing.append(attribute_match.group(1))
+                else:
+                    undefined_match = re.search(r"'([^']+)' is undefined", error_str)
+                    if undefined_match:
+                        missing.append(undefined_match.group(1))
             raise TemplateVariableError(
                 missing_variables=missing,
                 available_variables=available_refs,
+                agent_name=agent_name,
+                mode=mode,
                 cause=e,
             ) from e
 
