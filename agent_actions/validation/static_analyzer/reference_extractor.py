@@ -47,9 +47,14 @@ class ReferenceExtractor:
 
     # Matches dot notation in guards: agent.field
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
+    ACTION_DOT_PATTERN = re.compile(
+        r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)"
+    )
 
     # Special namespaces that don't require dependency declaration
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "action"})
+    SPECIAL_NAMESPACES = frozenset(
+        {"source", "loop", "workflow", "seed", "action", "prompt", "schema"}
+    )
 
     # Jinja2 builtins to skip
     JINJA_BUILTINS = frozenset(
@@ -288,7 +293,26 @@ class ReferenceExtractor:
         if isinstance(guard, str):
             # String guard - extract dot notation references
             seen: Set[str] = set()
+            action_spans = []
+            for match in self.ACTION_DOT_PATTERN.finditer(guard):
+                source = match.group(1)
+                field = match.group(2)
+                ref_key = f"{source}.{field}"
+                if ref_key not in seen:
+                    seen.add(ref_key)
+                    requirements.append(
+                        InputRequirement(
+                            source_agent=source,
+                            field_path=field,
+                            raw_reference=match.group(0),
+                            location=location,
+                        )
+                    )
+                action_spans.append(match.span())
+
             for match in self.DOT_PATTERN.finditer(guard):
+                if any(start <= match.start() < end for start, end in action_spans):
+                    continue
                 source = match.group(1)
                 field = match.group(2)
                 ref_key = f"{source}.{field}"
@@ -310,8 +334,11 @@ class ReferenceExtractor:
         elif isinstance(guard, dict):
             # Dict guard - check field references
             field = guard.get("field", "")
-            if "." in str(field):
-                parts = str(field).split(".", 1)
+            field_value = str(field)
+            if field_value.startswith("action."):
+                field_value = field_value[len("action.") :]
+            if "." in field_value:
+                parts = field_value.split(".", 1)
                 if len(parts) >= 2:
                     requirements.append(
                         InputRequirement(
@@ -338,20 +365,19 @@ class ReferenceExtractor:
                 continue
 
             if "." in ref:
+                original_ref = ref
+                if ref.startswith("action."):
+                    ref = ref[len("action.") :]
                 parts = ref.split(".", 1)
                 if len(parts) >= 2:
                     source = parts[0]
                     field = parts[1]
 
-                    # Handle nested paths
-                    if "." in field:
-                        field = field.split(".")[0]
-
                     requirements.append(
                         InputRequirement(
                             source_agent=source,
                             field_path=field,
-                            raw_reference=ref,
+                            raw_reference=original_ref,
                             location=location,
                         )
                     )

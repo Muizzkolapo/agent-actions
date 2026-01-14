@@ -202,7 +202,7 @@ class DataFlowGraph:
     """
 
     # Special namespaces that are always available without explicit dependencies
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed"})
+    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "prompt", "schema"})
 
     def __init__(self) -> None:
         self.nodes: Dict[str, DataFlowNode] = {}
@@ -249,6 +249,32 @@ class DataFlowGraph:
             if agent_name in node.dependencies:
                 downstream.append(node)
         return downstream
+
+    def get_reachable_upstream_names(self, agent_name: str) -> Set[str]:
+        """Get all upstream agent names reachable via dependencies.
+
+        Args:
+            agent_name: Agent name to compute reachability for
+
+        Returns:
+            Set of agent names that are dependencies or ancestors
+        """
+        node = self.nodes.get(agent_name)
+        if not node:
+            return set()
+
+        reachable: Set[str] = set()
+        stack = list(node.dependencies)
+        while stack:
+            dep_name = stack.pop()
+            if dep_name in reachable:
+                continue
+            reachable.add(dep_name)
+            dep_node = self.nodes.get(dep_name)
+            if dep_node:
+                stack.extend(dep_node.dependencies - reachable)
+
+        return reachable
 
     def topological_sort(self) -> List[str]:
         """Return nodes in topological order (Kahn's algorithm).
