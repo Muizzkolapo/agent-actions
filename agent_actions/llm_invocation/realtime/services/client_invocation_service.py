@@ -14,6 +14,7 @@ from agent_actions.llm_invocation.providers.mistral.client import MistralClient
 from agent_actions.llm_invocation.providers.anthropic.client import AnthropicClient
 from agent_actions.llm_invocation.providers.groq.client import GroqClient
 from agent_actions.llm_invocation.providers.tools.client import ToolClient
+from agent_actions.llm_invocation.providers.agac.client import AgacClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ CLIENT_REGISTRY: Dict[str, Any] = {
     "anthropic": AnthropicClient,
     "groq": GroqClient,
     "tool": ToolClient,
+    "agac-provider": AgacClient,
 }
 
 # Clients that return single response (need wrapping in list)

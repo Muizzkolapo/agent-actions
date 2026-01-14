@@ -30,8 +30,8 @@ try:
 except ImportError:
     MISTRAL_AVAILABLE = False
 
-# Mock client is always available (for testing)
-from .mock_batch_client import MockBatchClient
+# Agac mock client is always available (for testing)
+from .agac.batch_client import AgacBatchClient
 
 
 class BatchClientFactory:
@@ -147,10 +147,10 @@ class BatchClientFactory:
             api_key = config.get("api_key") or os.getenv("MISTRAL_API_KEY")
             return MistralBatchClient(api_key=api_key)
 
-        if client_type == "mock":
-            # Mock client for testing batch processing without hitting real APIs
+        if client_type == "mock" or client_type == "agac-provider":
+            # Agac mock client for testing batch processing without hitting real APIs
             polls_until_complete = config.get("polls_until_complete")
-            return MockBatchClient(polls_until_complete=polls_until_complete)
+            return AgacBatchClient(polls_until_complete=polls_until_complete)
 
         from agent_actions.errors import ConfigurationError
 
@@ -170,7 +170,7 @@ class BatchClientFactory:
     @staticmethod
     def get_supported_clients() -> list[str]:
         """Get list of supported client types."""
-        clients = ["openai", "gemini", "ollama", "mock"]
+        clients = ["openai", "gemini", "ollama", "agac-provider"]
         if ANTHROPIC_AVAILABLE:
             clients.append("anthropic")
         if GROQ_AVAILABLE:

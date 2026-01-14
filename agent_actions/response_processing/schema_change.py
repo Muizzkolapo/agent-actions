@@ -212,13 +212,24 @@ def compile_unified_schema(unified: Dict[str, Any], target_system: str) -> Dict[
             "required": required,
             "additionalProperties": False,
         }
+    elif target == "agac-provider":
+        # Use OpenAI-compatible format for agac-provider
+        compiled = {
+            "name": unified.get("name", ""),
+            "schema": {
+                "type": "object",
+                "properties": properties,
+                "required": required,
+                "additionalProperties": False,
+            },
+        }
     else:
         raise ConfigValidationError(
             "target_system",
             f"Unknown target system: {target}",
             context={
                 "target_system": target,
-                "valid_systems": ["openai", "anthropic", "gemini", "ollama"],
+                "valid_systems": ["openai", "anthropic", "gemini", "ollama", "agac-provider"],
                 "operation": "compile_unified_schema",
             },
         )
@@ -443,7 +454,7 @@ def _compile_schema_for_vendor(
     except ConfigValidationError:
         logger.warning(
             "Vendor '%s' does not support schema validation. Schema '%s' will be ignored. "
-            "For schema support, use one of: openai, anthropic, gemini, ollama",
+            "For schema support, use one of: openai, anthropic, gemini, ollama, agac-provider",
             vendor,
             schema_name,
         )

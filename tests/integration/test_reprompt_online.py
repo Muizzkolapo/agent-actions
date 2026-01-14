@@ -130,7 +130,7 @@ class TestOnlineRepromptIntegration:
         assert result.recovery_metadata.reprompt.passed is True
 
     def test_reprompt_passes_first_attempt_no_feedback(self):
-        """When validation passes on first attempt, no feedback should be sent."""
+        """When validation passes on first attempt, no feedback should be sent and no recovery metadata added."""
         agent_config = {
             "name": "test_action",
             "intent": "Test action",
@@ -176,11 +176,9 @@ class TestOnlineRepromptIntegration:
         # Should only call LLM once
         assert len(llm_calls) == 1
 
-        # Should have reprompt metadata with 1 attempt
-        assert result.recovery_metadata is not None
-        assert result.recovery_metadata.reprompt is not None
-        assert result.recovery_metadata.reprompt.attempts == 1
-        assert result.recovery_metadata.reprompt.passed is True
+        # When validation passes on first attempt, no actual reprompting occurred,
+        # so recovery_metadata should be None (per commit 0333e726)
+        assert result.recovery_metadata is None
 
     def test_reprompt_exhausted_with_feedback(self):
         """
