@@ -502,14 +502,25 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
         if not isinstance(data_chunk, list):
             data_chunk = [data_chunk]
 
-        # Ensure source_guid exists for all items
+        # Prepare source text for saving (add source_guid)
+        # CRITICAL: Do NOT mutate data_chunk items in place, as RecordProcessor
+        # calculates source_guid based on the raw item content. If we add
+        # source_guid to data_chunk, RecordProcessor will include it in the hash,
+        # causing a mismatch with the saved source file.
         from agent_actions.utilities.id_generation import IDGenerator
 
+        src_text = []
         for item in data_chunk:
-            if isinstance(item, dict) and "source_guid" not in item:
-                item["source_guid"] = IDGenerator.generate_deterministic_source_guid(item)
-
-        src_text = data_chunk
+            if isinstance(item, dict):
+                # Create a copy for source saving to avoid modifying the input for processing
+                source_item = item.copy()
+                if "source_guid" not in source_item:
+                    source_item["source_guid"] = IDGenerator.generate_deterministic_source_guid(
+                        item
+                    )
+                src_text.append(source_item)
+            else:
+                src_text.append(item)
 
     elif ctx.file_type in (".csv", ".xlsx"):
         data_chunk = tabular_loader.process(ctx.content)

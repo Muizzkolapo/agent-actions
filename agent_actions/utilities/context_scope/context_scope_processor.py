@@ -279,11 +279,28 @@ class ContextScopeProcessor:
 
                     # Get the specific source item by source_guid
                     if source_data:
+                        logger.debug("Looking for source_guid: %s", source_guid)
+                        available_guids = [
+                            i.get("source_guid") for i in source_data if isinstance(i, dict)
+                        ]
+                        logger.debug("Available source_guids: %s", available_guids)
+
                         source_item = DataTransformer.get_content_by_source_guid(
                             source_data, source_guid
                         )
                         if source_item:
-                            field_context["source"] = source_item
+                            # Robustness: If source is wrapped, expose inner content + metadata as 'source'
+                            if (
+                                isinstance(source_item, dict)
+                                and "content" in source_item
+                                and isinstance(source_item["content"], dict)
+                            ):
+                                field_context["source"] = {
+                                    **source_item,
+                                    **source_item["content"],
+                                }
+                            else:
+                                field_context["source"] = source_item
 
                         # DEBUG: Log source structure
                         logger.debug("Source item type: %s", type(source_item))
@@ -320,18 +337,18 @@ class ContextScopeProcessor:
                         if isinstance(source_item, dict):
                             existing_keys = list(field_context.keys())
                             source_keys = list(source_item.keys())
-                            logger.info(
+                            logger.debug(
                                 f"ContextScope Debug: Merging flat source keys. Existing: {existing_keys}, Source: {source_keys}"
                             )
                             for k, v in source_item.items():
                                 if k not in ["source_guid", "content", "chunk_info"]:
                                     if k not in field_context:
                                         field_context[k] = v
-                                        logger.info(
+                                        logger.debug(
                                             f"ContextScope Debug: Merged '{k}' into root context"
                                         )
                                     else:
-                                        logger.info(
+                                        logger.debug(
                                             f"ContextScope Debug: SKIPPED '{k}' (already in context)"
                                         )
                 except Exception as e:
