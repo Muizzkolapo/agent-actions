@@ -36,6 +36,10 @@
 | `ModelErrorFormatter` | Class | Handles model validation errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `can_handle` | Method | Detect model validation errors. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `format` | Method | Handle model validation errors. | - |
+| `template_formatter.py` | Module | Template rendering error formatter. | - |
+| `TemplateErrorFormatter` | Class | Handles template rendering errors with missing variables. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `can_handle` | Method | Detect template variable errors. | - |
+| &nbsp;&nbsp;&nbsp;&nbsp;└─ `format` | Method | Format template variable errors with available context fields. | - |
 | `yaml_formatter.py` | Module | YAML syntax error formatter with code snippets. | - |
 | `YAMLSyntaxErrorFormatter` | Class | Handles YAML syntax errors with industry-standard formatting. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `can_handle` | Method | Detect YAML syntax errors. | - |

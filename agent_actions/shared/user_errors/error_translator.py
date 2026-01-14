@@ -14,6 +14,7 @@ from .formatters import (
     APIErrorFormatter,
     YAMLSyntaxErrorFormatter,
     FunctionNotFoundFormatter,
+    TemplateErrorFormatter,
     GenericErrorFormatter,
 )
 from .services import ErrorContextService
@@ -36,6 +37,7 @@ class ErrorTranslator:
         self.formatters: List[ErrorFormatter] = [
             YAMLSyntaxErrorFormatter(),  # Check YAML first (most specific)
             FunctionNotFoundFormatter(),  # Check function errors
+            TemplateErrorFormatter(),  # Template variable errors
             ConfigurationErrorFormatter(),
             ModelErrorFormatter(),
             AuthenticationErrorFormatter(),
