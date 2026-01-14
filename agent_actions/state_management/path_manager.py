@@ -31,6 +31,7 @@ class PathType(Enum):
     RENDERED_WORKFLOWS = "rendered_workflows"
     BATCH = "batch"
     SIDE_OUTPUT = "side_output"
+    SEED_DATA = "seed_data"
 
 
 @dataclass
@@ -80,6 +81,7 @@ class PathManager:
         PathType.RENDERED_WORKFLOWS: "artefact/rendered_workflows",
         PathType.BATCH: "batch",
         PathType.SIDE_OUTPUT: "side_output",
+        PathType.SEED_DATA: "seed_data",
     }
 
     # Validation rules for different path types
@@ -122,10 +124,17 @@ class PathManager:
             if marker_path.exists():
                 self._project_root = current
                 return current
+
+            # Fallback: check for 'agent_actions' (package root) or 'agent_config' directory
+            # 'agent_actions' is the definitive project marker per user specification.
+            if (current / "agent_actions").is_dir() or (current / "agent_config").is_dir():
+                self._project_root = current
+                return current
+
             current = current.parent
 
         raise ProjectRootNotFoundError(
-            f"Project root not found. Searched for '{self.config.marker_file}' "
+            f"Project root not found. Searched for '{self.config.marker_file}', 'agent_actions', or 'agent_config' "
             f"starting from {search_path}"
         )
 

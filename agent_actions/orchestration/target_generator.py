@@ -42,6 +42,7 @@ class BatchGenerationParams:
     batch_base_directory: str
     batch_output_directory: str
     batch_agent_configs: Optional[Dict[str, Any]] = None
+    source_data: Optional[Any] = None
 
 
 @dataclass
@@ -136,6 +137,7 @@ class TargetGenerator:
             file_name,
             data,
             params.batch_output_directory,
+            source_data=params.source_data,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
@@ -252,7 +254,12 @@ class TargetGenerator:
         return file_reader.read()
 
     def _handle_batch_mode(
-        self, _data: Any, file_path: str, base_directory: str, output_directory: str
+        self,
+        _data: Any,
+        file_path: str,
+        base_directory: str,
+        output_directory: str,
+        source_data: Optional[Any] = None,
     ):
         """Handle batch mode processing.
 
@@ -270,6 +277,7 @@ class TargetGenerator:
                 batch_base_directory=base_directory,
                 batch_output_directory=output_directory,
                 batch_agent_configs=self.config.agent_configs,
+                source_data=source_data,
             )
         )
         return result_path
@@ -285,9 +293,46 @@ class TargetGenerator:
         Select and apply the appropriate processing strategy based on
         configuration. Uses RecordProcessor for unified processing.
         """
+        # Initialize source_data with the input data as a fallback
+        source_data = data
+
+        try:
+            # Architectural Fix: Delegate source loading to SourceDataLoader
+            # which encapsulates standard path knowledge and validation logic.
+            # This is more robust than ad-hoc path traversal.
+            from agent_actions.state_management.path_manager import PathManager
+            from agent_actions.input_loading.extractors_source_data_loader import SourceDataLoader
+
+            # Initialize PathManager. We allow it to auto-discover project root if needed.
+            path_manager = PathManager()
+
+            # Using SourceDataLoader ensures we follow the rigorous path logic
+            # (e.g. handling 'agent_io/target/NODE/file' -> 'agent_io/source/file')
+            source_loader = SourceDataLoader(self.config.agent_name, path_manager)
+
+            # Load the source data for the given input file
+            loaded_source = source_loader.load_source_data(file_path)
+
+            if isinstance(loaded_source, list):
+                source_data = loaded_source
+            else:
+                # Should be a list, but handle single dict if returned
+                source_data = [loaded_source] if loaded_source else []
+
+            logger.info(f"Loaded source data via SourceDataLoader for {file_path}")
+
+        except Exception as e:
+            logger.error(
+                f"SourceDataLoader failed to resolve source for '{file_path}': {e}. "
+                f"Agent: {self.config.agent_name}. "
+                "Falling back to using input data as source context. "
+                "This will likely cause 'undefined variable' errors if templates expect source fields."
+            )
+            # source_data remains 'data' (the fallback)
+
         # Batch mode check
         if self.config.agent_config.get("run_mode") == "batch" and self.model_vendor != TOOL_VENDOR:
-            self._handle_batch_mode(data, file_path, base_directory, output_directory)
+            self._handle_batch_mode(data, file_path, base_directory, output_directory, source_data)
             return
 
         # Prepare agent indices and dependency configs for context
@@ -302,13 +347,15 @@ class TargetGenerator:
             }
             dependency_configs = self.config.agent_configs
 
+        agent_ids = agent_indices
+
         # Create processing context
         context = ProcessingContext(
             agent_config=self.config.agent_config,
             agent_name=self.config.agent_name,
             mode=ProcessingMode.ONLINE,
             is_first_stage=False,
-            source_data=data,  # For subsequent stages, input data is the source data
+            source_data=source_data,  # Pass the loaded source data
             file_path=file_path,
             output_directory=output_directory,
             agent_indices=agent_indices,

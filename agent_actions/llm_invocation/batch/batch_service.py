@@ -172,11 +172,17 @@ class BatchService:
         )
 
     def submit_batch_job(
-        self, agent_config, batch_name, data, output_directory=None, force=False
+        self,
+        agent_config,
+        batch_name,
+        data,
+        output_directory=None,
+        force=False,
+        source_data: Optional[Any] = None,
     ) -> Union[str, Dict[str, Any]]:
         """Submit a batch job for processing (delegates to submission service)."""
         return self._get_submission_service().submit_batch_job(
-            agent_config, batch_name, data, output_directory, force
+            agent_config, batch_name, data, output_directory, force, source_data
         )
 
     def check_status(self, batch_id: str, output_directory: str = None) -> BatchStatus:

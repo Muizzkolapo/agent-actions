@@ -77,6 +77,7 @@ class BatchTaskPreparator:
         provider,
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
+        source_data: Optional[List[Any]] = None,
     ) -> PreparedBatchTasks:
         """
         Prepare batch tasks from raw data.
@@ -119,7 +120,10 @@ class BatchTaskPreparator:
         raw_prompt = PromptFormatter.get_raw_prompt(agent_config)  # Validate prompt exists
 
         # 2.1 Pre-flight validation: check template variables against first data row
-        self._run_preflight_validation(agent_config, raw_prompt, data, output_directory, batch_name)
+        # 2.1 Pre-flight validation: check template variables against first data row
+        self._run_preflight_validation(
+            agent_config, raw_prompt, data, output_directory, batch_name, source_data
+        )
         from agent_actions.utilities.tools_resolver import resolve_tools_path
 
         tools_path = resolve_tools_path(agent_config)
@@ -141,8 +145,16 @@ class BatchTaskPreparator:
         stats = BatchTaskPreparationStats(total_items=len(data))
 
         # 7. Process each data item
-        for row in data:
+        for idx, row in enumerate(data):
             try:
+                # Resolve source item for this row
+                source_item = None
+                if source_data and idx < len(source_data):
+                    source_item = source_data[idx]
+
+                # If no explicit source_data, or out of bounds, fallback logic inside PromptPreparationService (or below)
+                # But here we pass exactly what we have.
+
                 result = self._process_single_item(
                     row=row,
                     agent_config=agent_config,
@@ -154,6 +166,7 @@ class BatchTaskPreparator:
                     tools_path=tools_path,
                     context_map_builder=context_map_builder,
                     stats=stats,
+                    source_item=source_item,
                 )
 
                 if result:
@@ -187,6 +200,7 @@ class BatchTaskPreparator:
         tools_path: Optional[str],
         context_map_builder: Dict[str, Any],
         stats: BatchTaskPreparationStats,
+        source_item: Optional[Any] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Process a single data item.
@@ -241,6 +255,7 @@ class BatchTaskPreparator:
             batch_name=batch_name,
             tools_path=tools_path,
             context_map_builder=context_map_builder,
+            source_item=source_item,
         )
 
     def _prepare_single_task(
@@ -253,6 +268,7 @@ class BatchTaskPreparator:
         batch_name: Optional[str],
         tools_path: Optional[str],
         context_map_builder: Dict[str, Any],
+        source_item: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """Prepare a single batch task using PromptPreparationService."""
         from agent_actions.prompt_generation.prompt_preparation_service import (
@@ -274,7 +290,9 @@ class BatchTaskPreparator:
             mode="batch",
             agent_indices=self.agent_indices,
             dependency_configs=self.dependency_configs,
-            source_content=row_content,  # Pass source for batch/online parity
+            source_content=source_item
+            if source_item is not None
+            else row_content,  # Prioritize explicit source_item
             current_item=context_map_builder.get(custom_id),
             file_path=file_path_for_history,
             tools_path=tools_path,
@@ -360,6 +378,7 @@ class BatchTaskPreparator:
         data: List[Dict[str, Any]],
         output_directory: Optional[str] = None,
         batch_name: Optional[str] = None,
+        source_data: Optional[List[Any]] = None,
     ) -> None:
         """Run pre-flight validation on template and first data row.
 
@@ -400,6 +419,13 @@ class BatchTaskPreparator:
         if output_directory and batch_name:
             file_path_for_history = str(Path(output_directory) / batch_name)
 
+        # Determine source content for validation
+        source_content_for_validation = None
+        if source_data and len(source_data) > 0:
+            source_content_for_validation = source_data[0]
+        else:
+            source_content_for_validation = row_content
+
         # Use the SAME service as actual task preparation - single source of truth
         prep_result = PromptPreparationService.prepare_prompt_with_context(
             agent_config=agent_config,
@@ -408,7 +434,7 @@ class BatchTaskPreparator:
             mode="batch",
             agent_indices=self.agent_indices,
             dependency_configs=self.dependency_configs,
-            source_content=row_content,  # Pass source for batch/online parity
+            source_content=source_content_for_validation,  # Use prioritized source
             current_item=first_row,
             file_path=file_path_for_history,
         )
