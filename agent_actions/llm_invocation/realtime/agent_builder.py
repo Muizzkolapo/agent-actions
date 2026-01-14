@@ -42,8 +42,8 @@ def create_dynamic_agent(
         source_content: Source content for tool handler (optional)
         additional_context: Additional context from context_scope.observe (optional).
                            Formatted and appended to prompt before LLM invocation.
-        original_context: Original untransformed context for tools/UDFs (optional).
-                         If not provided, uses context_data_str for both LLM and tools.
+        original_context: Original untransformed context for guards/debug (optional).
+                         Tools and LLMs use the same transformed context_data_str.
 
     Returns:
         List of response items from the LLM
