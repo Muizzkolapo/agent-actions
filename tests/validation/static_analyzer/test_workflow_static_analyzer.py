@@ -131,6 +131,22 @@ class TestWorkflowStaticAnalyzer:
         assert not result.is_valid
         assert any("does not exist" in e.message for e in result.errors)
 
+    def test_analyze_rejects_reserved_action_name(self):
+        """Test analyzer rejects reserved action names."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "prompt",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        assert any("reserved" in e.message for e in result.errors)
+
     def test_get_agent_schema(self):
         """Test getting schema for specific agent."""
         workflow_config = {
