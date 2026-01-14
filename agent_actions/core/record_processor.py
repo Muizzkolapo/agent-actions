@@ -443,6 +443,7 @@ class RecordProcessor:
                         content,
                         prompt,  # Use prompt parameter (includes feedback on reprompt)
                         tools_path=tools_path,
+                        llm_context=prep_result.llm_context,
                     )
 
                 retry_result = retry_service.execute(
@@ -510,6 +511,7 @@ class RecordProcessor:
                     content,
                     prompt,  # Use prompt parameter (includes feedback on reprompt)
                     tools_path=tools_path,
+                    llm_context=prep_result.llm_context,
                 )
 
             reprompt_result = reprompt_service.execute(
@@ -545,6 +547,7 @@ class RecordProcessor:
                     content,
                     prep_result.formatted_prompt,
                     tools_path=tools_path,
+                    llm_context=prep_result.llm_context,
                 )
 
             retry_result = retry_service.execute(
@@ -600,6 +603,7 @@ class RecordProcessor:
                 content,
                 prep_result.formatted_prompt,
                 tools_path=tools_path,
+                llm_context=prep_result.llm_context,
             )
 
             return response, executed, prep_result.passthrough_fields, None
@@ -658,4 +662,5 @@ class RecordProcessor:
             record_index=index,
             agent_indices=base_context.agent_indices,
             dependency_configs=base_context.dependency_configs,
+            current_item=item if isinstance(item, dict) else None,
         )

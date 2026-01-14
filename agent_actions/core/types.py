@@ -214,6 +214,9 @@ class ProcessingContext:
     agent_indices: Optional[Dict[str, int]] = None
     dependency_configs: Optional[Dict[str, Any]] = None
 
+    # Current item (per-record) for lineage chaining in realtime processing
+    current_item: Optional[Dict[str, Any]] = None
+
     @property
     def action_name(self) -> str:
         """Get action name from config or agent_name."""

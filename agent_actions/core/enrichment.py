@@ -73,6 +73,10 @@ class LineageEnricher(Enricher):
         if context.is_first_stage or not source_guid:
             return None
 
+        # Prefer per-record current item when available (preserves lineage chain)
+        if context.current_item:
+            return context.current_item
+
         # Look up parent in source_data
         if not context.source_data:
             return None
