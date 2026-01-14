@@ -99,7 +99,7 @@ context_scope:
   drop:
     - previous.internal       # Removed
   seed_data:
-    config: $file:config.json # Static reference data
+    config: $file:config.json # Static reference data (prompt-only)
 ```
 
 See `references/context-scope-guide.md` for complete documentation.

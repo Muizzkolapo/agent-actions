@@ -158,9 +158,8 @@ class ContextService:
         """
         Prepare context data for LLM/tool invocation.
 
-        CRITICAL: For tool actions, use original_context (not transformed llm_data).
-        Tools need access to ALL fields from previous actions, even those dropped
-        by context_scope.drop for the LLM.
+        CRITICAL: Tools and LLMs now share the same llm_context to ensure
+        consistent behavior across vendors.
 
         Args:
             context_data_str: Context data for LLM (may have context_scope.drop applied)
@@ -170,20 +169,14 @@ class ContextService:
         Returns:
             Prepared context data (str or dict depending on vendor needs)
         """
-        # CRITICAL FIX (Issue #487 - Phase 2):
-        # For tool actions, use original_context (not transformed llm_data)
-        if is_tool and original_context is not None:
-            return original_context
-
-        # For tool vendor, return context as-is (dict or str)
-        # For LLM vendors, convert to JSON string if dict
+        # For tool vendors, return llm_context as-is (dict or str)
         if is_tool:
             return context_data_str
-        else:
-            if isinstance(context_data_str, str):
-                return context_data_str
-            else:
-                return json.dumps(context_data_str, ensure_ascii=False)
+
+        # For LLM vendors, convert to JSON string if dict
+        if isinstance(context_data_str, str):
+            return context_data_str
+        return json.dumps(context_data_str, ensure_ascii=False)
 
     @staticmethod
     def prepare_tool_context(
@@ -192,8 +185,7 @@ class ContextService:
         """
         Prepare tool context as JSON string for tool injection.
 
-        CRITICAL: Use original_context for tool injection (has all fields from previous actions).
-        Use context_data (transformed) for LLM only.
+        CRITICAL: Tools and LLMs now share the same llm_context.
 
         Args:
             context_data_str: Transformed context data (with context_scope.drop applied)
@@ -202,11 +194,7 @@ class ContextService:
         Returns:
             JSON string of tool context
         """
-        # Use original context if available, otherwise use context_data_str
-        tool_context = original_context if original_context is not None else context_data_str
-
-        # Convert to JSON string if needed
-        if isinstance(tool_context, str):
-            return tool_context
-        else:
-            return json.dumps(tool_context, ensure_ascii=False)
+        # Use llm_context for tool injection (same as LLM)
+        if isinstance(context_data_str, str):
+            return context_data_str
+        return json.dumps(context_data_str, ensure_ascii=False)

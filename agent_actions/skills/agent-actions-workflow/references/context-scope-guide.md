@@ -96,6 +96,9 @@ actions:
       Extract facts from: {{ source.page_content }}
 ```
 
+Seed data is **prompt-only**. It is available under the `seed` namespace for
+template rendering, but it is not injected into LLM/tool context by default.
+
 | Syntax | Description |
 |--------|-------------|
 | `$file:path.json` | Load JSON from seed_data directory |

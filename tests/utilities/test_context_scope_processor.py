@@ -78,6 +78,32 @@ class TestContextScopeProcessor:
         assert "extracted_entities:" in result
         assert "metadata:" in result
         assert "reference_id:" in result
+
+    def test_seed_data_namespaced_in_prompt_context(self):
+        """Seed data should be namespaced under seed for prompt context only."""
+        field_context = {"source": {"page_content": "text"}}
+        context_scope = {}
+        static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
+
+        prompt_context, llm_context, passthrough_fields = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope, static_data=static_data
+        )
+
+        assert llm_context == {}
+        assert prompt_context.get("seed") == static_data
+        assert passthrough_fields == {}
+
+    def test_seed_drop_does_not_affect_llm_context(self):
+        """Dropping seed.* should not add seed to llm_context."""
+        field_context = {"source": {"page_content": "text"}}
+        context_scope = {"drop": ["seed.exam_syllabus"]}
+        static_data = {"exam_syllabus": {"exam_name": "Test Exam"}}
+
+        _, llm_context, _ = ContextScopeProcessor.apply_context_scope(
+            field_context, context_scope, static_data=static_data
+        )
+
+        assert llm_context == {}
         assert '"entity1"' in result
         assert '"research_paper"' in result
         assert '"ref-456"' in result
