@@ -99,3 +99,11 @@ class TestConfigValidationErrorMessages:
         error = exc_info.value
         assert "action" in error.context
         assert error.context["action"] == "my_test_action"
+
+    def test_reserved_action_name_error_lists_reserved_names(self):
+        """Verify reserved action name validation includes reserved list."""
+        with pytest.raises(ConfigValidationError) as exc_info:
+            ActionExpander._validate_action_name("prompt")
+        error = exc_info.value
+        assert "prompt" in str(error)
+        assert "reserved_names" in error.context

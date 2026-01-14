@@ -80,12 +80,8 @@ class TestWorkflowStaticAnalyzer:
         assert len(result.errors) >= 1
         assert any("nonexistent_field" in e.message for e in result.errors)
 
-    def test_analyze_accepts_implicit_dependency(self):
-        """Test analyzer accepts implicit dependencies via field references.
-
-        When an agent references another agent's field, it creates an implicit
-        dependency at runtime. Explicit depends_on is optional but recommended.
-        """
+    def test_analyze_rejects_implicit_dependency(self):
+        """Test analyzer requires reachable dependencies for references."""
         workflow_config = {
             "actions": [
                 {
@@ -114,9 +110,8 @@ class TestWorkflowStaticAnalyzer:
         analyzer = WorkflowStaticAnalyzer(workflow_config)
         result = analyzer.analyze()
 
-        # Should be valid - implicit dependencies work at runtime
-        assert result.is_valid
-        assert len(result.errors) == 0
+        assert not result.is_valid
+        assert any("not reachable" in e.message for e in result.errors)
 
     def test_analyze_detects_nonexistent_agent(self):
         """Test analyzer detects reference to non-existent agent."""
@@ -135,6 +130,22 @@ class TestWorkflowStaticAnalyzer:
 
         assert not result.is_valid
         assert any("does not exist" in e.message for e in result.errors)
+
+    def test_analyze_rejects_reserved_action_name(self):
+        """Test analyzer rejects reserved action names."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "prompt",
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        assert any("reserved" in e.message for e in result.errors)
 
     def test_get_agent_schema(self):
         """Test getting schema for specific agent."""

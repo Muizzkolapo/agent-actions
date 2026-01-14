@@ -8,3 +8,8 @@ PROMPT_KEY = "prompt"
 SCHEMA_NAME_KEY = "schema_name"
 SCHEMA_KEY = "schema"
 CHUNK_CONFIG_KEY = "chunk_config"
+
+# Reserved agent/action names that cannot be used in workflows.
+RESERVED_AGENT_NAMES = frozenset(
+    {"source", "loop", "workflow", "seed", "prompt", "schema", "context_scope", "action"}
+)

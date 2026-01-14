@@ -108,12 +108,8 @@ class TestStaticTypeChecker:
         assert "nonexistent" in result.errors[0].message
         assert "does not exist" in result.errors[0].message
 
-    def test_implicit_dependency_is_valid(self):
-        """Test that implicit dependencies (via reference) are valid.
-
-        When an agent references another agent's field, it creates an implicit
-        dependency at runtime. Explicit depends_on is optional but recommended.
-        """
+    def test_implicit_dependency_is_invalid(self):
+        """Test that references require reachable dependencies."""
         graph = self._create_graph_with_agents(
             [
                 {"name": "upstream", "fields": {"data"}},
@@ -129,7 +125,28 @@ class TestStaticTypeChecker:
         checker = StaticTypeChecker(graph)
         result = checker.check_all()
 
-        # Should be valid - implicit dependency is resolved at runtime
+        assert not result.is_valid
+        assert len(result.errors) == 1
+        assert "not reachable" in result.errors[0].message
+
+    def test_reachable_via_ancestor_dependency(self):
+        """Test reachability via dependency ancestors."""
+        graph = self._create_graph_with_agents(
+            [
+                {"name": "upstream", "fields": {"data"}},
+                {"name": "midstream", "fields": {"mid"}, "deps": {"upstream"}},
+                {
+                    "name": "downstream",
+                    "fields": {"result"},
+                    "deps": {"midstream"},
+                    "refs": [("upstream", "data")],
+                },
+            ]
+        )
+
+        checker = StaticTypeChecker(graph)
+        result = checker.check_all()
+
         assert result.is_valid
         assert len(result.errors) == 0
 

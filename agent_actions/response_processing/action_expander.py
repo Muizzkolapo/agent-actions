@@ -13,6 +13,7 @@ from agent_actions.llm_invocation.config.vendor_config import VendorType
 from agent_actions.response_processing.guard_parser import GuardParser
 from agent_actions.response_processing.consolidated_guard import GuardBehavior, parse_guard_config
 from agent_actions.response_processing.schema_change import compile_unified_schema
+from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
 from agent_actions.utilities.udf_management import get_udf_metadata
 from agent_actions.utilities.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
@@ -56,6 +57,29 @@ class ActionExpander:
                     "vendor": vendor,
                     "supported_vendors": valid_vendors,
                     "hint": f"Valid vendors: {', '.join(valid_vendors)}",
+                },
+            )
+
+    @staticmethod
+    def _validate_action_name(action_name: Optional[str]) -> None:
+        """Validate action name is not reserved."""
+        if not action_name or not isinstance(action_name, str):
+            raise ConfigValidationError(
+                "name",
+                "Action name must be a non-empty string",
+                context={"action_name": action_name, "operation": "expand_actions_to_agents"},
+            )
+
+        normalized = action_name.strip().lower()
+        if normalized in RESERVED_AGENT_NAMES:
+            raise ConfigValidationError(
+                "name",
+                f"Reserved action name '{action_name}' cannot be used",
+                context={
+                    "action_name": action_name,
+                    "reserved_names": sorted(RESERVED_AGENT_NAMES),
+                    "operation": "expand_actions_to_agents",
+                    "hint": "Rename the action to avoid reserved namespaces.",
                 },
             )
 
@@ -515,6 +539,7 @@ class ActionExpander:
 
         agents: AgentConfigList = []
         for action in actions:
+            ActionExpander._validate_action_name(action.get("name"))
             # Assuming all actions listed are operational unless specified otherwise,
             # or we could filter by some other logic. For now, we take all actions.
             is_operational = True

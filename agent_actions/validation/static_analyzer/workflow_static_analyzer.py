@@ -13,10 +13,11 @@ from .data_flow_graph import (
     InputSchema,
     OutputSchema,
 )
-from .errors import StaticValidationResult
+from .errors import FieldLocation, StaticTypeError, StaticValidationResult
 from .reference_extractor import ReferenceExtractor
 from .schema_extractor import SchemaExtractor
 from .type_checker import StaticTypeChecker
+from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
 
 
 class WorkflowStaticAnalyzer:
@@ -89,6 +90,10 @@ class WorkflowStaticAnalyzer:
         checker = StaticTypeChecker(self.graph)
         result = checker.check_all()
 
+        # Step 2b: Reserved action name validation
+        for error in self._check_reserved_action_names():
+            result.add_error(error)
+
         # Step 3: Check for unused dependencies (add as warnings)
         warnings = checker.check_unused_dependencies()
         for warning in warnings:
@@ -113,6 +118,29 @@ class WorkflowStaticAnalyzer:
         self.graph.build_edges_from_requirements()
 
         self._built = True
+
+    def _check_reserved_action_names(self) -> List[StaticTypeError]:
+        """Return errors for actions using reserved names."""
+        errors: List[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+            name = action.get("name")
+            if not isinstance(name, str):
+                continue
+            normalized = name.strip().lower()
+            if normalized in RESERVED_AGENT_NAMES:
+                errors.append(
+                    StaticTypeError(
+                        message=f"Action name '{name}' is reserved and cannot be used",
+                        location=FieldLocation(agent_name=name, config_field="name"),
+                        referenced_agent=name,
+                        referenced_field="",
+                        hint="Rename the action to avoid reserved namespaces.",
+                    )
+                )
+        return errors
 
     def _add_source_node(self) -> None:
         """Add the special source node for workflow input."""

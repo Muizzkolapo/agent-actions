@@ -10,6 +10,7 @@ from agent_actions.validation.agent_validators.base_agent_validator import (
 from agent_actions.validation.utils.agent_config_validation_utilities import (
     AgentConfigValidationUtilities,
 )
+from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
 
 
 class AgentTypeSpecificValidator(BaseAgentEntryValidator):
@@ -53,6 +54,12 @@ class AgentTypeSpecificValidator(BaseAgentEntryValidator):
         name = context.normalized_entry.get("name")
         if "name" in context.normalized_entry and not isinstance(name, str):
             errors.append(f"{context.description} 'name' must be string.")
+            return
+
+        if isinstance(name, str):
+            normalized = name.strip().lower()
+            if normalized in RESERVED_AGENT_NAMES:
+                errors.append(f"{context.description} 'name' uses reserved namespace '{name}'.")
 
     def _validate_agent_type_field(self, context, errors: list) -> None:
         """Validate agent_type field and type-specific requirements."""

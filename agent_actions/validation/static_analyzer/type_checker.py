@@ -32,7 +32,7 @@ class StaticTypeChecker:
             print(result.format_report())
     """
 
-    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed"})
+    SPECIAL_NAMESPACES = frozenset({"source", "loop", "workflow", "seed", "prompt", "schema"})
 
     def __init__(self, graph: DataFlowGraph) -> None:
         """Initialize the type checker.
@@ -88,7 +88,7 @@ class StaticTypeChecker:
 
         Validates:
         1. Source agent exists (or is special namespace)
-        2. Source agent is in dependencies
+        2. Source agent is reachable via dependencies
         3. Field exists in source agent's output
         """
         source_agent = requirement.source_agent
@@ -122,11 +122,26 @@ class StaticTypeChecker:
             )
             return
 
-        # Check 2: Source agent is in dependencies (or implicitly via reference)
-        # Note: References like {{ action.agent.field }} create implicit dependencies
-        # at runtime, so we don't require explicit depends_on declarations.
-        # This is intentional - the runtime resolves dependencies automatically.
-        # We only proceed to field validation if the source agent exists.
+        # Check 2: Source agent is reachable via dependencies
+        if source_agent != node.name:
+            reachable = self.graph.get_reachable_upstream_names(node.name)
+            if source_agent not in reachable:
+                result.add_error(
+                    StaticTypeError(
+                        message=(
+                            f"Referenced agent '{source_agent}' is not reachable from "
+                            f"agent '{node.name}'"
+                        ),
+                        location=location,
+                        referenced_agent=source_agent,
+                        referenced_field=field_path,
+                        hint=(
+                            f"Add '{source_agent}' to depends_on for '{node.name}' "
+                            "or ensure it is reachable via upstream dependencies"
+                        ),
+                    )
+                )
+                return
 
         # Check 3: Field exists in output schema
         output_schema = source_node.output_schema

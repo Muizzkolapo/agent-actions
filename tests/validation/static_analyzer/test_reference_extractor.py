@@ -104,6 +104,38 @@ class TestReferenceExtractor:
         assert guard_refs[0].source_agent == "analyzer"
         assert guard_refs[0].field_path == "confidence"
 
+    def test_extract_from_guard_with_action_prefix(self):
+        """Test extracting references from guard expressions with action prefix."""
+        config = {
+            "name": "conditional_agent",
+            "prompt": "Process",
+            "guard": "action.analyzer.confidence > 0.8",
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        guard_refs = [r for r in refs if r.location == "guard"]
+        assert len(guard_refs) == 1
+        assert guard_refs[0].source_agent == "analyzer"
+        assert guard_refs[0].field_path == "confidence"
+
+    def test_extract_from_dict_guard_with_action_prefix(self):
+        """Test extracting references from dict guard with action prefix."""
+        config = {
+            "name": "conditional_agent",
+            "prompt": "Process",
+            "guard": {
+                "field": "action.analyzer.confidence",
+                "operator": ">",
+                "value": 0.8,
+            },
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        guard_refs = [r for r in refs if r.location == "guard.field"]
+        assert len(guard_refs) == 1
+        assert guard_refs[0].source_agent == "analyzer"
+        assert guard_refs[0].field_path == "confidence"
+
     def test_extract_from_context_scope_observe(self):
         """Test extracting references from context_scope observe."""
         config = {
@@ -117,6 +149,22 @@ class TestReferenceExtractor:
 
         context_refs = [r for r in refs if r.location == "context_scope.observe"]
         assert len(context_refs) == 2
+
+    def test_extract_from_context_scope_with_action_prefix(self):
+        """Test extracting references from context_scope with action prefix."""
+        config = {
+            "name": "agent",
+            "prompt": "Process",
+            "context_scope": {
+                "observe": ["action.extractor.field1", "action.classifier.category"],
+            },
+        }
+        refs = self.extractor.extract_from_agent(config)
+
+        context_refs = [r for r in refs if r.location == "context_scope.observe"]
+        assert len(context_refs) == 2
+        agents = {r.source_agent for r in context_refs}
+        assert agents == {"extractor", "classifier"}
 
     def test_extract_from_context_scope_drop(self):
         """Test extracting references from context_scope drop."""
