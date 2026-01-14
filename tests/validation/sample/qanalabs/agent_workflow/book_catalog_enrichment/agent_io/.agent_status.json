@@ -1,0 +1,11 @@
+{
+    "classify_genre": {
+        "status": "completed"
+    },
+    "validate_bisac": {
+        "status": "completed"
+    },
+    "write_description": {
+        "status": "completed"
+    }
+}

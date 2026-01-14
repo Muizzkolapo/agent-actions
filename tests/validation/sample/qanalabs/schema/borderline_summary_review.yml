@@ -1,0 +1,25 @@
+name: borderline_summary_review
+fields:
+  - id: final_decision
+    type: string
+    required: true
+
+  - id: objectives_addressed
+    type: array
+    items:
+      type: string
+    required: true
+
+  - id: objectives_missed
+    type: array
+    items:
+      type: string
+    required: true
+
+  - id: reasoning
+    type: string
+    required: true
+
+  - id: confidence
+    type: number
+    required: true

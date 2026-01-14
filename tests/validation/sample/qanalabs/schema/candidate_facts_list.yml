@@ -1,0 +1,29 @@
+name: candidate_facts_list
+type: array
+items:
+  type: object
+  properties:
+    fact:
+      type: string
+      description: "Short, testable statement with technical detail"
+      maxLength: 250
+    quote:
+      type: string
+      description: "Short verbatim evidence from source"
+    technical_level:
+      type: string
+      description: "Type of technical content"
+      enum:
+        - configuration
+        - implementation
+        - constraint
+        - procedure
+        - integration
+    supports_objective:
+      type: string
+      description: "Which specific learning objective this fact supports"
+  required:
+    - fact
+    - quote
+    - technical_level
+    - supports_objective

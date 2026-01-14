@@ -184,7 +184,10 @@ class SourceDataLoader(ISourceDataLoader):
             source_data = self.load_source_data(file_path)
             for item in source_data:
                 if item.get("source_guid") == source_guid:
-                    return item.get("content")
+                    # Support both legacy wrapped content and new flat content
+                    if "content" in item and isinstance(item["content"], dict):
+                        return item.get("content")
+                    return item
             return None
         except Exception as e:
             logger.warning(

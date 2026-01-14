@@ -1,0 +1,39 @@
+"""Reprompt condition for validating book classification quality."""
+
+from agent_actions import reprompt_condition
+
+
+@reprompt_condition(
+    description="Classification must include valid BISAC code format (3 letters + 6 digits) and reasoning must be at least 20 words"
+)
+def check_classification_quality(record: dict) -> bool:
+    """Check if the LLM classification response meets quality standards.
+
+    Args:
+        record: LLM output containing classification data
+
+    Returns:
+        True if valid, False to trigger reprompt
+    """
+    # Check primary BISAC code format (e.g., COM051000)
+    primary_code = record.get("primary_bisac_code", "")
+    if not primary_code or len(primary_code) < 9:
+        return False
+
+    # Check code starts with valid prefix
+    prefix = primary_code[:3].upper()
+    valid_prefixes = ["COM", "BUS", "TEC", "SCI", "MAT", "EDU"]
+    if prefix not in valid_prefixes:
+        return False
+
+    # Check reasoning has minimum word count
+    reasoning = record.get("classification_reasoning", "")
+    word_count = len(reasoning.split())
+    if word_count < 20:
+        return False
+
+    # Check primary_bisac_name is not empty
+    if not record.get("primary_bisac_name", "").strip():
+        return False
+
+    return True

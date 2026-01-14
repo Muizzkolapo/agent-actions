@@ -241,7 +241,9 @@ class ContextScopeProcessor:
             HistoricalDataRequest,
         )
 
-        field_context = {}
+        # Initialize with contents to expose input fields at root level
+        # This ensures backward compatibility for templates expecting {{ field }} from input
+        field_context = contents.copy() if isinstance(contents, dict) else {}
 
         # Load source content internally (unified for batch and realtime)
         # This ensures both modes get the ACTUAL source data from the source folder
@@ -266,6 +268,15 @@ class ContextScopeProcessor:
                     # Load source data from the source folder
                     source_data = source_loader.load_source_data(file_path)
 
+                    # DEBUG: Log source data loading
+                    logger.debug("Loaded source_data: %s", "Yes" if source_data else "None/Empty")
+                    if source_data:
+                        logger.debug(
+                            "Source_data type: %s, length: %s",
+                            type(source_data),
+                            len(source_data) if isinstance(source_data, (list, dict)) else "N/A",
+                        )
+
                     # Get the specific source item by source_guid
                     if source_data:
                         source_item = DataTransformer.get_content_by_source_guid(
@@ -273,10 +284,82 @@ class ContextScopeProcessor:
                         )
                         if source_item:
                             field_context["source"] = source_item
+
+                        # DEBUG: Log source structure
+                        logger.debug("Source item type: %s", type(source_item))
+                        if isinstance(source_item, dict):
+                            logger.debug("Source item keys: %s", list(source_item.keys()))
+                            if "content" in source_item:
+                                logger.debug(
+                                    "Source content type: %s", type(source_item["content"])
+                                )
+                            else:
+                                logger.debug("Source item does NOT have 'content' key")
+
+                        # Unified Processing Backward Compatibility:
+                        # If source item is wrapped in standard envelope {content: ..., source_guid: ...},
+                        # expose the inner content at root to match legacy expectations where source was flat.
+                        if (
+                            isinstance(source_item, dict)
+                            and "content" in source_item
+                            and isinstance(source_item["content"], dict)
+                        ):
+                            keys_found = list(source_item["content"].keys())
+                            logger.debug("Found source.content keys to unwrap: %s", keys_found)
+                            for k, v in source_item["content"].items():
+                                # Only add if not already present (current stage output takes precedence)
+                                if k not in field_context:
+                                    field_context[k] = v
+                                else:
+                                    logger.debug(
+                                        "Skipping unwrap of key '%s' (already in context)", k
+                                    )
+
+                        # Also merge flat source keys (excluding metadata) into root
+                        # This handles cases where source is flat or hybrid
+                        if isinstance(source_item, dict):
+                            existing_keys = list(field_context.keys())
+                            source_keys = list(source_item.keys())
+                            logger.info(
+                                f"ContextScope Debug: Merging flat source keys. Existing: {existing_keys}, Source: {source_keys}"
+                            )
+                            for k, v in source_item.items():
+                                if k not in ["source_guid", "content", "chunk_info"]:
+                                    if k not in field_context:
+                                        field_context[k] = v
+                                        logger.info(
+                                            f"ContextScope Debug: Merged '{k}' into root context"
+                                        )
+                                    else:
+                                        logger.info(
+                                            f"ContextScope Debug: SKIPPED '{k}' (already in context)"
+                                        )
                 except Exception as e:
                     # Fallback to passed source_content if loading fails
                     if source_content:
                         field_context["source"] = source_content
+                        # Apply same unwrapping logic for fallback source
+                        if (
+                            isinstance(source_content, dict)
+                            and "content" in source_content
+                            and isinstance(source_content["content"], dict)
+                        ):
+                            keys_found = list(source_content["content"].keys())
+                            logger.debug(
+                                "Found fallback source.content keys to unwrap: %s", keys_found
+                            )
+                            for k, v in source_content["content"].items():
+                                if k not in field_context:
+                                    field_context[k] = v
+
+                        # Also merge flat source keys for fallback
+                        if isinstance(source_content, dict):
+                            for k, v in source_content.items():
+                                if (
+                                    k not in ["source_guid", "content", "chunk_info"]
+                                    and k not in field_context
+                                ):
+                                    field_context[k] = v
                     # Log the error but don't fail - some workflows may not have source folder
                     logger.debug("Could not load source from folder: %s", e)
 
@@ -284,6 +367,23 @@ class ContextScopeProcessor:
         # This maintains backward compatibility
         if "source" not in field_context and source_content:
             field_context["source"] = source_content
+            # Apply same unwrapping logic for fallback
+            if (
+                isinstance(source_content, dict)
+                and "content" in source_content
+                and isinstance(source_content["content"], dict)
+            ):
+                keys_found = list(source_content["content"].keys())
+                logger.debug("Found legacy fallback source.content keys to unwrap: %s", keys_found)
+                for k, v in source_content["content"].items():
+                    if k not in field_context:
+                        field_context[k] = v
+
+            # Also merge flat source keys for fallback
+            if isinstance(source_content, dict):
+                for k, v in source_content.items():
+                    if k not in ["source_guid", "content", "chunk_info"] and k not in field_context:
+                        field_context[k] = v
 
         # Auto-load ALL previous actions from lineage
         if current_item and file_path and agent_indices:

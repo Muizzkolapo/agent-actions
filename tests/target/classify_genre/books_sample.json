@@ -1,0 +1,22 @@
+[
+    {
+        "source_guid": "a822c738-b8bd-5327-8457-a241f8ae90ea",
+        "content": {
+            "primary_bisac_code": "COM051010",
+            "primary_bisac_name": "Programming / Object-Oriented",
+            "secondary_bisac_codes": [
+                "COM051230"
+            ],
+            "classification_reasoning": "Head First Design Patterns teaches object-oriented design patterns with Java examples and targets software developers learning OOP design techniques. The most specific fit is Programming / Object-Oriented (COM051010). As design patterns are core software engineering practices, Software Development & Engineering / General (COM051230) is an appropriate secondary category."
+        },
+        "target_id": "8cbaa479-f03b-4c3e-ac79-1f84fe642115",
+        "node_id": "classify_genre_afe5b668-aa95-42df-a417-fb4f8dffbead",
+        "lineage": [
+            "classify_genre_afe5b668-aa95-42df-a417-fb4f8dffbead"
+        ],
+        "metadata": {
+            "model": "gpt-5-mini",
+            "provider": "openai"
+        }
+    }
+]

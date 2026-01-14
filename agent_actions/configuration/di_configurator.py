@@ -55,9 +55,6 @@ class DIConfigurator:
         from agent_actions.preprocessing.processing.data_processor import DataProcessor
         from agent_actions.prompt_generation.data_generator import DataGenerator
 
-        # Import to trigger decorator-based registration with ProcessorRegistry
-        from agent_actions.prompt_generation import target_content_processor  # noqa: F401
-
         container.register_transient(IDataProcessor, DataProcessor)
         container.register_transient(IGenerator, DataGenerator)
         # Note: ISourceDataLoader is NOT registered here because SourceDataLoader

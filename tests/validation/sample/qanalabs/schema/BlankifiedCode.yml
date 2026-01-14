@@ -1,0 +1,32 @@
+name: BlankifiedCode
+fields:
+  - id: code_segments
+    type: array
+    items:
+      type: object
+      properties:
+        block_id:
+          type: string
+        original_code:
+          type: string
+        blanked_code:
+          type: string
+        blanks:
+          type: array
+          items:
+            type: object
+            properties:
+              placeholder_id:
+                type: string
+              original_text:
+                type: string
+              concept:
+                type: string
+            required:
+              - placeholder_id
+              - original_text
+      required:
+        - block_id
+        - original_code
+        - blanked_code
+        - blanks

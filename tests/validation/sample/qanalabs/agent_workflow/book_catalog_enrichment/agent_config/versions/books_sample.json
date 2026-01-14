@@ -1,0 +1,47 @@
+[
+  {
+    "isbn": "9780134685991",
+    "title": "Effective Java",
+    "authors": ["Joshua Bloch"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 2017,
+    "page_count": 416,
+    "raw_description": "The definitive guide to Java Platform best practices from the creator of many key Java features."
+  },
+  {
+    "isbn": "9780596007126",
+    "title": "Head First Design Patterns",
+    "authors": ["Eric Freeman", "Elisabeth Freeman", "Kathy Sierra", "Bert Bates"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2004,
+    "page_count": 638,
+    "raw_description": "A brain-friendly guide to design patterns using Java examples."
+  },
+  {
+    "isbn": "9780201633610",
+    "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
+    "authors": ["Erich Gamma", "John Vlissides", "Richard Helm", "Ralph Johnson"],
+    "publisher": "Addison-Wesley Professional",
+    "publish_year": 1995,
+    "page_count": 395,
+    "raw_description": "The classic Gang of Four book on software design patterns."
+  },
+  {
+    "isbn": "9780132350884",
+    "title": "Clean Code: A Handbook of Agile Software Craftsmanship",
+    "authors": ["Robert C. Martin"],
+    "publisher": "Prentice Hall",
+    "publish_year": 2008,
+    "page_count": 431,
+    "raw_description": "A handbook of agile software craftsmanship focusing on writing clean, maintainable code."
+  },
+  {
+    "isbn": "9780596517748",
+    "title": "JavaScript: The Good Parts",
+    "authors": ["Douglas Crockford"],
+    "publisher": "O'Reilly Media",
+    "publish_year": 2008,
+    "page_count": 250,
+    "raw_description": "Unearthing the excellence in JavaScript by focusing on its best features."
+  }
+]

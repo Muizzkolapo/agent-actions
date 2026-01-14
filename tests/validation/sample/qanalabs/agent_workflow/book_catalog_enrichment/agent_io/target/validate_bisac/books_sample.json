@@ -1,0 +1,28 @@
+[
+    {
+        "source_guid": "0e5f8d62-e93e-5a2b-9767-42cb53efc3ff",
+        "content": {
+            "bisac_valid": true,
+            "bisac_codes": [
+                "COM051010",
+                "COM051230"
+            ],
+            "bisac_names": [
+                "Programming / Object-Oriented"
+            ],
+            "validation_notes": "All codes valid"
+        },
+        "target_id": "70cab710-c40c-41aa-85b8-c38de5cd6604",
+        "node_id": "validate_bisac_cd019448-7662-43e0-b6b5-c8782a4a04b7",
+        "lineage": [
+            "classify_genre_545471c1-6cf0-4145-a7a8-959e6e6fbf7c",
+            "validate_bisac_cd019448-7662-43e0-b6b5-c8782a4a04b7"
+        ],
+        "parent_target_id": "9950c4f8-bed8-4b25-8ead-ab48f192fed6",
+        "root_target_id": "9950c4f8-bed8-4b25-8ead-ab48f192fed6",
+        "metadata": {
+            "model": "validate_bisac_codes",
+            "provider": "tool"
+        }
+    }
+]

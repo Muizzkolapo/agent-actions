@@ -10,7 +10,7 @@ import uuid
 import asyncio
 
 from agent_actions.errors import AgentActionsException
-from agent_actions.input_loading.file_reader import FileReader
+
 from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.file_io.unified_source_data_saver import UnifiedSourceDataSaver
 from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
@@ -20,10 +20,7 @@ from agent_actions.validation.preflight.preflight_validator import PreFlightVali
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.core.record_processor import RecordProcessor
 from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
-from agent_actions.input_loading.json_loader import JsonLoader
-from agent_actions.input_loading.tabular_loader import TabularLoader
-from agent_actions.input_loading.text_loader import TextLoader
-from agent_actions.input_loading.xml_loader import XmlLoader
+
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +204,8 @@ def generate_staging(ctx: StagingContext):
     Parameters:
         ctx: StagingContext with all necessary parameters
     """
+    from agent_actions.input_loading.file_reader import FileReader
+
     file_reader = FileReader(ctx.file_path)
     content = file_reader.read()
     file_type = file_reader.file_type
@@ -396,6 +395,9 @@ def _prepare_batch_data(ctx: DataPreparationContext):
     """Prepare data for batch mode processing."""
     local_batch_id = f"batch_{uuid.uuid4().hex}"
     node_id = f"node_{ctx.idx}_{uuid.uuid4()}"
+    from agent_actions.input_loading.tabular_loader import TabularLoader
+    from agent_actions.input_loading.xml_loader import XmlLoader
+
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
 
@@ -456,6 +458,11 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     Prepare data for realtime mode processing using direct loaders.
     Replaces StagingContentLoader usage.
     """
+    from agent_actions.input_loading.text_loader import TextLoader
+    from agent_actions.input_loading.json_loader import JsonLoader
+    from agent_actions.input_loading.tabular_loader import TabularLoader
+    from agent_actions.input_loading.xml_loader import XmlLoader
+
     text_loader = TextLoader(ctx.agent_config, ctx.agent_name)
     json_loader = JsonLoader(ctx.agent_config, ctx.agent_name)
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
@@ -483,11 +490,25 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
         src_text = []
         for text in data_chunk:
             guid = IDGenerator.generate_deterministic_source_guid(text)
-            src_text.append({"source_guid": guid, "content": text, "page_content": text})
+            # Store flat structure for consistency using 'content' as main text field
+            # This avoids nesting and matches the user's expected flat-ish structure
+            src_text.append({"source_guid": guid, "content": text})
 
     elif ctx.file_type == ".json":
-        # JsonLoader returns processed items (with source_guid if chunked)
+        # JsonLoader returns parsed JSON
         data_chunk = json_loader.process(ctx.content, ctx.file_path)
+
+        # Ensure list format for processing
+        if not isinstance(data_chunk, list):
+            data_chunk = [data_chunk]
+
+        # Ensure source_guid exists for all items
+        from agent_actions.utilities.id_generation import IDGenerator
+
+        for item in data_chunk:
+            if isinstance(item, dict) and "source_guid" not in item:
+                item["source_guid"] = IDGenerator.generate_deterministic_source_guid(item)
+
         src_text = data_chunk
 
     elif ctx.file_type in (".csv", ".xlsx"):

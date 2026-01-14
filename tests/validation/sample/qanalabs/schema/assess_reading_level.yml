@@ -1,0 +1,21 @@
+name: assess_reading_level
+description: Schema for reading level assessment
+fields:
+  - id: reading_level
+    type: string
+    description: "Reading level (Beginner/Intermediate/Advanced/Expert)"
+  - id: years_experience_needed
+    type: string
+    description: "Recommended years of experience"
+  - id: prerequisites
+    type: array
+    items:
+      type: string
+    description: "Required prerequisite knowledge"
+  - id: estimated_reading_time
+    type: string
+    description: "Estimated time to complete the book"
+  - id: difficulty_explanation
+    type: string
+    description: "Explanation of difficulty assessment"
+additionalProperties: false

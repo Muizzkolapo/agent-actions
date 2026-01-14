@@ -1,0 +1,34 @@
+name: score_quality
+description: Schema for catalog enrichment quality scoring
+fields:
+  - id: overall_score
+    type: number
+    description: "Overall quality score (1-5)"
+  - id: dimension_scores
+    type: object
+    description: "Scores for each quality dimension"
+    properties:
+      classification_accuracy:
+        type: number
+        description: "BISAC classification accuracy (1-5)"
+      description_quality:
+        type: number
+        description: "Marketing description quality (1-5)"
+      seo_effectiveness:
+        type: number
+        description: "SEO keyword relevance (1-5)"
+      recommendation_relevance:
+        type: number
+        description: "Similar books relevance (1-5)"
+      reading_level_accuracy:
+        type: number
+        description: "Reading level assessment accuracy (1-5)"
+  - id: improvement_suggestions
+    type: array
+    items:
+      type: string
+    description: "Suggestions to improve the catalog entry"
+  - id: ready_for_publication
+    type: boolean
+    description: "Whether the entry is ready for publication"
+additionalProperties: false

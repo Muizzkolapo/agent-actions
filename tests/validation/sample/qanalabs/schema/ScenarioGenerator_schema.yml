@@ -1,0 +1,26 @@
+name: question
+fields:
+  - id: question
+    type: string
+    required: true
+
+  - id: options
+    type: array
+    items:
+      type: string
+    required: true
+
+  - id: answer
+    type: string
+    pattern: ^([A-Z](,[A-Z])*)$  
+    description: This can only be letter A-z
+    required: true
+
+  - id: answer_explanation
+    type: string
+    required: true
+
+  - id: question_type
+    type: string
+    enum: [SA, MA]  
+    required: true

@@ -131,20 +131,11 @@ class TargetGenerator:
         data = file_reader.read()
         file_name = Path(params.batch_file_path).name
 
-        # Extract source file info if possible (simple extraction)
-        source_file_info = {}
-        if isinstance(data, list) and data:
-            source_file_info["single_file"] = True
-            source_file_info["source_guids"] = [
-                item.get("source_guid") for item in data if isinstance(item, dict)
-            ]
-
         result = batch_service.submit_batch_job(
             params.generator_agent_config,
             file_name,
             data,
             params.batch_output_directory,
-            source_file_info=source_file_info,
         )
 
         relative_path = Path(params.batch_file_path).relative_to(params.batch_base_directory)
