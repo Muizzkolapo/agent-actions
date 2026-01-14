@@ -27,20 +27,27 @@ class LLMContextBuilder:
         else:
             llm_full_context = row_content.copy()
 
-        # Remove dropped fields (context_scope.drop)
-        if context_scope and context_scope.get("drop"):
-            for field_ref in context_scope.get("drop", []):
-                try:
-                    # Parse field reference (e.g., 'source.api_key' -> 'api_key')
-                    _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                    llm_full_context.pop(field_name, None)
-                except ValueError:
-                    # Invalid field reference, skip silently (backward compatible)
-                    continue
-
         # Add observed fields from llm_context (context_scope.observe)
         if llm_context:
             llm_full_context.update(llm_context)
+
+        # Remove dropped fields (context_scope.drop) AFTER observe/static merge
+        if context_scope and context_scope.get("drop"):
+            for field_ref in context_scope.get("drop", []):
+                try:
+                    # Parse field reference (e.g., 'source.api_key')
+                    action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                    if action_name == "seed":
+                        seed_data = llm_full_context.get("seed")
+                        if isinstance(seed_data, dict):
+                            seed_data.pop(field_name, None)
+                            if not seed_data:
+                                llm_full_context.pop("seed", None)
+                    else:
+                        llm_full_context.pop(field_name, None)
+                except ValueError:
+                    # Invalid field reference, skip silently (backward compatible)
+                    continue
 
         return llm_full_context
 
@@ -61,25 +68,33 @@ class LLMContextBuilder:
 
         result_context = processed_context
 
-        # Apply context_scope.drop field filtering using DataTransformer
+        # Merge context_scope.observe/static fields into context JSON (dict spread)
+        if llm_additional_context and isinstance(result_context, dict):
+            result_context = {**result_context, **llm_additional_context}
+
+        # Apply context_scope.drop field filtering using DataTransformer AFTER merge
         if context_scope and context_scope.get("drop"):
-            # Extract field names from context_scope.drop
+            seed_drop_fields = []
             drop_fields = []
             for field_ref in context_scope.get("drop", []):
                 try:
-                    # Parse field reference (e.g., 'source.api_key' -> 'api_key')
-                    _, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
-                    drop_fields.append(field_name)
+                    # Parse field reference (e.g., 'source.api_key')
+                    action_name, field_name = ContextScopeProcessor.parse_field_reference(field_ref)
+                    if action_name == "seed":
+                        seed_drop_fields.append(field_name)
+                    else:
+                        drop_fields.append(field_name)
                 except ValueError:
                     # Invalid field reference, skip silently (backward compatible)
                     continue
 
-            # Remove dropped fields from context using DataTransformer
+            if seed_drop_fields and isinstance(result_context.get("seed"), dict):
+                for field_name in seed_drop_fields:
+                    result_context["seed"].pop(field_name, None)
+                if not result_context["seed"]:
+                    result_context.pop("seed", None)
+
             if drop_fields:
                 result_context = DataTransformer.remove_schema_objects(result_context, drop_fields)
-
-        # Merge context_scope.observe fields into context JSON (dict spread)
-        if llm_additional_context and isinstance(result_context, dict):
-            result_context = {**result_context, **llm_additional_context}
 
         return result_context
