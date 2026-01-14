@@ -380,21 +380,8 @@ class TargetGenerator:
                 logger.error(f"Failed to process record: {result.error}")
 
         # Determine output type (Main vs Side Output)
-        if self.model_vendor == TOOL_VENDOR and self.side_output_enabled:
-            # Logic for side output separation (if supported by RecordProcessor or manual)
-            # RecordProcessor doesn't natively split side output yet.
-            # We might need to keep legacy logic or implement split here.
-            # For now, simplistic implementation:
-            # This part might need the DataProcessor logic for side outputs
-            # if RecordProcessor didn't handle it.
-            # Assuming RecordProcessor returns transformed data.
-            self.output_handler.save_main_output(
-                output, file_path, base_directory, output_directory
-            )
-        else:
-            self.output_handler.save_main_output(
-                output, file_path, base_directory, output_directory
-            )
+        # Note: Side output logic removed as per cleanup.
+        self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
 
 
 def create_target_generator(
