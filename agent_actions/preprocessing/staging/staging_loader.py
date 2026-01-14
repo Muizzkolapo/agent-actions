@@ -458,12 +458,10 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
     Prepare data for realtime mode processing using direct loaders.
     Replaces StagingContentLoader usage.
     """
-    from agent_actions.input_loading.text_loader import TextLoader
     from agent_actions.input_loading.json_loader import JsonLoader
     from agent_actions.input_loading.tabular_loader import TabularLoader
     from agent_actions.input_loading.xml_loader import XmlLoader
 
-    text_loader = TextLoader(ctx.agent_config, ctx.agent_name)
     json_loader = JsonLoader(ctx.agent_config, ctx.agent_name)
     tabular_loader = TabularLoader(ctx.agent_config, ctx.agent_name)
     xml_loader = XmlLoader(ctx.agent_config, ctx.agent_name)
@@ -481,7 +479,8 @@ def _prepare_realtime_data(ctx: DataPreparationContext):
             tokenizer_model=tokenizer_model,
             split_method=split_method,
         )
-        data_chunk = text_loader.process(chunks)
+        # Keep chunks as a list; avoid passing through TextLoader.process (stringifies lists).
+        data_chunk = chunks
 
         # For text, we need to wrap strings in dicts for UnifiedSourceDataSaver
         # Use IDGenerator to ensure GUIDs match what RecordProcessor will generate
