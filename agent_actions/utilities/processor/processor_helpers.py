@@ -134,14 +134,10 @@ def run_dynamic_agent(
         - Metadata fields (source_guid, target_id, node_id, lineage) are available for guards
         - Only actual data fields from 'content' are used for evaluation
 
-    Context Separation (Phase 2: Issue #487 - Critical Fix):
-        This function now receives TWO contexts:
-        - context: Original, untransformed data for guard evaluation and tools/UDFs
-        - llm_context: Transformed data (with context_scope.drop applied) for the LLM
-
-        This separation is CRITICAL because:
-        - Guards/tools need access to ALL fields (even those in context_scope.drop)
-        - LLM should only see transformed context (with context_scope.drop applied)
+    Context Separation:
+        This function receives TWO contexts:
+        - context: Original, untransformed data for guard evaluation
+        - llm_context: Transformed data (with context_scope.drop applied) for LLM/tool execution
 
     Args:
         agent_config: Agent configuration including guard conditions
@@ -177,13 +173,10 @@ def run_dynamic_agent(
     else:
         processed_context = context
 
-    # Use llm_context if provided (transformed for LLM), otherwise use processed_context
-    # This allows context_scope.drop to work correctly while keeping original data for tools
+    # Use llm_context if provided (transformed for LLM/tool), otherwise use processed_context
     llm_data = llm_context if llm_context is not None else processed_context
 
-    # CRITICAL FIX: Pass both contexts to agent_builder
-    # - llm_data: Transformed context for LLM (has context_scope.drop applied)
-    # - processed_context: Original context for tools/UDFs (has all fields from previous actions)
+    # Pass both contexts to agent_builder (guards already ran on original data).
     response = agent_builder.create_dynamic_agent(
         agent_config,
         agent_name,
@@ -193,7 +186,7 @@ def run_dynamic_agent(
         tool_args=tool_args,
         source_content=source_content,
         additional_context=None,
-        original_context=processed_context,  # CRITICAL: Pass original context for tools
+        original_context=processed_context,
     )
 
     # Note: passthrough fields are NOT merged here - they're merged later in
