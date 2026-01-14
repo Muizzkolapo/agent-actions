@@ -105,9 +105,6 @@ class ContextScopeProcessor:
             )
             logger.debug("[STATIC_DATA] Fields: %s", list(static_data.keys()))
 
-            # Add to llm_context (for LLM visibility)
-            llm_context.update(static_data)
-
             # Add under 'seed' namespace in prompt_context (for field reference replacement)
             # This allows references like {seed.exam_syllabus} in prompts
             if "seed" in prompt_context:
