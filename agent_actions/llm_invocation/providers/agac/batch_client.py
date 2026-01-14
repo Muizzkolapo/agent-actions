@@ -2,9 +2,12 @@
 Mock Batch Client for Testing.
 
 Provides a simple mock batch client for testing batch processing
-without hitting real APIs.
+without hitting real APIs. Uses schema-based fake data generation.
+
+Auto-completes after configurable time (default 5 seconds).
 """
 
+import time
 import uuid
 import json
 import logging
@@ -16,6 +19,7 @@ from agent_actions.llm_invocation.providers.batch_client_base import (
     BaseBatchClient,
     BatchTask,
 )
+from agent_actions.llm_invocation.providers.agac.fake_data_generator import FakeDataGenerator
 
 logger = logging.getLogger(__name__)
 
@@ -28,50 +32,70 @@ class MockBatchState:
     tasks: List[BatchTask] = field(default_factory=list)
     status: str = "in_progress"
     poll_count: int = 0
-    polls_until_complete: int = 2
+    polls_until_complete: int = 0
+    created_at: float = field(default_factory=time.time)
+    complete_after_seconds: float = 5.0  # Auto-complete after 5 seconds
 
 
-class MockBatchClient(BaseBatchClient):
+class AgacBatchClient(BaseBatchClient):
     """
     Mock batch client for testing batch processing without real APIs.
 
+    Auto-completes batches after a configurable time (default 5 seconds).
+
     Configuration:
-    - MOCK_BATCH_POLLS_UNTIL_COMPLETE: Number of status checks before completing (default: 2)
+    - AGAC_BATCH_COMPLETE_AFTER_SECONDS: Time before auto-complete (default: 5)
+    - AGAC_BATCH_POLLS_UNTIL_COMPLETE: Poll count before complete (default: 0, disabled)
 
     Example:
-        export MOCK_BATCH_POLLS_UNTIL_COMPLETE=3
+        # Complete after 10 seconds
+        export AGAC_BATCH_COMPLETE_AFTER_SECONDS=10
         agac run my_workflow.yaml --run-mode batch
     """
 
-    # Class-level storage for batch state (simulates server-side storage)
+    # Class-level storage for batch state (persists across CLI runs via disk)
     _batches: Dict[str, MockBatchState] = {}
     _tasks_by_batch: Dict[str, List[Dict[str, Any]]] = {}
 
-    def __init__(self, polls_until_complete: Optional[int] = None, **kwargs):
+    def __init__(
+        self,
+        polls_until_complete: Optional[int] = None,
+        complete_after_seconds: Optional[float] = None,
+        **kwargs,
+    ):
         """
         Initialize mock client.
 
         Args:
-            polls_until_complete: Status checks before completing (default: 2)
+            polls_until_complete: Status checks before completing (default: 0, disabled)
+            complete_after_seconds: Seconds before auto-complete (default: 5)
             **kwargs: Ignored for backward compatibility
         """
         import os
 
+        # Poll-based completion (default disabled)
         self.polls_until_complete = polls_until_complete
         if self.polls_until_complete is None:
-            env_polls = os.environ.get("MOCK_BATCH_POLLS_UNTIL_COMPLETE", "2")
+            env_polls = os.environ.get("AGAC_BATCH_POLLS_UNTIL_COMPLETE", "0")
             self.polls_until_complete = int(env_polls)
 
+        # Time-based completion (default 5 seconds)
+        self.complete_after_seconds = complete_after_seconds
+        if self.complete_after_seconds is None:
+            env_seconds = os.environ.get("AGAC_BATCH_COMPLETE_AFTER_SECONDS", "5")
+            self.complete_after_seconds = float(env_seconds)
+
         logger.info(
-            "MockBatchClient initialized: polls=%d",
+            "AgacBatchClient initialized: polls=%d, complete_after=%.1fs",
             self.polls_until_complete,
+            self.complete_after_seconds,
         )
 
     # ========== Required abstract method implementations ==========
 
     def _get_default_model(self) -> str:
         """Return default model name."""
-        return "mock-model"
+        return "agac-model"
 
     def format_task_for_provider(
         self, batch_task: BatchTask, schema: Optional[Dict[str, Any]] = None
@@ -86,22 +110,40 @@ class MockBatchClient(BaseBatchClient):
         }
 
     def _fetch_status(self, batch_id: str) -> str:
-        """Fetch raw status from mock state."""
+        """Fetch raw status from mock state with time-based auto-completion."""
         state = self._batches.get(batch_id)
         if not state:
             return "unknown"
 
         state.poll_count += 1
-        if state.poll_count >= state.polls_until_complete:
-            state.status = "completed"
 
-        logger.debug(
-            "Mock batch %s status: %s (poll %d/%d)",
-            batch_id,
-            state.status,
-            state.poll_count,
-            state.polls_until_complete,
-        )
+        # Check time-based completion
+        elapsed = time.time() - state.created_at
+        if elapsed >= state.complete_after_seconds:
+            state.status = "completed"
+            logger.debug(
+                "Mock batch %s auto-completed after %.1fs",
+                batch_id,
+                elapsed,
+            )
+        # Check poll-based completion (if configured)
+        elif state.polls_until_complete > 0 and state.poll_count >= state.polls_until_complete:
+            state.status = "completed"
+            logger.debug(
+                "Mock batch %s completed after %d polls",
+                batch_id,
+                state.poll_count,
+            )
+        else:
+            remaining = state.complete_after_seconds - elapsed
+            logger.debug(
+                "Mock batch %s status: %s (poll %d, %.1fs remaining)",
+                batch_id,
+                state.status,
+                state.poll_count,
+                remaining,
+            )
+
         return state.status
 
     def _normalize_status(self, raw_status: str) -> str:
@@ -109,7 +151,7 @@ class MockBatchClient(BaseBatchClient):
         return raw_status
 
     def _fetch_raw_results(self, batch_id: str) -> bytes:
-        """Generate mock results as JSONL bytes."""
+        """Generate mock results as JSONL bytes using schema-based fake data."""
         state = self._batches.get(batch_id)
         if not state:
             raise ValueError(f"Batch {batch_id} not found")
@@ -119,31 +161,25 @@ class MockBatchClient(BaseBatchClient):
 
         for task in tasks:
             custom_id = task.get("custom_id", "unknown")
+            body = task.get("body", {})
 
-            # Generate mock successful response
+            # Track attempt for this custom_id (for reprompt testing)
+            attempt = self._get_attempt_for_custom_id(custom_id)
+
+            # Generate fake data using schema from request
+            openai_response = FakeDataGenerator.generate_openai_response(custom_id, body, attempt)
+
+            # Wrap in batch result format
             result = {
+                "id": f"batch_req_{uuid.uuid4().hex[:24]}",
                 "custom_id": custom_id,
                 "response": {
-                    "body": {
-                        "choices": [
-                            {
-                                "message": {
-                                    "content": json.dumps(
-                                        {
-                                            "mock_response": True,
-                                            "original_id": custom_id,
-                                            "batch_id": batch_id,
-                                        }
-                                    )
-                                },
-                                "finish_reason": "stop",
-                            }
-                        ],
-                        "usage": {"prompt_tokens": 100, "completion_tokens": 50},
-                        "model": "mock-model",
-                    }
+                    "status_code": 200,
+                    "body": openai_response,
                 },
+                "error": None,
             }
+
             lines.append(json.dumps(result))
 
         logger.info(
@@ -153,6 +189,26 @@ class MockBatchClient(BaseBatchClient):
         )
 
         return "\n".join(lines).encode("utf-8")
+
+    def _get_attempt_for_custom_id(self, custom_id: str) -> int:
+        """
+        Track attempt count per custom_id across batch resubmissions.
+
+        Args:
+            custom_id: Custom ID to track
+
+        Returns:
+            Current attempt number (1-indexed)
+        """
+        if not hasattr(self, "_custom_id_attempts"):
+            self._custom_id_attempts = {}
+
+        if custom_id not in self._custom_id_attempts:
+            self._custom_id_attempts[custom_id] = 1
+        else:
+            self._custom_id_attempts[custom_id] += 1
+
+        return self._custom_id_attempts[custom_id]
 
     def _get_result_file_name(self, batch_id: str) -> str:
         """Get result file name."""
@@ -180,6 +236,7 @@ class MockBatchClient(BaseBatchClient):
             batch_id=batch_id,
             status="in_progress",
             polls_until_complete=self.polls_until_complete,
+            complete_after_seconds=self.complete_after_seconds,
         )
         self._batches[batch_id] = state
         self._tasks_by_batch[batch_id] = tasks
@@ -217,7 +274,7 @@ class MockBatchClient(BaseBatchClient):
         if isinstance(raw_response, dict):
             response = raw_response.get("response", {})
             body = response.get("body", {})
-            metadata["model"] = body.get("model", "mock-model")
+            metadata["model"] = body.get("model", "agac-model")
             choices = body.get("choices", [])
             if choices:
                 metadata["finish_reason"] = choices[0].get("finish_reason", "stop")
@@ -238,7 +295,7 @@ class MockBatchClient(BaseBatchClient):
         """Reset all mock batch state. Useful between tests."""
         cls._batches.clear()
         cls._tasks_by_batch.clear()
-        logger.debug("MockBatchClient state reset")
+        logger.debug("AgacBatchClient state reset")
 
     @classmethod
     def get_batch_state(cls, batch_id: str) -> Optional[MockBatchState]:

@@ -71,6 +71,14 @@ VENDOR_CAPABILITIES = {
         "required_fields": [],
         "optional_fields": ["tool_name"],
     },
+    "agac-provider": {
+        "supports_json_mode": True,
+        "supports_batch": True,
+        "supports_tools": True,
+        "supports_vision": True,
+        "required_fields": ["model_name"],
+        "optional_fields": [],
+    },
 }
 
 # Valid vendor names

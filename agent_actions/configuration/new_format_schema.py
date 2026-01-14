@@ -70,6 +70,22 @@ class RetryConfig(BaseModel):
     )
 
 
+class RepromptConfig(BaseModel):
+    """Configuration for reprompt behavior on validation failures."""
+
+    validation: str = Field(..., description="Name of validation UDF function")
+    max_attempts: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Maximum number of reprompt attempts (1-10)",
+    )
+    on_exhausted: Literal["return_last", "raise"] = Field(
+        default="return_last",
+        description="Behavior when max_attempts exhausted: return_last or raise",
+    )
+
+
 class ActionConfig(BaseModel):
     """Configuration for a workflow action."""
 
@@ -104,6 +120,9 @@ class ActionConfig(BaseModel):
     )
     retry: Optional[RetryConfig] = Field(
         default=None, description="Retry configuration for transport-layer failures"
+    )
+    reprompt: Optional[RepromptConfig] = Field(
+        default=None, description="Reprompt configuration for validation failures"
     )
     idempotency_key: Optional[str] = Field(default=None, description="Idempotency key template")
     prompt: Optional[str] = Field(default=None, description="Prompt template or reference")

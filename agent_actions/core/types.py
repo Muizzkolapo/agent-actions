@@ -64,6 +64,30 @@ class RetryMetadata:
 
 
 @dataclass
+class RepromptMetadata:
+    """
+    Metadata for reprompt recovery, stored in output _recovery.reprompt field.
+
+    Attributes:
+        attempts: Number of reprompt attempts made
+        passed: Whether validation ultimately passed
+        validation: Name of the validation UDF that was used
+    """
+
+    attempts: int
+    passed: bool
+    validation: str
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "attempts": self.attempts,
+            "passed": self.passed,
+            "validation": self.validation,
+        }
+
+
+@dataclass
 class RecoveryMetadata:
     """
     Container for all recovery-related metadata.
@@ -73,20 +97,20 @@ class RecoveryMetadata:
     """
 
     retry: Optional[RetryMetadata] = None
-    # reprompt: Optional[RepromptMetadata] = None  # Future: Phase 2
+    reprompt: Optional[RepromptMetadata] = None
 
     def to_dict(self) -> Optional[Dict[str, Any]]:
         """Convert to dictionary for JSON serialization. Returns None if empty."""
         result: Dict[str, Any] = {}
         if self.retry:
             result["retry"] = self.retry.to_dict()
-        # if self.reprompt:
-        #     result["reprompt"] = self.reprompt.to_dict()
+        if self.reprompt:
+            result["reprompt"] = self.reprompt.to_dict()
         return result if result else None
 
     def is_empty(self) -> bool:
         """Check if any recovery occurred."""
-        return self.retry is None  # and self.reprompt is None
+        return self.retry is None and self.reprompt is None
 
 
 @dataclass

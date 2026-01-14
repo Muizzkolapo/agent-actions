@@ -20,6 +20,7 @@ class VendorType(str, Enum):
     MISTRAL = "mistral"
     OLLAMA = "ollama"
     TOOL = "tool"
+    AGAC_PROVIDER = "agac-provider"
 
 
 class ResponseFormat(str, Enum):
@@ -117,6 +118,14 @@ class ToolVendorConfig(BaseVendorConfig):
     json_mode: bool = False
 
 
+class AgacProviderConfig(BaseVendorConfig):
+    """Configuration for Agac mock provider (testing/development)."""
+
+    vendor_type: Literal[VendorType.AGAC_PROVIDER] = VendorType.AGAC_PROVIDER
+    api_key_env_name: str = "AGAC_API_KEY"
+    json_mode: bool = True
+
+
 VendorConfig = Union[
     OpenAIConfig,
     AnthropicConfig,
@@ -126,6 +135,7 @@ VendorConfig = Union[
     MistralConfig,
     OllamaConfig,
     ToolVendorConfig,
+    AgacProviderConfig,
 ]
 
 
@@ -178,6 +188,7 @@ __all__ = [
     "MistralConfig",
     "OllamaConfig",
     "ToolVendorConfig",
+    "AgacProviderConfig",
     "VendorConfig",
     "VendorRegistry",
 ]

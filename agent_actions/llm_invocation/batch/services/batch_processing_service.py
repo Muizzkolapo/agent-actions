@@ -573,6 +573,17 @@ class BatchProcessingService:
                 retry_attempts,
             )
 
+        # Phase 2: Validate and reprompt (after retry completes)
+        # Only validate successful results - skip retry-exhausted records
+        all_results = self._validate_and_reprompt(
+            results=all_results,
+            provider=provider,
+            context_map=context_map,
+            output_directory=output_directory,
+            file_name=file_name,
+            agent_config=agent_config,
+        )
+
         return all_results, exhausted_recovery
 
     def _resubmit_missing_records(
@@ -688,3 +699,267 @@ class BatchProcessingService:
 
         logger.warning("Retry batch %s timed out after %d seconds", batch_id, timeout_seconds)
         return provider.check_status(batch_id)
+
+    def _validate_and_reprompt(
+        self,
+        results: List[BatchResult],
+        provider: BaseBatchClient,
+        context_map: Dict[str, Any],
+        output_directory: str,
+        file_name: Optional[str],
+        agent_config: Optional[Dict[str, Any]],
+    ) -> List[BatchResult]:
+        """Validate results and reprompt failures with feedback.
+
+        Validates batch results using configured UDF. Records that fail validation
+        are resubmitted with feedback messages appended to their prompts.
+
+        Args:
+            results: Initial batch results to validate
+            provider: Batch API client
+            context_map: Context map for record lookup
+            output_directory: Output directory path
+            file_name: Original file name
+            agent_config: Agent configuration with reprompt settings
+
+        Returns:
+            Consolidated list of batch results (original passes + reprompt results)
+        """
+        from agent_actions.core.reprompt_validation import get_validation_function
+        from agent_actions.core.types import RepromptMetadata
+        from agent_actions.llm_invocation.batch.processing.batch_task_preparator import (
+            BatchTaskPreparator,
+        )
+
+        # Check if reprompt is enabled
+        reprompt_config = (agent_config or {}).get("reprompt")
+        if not reprompt_config:
+            return results
+
+        validation_name = reprompt_config.get("validation")
+        if not validation_name:
+            logger.warning("Reprompt enabled but no validation UDF specified")
+            return results
+
+        max_attempts = reprompt_config.get("max_attempts", 2)
+        on_exhausted = reprompt_config.get("on_exhausted", "return_last")
+
+        # Get validation function
+        try:
+            validation_func, feedback_message = get_validation_function(validation_name)
+        except ValueError as e:
+            logger.error("Failed to get validation function: %s", e)
+            return results
+
+        # Track per-record reprompt attempts
+        reprompt_attempts: Dict[str, int] = {}
+
+        # Track which results have been replaced (for consolidation)
+        result_map = {r.custom_id: r for r in results}
+
+        attempt = 0
+        while attempt < max_attempts:
+            attempt += 1
+
+            # Validate all current results
+            failed_results = []
+            for result in result_map.values():
+                # Skip if already failed (not success)
+                if not result.success:
+                    continue
+
+                # Skip if this result already passed reprompt validation
+                if (
+                    result.recovery_metadata
+                    and result.recovery_metadata.reprompt
+                    and result.recovery_metadata.reprompt.passed
+                ):
+                    continue
+
+                # Validate
+                try:
+                    is_valid = validation_func(result.content)
+                except Exception as e:
+                    logger.error(
+                        "Validation UDF error for %s: %s",
+                        result.custom_id,
+                        e,
+                    )
+                    is_valid = False
+
+                if not is_valid:
+                    failed_results.append(result)
+
+            # Check if all passed
+            if not failed_results:
+                logger.info("All %d records passed validation", len(result_map))
+                break
+
+            logger.warning(
+                "Reprompt attempt %d/%d: %d records failed validation",
+                attempt,
+                max_attempts,
+                len(failed_results),
+            )
+
+            # Track attempts for failed records
+            for failed_result in failed_results:
+                reprompt_attempts[failed_result.custom_id] = attempt
+
+            # Check if exhausted
+            if attempt >= max_attempts:
+                # Handle exhausted records
+                for failed_result in failed_results:
+                    if on_exhausted == "raise":
+                        raise RuntimeError(
+                            f"Reprompt validation exhausted for {failed_result.custom_id} "
+                            f"after {attempt} attempts (validation: {validation_name})"
+                        )
+
+                    # on_exhausted = "return_last": Add metadata but keep last response
+                    if not failed_result.recovery_metadata:
+                        failed_result.recovery_metadata = RecoveryMetadata()
+
+                    failed_result.recovery_metadata.reprompt = RepromptMetadata(
+                        attempts=attempt,
+                        passed=False,
+                        validation=validation_name,
+                    )
+                break
+
+            # Build reprompt tasks for failed records
+            reprompt_records = []
+            for failed_result in failed_results:
+                custom_id = failed_result.custom_id
+
+                # Get original record from context_map
+                if custom_id not in context_map:
+                    logger.warning(
+                        "Cannot reprompt %s: not found in context_map",
+                        custom_id,
+                    )
+                    continue
+
+                original_record = context_map[custom_id].copy()
+
+                # Build feedback message
+                feedback = self._build_reprompt_feedback(
+                    failed_response=failed_result.content,
+                    feedback_message=feedback_message,
+                )
+
+                # Append feedback to user_content
+                original_user_content = original_record.get("user_content", "")
+                original_record["user_content"] = f"{original_user_content}\n\n{feedback}"
+
+                # Ensure target_id is set
+                if "target_id" not in original_record:
+                    original_record["target_id"] = custom_id
+
+                reprompt_records.append(original_record)
+
+            if not reprompt_records:
+                logger.warning("No records to reprompt")
+                break
+
+            # Submit reprompt batch
+            try:
+                reprompt_batch_name = f"{file_name or 'batch'}_reprompt_{attempt}"
+                preparator = BatchTaskPreparator()
+                result = preparator.prepare_tasks(
+                    agent_config=agent_config or {},
+                    data=reprompt_records,
+                    provider=provider,
+                    output_directory=output_directory,
+                    batch_name=reprompt_batch_name,
+                )
+
+                batch_id, status = provider.submit_batch(
+                    tasks=result.tasks,
+                    batch_name=reprompt_batch_name,
+                    output_directory=output_directory,
+                )
+
+                logger.info(
+                    "Submitted reprompt batch %s with %d records",
+                    batch_id,
+                    len(result.tasks),
+                )
+
+                # Wait for completion
+                final_status = self._wait_for_batch(provider, batch_id)
+
+                if final_status != BatchStatus.COMPLETED:
+                    logger.error(
+                        "Reprompt batch %s did not complete: %s",
+                        batch_id,
+                        final_status,
+                    )
+                    break
+
+                # Retrieve reprompt results
+                reprompt_results = provider.retrieve_results(batch_id, output_directory)
+
+                # Replace failed results with reprompt results, preserving existing recovery metadata
+                for reprompt_result in reprompt_results:
+                    # Preserve existing recovery metadata (e.g., retry metadata)
+                    if reprompt_result.custom_id in result_map:
+                        existing_recovery = result_map[reprompt_result.custom_id].recovery_metadata
+                        if existing_recovery and not reprompt_result.recovery_metadata:
+                            reprompt_result.recovery_metadata = existing_recovery
+                        elif existing_recovery and reprompt_result.recovery_metadata:
+                            # Merge: preserve retry, will add reprompt later
+                            reprompt_result.recovery_metadata.retry = existing_recovery.retry
+
+                    result_map[reprompt_result.custom_id] = reprompt_result
+
+            except Exception as e:
+                logger.error("Error during reprompt batch submission: %s", e)
+                break
+
+        # Add reprompt metadata to all records that were reprompted
+        for custom_id, attempts in reprompt_attempts.items():
+            if custom_id in result_map:
+                result = result_map[custom_id]
+
+                # Check final validation status
+                try:
+                    passed = validation_func(result.content)
+                except Exception:
+                    passed = False
+
+                # Add or update recovery metadata
+                if not result.recovery_metadata:
+                    result.recovery_metadata = RecoveryMetadata()
+
+                result.recovery_metadata.reprompt = RepromptMetadata(
+                    attempts=attempts,
+                    passed=passed,
+                    validation=validation_name,
+                )
+
+        return list(result_map.values())
+
+    def _build_reprompt_feedback(self, failed_response: Any, feedback_message: str) -> str:
+        """Build feedback message for reprompt batch.
+
+        Args:
+            failed_response: The response that failed validation
+            feedback_message: Message from validation UDF decorator
+
+        Returns:
+            Formatted feedback message
+        """
+        import json
+
+        try:
+            response_str = json.dumps(failed_response, indent=2)
+        except Exception:
+            response_str = str(failed_response)
+
+        return f"""---
+Your response failed validation: {feedback_message}
+
+Your response: {response_str}
+
+Please correct and respond again."""
