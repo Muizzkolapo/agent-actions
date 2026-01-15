@@ -6,7 +6,7 @@
 |------------|-------------|
 | [agent_validators](agent_validators/_MANIFEST.md) | Agent entry validators package. |
 | [orchestration](orchestration/_MANIFEST.md) | Validation orchestration package. |
-| [preflight](preflight/_MANIFEST.md) | Pre-flight validation package for unified batch/online validation. |
+| [preflight](preflight/_MANIFEST.md) | Runtime validation for file paths and vendor compatibility. |
 | [static_analyzer](static_analyzer/_MANIFEST.md) | Static workflow analysis for compile-time type checking. |
 | [utils](utils/_MANIFEST.md) | Validation utilities package. |
 
@@ -36,10 +36,6 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `validate` | Method | Validates directory-related operations. | - |
 | `docs_validator.py` | Module | Docs command validation module. | - |
 | `DocsCommandArgs` | Class | Pydantic model for the docs command arguments. | - |
-| `functions.py` | Module | Validator functions for use with ValidationInterceptor. | - |
-| `validate_word_count` | Function | Validate that content has exactly the expected number of words. | - |
-| `validate_char_count` | Function | Validate character count is within range. | - |
-| `validate_keywords` | Function | Validate that content contains all required keywords. | - |
 | `init_validator.py` | Module | Init command validation module. | - |
 | `InitCommandArgs` | Class | Pydantic model for the init command arguments. | - |
 | `path_validator.py` | Module | Path validation utilities. | `cli`, `validation` |
@@ -90,7 +86,3 @@
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `validate` | Method | Perform UDF validation and return the result. | - |
 | &nbsp;&nbsp;&nbsp;&nbsp;└─ `execute` | Method | Execute the validate-udfs command with formatted CLI output. | - |
 | `validate_udfs_cmd` | Function | Validate all UDF references in config without running the workflow. | - |
-| `validation_interceptor.py` | Module | Interceptor that validates responses using user-defined functions. | `errors`, `response_processing`, `utilities` |
-| `ValidationInterceptor` | Class | Interceptor that validates responses against configured criteria. | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `configure` | Method | - | - |
-| &nbsp;&nbsp;&nbsp;&nbsp;└─ `intercept` | Method | - | - |

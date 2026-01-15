@@ -39,17 +39,13 @@ class TestRefactor(unittest.TestCase):
             shutil.rmtree(self.test_dir)
 
     @patch("agent_actions.preprocessing.staging.staging_loader.RecordProcessor")
-    @patch("agent_actions.preprocessing.staging.staging_loader.PreFlightValidator")
-    def test_initial_strategy_calls_record_processor(self, mock_validator, MockRecordProcessor):
+    def test_initial_strategy_calls_record_processor(self, MockRecordProcessor):
         """Verify generate_staging uses RecordProcessor."""
         # Setup mock calls
         mock_instance = MockRecordProcessor.return_value
         mock_instance.process_batch.return_value = [
             ProcessingResult.success(data=[{"content": "processed"}])
         ]
-
-        validator_instance = mock_validator.return_value
-        validator_instance.validate.return_value.raise_if_invalid.return_value = None
 
         # Added model_vendor to satisfy preflight validation
         ctx = StagingContext(
