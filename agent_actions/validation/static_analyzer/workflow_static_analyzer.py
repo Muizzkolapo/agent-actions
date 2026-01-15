@@ -94,6 +94,10 @@ class WorkflowStaticAnalyzer:
         for error in self._check_reserved_action_names():
             result.add_error(error)
 
+        # Step 2c: Validate context_scope field references
+        for error in self._check_context_scope_fields():
+            result.add_error(error)
+
         # Step 3: Check for unused dependencies (add as warnings)
         warnings = checker.check_unused_dependencies()
         for warning in warnings:
@@ -140,6 +144,107 @@ class WorkflowStaticAnalyzer:
                         hint="Rename the action to avoid reserved namespaces.",
                     )
                 )
+        return errors
+
+    def _check_context_scope_fields(self) -> List[StaticTypeError]:
+        """Validate context_scope field references against dependency schemas.
+
+        Checks that fields referenced in context_scope.observe and context_scope.passthrough
+        actually exist in the dependency's output schema.
+
+        Returns:
+            List of StaticTypeError for invalid field references
+        """
+        errors: List[StaticTypeError] = []
+        actions = self.workflow_config.get("actions", [])
+
+        for action in actions:
+            if not isinstance(action, dict):
+                continue
+
+            action_name = action.get("name", "unknown")
+            context_scope = action.get("context_scope", {})
+
+            if not context_scope:
+                continue
+
+            # Get action's dependencies
+            deps_list = action.get("depends_on") or action.get("dependencies", [])
+            dependencies = set()
+            if isinstance(deps_list, list):
+                for dep in deps_list:
+                    if isinstance(dep, str):
+                        dependencies.add(dep)
+
+            # Check observe and passthrough directives
+            for directive in ["observe", "passthrough"]:
+                field_refs = context_scope.get(directive, [])
+                if not isinstance(field_refs, list):
+                    continue
+
+                for field_ref in field_refs:
+                    if not isinstance(field_ref, str):
+                        continue
+
+                    # Parse field reference: "dep_name.field_name" or "dep_name.*"
+                    if "." not in field_ref:
+                        continue  # Skip malformed references
+
+                    parts = field_ref.split(".", 1)
+                    dep_name = parts[0]
+                    field_name = parts[1] if len(parts) > 1 else ""
+
+                    # Skip special namespaces (source, seed, loop, workflow)
+                    if dep_name in {"source", "seed", "loop", "workflow"}:
+                        continue
+
+                    # Check if dependency is declared
+                    if dep_name not in dependencies:
+                        errors.append(
+                            StaticTypeError(
+                                message=f"context_scope.{directive} references undeclared dependency '{dep_name}'",
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=field_ref,
+                                ),
+                                referenced_agent=dep_name,
+                                referenced_field=field_name,
+                                hint=f"Add '{dep_name}' to dependencies or remove this reference.",
+                            )
+                        )
+                        continue
+
+                    # Skip wildcard - can't validate specific fields
+                    if field_name == "*":
+                        continue
+
+                    # Validate field exists in dependency's output schema
+                    dep_node = self.graph.get_node(dep_name)
+                    if not dep_node:
+                        continue  # Dependency doesn't exist - will be caught by other validation
+
+                    output_schema = dep_node.output_schema
+                    if output_schema.is_dynamic:
+                        continue  # Can't validate dynamic schemas
+
+                    available_fields = output_schema.schema_fields
+                    if field_name not in available_fields:
+                        errors.append(
+                            StaticTypeError(
+                                message=f"context_scope.{directive} references non-existent field '{field_name}' in '{dep_name}'",
+                                location=FieldLocation(
+                                    agent_name=action_name,
+                                    config_field=f"context_scope.{directive}",
+                                    raw_reference=field_ref,
+                                ),
+                                referenced_agent=dep_name,
+                                referenced_field=field_name,
+                                available_fields=available_fields,
+                                hint=f"Check the output schema of '{dep_name}' for available fields.",
+                            )
+                        )
+
         return errors
 
     def _add_source_node(self) -> None:

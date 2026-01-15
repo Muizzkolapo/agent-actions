@@ -655,3 +655,206 @@ class TestComplexWorkflows:
 
         result = analyze_workflow(workflow_config)
         assert result.is_valid
+
+
+class TestContextScopeValidation:
+    """Tests for context_scope field validation."""
+
+    def test_valid_context_scope_passes(self):
+        """Test that valid context_scope references pass validation."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "facts": {"type": "array"},
+                            "summary": {"type": "string"},
+                        },
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.facts", "extractor.summary"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+        # No context_scope errors
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) == 0
+
+    def test_undeclared_dependency_in_context_scope(self):
+        """Test that undeclared dependency in context_scope is caught."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "processor",
+                    # Note: depends_on does NOT include 'extractor'
+                    "depends_on": [],
+                    "context_scope": {
+                        "observe": ["extractor.facts"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) >= 1
+        assert any("undeclared dependency" in e.message for e in context_errors)
+
+    def test_nonexistent_field_in_context_scope(self):
+        """Test that non-existent field in context_scope is caught."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "facts": {"type": "array"},
+                        },
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.nonexistent_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) >= 1
+        assert any("non-existent field" in e.message for e in context_errors)
+        assert any("nonexistent_field" in e.message for e in context_errors)
+
+    def test_wildcard_allowed_without_validation(self):
+        """Test that wildcard references (dep.*) are allowed without field validation."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": ["extractor.*"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # Wildcard should not cause context_scope errors
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) == 0
+
+    def test_special_namespaces_allowed(self):
+        """Test that special namespaces (source, seed, loop, workflow) are always allowed."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "processor",
+                    "context_scope": {
+                        "observe": [
+                            "source.title",
+                            "seed.config",
+                            "loop.index",
+                            "workflow.name",
+                        ],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        # Special namespaces should not cause context_scope errors
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        assert len(context_errors) == 0
+
+    def test_passthrough_directive_validated(self):
+        """Test that passthrough directive is also validated."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "passthrough": ["extractor.invalid_field"],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "context_scope.passthrough" in e.message]
+        assert len(context_errors) >= 1
+
+    def test_multiple_errors_reported(self):
+        """Test that multiple context_scope errors are all reported."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "extractor",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"facts": {"type": "array"}},
+                    },
+                },
+                {
+                    "name": "processor",
+                    "depends_on": ["extractor"],
+                    "context_scope": {
+                        "observe": [
+                            "extractor.bad_field1",
+                            "extractor.bad_field2",
+                            "undeclared_dep.field",
+                        ],
+                    },
+                },
+            ]
+        }
+
+        result = analyze_workflow(workflow_config)
+
+        assert not result.is_valid
+        context_errors = [e for e in result.errors if "context_scope" in e.message]
+        # Should have errors for: bad_field1, bad_field2, and undeclared_dep
+        assert len(context_errors) >= 3
