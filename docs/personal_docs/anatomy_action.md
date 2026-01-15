@@ -5,7 +5,7 @@
 
   1. CONTEXT - Where does an action get its data?
 
-  Entry Point: ContextScopeProcessor.build_field_context_with_history() at context_scope_processor.py:305
+  Entry Point: ContextScopeProcessor.build_field_context_with_history() at context_scope_processor.py:375
   ┌────────────┬──────────────────────────────────┬────────────────────────────────────────────────┐
   │ Namespace  │              Source              │                  Description                   │
   ├────────────┼──────────────────────────────────┼────────────────────────────────────────────────┤
@@ -19,7 +19,7 @@
   ├────────────┼──────────────────────────────────┼────────────────────────────────────────────────┤
   │ workflow   │ Workflow executor                │ Workflow metadata (workflow.id, workflow.name) │
   └────────────┴──────────────────────────────────┴────────────────────────────────────────────────┘
-  Context Scope Directives (applied at context_scope_processor.py:145):
+  Context Scope Directives (applied at context_scope_processor.py:92):
   - observe: Fields visible to LLM (extracted to llm_context)
   - passthrough: Fields copied to output (also visible to LLM)
   - drop: Fields removed from context (security)
