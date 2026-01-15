@@ -68,3 +68,15 @@ artefact/
 
 # Ignore docs_site artefact symlink (created by docs serve, should never be committed)
 agent_actions/docs/docs_site/artefact
+
+# Ignore workflow output directories that may be created in wrong locations
+# These should go to designated output directories, not in source code
+agent_actions/generate_*/
+agent_actions/add_*/
+agent_actions/write_*/
+agent_actions/suggest_*/
+agent_actions/fix_*/
+agent_actions/classify_*/
+agent_actions/extract_*/
+agent_actions/flatten_*/
+**/combined_scraped.json

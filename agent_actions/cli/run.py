@@ -20,10 +20,7 @@ from agent_actions.orchestration.agent_workflow import AgentWorkflow, WorkflowCo
 from agent_actions.prompt_generation.config_renderer import ConfigRenderer
 from agent_actions.validation.prompt_validator import PromptValidator
 from agent_actions.validation.run_validator import RunCommandArgs
-from agent_actions.validation.preflight import (
-    VendorCompatibilityValidator,
-    DependencyValidator,
-)
+from agent_actions.validation.preflight import VendorCompatibilityValidator
 
 
 class RunCommand:
@@ -151,13 +148,6 @@ class RunCommand:
 
         return errors, warnings
 
-    def _validate_dependencies(self, agent_configs: dict) -> tuple[list, list]:
-        """Validate workflow dependencies."""
-        dep_validator = DependencyValidator()
-        if dep_validator.validate_workflow({"agents": agent_configs}, agent_configs):
-            return [], []
-        return self._collect_issues_from_validator(dep_validator, "dependency")
-
     def _run_static_analysis(self, agent_configs: dict) -> tuple[list, list]:
         """Run static type checking on field references."""
         click.echo("\nRunning static type checking...")
@@ -224,10 +214,6 @@ class RunCommand:
 
         # Collect all validation issues
         errors, warnings = self._validate_vendors(workflow.agent_configs)
-
-        dep_errors, dep_warnings = self._validate_dependencies(workflow.agent_configs)
-        errors.extend(dep_errors)
-        warnings.extend(dep_warnings)
 
         if static_typing:
             static_errors, static_warnings = self._run_static_analysis(workflow.agent_configs)

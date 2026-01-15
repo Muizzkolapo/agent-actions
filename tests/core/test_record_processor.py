@@ -603,3 +603,55 @@ class TestItemContextCreation:
         assert new_context.workflow_metadata == {"workflow": "test"}
         assert new_context.output_directory == "/output"
         assert new_context.mode == ProcessingMode.BATCH
+
+
+class TestConfigurationErrorHandling:
+    """Test that ConfigurationError is re-raised and fails the workflow."""
+
+    def test_configuration_error_is_reraised(self):
+        """Test that ConfigurationError is not caught and re-raised immediately."""
+        from agent_actions.errors import ConfigurationError
+
+        class FailingProcessor(RecordProcessor):
+            def process(self, item, context):
+                raise ConfigurationError(
+                    "Dependency 'dep_A' not in context_scope", context={"action": "test_action"}
+                )
+
+        processor = FailingProcessor(agent_config={}, agent_name="test_action")
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="test_action",
+            agent_indices={"test_action": 0},
+            is_first_stage=False,
+            mode=ProcessingMode.BATCH,
+        )
+
+        # ConfigurationError should be re-raised, not caught
+        with pytest.raises(ConfigurationError) as exc_info:
+            processor.process_batch([{"data": "test"}], context)
+
+        assert "not in context_scope" in str(exc_info.value)
+
+    def test_other_exceptions_create_failed_results(self):
+        """Test that non-ConfigurationError exceptions create failed results."""
+
+        class FailingProcessor(RecordProcessor):
+            def process(self, item, context):
+                raise ValueError("Some transient error")
+
+        processor = FailingProcessor(agent_config={}, agent_name="test_action")
+        context = ProcessingContext(
+            agent_config={},
+            agent_name="test_action",
+            agent_indices={"test_action": 0},
+            is_first_stage=False,
+            mode=ProcessingMode.BATCH,
+        )
+
+        # Other exceptions should be caught and converted to failed results
+        results = processor.process_batch([{"data": "test"}], context)
+
+        assert len(results) == 1
+        assert results[0].status == ProcessingStatus.FAILED
+        assert "Some transient error" in results[0].error

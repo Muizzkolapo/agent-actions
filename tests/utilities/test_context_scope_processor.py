@@ -2,6 +2,7 @@
 
 import pytest
 from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
+from agent_actions.errors import ConfigurationError
 
 
 class TestContextScopeProcessor:
@@ -220,3 +221,62 @@ class TestContextScopeProcessor:
 
         # Only 2 fields loaded (progressive exposure working!)
         assert len(field_context["add_answer_text"]) == 2
+
+
+class TestDependencyDeclarationEnforcement:
+    """Tests that all dependencies must be declared in context_scope."""
+
+    def test_missing_dependency_declaration_raises_error(self):
+        """Test that missing dependency in context_scope raises ConfigurationError."""
+        dependencies = ["dep_A", "dep_B", "dep_C"]
+        context_scope = {
+            "observe": ["dep_A.field1", "dep_B.field2"]
+            # Missing: dep_C
+        }
+
+        with pytest.raises(ConfigurationError) as exc:
+            ContextScopeProcessor._extract_allowed_fields_per_dependency(
+                dependencies, context_scope, "test_action"
+            )
+
+        assert "dep_C" in str(exc.value)
+        assert "not referenced in context_scope" in str(exc.value)
+
+    def test_all_dependencies_declared_with_wildcard(self):
+        """Test that wildcard declarations work."""
+        dependencies = ["dep_A", "dep_B"]
+        context_scope = {"observe": ["dep_A.*", "dep_B.*"]}
+
+        result = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+            dependencies, context_scope, "test_action"
+        )
+
+        assert result["dep_A"] is None  # Wildcard
+        assert result["dep_B"] is None  # Wildcard
+
+    def test_all_dependencies_declared_with_specific_fields(self):
+        """Test that specific field declarations work."""
+        dependencies = ["dep_A", "dep_B"]
+        context_scope = {
+            "observe": ["dep_A.field1", "dep_A.field2"],
+            "passthrough": ["dep_B.field3"],
+        }
+
+        result = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+            dependencies, context_scope, "test_action"
+        )
+
+        assert set(result["dep_A"]) == {"field1", "field2"}
+        assert result["dep_B"] == ["field3"]
+
+    def test_no_context_scope_with_dependencies_raises_error(self):
+        """Test that missing context_scope with dependencies raises error."""
+        dependencies = ["dep_A", "dep_B"]
+        context_scope = None
+
+        with pytest.raises(ConfigurationError) as exc:
+            ContextScopeProcessor._extract_allowed_fields_per_dependency(
+                dependencies, context_scope, "test_action"
+            )
+
+        assert "no context_scope defined" in str(exc.value)

@@ -15,8 +15,6 @@ from agent_actions.preprocessing.filtering.guard_handler import GuardHandler
 from agent_actions.utilities.constants import JSON_MODE_KEY
 from agent_actions.utilities.id_generation import IDGenerator
 from agent_actions.errors import ConfigurationError  # New modular pattern!
-from agent_actions.errors.preflight import ContextStructureError
-from agent_actions.validation.preflight import PreFlightValidator
 from agent_actions.llm_invocation.batch.core.batch_models import (
     PreparedBatchTasks,
     BatchTaskPreparationStats,
@@ -100,16 +98,13 @@ class BatchTaskPreparator:
         """
         # 0. Validate agent_config is not None
         if agent_config is None:
-            raise ContextStructureError(
-                "agent_config is None in batch task preparation",
-                expected_fields=["agent_config"],
-                actual_fields=[],
-                mode="batch",
+            raise ConfigurationError(
+                "agent_config is None in batch task preparation. "
+                "Check that the agent is defined in the workflow configuration "
+                "and the configuration loaded properly.",
                 context={
                     "batch_name": batch_name,
                     "output_directory": output_directory,
-                    "hint": "Check that the agent is defined in the workflow configuration "
-                    "and the configuration loaded properly.",
                 },
             )
 
@@ -438,15 +433,3 @@ class BatchTaskPreparator:
             current_item=first_row,
             file_path=file_path_for_history,
         )
-
-        # Run pre-flight validation with the actual context that will be used
-        validator = PreFlightValidator()
-        result = validator.validate_for_batch(
-            template=raw_prompt,
-            context=prep_result.prompt_context,
-            agent_name=agent_name,
-            agent_config=agent_config,
-        )
-
-        # Raise unified error if validation fails
-        result.raise_if_invalid()

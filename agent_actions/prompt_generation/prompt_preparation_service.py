@@ -18,8 +18,6 @@ from agent_actions.preprocessing.context.static_data_loader import (
     StaticDataLoader,
     StaticDataLoadError,
 )
-from agent_actions.validation.preflight import PreFlightValidator
-from agent_actions.errors.preflight import TemplateVariableError
 
 logger = logging.getLogger(__name__)
 
@@ -294,15 +292,6 @@ class PromptPreparationService:
         )
         logger.debug("Built LLM context for %s mode with %d keys", request.mode, len(llm_context))
 
-        # Step 4.5: Pre-flight validation - check template variables before rendering
-        PromptPreparationService._run_preflight_validation(
-            raw_prompt=raw_prompt,
-            prompt_context=prompt_context,
-            agent_name=request.agent_name,
-            mode=request.mode,
-            agent_config=request.agent_config,
-        )
-
         # Step 5: Render template with Jinja2 ({{ action.field }})
         formatted_prompt = PromptPreparationService._render_prompt_template(
             raw_prompt,
@@ -536,46 +525,6 @@ class PromptPreparationService:
             # Ensure result is always a dict (DataTransformer might return non-dict)
             return result if isinstance(result, dict) else {}
         raise ValueError(f"Invalid mode '{mode}'. Must be 'batch' or 'realtime'.")
-
-    @staticmethod
-    def _run_preflight_validation(
-        raw_prompt: str,
-        prompt_context: Dict[str, Any],
-        agent_name: str,
-        mode: str,
-        agent_config: Dict[str, Any],
-    ) -> None:
-        """
-        Run pre-flight validation on template and context before rendering.
-
-        Validates template variables are available in context before rendering.
-        This catches configuration errors early with unified error messages
-        across batch and online modes.
-
-        Args:
-            raw_prompt: The raw prompt template
-            prompt_context: The context dictionary for template rendering
-            agent_name: Name of the agent being processed
-            mode: Processing mode ('batch' or 'realtime')
-            agent_config: Agent configuration dictionary
-
-        Raises:
-            PreFlightValidationError: If validation fails
-        """
-        if not raw_prompt or not prompt_context:
-            return  # Nothing to validate
-
-        validator = PreFlightValidator()
-        result = validator.validate(
-            template=raw_prompt,
-            context=prompt_context,
-            agent_name=agent_name,
-            mode=mode,
-            agent_config=agent_config,
-        )
-
-        # Raise unified error if validation fails
-        result.raise_if_invalid()
 
     @staticmethod
     def _determine_static_data_dir(workflow_config_path: Optional[str]) -> Path:

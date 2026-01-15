@@ -858,3 +858,156 @@ class TestContextScopeValidation:
         context_errors = [e for e in result.errors if "context_scope" in e.message]
         # Should have errors for: bad_field1, bad_field2, and undeclared_dep
         assert len(context_errors) >= 3
+
+
+class TestPrimaryDependencyValidation:
+    """Tests for primary_dependency validation."""
+
+    def test_valid_explicit_primary_dependency(self):
+        """Test valid explicit primary_dependency."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "dep_A",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"field1": {"type": "string"}}},
+                },
+                {
+                    "name": "dep_B",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"field2": {"type": "string"}}},
+                },
+                {
+                    "name": "dep_C",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"field3": {"type": "string"}}},
+                },
+                {
+                    "name": "action_with_primary",
+                    "dependencies": ["dep_A", "dep_B", "dep_C"],
+                    "primary_dependency": "dep_B",
+                    "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }} {{ action.dep_C.field3 }}",
+                    "schema": {"type": "object", "properties": {"result": {"type": "string"}}},
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert result.is_valid
+        assert len(result.errors) == 0
+
+    def test_primary_dependency_not_in_list_error(self):
+        """Test error when primary_dependency not in dependencies."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "dep_A",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"f1": {"type": "string"}}},
+                },
+                {
+                    "name": "dep_B",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"f2": {"type": "string"}}},
+                },
+                {
+                    "name": "action_with_bad_primary",
+                    "dependencies": ["dep_A", "dep_B"],
+                    "primary_dependency": "dep_C",  # Not in list
+                    "prompt": "Process: {{ action.dep_A.f1 }} {{ action.dep_B.f2 }}",
+                    "schema": {"type": "object"},
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        errors = [e for e in result.errors if "primary_dependency" in e.message]
+        assert len(errors) >= 1
+        assert any("not found in dependencies list" in e.message for e in errors)
+
+    def test_primary_dependency_without_dependencies_error(self):
+        """Test error when primary_dependency specified but no dependencies."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "action_no_deps",
+                    "primary_dependency": "some_action",
+                    "schema": {"type": "object"},
+                }
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        assert not result.is_valid
+        errors = [e for e in result.errors if "primary_dependency" in e.message]
+        assert len(errors) >= 1
+        assert any("but no 'dependencies' list" in e.message for e in errors)
+
+    def test_multiple_deps_without_primary_is_valid(self):
+        """Test that multiple deps without explicit primary is valid (uses convention)."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "dep_A",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"f1": {"type": "string"}}},
+                },
+                {
+                    "name": "dep_B",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"f2": {"type": "string"}}},
+                },
+                {
+                    "name": "action_convention",
+                    "dependencies": ["dep_A", "dep_B"],
+                    # No primary_dependency - uses last by convention
+                    "prompt": "Process: {{ action.dep_A.f1 }} {{ action.dep_B.f2 }}",
+                    "schema": {"type": "object"},
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        # Should be valid - convention is to use last dependency
+        assert result.is_valid
+        assert len(result.errors) == 0
+
+    def test_context_scope_references_undeclared_dependency_error(self):
+        """Test reverse check: context_scope references dependency not in dependencies list."""
+        workflow_config = {
+            "actions": [
+                {
+                    "name": "dep_A",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"field1": {"type": "string"}}},
+                },
+                {
+                    "name": "dep_B",
+                    "prompt": "test",
+                    "schema": {"type": "object", "properties": {"field2": {"type": "string"}}},
+                },
+                {
+                    "name": "action_bad_context",
+                    "dependencies": ["dep_A"],  # Only declares dep_A
+                    "prompt": "Process: {{ action.dep_A.field1 }} {{ action.dep_B.field2 }}",
+                    "schema": {"type": "object"},
+                },
+            ]
+        }
+
+        analyzer = WorkflowStaticAnalyzer(workflow_config)
+        result = analyzer.analyze()
+
+        # Should fail - dep_B referenced in prompt but not in dependencies
+        assert not result.is_valid
+        errors = [e for e in result.errors if "dep_B" in e.message and "not reachable" in e.message]
+        assert len(errors) >= 1

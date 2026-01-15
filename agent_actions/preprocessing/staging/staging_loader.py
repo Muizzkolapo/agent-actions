@@ -15,8 +15,6 @@ from agent_actions.file_io.file_writer import FileWriter
 from agent_actions.file_io.unified_source_data_saver import UnifiedSourceDataSaver
 from agent_actions.preprocessing.transformation.string_transformer import Tokenizer
 from agent_actions.utilities.constants import CHUNK_CONFIG_KEY
-from agent_actions.errors.preflight import PreFlightValidationError
-from agent_actions.validation.preflight.preflight_validator import PreFlightValidator
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.core.record_processor import RecordProcessor
 from agent_actions.core.types import ProcessingContext, ProcessingMode, ProcessingStatus
@@ -133,9 +131,6 @@ def _validate_staged_data(
         agent_name: Name of agent (for error context)
         mode: Execution mode ('batch' or 'online')
         file_path: Path to input file (for context building)
-
-    Raises:
-        PreFlightValidationError: If template references fields not in context
     """
     from agent_actions.prompt_generation.prompt_preparation_service import (
         PromptPreparationService,
@@ -180,18 +175,6 @@ def _validate_staged_data(
         current_item=first_item,
         file_path=file_path,
     )
-
-    # Validate against INPUT context (source + seed + previous actions)
-    validator = PreFlightValidator()
-    result = validator.validate(
-        template=raw_prompt,
-        context=prep_result.prompt_context,
-        agent_name=agent_name,
-        mode=mode,
-        agent_config=agent_config,
-    )
-
-    result.raise_if_invalid()
 
 
 def generate_staging(ctx: StagingContext):
