@@ -169,36 +169,113 @@ class AgentRunner:
         return [agent_folder / "staging"]
 
     def _resolve_dependency_directories(
-        self, agent_folder: Path, dependencies: List[str]
+        self, agent_folder: Path, dependencies: List[str], agent_config: Dict, agent_name: str
     ) -> List[Path]:
-        """Resolve upstream directories from explicit dependencies (DAG/Diamond pattern).
+        """Resolve upstream directories from dependencies.
 
-        Uses simple directory names (action names) without index prefixes.
-        The manifest is the source of truth for directory locations.
+        NEW BEHAVIOR:
+        - Single dependency → Use it
+        - Multiple dependencies → Use primary_dependency (or last if not specified)
+        - Returns only PRIMARY dependency directory
+
+        Args:
+            agent_folder: Path to agent folder
+            dependencies: List of dependency names
+            agent_config: Full agent configuration (to get primary_dependency)
+            agent_name: Agent name (for logging/errors)
+
+        Returns:
+            List containing only the primary dependency directory path
+
+        Raises:
+            ConfigurationError: If primary_dependency invalid
+            DependencyError: If primary dependency directory not found
         """
-        upstream_dirs: List[Path] = []
+        from agent_actions.errors import ConfigurationError, DependencyError
+
         target_dir = agent_folder / "target"
 
-        for dep_name in dependencies:
-            # Try manifest-based resolution first
-            if self.manifest_manager:
-                try:
-                    dep_path = self.manifest_manager.get_output_directory(dep_name)
-                    if dep_path.exists():
-                        upstream_dirs.append(dep_path)
-                        continue
-                except KeyError:
-                    pass
+        # Single dependency - straightforward
+        if len(dependencies) == 1:
+            dep_path = self._resolve_single_dependency(target_dir, dependencies[0])
+            if dep_path:
+                return [dep_path]
+            raise DependencyError(
+                f"Dependency directory not found: {target_dir / dependencies[0]}",
+                context={"action": agent_name, "dependency": dependencies[0]},
+            )
 
-            # Direct path using simple name (no index prefix)
-            simple_path = target_dir / dep_name
-            if simple_path.exists():
-                upstream_dirs.append(simple_path)
-                continue
+        # Multiple dependencies - determine primary
+        primary_dep = agent_config.get("primary_dependency")
 
-            logger.warning("Dependency directory not found for %s", dep_name)
+        if primary_dep:
+            # Explicit primary_dependency specified
+            if primary_dep not in dependencies:
+                raise ConfigurationError(
+                    f"Action '{agent_name}': primary_dependency '{primary_dep}' "
+                    f"not found in dependencies list: {dependencies}",
+                    context={
+                        "action": agent_name,
+                        "primary_dependency": primary_dep,
+                        "dependencies": dependencies,
+                    },
+                )
+            logger.info(
+                f"Action '{agent_name}': Using explicit primary_dependency "
+                f"'{primary_dep}' from {len(dependencies)} dependencies."
+            )
+        else:
+            # Convention: last dependency is primary
+            primary_dep = dependencies[-1]
+            logger.info(
+                f"Action '{agent_name}': Multiple dependencies {dependencies}. "
+                f"Using '{primary_dep}' (last in list) as primary input. "
+                f"To change, set 'primary_dependency: <name>' in config."
+            )
 
-        return upstream_dirs
+        # Resolve primary dependency directory
+        dep_path = self._resolve_single_dependency(target_dir, primary_dep)
+        if not dep_path:
+            raise DependencyError(
+                f"Primary dependency directory not found: {target_dir / primary_dep}",
+                context={
+                    "action": agent_name,
+                    "primary_dependency": primary_dep,
+                    "all_dependencies": dependencies,
+                    "expected_path": str(target_dir / primary_dep),
+                },
+            )
+
+        return [dep_path]
+
+    def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Optional[Path]:
+        """Resolve a single dependency directory.
+
+        Tries manifest-based resolution first, then direct path.
+
+        Args:
+            target_dir: Target directory path
+            dep_name: Dependency name
+
+        Returns:
+            Resolved Path or None if not found
+        """
+        # Try manifest-based resolution first
+        if self.manifest_manager:
+            try:
+                dep_path = self.manifest_manager.get_output_directory(dep_name)
+                if dep_path.exists():
+                    return dep_path
+            except KeyError:
+                pass
+
+        # Direct path using simple name
+        simple_path = target_dir / dep_name
+        if simple_path.exists():
+            return simple_path
+
+        logger.warning("Dependency directory not found for %s", dep_name)
+        return None
 
     def _resolve_linear_directory(
         self, agent_folder: Path, previous_agent_type: str, _idx: int
@@ -240,7 +317,10 @@ class AgentRunner:
             upstream_data_dirs = self._resolve_start_node_directories(agent_folder_path)
         elif dependencies and hasattr(self, "agent_indices") and self.agent_indices:
             upstream_data_dirs = self._resolve_dependency_directories(
-                agent_folder_path, dependencies
+                agent_folder_path,
+                dependencies,
+                agent_config,
+                agent_type,  # agent_name
             )
         elif previous_agent_type:
             upstream_data_dirs = [
@@ -641,10 +721,29 @@ class AgentRunner:
         # Use merging approach when there are multiple upstream directories
         # This handles parallel branch outputs correctly
         if len(params.upstream_data_dirs) > 1:
-            files_processed_count = self._process_merged_files(params)
-            if files_processed_count == 0:
-                self._warn_no_files_found(params)
-            return
+            # Check if this is parallel branches (same action) or multiple deps
+            upstream_paths = [Path(d) for d in params.upstream_data_dirs]
+            dep_names = [p.name for p in upstream_paths]
+            unique_names = set(dep_names)
+
+            if len(unique_names) == 1:
+                # Parallel branches from same action - merge them
+                logger.info(
+                    f"Detected parallel branches from '{unique_names.pop()}'. "
+                    f"Merging {len(upstream_paths)} outputs."
+                )
+                files_processed_count = self._process_merged_files(params)
+                if files_processed_count == 0:
+                    self._warn_no_files_found(params)
+                return
+            else:
+                # Multiple different dependencies - shouldn't happen with new design
+                logger.error(
+                    f"Multiple dependency directories detected: {dep_names}. "
+                    f"This should have been resolved to primary dependency. "
+                    f"Using first directory only as fallback."
+                )
+                params.upstream_data_dirs = [params.upstream_data_dirs[0]]
 
         # Single upstream directory - use original logic (more efficient)
         files_processed_count = 0

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from agent_actions.errors import ConfigurationError
 from .enrichment import EnrichmentPipeline
 from .retry_service import RetryService, create_retry_service_from_config
 from .types import (
@@ -195,9 +196,13 @@ class RecordProcessor:
                 item_context = self._create_item_context(context, idx, item)
                 result = self.process(item, item_context)
                 results.append(result)
+            except ConfigurationError:
+                # ConfigurationError indicates a fundamental workflow misconfiguration
+                # Re-raise immediately to fail the workflow - these cannot be recovered
+                raise
             except Exception as e:
                 # Create failed result instead of propagating exception
-                # This allows batch processing to continue
+                # This allows batch processing to continue for transient/data errors
                 # Log the error for debugging
                 import logging
 

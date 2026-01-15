@@ -297,7 +297,7 @@ class ContextScopeProcessor:
 
     @staticmethod
     def _extract_allowed_fields_per_dependency(
-        dependencies: List[str], context_scope: Optional[Dict]
+        dependencies: List[str], context_scope: Optional[Dict], action_name: str = "unknown"
     ) -> Dict[str, Optional[List[str]]]:
         """
         Extract which fields are allowed for each dependency from context_scope.
@@ -321,8 +321,19 @@ class ContextScopeProcessor:
             }
         """
         if not context_scope:
-            # No context_scope: Load all fields from all dependencies (backward compat)
-            return {dep: None for dep in dependencies}
+            if dependencies:
+                logger.error(
+                    f"Action '{action_name}' has dependencies but no context_scope defined."
+                )
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Action '{action_name}' has dependencies but no context_scope defined. "
+                    f"All dependencies must have explicit field declarations.\n\n"
+                    f"Dependencies: {dependencies}",
+                    context={"action": action_name, "dependencies": dependencies},
+                )
+            return {}
 
         allowed_per_dep: Dict[str, Optional[List[str]]] = {}
 
@@ -331,6 +342,15 @@ class ContextScopeProcessor:
         all_field_refs = []
         all_field_refs.extend(context_scope.get("observe", []))
         all_field_refs.extend(context_scope.get("passthrough", []))
+
+        # Track which dependencies are declared in context_scope
+        declared_deps = set()
+        for field_ref in all_field_refs:
+            try:
+                ref_action, _ = ContextScopeProcessor.parse_field_reference(field_ref)
+                declared_deps.add(ref_action)
+            except ValueError:
+                continue
 
         for dep_name in dependencies:
             wildcard_found = False
@@ -361,12 +381,25 @@ class ContextScopeProcessor:
                 allowed_per_dep[dep_name] = list(set(specific_fields))  # Deduplicate
             else:
                 # Dependency declared but no fields referenced in context_scope
-                # Load all fields (backward compatibility)
-                logger.warning(
+                # This is now an error (no implicit field loading)
+                logger.error(
                     f"Dependency '{dep_name}' declared but not referenced in context_scope. "
-                    f"Loading all fields by default."
+                    f"All dependencies must have explicit field declarations."
                 )
-                allowed_per_dep[dep_name] = None
+                from agent_actions.errors import ConfigurationError
+
+                raise ConfigurationError(
+                    f"Dependency '{dep_name}' declared but not referenced in context_scope. "
+                    f"Add field declarations (e.g., '{dep_name}.*' or '{dep_name}.field_name').\n\n"
+                    f"All dependencies: {dependencies}\n"
+                    f"Declared in context_scope: {list(declared_deps)}",
+                    context={
+                        "action": action_name,
+                        "missing_dependency": dep_name,
+                        "all_dependencies": dependencies,
+                        "declared_dependencies": list(declared_deps),
+                    },
+                )
 
         return allowed_per_dep
 
@@ -436,7 +469,7 @@ class ContextScopeProcessor:
 
             # Extract which fields are allowed for each dependency from context_scope
             allowed_fields_map = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope
+                dependencies, context_scope, agent_name
             )
 
             logger.debug(
@@ -544,7 +577,7 @@ class ContextScopeProcessor:
 
             # Extract allowed fields per dependency
             allowed_fields_map = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope
+                dependencies, context_scope, agent_name
             )
             logger.debug(f"[PROGRESSIVE EXPOSURE - REALTIME] Allowed fields: {allowed_fields_map}")
 
