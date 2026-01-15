@@ -12,9 +12,9 @@ from jinja2 import Environment, StrictUndefined, TemplateSyntaxError
 from agent_actions.prompt_generation.prompt_formatter import PromptFormatter
 from agent_actions.prompt_generation.prompt_utils import PromptUtils
 from agent_actions.prompt_generation.sample_enricher import SampleEnricher
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
-from agent_actions.utilities.context_scope.llm_context_builder import LLMContextBuilder
-from agent_actions.utilities.context_scope.static_data_loader import (
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.llm_context_builder import LLMContextBuilder
+from agent_actions.preprocessing.context.static_data_loader import (
     StaticDataLoader,
     StaticDataLoadError,
 )
@@ -234,7 +234,11 @@ class PromptPreparationService:
         raw_prompt = PromptFormatter.get_raw_prompt(request.agent_config)
         logger.debug("Loaded raw prompt (length: %d)", len(raw_prompt))
 
+        # Step 1.5: Extract context_scope for progressive data exposure
+        context_scope = request.agent_config.get("context_scope", {})
+
         # Step 2: Build field context with historical node loading
+        # Pass context_scope to control which fields are loaded (progressive data exposure)
         field_context = ContextScopeProcessor.build_field_context_with_history(
             contents=request.contents if isinstance(request.contents, dict) else {},
             agent_name=request.agent_name,
@@ -246,11 +250,11 @@ class PromptPreparationService:
             workflow_metadata=request.workflow_metadata,
             current_item=request.current_item,
             file_path=request.file_path,
+            context_scope=context_scope,  # NEW: Controls which fields to load
         )
         logger.debug("Built field context with %d top-level keys", len(field_context))
 
         # Step 2.5: Load seed data files if configured
-        context_scope = request.agent_config.get("context_scope", {})
         static_data = PromptPreparationService._load_seed_data(
             request.agent_config, context_scope, request.agent_name
         )
@@ -269,6 +273,10 @@ class PromptPreparationService:
                 len(llm_additional_context),
                 len(passthrough_fields),
                 len(static_data),
+            )
+            logger.debug(
+                "DEBUG: prompt_context namespaces after apply_context_scope: %s",
+                list(prompt_context.keys()),
             )
         else:
             # No context_scope: use field_context as-is for backward compatibility

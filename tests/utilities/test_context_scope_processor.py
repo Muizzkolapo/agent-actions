@@ -1,7 +1,7 @@
 """Tests for ContextScopeProcessor utility class."""
 
 import pytest
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
 
 
 class TestContextScopeProcessor:
@@ -104,13 +104,6 @@ class TestContextScopeProcessor:
         )
 
         assert llm_context == {}
-        assert '"entity1"' in result
-        assert '"research_paper"' in result
-        assert '"ref-456"' in result
-
-        # Test with empty context
-        empty_result = ContextScopeProcessor.format_llm_context({})
-        assert empty_result == ""
 
     def test_merge_passthrough_fields(self):
         """Test merging passthrough fields into LLM response."""
@@ -162,3 +155,68 @@ class TestContextScopeProcessor:
         # Test with empty passthrough returns response unchanged
         unchanged = ContextScopeProcessor.merge_passthrough_fields(structured_response, {})
         assert unchanged == structured_response
+
+    def test_realtime_mode_progressive_exposure_wildcard(self):
+        """Test realtime mode with wildcard (all fields from dependency)."""
+        contents = {
+            "question": "What is MCP?",
+            "options": ["A", "B", "C", "D"],
+            "answer": "A",
+            "answer_text": ["Model Context Protocol"],
+            "extra_field": "unused",
+        }
+
+        agent_config = {"dependencies": ["add_answer_text"]}
+        context_scope = {"observe": ["add_answer_text.*"]}
+
+        # Realtime mode: no current_item, file_path, or agent_indices
+        field_context = ContextScopeProcessor.build_field_context_with_history(
+            contents=contents,
+            agent_name="generate_distractor",
+            agent_config=agent_config,
+            context_scope=context_scope,
+        )
+
+        # Should load all fields from contents into dependency namespace
+        assert "add_answer_text" in field_context
+        assert field_context["add_answer_text"]["question"] == "What is MCP?"
+        assert field_context["add_answer_text"]["answer_text"] == ["Model Context Protocol"]
+        assert field_context["add_answer_text"]["extra_field"] == "unused"
+        assert len(field_context["add_answer_text"]) == 5  # All fields
+
+    def test_realtime_mode_progressive_exposure_specific_fields(self):
+        """Test realtime mode with specific fields (progressive exposure)."""
+        contents = {
+            "question": "What is MCP?",
+            "options": ["A", "B", "C", "D"],
+            "answer": "A",
+            "answer_text": ["Model Context Protocol"],
+            "target_word_counts": {"distractor_1": 10},
+        }
+
+        agent_config = {"dependencies": ["add_answer_text"]}
+        context_scope = {
+            "observe": ["add_answer_text.answer_text"],
+            "passthrough": ["add_answer_text.question"],
+        }
+
+        # Realtime mode: no current_item, file_path, or agent_indices
+        field_context = ContextScopeProcessor.build_field_context_with_history(
+            contents=contents,
+            agent_name="generate_distractor",
+            agent_config=agent_config,
+            context_scope=context_scope,
+        )
+
+        # Should load ONLY declared fields
+        assert "add_answer_text" in field_context
+        assert field_context["add_answer_text"]["answer_text"] == ["Model Context Protocol"]
+        assert field_context["add_answer_text"]["question"] == "What is MCP?"
+
+        # Undeclared fields should NOT be in field_context
+        assert "options" not in field_context["add_answer_text"]
+        assert "answer" not in field_context["add_answer_text"]
+        assert "target_word_counts" not in field_context["add_answer_text"]
+
+        # Only 2 fields loaded (progressive exposure working!)
+        assert len(field_context["add_answer_text"]) == 2

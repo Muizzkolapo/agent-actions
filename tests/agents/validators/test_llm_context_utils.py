@@ -1,7 +1,7 @@
 """Tests for LLM context computation utilities."""
 
 import pytest
-from agent_actions.utilities.context_scope.llm_context_utils import LLMContextUtils
+from agent_actions.preprocessing.context.llm_context_utils import LLMContextUtils
 
 
 class TestComputeLLMContext:

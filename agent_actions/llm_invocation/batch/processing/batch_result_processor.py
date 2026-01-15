@@ -362,7 +362,7 @@ class BatchResultProcessor:
 
         if stored_passthrough:
             # Use pre-computed passthrough
-            from agent_actions.utilities.context_scope.context_scope_processor import (
+            from agent_actions.preprocessing.context.context_scope_processor import (
                 ContextScopeProcessor,
             )
 
@@ -377,7 +377,7 @@ class BatchResultProcessor:
 
             for field_ref in passthrough_refs:
                 try:
-                    from agent_actions.utilities.context_scope.context_scope_processor import (
+                    from agent_actions.preprocessing.context.context_scope_processor import (
                         ContextScopeProcessor,
                     )
 

@@ -112,6 +112,12 @@ class HistoricalNodeDataLoader:
             target_path = HistoricalNodeDataLoader._construct_target_path(
                 request.action_name, node_idx, request.file_path
             )
+            logger.debug(
+                "[DEBUG HISTORICAL] action_name=%s, file_path=%s -> target_path=%s",
+                request.action_name,
+                request.file_path,
+                target_path,
+            )
 
             if not target_path.exists():
                 logger.warning("Target file does not exist: %s", target_path)
@@ -144,18 +150,26 @@ class HistoricalNodeDataLoader:
                 parent_target_id=request.parent_target_id,
                 root_target_id=request.root_target_id,
                 is_parallel_sibling=is_parallel_sibling,
+                action_name=request.action_name,
             )
 
             # DEBUG: Log result
             if record:
-                logger.debug("[DEBUG] Found record with node_id=%s", record.get("node_id"))
+                content = record.get("content", {})
+                content_keys = list(content.keys()) if isinstance(content, dict) else []
+                logger.debug(
+                    "[DEBUG HISTORICAL] Found record for action '%s': node_id=%s, content_keys=%s",
+                    request.action_name,
+                    record.get("node_id"),
+                    content_keys,
+                )
                 ServiceLogger.log_operation_success(
                     logger,
                     "load historical node data",
                     action_name=request.action_name,
                     node_id=node_id,
                 )
-                return record.get("content")
+                return content
 
             source_guids = set(r.get("source_guid") for r in data if isinstance(r, dict))
             logger.debug("[DEBUG] No match found. File contains source_guids: %s", source_guids)
@@ -296,6 +310,7 @@ class HistoricalNodeDataLoader:
         parent_target_id: Optional[str] = None,
         root_target_id: Optional[str] = None,
         is_parallel_sibling: bool = False,
+        action_name: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Find a record in the data using multi-strategy matching.
@@ -321,6 +336,7 @@ class HistoricalNodeDataLoader:
             parent_target_id: Optional parent ID for sibling matching
             root_target_id: Optional root ID for Map-Reduce matching
             is_parallel_sibling: True if dependency node is not in caller's lineage
+            action_name: Optional action name to filter by node_id prefix
 
         Returns:
             The matching record or None if not found
@@ -331,11 +347,12 @@ class HistoricalNodeDataLoader:
 
         logger.debug(
             "[DEBUG _find_record] Searching %s records for source_guid=%s, "
-            "parent_target_id=%s, is_parallel_sibling=%s",
+            "parent_target_id=%s, is_parallel_sibling=%s, action_name=%s",
             len(data),
             source_guid,
             parent_target_id,
             is_parallel_sibling,
+            action_name,
         )
 
         matches_found = 0
@@ -349,6 +366,15 @@ class HistoricalNodeDataLoader:
 
             # Primary filter: source_guid
             if record.get("source_guid") != source_guid:
+                continue
+
+            # Secondary filter: node_id must contain action_name
+            # This prevents returning records from wrong actions that happen to share source_guid
+            # Supports both formats:
+            #   - Production: "{action_name}_{uuid}" (e.g., "get_authoring_prompt_abc123")
+            #   - Test/legacy: "node_{idx}_{action_name}" (e.g., "node_4_generate_seo")
+            record_node_id = record.get("node_id", "")
+            if action_name and action_name not in record_node_id:
                 continue
 
             matches_found += 1
