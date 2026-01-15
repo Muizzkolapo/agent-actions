@@ -5,7 +5,7 @@ Service for building rich evaluation contexts for guards, filters, and prompts.
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
 
 logger = logging.getLogger(__name__)
 
@@ -170,8 +170,10 @@ class EvaluationContextProvider:
             current_content = {}
 
         # Build field context using existing infrastructure
-        # This auto-loads ALL upstream actions via historical node loader!
+        # This auto-loads upstream actions via historical node loader
+        # Respects context_scope if defined, otherwise loads all fields
         try:
+            context_scope = config.agent_config.get("context_scope")
             field_context = ContextScopeProcessor.build_field_context_with_history(
                 contents=current_content,
                 agent_name=config.agent_name,
@@ -183,6 +185,7 @@ class EvaluationContextProvider:
                 workflow_metadata=config.workflow_metadata,
                 current_item=current_item,
                 file_path=config.file_path,
+                context_scope=context_scope,
             )
         except (ValueError, TypeError, KeyError) as e:
             logger.warning(

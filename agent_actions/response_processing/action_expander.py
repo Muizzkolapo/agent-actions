@@ -15,7 +15,7 @@ from agent_actions.response_processing.consolidated_guard import GuardBehavior, 
 from agent_actions.response_processing.schema_change import compile_unified_schema
 from agent_actions.utilities.constants import RESERVED_AGENT_NAMES
 from agent_actions.utilities.udf_management import get_udf_metadata
-from agent_actions.utilities.field_resolution import ReferenceValidator, ReferenceParser
+from agent_actions.preprocessing.field_resolution import ReferenceValidator, ReferenceParser
 from .config_types import AgentConfigMap, AgentEntryDict, AgentConfigList
 from .config_field_definitions import inherit_simple_fields
 

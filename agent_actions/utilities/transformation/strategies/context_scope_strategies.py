@@ -8,7 +8,7 @@ context_scope.passthrough configuration at runtime.
 from typing import Dict, List, Optional
 
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
 from .base import IPassthroughTransformStrategy
 
 

@@ -3,7 +3,7 @@ LLM Context Builder - Mode-specific implementations for batch and realtime.
 """
 
 from typing import Dict, Any, Optional
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
 from agent_actions.preprocessing.transformation.data_transformer import DataTransformer
 
 

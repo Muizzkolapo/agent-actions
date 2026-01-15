@@ -16,7 +16,7 @@ import json
 import tempfile
 from pathlib import Path
 from typing import Dict, List
-from agent_actions.utilities.context_scope.context_scope_processor import ContextScopeProcessor
+from agent_actions.preprocessing.context.context_scope_processor import ContextScopeProcessor
 
 
 @pytest.fixture
