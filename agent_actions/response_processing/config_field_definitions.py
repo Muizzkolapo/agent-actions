@@ -17,8 +17,11 @@ SIMPLE_CONFIG_FIELDS = {
     "model_name": None,
     "api_key": None,
     "base_url": None,  # Optional: base URL for vendors like Ollama
+    # Action type
+    "kind": "llm",  # Default: 'llm' (LLM action). Use 'tool' for UDF actions.
     # Execution settings
     "run_mode": "online",  # Default: online mode
+    "granularity": "record",  # Default: record-level processing. Use 'file' for batch processing (tool only).
     "is_operational": True,  # Default: enabled
     # LLM configuration
     "json_mode": True,  # Default: True (JSON-based system)
