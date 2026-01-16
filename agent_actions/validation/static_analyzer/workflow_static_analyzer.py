@@ -291,20 +291,36 @@ class WorkflowStaticAnalyzer:
         # Extract input requirements (field references)
         input_requirements = self.reference_extractor.extract_from_agent(action_config)
 
-        # Get dependencies - support both 'depends_on' and 'dependencies' field names
-        deps_list = action_config.get("depends_on") or action_config.get("dependencies", [])
+        # Use auto-inferred dependency model
+        from agent_actions.preprocessing.context.context_scope_processor import (
+            ContextScopeProcessor,
+        )
 
-        # Handle both string and dict dependencies
-        dependencies = set()
-        if isinstance(deps_list, list):
-            for dep in deps_list:
-                if isinstance(dep, str):
-                    dependencies.add(dep)
-                elif isinstance(dep, dict):
-                    # Workflow dependency - skip for now (cross-workflow validation)
-                    workflow_dep = dep.get("workflow")
-                    if workflow_dep:
-                        continue
+        workflow_actions = [
+            a.get("name") for a in self.workflow_config.get("actions", []) if a.get("name")
+        ]
+
+        try:
+            input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                action_config, workflow_actions, name
+            )
+            # All dependencies (both input and context) for graph building
+            dependencies = set(input_sources + context_sources)
+        except Exception:
+            # Fallback to old behavior if inference fails
+            deps_list = action_config.get("depends_on") or action_config.get("dependencies", [])
+            dependencies = set()
+            if isinstance(deps_list, str):
+                dependencies.add(deps_list)
+            elif isinstance(deps_list, list):
+                for dep in deps_list:
+                    if isinstance(dep, str):
+                        dependencies.add(dep)
+                    elif isinstance(dep, dict):
+                        # Workflow dependency - skip for now (cross-workflow validation)
+                        workflow_dep = dep.get("workflow")
+                        if workflow_dep:
+                            continue
 
         node = DataFlowNode(
             name=name,

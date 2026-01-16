@@ -155,7 +155,8 @@ class ContextScopeProcessor:
         from agent_actions.errors import ConfigurationError
 
         # 1. Get explicit dependencies (input sources)
-        deps = action_config.get("dependencies", [])
+        # Support both 'dependencies' and 'depends_on' for backward compatibility
+        deps = action_config.get("dependencies") or action_config.get("depends_on", [])
         if deps is None:
             input_sources = []
         elif isinstance(deps, str):
