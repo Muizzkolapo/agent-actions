@@ -73,6 +73,24 @@ class RecordProcessor:
         """
         self.agent_config = agent_config
         self.agent_name = agent_name
+
+        # Validate granularity setting
+        granularity = agent_config.get("granularity", "record")
+        model_vendor = agent_config.get("model_vendor", "")
+
+        if isinstance(granularity, str) and granularity.lower() == "file":
+            if model_vendor != "tool":
+                raise ConfigurationError(
+                    "FILE granularity is only supported for tool actions. "
+                    "LLM actions must use RECORD granularity. "
+                    "See: https://github.com/Muizzkolapo/agent-actions/issues/740",
+                    context={
+                        "agent_name": agent_name,
+                        "granularity": granularity,
+                        "model_vendor": model_vendor,
+                    },
+                )
+
         self.enrichment_pipeline = EnrichmentPipeline()
 
     def process(self, item: Any, context: ProcessingContext) -> ProcessingResult:

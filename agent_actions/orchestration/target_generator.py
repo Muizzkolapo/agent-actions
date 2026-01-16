@@ -363,8 +363,15 @@ class TargetGenerator:
         )
 
         # Process via RecordProcessor
-        # process_batch handles looping and calls process() which handles retries
-        results = self.record_processor.process_batch(data, context)
+        # Check if FILE mode for tools - bypass record loop
+        if self.granularity == "file" and self.model_vendor == "tool":
+            # For FILE mode, use the input data as source for parent lookup
+            # (not source_data which points to original source folder)
+            context.source_data = data
+            results = self._process_file_mode_tool(data, context)
+        else:
+            # process_batch handles looping and calls process() which handles retries
+            results = self.record_processor.process_batch(data, context)
 
         # Collect success results
         output = []
@@ -382,6 +389,100 @@ class TargetGenerator:
         # Determine output type (Main vs Side Output)
         # Note: Side output logic removed as per cleanup.
         self.output_handler.save_main_output(output, file_path, base_directory, output_directory)
+
+    def _process_file_mode_tool(self, data: List[Dict], context: ProcessingContext) -> List:
+        """
+        Process tool in FILE granularity mode.
+
+        Invokes tool once with full array instead of looping per-record.
+        Tool receives array WITH existing IDs/lineage.
+        Tool returns array of outputs (N→M transformation allowed).
+        Enrichment assigns new IDs/lineage to each output.
+
+        Args:
+            data: Full array of input records
+            context: Processing context
+
+        Returns:
+            List with single ProcessingResult containing all outputs
+        """
+        from agent_actions.utilities.processor.processor_helpers import run_dynamic_agent
+        from agent_actions.core.types import ProcessingResult, ProcessingStatus
+
+        try:
+            # Get tools_path from agent config
+            tools_path = context.agent_config.get("tools_path")
+
+            # Invoke tool once with full array
+            # For tools, formatted_prompt is not used, so we pass empty string
+            raw_response, executed = run_dynamic_agent(
+                agent_config=context.agent_config,
+                agent_name=context.agent_name,
+                context=data,  # Full array of records
+                formatted_prompt="",  # Not used for tools
+                tools_path=tools_path,
+            )
+
+            # Tool should return array
+            if not isinstance(raw_response, list):
+                raise ValueError(
+                    f"FILE mode tool must return array, got {type(raw_response).__name__}"
+                )
+
+            # Reserved framework fields that go at top level, not in content
+            RESERVED_FIELDS = {
+                "source_guid",
+                "target_id",
+                "node_id",
+                "lineage",
+                "metadata",
+                "content",
+            }
+
+            # Wrap each tool output in {content: {...}} structure
+            # Preserve source_guid at top level for lineage chaining
+            structured_data = []
+            for item in raw_response:
+                if isinstance(item, dict):
+                    # Separate data fields from reserved framework fields
+                    data_fields = {k: v for k, v in item.items() if k not in RESERVED_FIELDS}
+
+                    # Build structured item with content
+                    structured_item = {"content": data_fields}
+
+                    # Preserve source_guid at top level (needed for lineage chaining)
+                    if "source_guid" in item:
+                        structured_item["source_guid"] = item["source_guid"]
+
+                    structured_data.append(structured_item)
+                else:
+                    # Handle non-dict outputs
+                    structured_data.append({"content": {"value": item}})
+
+            result = ProcessingResult(
+                status=ProcessingStatus.SUCCESS,
+                data=structured_data,
+                source_guid=None,  # FILE mode has no single source
+                raw_response=raw_response,
+                executed=executed,
+            )
+
+            # Run enrichment on ALL items in result
+            result = self.record_processor.enrichment_pipeline.enrich(result, context)
+
+            return [result]
+
+        except Exception as e:
+            # Error handling
+            logger.error(f"Error in FILE mode tool processing: {e}")
+            error_result = ProcessingResult(
+                status=ProcessingStatus.FAILED,
+                data=[],
+                source_guid=None,
+                error=str(e),
+                executed=False,
+            )
+            return [error_result]
 
 
 def create_target_generator(
