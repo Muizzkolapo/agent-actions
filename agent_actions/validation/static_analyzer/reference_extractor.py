@@ -47,9 +47,7 @@ class ReferenceExtractor:
 
     # Matches dot notation in guards: agent.field
     DOT_PATTERN = re.compile(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
-    ACTION_DOT_PATTERN = re.compile(
-        r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)"
-    )
+    ACTION_DOT_PATTERN = re.compile(r"\baction\.([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z0-9_.]+)")
 
     # Special namespaces that don't require dependency declaration
     SPECIAL_NAMESPACES = frozenset(

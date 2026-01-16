@@ -55,7 +55,7 @@ Higher specificity wins.
 
 ```yaml
 - name: generate_explanation
-  dependencies: [previous_action]
+  dependencies: previous_action        # Input source (single)
   intent: "Generate educational explanation"
   model_vendor: openai
   model_name: gpt-4o-mini
@@ -73,12 +73,46 @@ Higher specificity wins.
 
 ```yaml
 - name: process_data
-  dependencies: [previous_action]
+  dependencies: previous_action        # Input source
   kind: tool
   impl: function_name        # Must match @udf_tool function
   intent: "Process the data"
   granularity: record        # record | file
 ```
+
+## Dependencies Model
+
+**Single Input Source:**
+```yaml
+dependencies: previous_action          # String for single input
+```
+
+**Multiple Inputs (Merge Pattern):**
+```yaml
+dependencies: [action_a, action_b]     # List for merging multiple sources
+reduce_key: parent_id                  # Optional: merge key
+```
+
+**Context Dependencies (Auto-Inferred):**
+
+Actions referenced in `context_scope` but NOT in `dependencies` are automatically treated as context dependencies:
+
+```yaml
+- name: generate_question
+  dependencies: get_prompt             # Input source only
+  context_scope:
+    observe:
+      - get_prompt.*                   # Input (in dependencies)
+      - classify_type.quiz_type        # Context (auto-inferred)
+      - extract_facts.summary          # Context (auto-inferred)
+```
+
+The framework automatically:
+1. Identifies `classify_type` and `extract_facts` from `context_scope`
+2. Treats them as context dependencies (not input sources)
+3. Loads their data via historical lineage matching
+
+**No `primary_dependency` needed** - it's deprecated.
 
 ## Context Scope
 
@@ -151,7 +185,7 @@ Execute actions multiple times with varying parameters:
 
 ```yaml
 - name: combine_distractors
-  dependencies: [generate_distractor]
+  dependencies: generate_distractor
   loop_consumption:
     source: generate_distractor
     pattern: merge  # Combines all loop outputs
@@ -256,7 +290,7 @@ actions:
     schema: { count: integer }  # keyword count
 
   - name: summarize
-    dependencies: [extract_entities, extract_keywords]
+    dependencies: [extract_entities, extract_keywords]  # Merge pattern
     prompt: |
       Entity count: {{ extract_entities.count }}
       Keyword count: {{ extract_keywords.count }}
@@ -284,19 +318,19 @@ actions:
     schema: { title: string, content: string }
 
   - name: generate_seo
-    dependencies: [validate]
+    dependencies: validate             # Single input
     schema: { primary_keywords: list }
 
   - name: generate_recommendations
-    dependencies: [validate]
+    dependencies: validate             # Single input
     schema: { similar_books: list }
 
   - name: assess_reading_level
-    dependencies: [validate]
+    dependencies: validate             # Single input
     schema: { reading_level: string }
 
   - name: score_quality
-    dependencies: [generate_seo, generate_recommendations, assess_reading_level]
+    dependencies: [generate_seo, generate_recommendations, assess_reading_level]  # Merge!
     # All 3 parallel parents accessible via namespacing:
     prompt: |
       SEO: {{ generate_seo.primary_keywords }}
@@ -311,19 +345,19 @@ Multiple specialists extract different aspects:
 ```yaml
 actions:
   - name: extract_entities
-    dependencies: [prepare]
+    dependencies: prepare              # Single input
     schema: { entities: list, count: integer }
 
   - name: extract_sentiment
-    dependencies: [prepare]
+    dependencies: prepare              # Single input
     schema: { sentiment: string, confidence: number }
 
   - name: extract_topics
-    dependencies: [prepare]
+    dependencies: prepare              # Single input
     schema: { topics: list, count: integer }
 
   - name: unified_analysis
-    dependencies: [extract_entities, extract_sentiment, extract_topics]
+    dependencies: [extract_entities, extract_sentiment, extract_topics]  # Merge!
     prompt: |
       Entities: {{ extract_entities.entities }}
       Sentiment: {{ extract_sentiment.sentiment }}
@@ -337,17 +371,17 @@ Multiple LLMs, pick best answer:
 ```yaml
 actions:
   - name: gpt4_answer
-    dependencies: [prepare]
+    dependencies: prepare              # Single input
     model_vendor: openai
     model_name: gpt-4o
 
   - name: claude_answer
-    dependencies: [prepare]
+    dependencies: prepare              # Single input
     model_vendor: anthropic
     model_name: claude-sonnet-4-20250514
 
   - name: best_answer
-    dependencies: [gpt4_answer, claude_answer]
+    dependencies: [gpt4_answer, claude_answer]  # Merge!
     prompt: |
       Compare and select the best answer:
       GPT-4: {{ gpt4_answer.response }}
@@ -364,21 +398,21 @@ actions:
     schema: { complexity: string }
 
   - name: fast_path
-    dependencies: [classify]
+    dependencies: classify             # Single input
     guard:
       condition: 'complexity == "low"'
       on_false: "skip"
     schema: { result: string }
 
   - name: slow_path
-    dependencies: [classify]
+    dependencies: classify             # Single input
     guard:
       condition: 'complexity == "high"'
       on_false: "skip"
     schema: { result: string }
 
   - name: combine
-    dependencies: [fast_path, slow_path]
+    dependencies: [fast_path, slow_path]  # Merge!
     # Handle potentially missing branches in prompt:
     prompt: |
       {% if fast_path %}Fast result: {{ fast_path.result }}{% endif %}

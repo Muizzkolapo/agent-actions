@@ -101,10 +101,6 @@ class WorkflowStaticAnalyzer:
         for error in self._check_context_scope_fields():
             result.add_error(error)
 
-        # Step 2d: Validate primary_dependency field
-        for error in self._check_primary_dependency():
-            result.add_error(error)
-
         # Step 3: Check for unused dependencies (add as warnings)
         warnings = checker.check_unused_dependencies()
         for warning in warnings:
@@ -251,82 +247,6 @@ class WorkflowStaticAnalyzer:
                                 hint=f"Check the output schema of '{dep_name}' for available fields.",
                             )
                         )
-
-        return errors
-
-    def _check_primary_dependency(self) -> List[StaticTypeError]:
-        """Validate primary_dependency configuration.
-
-        Rules:
-        1. If primary_dependency specified, must exist in dependencies
-        2. If primary_dependency specified but no dependencies, error
-        3. Logs info message if no primary specified (uses last by convention)
-
-        Returns:
-            List of StaticTypeError for validation failures
-        """
-        errors: List[StaticTypeError] = []
-        actions = self.workflow_config.get("actions", [])
-
-        for action in actions:
-            if not isinstance(action, dict):
-                continue
-
-            action_name = action.get("name", "unknown")
-            primary_dep = action.get("primary_dependency")
-
-            # Get dependencies list
-            deps_list = action.get("depends_on") or action.get("dependencies", [])
-            dependencies = set()
-            if isinstance(deps_list, list):
-                for dep in deps_list:
-                    if isinstance(dep, str):
-                        dependencies.add(dep)
-
-            # No primary_dependency specified - nothing to validate
-            if not primary_dep:
-                # If multiple dependencies, log info about convention
-                if len(dependencies) > 1:
-                    logger.info(
-                        f"Action '{action_name}': Multiple dependencies {sorted(dependencies)}. "
-                        f"No primary_dependency specified, will use last in list by convention."
-                    )
-                continue
-
-            # Validation 1: primary_dependency requires dependencies to exist
-            if not dependencies:
-                errors.append(
-                    StaticTypeError(
-                        message=f"Action '{action_name}' has 'primary_dependency' but no 'dependencies' list",
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="primary_dependency",
-                            raw_reference=primary_dep,
-                        ),
-                        referenced_agent="",
-                        referenced_field="",
-                        hint="Remove 'primary_dependency' or add a 'dependencies' list",
-                    )
-                )
-                continue
-
-            # Validation 2: primary_dependency must exist in dependencies
-            if primary_dep not in dependencies:
-                errors.append(
-                    StaticTypeError(
-                        message=f"primary_dependency '{primary_dep}' not found in dependencies list",
-                        location=FieldLocation(
-                            agent_name=action_name,
-                            config_field="primary_dependency",
-                            raw_reference=primary_dep,
-                        ),
-                        referenced_agent=primary_dep,
-                        referenced_field="",
-                        available_fields=dependencies,
-                        hint=f"Available dependencies: {', '.join(sorted(dependencies))}. "
-                        f"Ensure '{primary_dep}' is in the dependencies list.",
-                    )
-                )
 
         return errors
 

@@ -73,6 +73,130 @@ class ContextScopeProcessor:
         return field_names
 
     @staticmethod
+    def extract_action_names_from_context_scope(context_scope: Optional[Dict]) -> set:
+        """
+        Extract unique action names referenced in context_scope.
+
+        Parses observe and passthrough fields to find all action names.
+
+        Args:
+            context_scope: Context scope configuration dict
+
+        Returns:
+            Set of action names referenced in context_scope
+
+        Example:
+            context_scope = {
+                "observe": ["add_answer_text.*", "suggest_distractor_counts.target_word_counts"],
+                "passthrough": ["write_scenario_question.question"]
+            }
+            Returns: {"add_answer_text", "suggest_distractor_counts", "write_scenario_question"}
+        """
+        if not context_scope:
+            return set()
+
+        referenced_actions = set()
+
+        # Collect field references from observe and passthrough
+        all_field_refs = []
+        all_field_refs.extend(context_scope.get("observe", []))
+        all_field_refs.extend(context_scope.get("passthrough", []))
+
+        for field_ref in all_field_refs:
+            try:
+                action_name, _ = ContextScopeProcessor.parse_field_reference(field_ref)
+                referenced_actions.add(action_name)
+            except ValueError:
+                # Invalid reference format, skip
+                continue
+
+        return referenced_actions
+
+    @staticmethod
+    def infer_dependencies(
+        action_config: Dict, workflow_actions: List[str], action_name: str = "unknown"
+    ) -> Tuple[List[str], List[str]]:
+        """
+        Infer input sources and context sources from action configuration.
+
+        This method implements the simplified dependency model where:
+        - `dependencies` field = input sources (determines execution count)
+        - Actions in `context_scope` but NOT in `dependencies` = context sources (auto-inferred)
+
+        Args:
+            action_config: Action configuration dict containing dependencies and context_scope
+            workflow_actions: List of all action names in the workflow (for validation)
+            action_name: Name of current action (for error messages)
+
+        Returns:
+            Tuple of (input_sources, context_sources):
+            - input_sources: List of actions that provide input files
+            - context_sources: List of actions that provide context only (loaded via historical loader)
+
+        Raises:
+            ConfigurationError: If a referenced action doesn't exist in workflow
+
+        Example:
+            action_config = {
+                "dependencies": "add_answer_text",
+                "context_scope": {
+                    "observe": [
+                        "add_answer_text.*",
+                        "suggest_distractor_counts.*",
+                        "write_scenario_question.question"
+                    ]
+                }
+            }
+            workflow_actions = ["extract", "flatten", "add_answer_text", "suggest_distractor_counts", "write_scenario_question"]
+
+            Returns:
+                (["add_answer_text"], ["suggest_distractor_counts", "write_scenario_question"])
+        """
+        from agent_actions.errors import ConfigurationError
+
+        # 1. Get explicit dependencies (input sources)
+        deps = action_config.get("dependencies", [])
+        if deps is None:
+            input_sources = []
+        elif isinstance(deps, str):
+            input_sources = [deps]
+        else:
+            input_sources = list(deps)
+
+        # 2. Parse context_scope to find all referenced actions
+        context_scope = action_config.get("context_scope", {})
+        referenced_actions = ContextScopeProcessor.extract_action_names_from_context_scope(
+            context_scope
+        )
+
+        # 3. Auto-infer context sources (in context_scope but NOT in dependencies)
+        context_sources = list(referenced_actions - set(input_sources))
+
+        # 4. Validate all referenced actions exist in workflow
+        all_deps = set(input_sources) | set(context_sources)
+        for dep_action in all_deps:
+            if dep_action not in workflow_actions:
+                raise ConfigurationError(
+                    f"Action '{action_name}': References '{dep_action}' in context_scope "
+                    f"but '{dep_action}' not found in workflow.\n\n"
+                    f"Available actions: {workflow_actions}",
+                    context={
+                        "action": action_name,
+                        "missing_action": dep_action,
+                        "workflow_actions": workflow_actions,
+                        "input_sources": input_sources,
+                        "context_sources": context_sources,
+                    },
+                )
+
+        logger.debug(
+            f"[INFER_DEPS] Action '{action_name}': "
+            f"input_sources={input_sources}, context_sources={context_sources}"
+        )
+
+        return input_sources, context_sources
+
+    @staticmethod
     def extract_field_value(field_context: Dict, action_name: str, field_name: str) -> Any:
         """Extract field value from nested field_context structure, returning None if not found."""
         if not isinstance(field_context, dict):
@@ -406,7 +530,7 @@ class ContextScopeProcessor:
     @staticmethod
     # Complex field context building with historical data requires all these parameters
     def build_field_context_with_history(
-        contents: Dict,  # Kept for backward compatibility, not used in new architecture
+        contents: Dict,  # Legacy parameter, not used
         agent_name: str,
         agent_config: Optional[Dict],
         agent_indices: Optional[Dict[str, int]] = None,
@@ -416,13 +540,17 @@ class ContextScopeProcessor:
         workflow_metadata: Optional[Dict] = None,
         current_item: Optional[Dict] = None,
         file_path: Optional[str] = None,
-        context_scope: Optional[Dict] = None,  # NEW: Controls which fields to load
+        context_scope: Optional[Dict] = None,
     ) -> Dict:
         """
         Build field context with explicit namespace structure.
 
-        NO FALLBACKS - Context determined by dependencies and context_scope only.
-        TRUE PROGRESSIVE DATA EXPOSURE - Only loads fields declared in context_scope.
+        AUTO-INFERRED CONTEXT DEPENDENCIES:
+        - Input sources (from dependencies field): Data already in current_item
+        - Context sources (auto-inferred from context_scope): Loaded via historical loader
+
+        IMPORTANT: agent_indices is REQUIRED when action has dependencies.
+        No fallbacks - this ensures consistent behavior across all execution modes.
 
         Architecture (per anatomy_action.md):
         field_context = {
@@ -433,19 +561,29 @@ class ContextScopeProcessor:
             "workflow": {...},      # Workflow metadata
         }
 
-        Batch Mode (has file_path + current_item + agent_indices):
-        - Dependencies loaded from historical files ONLY
-        - Missing dependencies cause explicit errors (fail fast)
-        - FILTERED by context_scope: Only declared fields loaded
+        Args:
+            contents: Legacy parameter (not used)
+            agent_name: Name of the current action
+            agent_config: Action configuration dict
+            agent_indices: REQUIRED if action has dependencies. Maps action names to positions.
+            dependency_configs: Legacy parameter (not used)
+            source_content: Original input data for "source" namespace
+            loop_context: Loop iteration info
+            workflow_metadata: Workflow metadata
+            current_item: Current record being processed (has lineage, content)
+            file_path: Path to current file
+            context_scope: Controls which fields to load (progressive data exposure)
+
+        Returns:
+            Dict with namespaces: source, {dep_names}, loop, workflow
+
+        Raises:
+            ConfigurationError: If action has dependencies but agent_indices not provided
 
         Progressive Data Exposure:
         - context_scope.observe: ["dep.field1", "dep.*"] -> Controls what gets loaded
         - context_scope.passthrough: ["dep.field2"] -> Also loaded (needed for output)
         - Undeclared fields never enter memory
-
-        Parameters kept for backward compatibility:
-        - contents: Not used (was for fallback logic, now removed)
-        - dependency_configs: Not used (was for schema lookup, now removed)
         """
         from agent_actions.preprocessing.context.historical_node_loader import (
             HistoricalNodeDataLoader,
@@ -458,162 +596,175 @@ class ContextScopeProcessor:
             field_context["source"] = ContextScopeProcessor._extract_content_data(source_content)
             logger.debug("Added 'source' namespace with %s fields", len(field_context["source"]))
 
-        # 2. DEPENDENCY namespaces - load from historical files (batch mode)
-        dependencies = agent_config.get("dependencies", []) if agent_config else []
+        # 2. DEPENDENCY namespaces - separate input sources from context sources
+        if agent_config and agent_indices and current_item and file_path:
+            # BATCH MODE - Use auto-inferred context dependencies
+            workflow_actions = list(agent_indices.keys())
 
-        if dependencies and current_item and file_path and agent_indices:
-            # BATCH MODE - Load from historical files with progressive data exposure
+            # Infer input sources vs context sources
+            input_sources, context_sources = ContextScopeProcessor.infer_dependencies(
+                agent_config, workflow_actions, agent_name
+            )
+
+            logger.debug(
+                f"[AUTO-INFER] Action '{agent_name}': "
+                f"input_sources={input_sources}, context_sources={context_sources}"
+            )
+
             lineage = current_item.get("lineage", [])
             source_guid = current_item.get("source_guid")
             current_idx = agent_indices.get(agent_name, 999)
 
-            # Extract which fields are allowed for each dependency from context_scope
-            allowed_fields_map = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope, agent_name
-            )
+            # 2a. INPUT SOURCES - Data is already in current_item (the file being processed)
+            # Put it under the action name so prompts can reference {{ action_name.field }}
+            if input_sources and current_item:
+                input_data = ContextScopeProcessor._extract_content_data(current_item)
 
-            logger.debug(
-                f"[BATCH MODE] Loading {len(dependencies)} dependencies for '{agent_name}': {dependencies}"
-            )
-            logger.debug(
-                f"[PROGRESSIVE EXPOSURE] Allowed fields per dependency: {allowed_fields_map}"
-            )
-
-            for dep_name in dependencies:
-                # Check if dependency should be loaded
-                dep_idx = agent_indices.get(dep_name)
-                if dep_idx is None:
-                    logger.warning(
-                        f"Dependency '{dep_name}' not found in agent_indices. Available: {list(agent_indices.keys())}"
-                    )
-                    continue
-
-                if dep_idx >= current_idx:
-                    logger.debug(
-                        f"Skipping dependency '{dep_name}' (comes after current action in pipeline)"
-                    )
-                    continue
-
-                # Parallel Branch Check: Only load ancestors or explicit dependencies
-                # Since we're iterating through declared dependencies, all are "explicit"
-                # We should try to load them even if not in lineage yet
-                is_ancestor = (
-                    HistoricalNodeDataLoader._find_node_in_lineage(dep_name, lineage, agent_indices)
-                    is not None
+                # Get allowed fields for input sources
+                all_deps_for_fields = input_sources + context_sources
+                allowed_fields_map = ContextScopeProcessor._extract_allowed_fields_per_dependency(
+                    all_deps_for_fields, context_scope, agent_name
                 )
 
-                if not is_ancestor:
-                    logger.debug(
-                        f"Dependency '{dep_name}' not in lineage (may not have executed yet). "
-                        f"Will attempt to load from historical files."
-                    )
-                    # Don't skip - try to load anyway. If file doesn't exist, we'll warn below.
+                for input_source_name in input_sources:
+                    allowed_fields = allowed_fields_map.get(input_source_name)
 
-                # Load historical data (full data from file)
-                logger.debug(
-                    f"[HISTORICAL LOAD] Loading dep '{dep_name}' from file_path={file_path}"
-                )
-                historical_data = ContextScopeProcessor._load_historical_node(
-                    action_name=dep_name,
-                    lineage=lineage,
-                    source_guid=source_guid,
-                    file_path=file_path,
-                    agent_indices=agent_indices,
-                    parent_target_id=current_item.get("parent_target_id"),
-                    root_target_id=current_item.get("root_target_id"),
-                )
-                if historical_data:
-                    logger.debug(
-                        f"[HISTORICAL LOAD] Loaded dep '{dep_name}': fields={list(historical_data.keys())}"
-                    )
-
-                if historical_data is None:
-                    # Historical data not found - could be edge case (wrong source_guid, file missing, etc.)
-                    # Log warning but don't fail - allow workflow to continue
-                    logger.warning(
-                        f"[BATCH MODE] Dependency '{dep_name}' declared but historical data not found. "
-                        f"Lineage: {lineage}, source_guid: {source_guid}. "
-                        f"Dependency will not be available in field_context."
-                    )
-                    continue  # Skip this dependency
-
-                # PROGRESSIVE DATA EXPOSURE: Filter to only allowed fields
-                allowed_fields = allowed_fields_map.get(dep_name)
-
-                if allowed_fields is None:
-                    # Wildcard or no context_scope: Load all fields
-                    field_context[dep_name] = historical_data
-                    logger.debug(
-                        f"Loaded dependency '{dep_name}' with ALL {len(historical_data)} fields (wildcard)"
-                    )
-                else:
-                    # Specific fields: Filter to only declared fields
-                    filtered_data = {
-                        field: historical_data[field]
-                        for field in allowed_fields
-                        if field in historical_data
-                    }
-
-                    # Warn if declared fields not found in historical data
-                    missing_fields = set(allowed_fields) - set(historical_data.keys())
-                    if missing_fields:
-                        logger.warning(
-                            f"[PROGRESSIVE EXPOSURE] Dependency '{dep_name}': "
-                            f"context_scope declares fields {missing_fields} but not found in historical data. "
-                            f"Available fields: {list(historical_data.keys())}"
-                        )
-
-                    field_context[dep_name] = filtered_data
-                    logger.debug(
-                        f"Loaded dependency '{dep_name}' with {len(filtered_data)} fields "
-                        f"(filtered from {len(historical_data)} total): {list(filtered_data.keys())}"
-                    )
-
-        elif dependencies and not (current_item and file_path and agent_indices):
-            # REALTIME MODE - Load from contents dict with progressive data exposure
-            logger.debug(
-                f"[REALTIME MODE] Loading {len(dependencies)} dependencies from contents dict"
-            )
-
-            # Extract allowed fields per dependency
-            allowed_fields_map = ContextScopeProcessor._extract_allowed_fields_per_dependency(
-                dependencies, context_scope, agent_name
-            )
-            logger.debug(f"[PROGRESSIVE EXPOSURE - REALTIME] Allowed fields: {allowed_fields_map}")
-
-            # In realtime, contents dict has fields from previous actions
-            # We need to map those to dependency namespaces
-            for dep_name in dependencies:
-                allowed_fields = allowed_fields_map.get(dep_name)
-
-                if allowed_fields is None:
-                    # Wildcard: Load all fields from contents
-                    if isinstance(contents, dict):
-                        field_context[dep_name] = dict(contents)
+                    if allowed_fields is None:
+                        # Wildcard: Load all fields
+                        field_context[input_source_name] = input_data
                         logger.debug(
-                            f"[REALTIME] Loaded dependency '{dep_name}' with ALL {len(contents)} fields (wildcard)"
+                            f"[INPUT SOURCE] Loaded '{input_source_name}' with ALL {len(input_data)} fields "
+                            f"from current_item (wildcard)"
                         )
-                else:
-                    # Specific fields: Filter from contents
-                    if isinstance(contents, dict):
+                    else:
+                        # Specific fields: Filter
                         filtered_data = {
-                            field: contents[field] for field in allowed_fields if field in contents
+                            field: input_data[field]
+                            for field in allowed_fields
+                            if field in input_data
+                        }
+                        field_context[input_source_name] = filtered_data
+                        logger.debug(
+                            f"[INPUT SOURCE] Loaded '{input_source_name}' with {len(filtered_data)} fields "
+                            f"from current_item: {list(filtered_data.keys())}"
+                        )
+
+            # 2b. CONTEXT SOURCES - Load via historical loader (lineage matching)
+            if context_sources:
+                # Get allowed fields for context sources
+                if "allowed_fields_map" not in locals():
+                    all_deps_for_fields = input_sources + context_sources
+                    allowed_fields_map = (
+                        ContextScopeProcessor._extract_allowed_fields_per_dependency(
+                            all_deps_for_fields, context_scope, agent_name
+                        )
+                    )
+
+                logger.debug(
+                    f"[CONTEXT SOURCES] Loading {len(context_sources)} context dependencies: {context_sources}"
+                )
+
+                for dep_name in context_sources:
+                    # Check if dependency should be loaded
+                    dep_idx = agent_indices.get(dep_name)
+                    if dep_idx is None:
+                        logger.warning(
+                            f"Context dependency '{dep_name}' not found in agent_indices. "
+                            f"Available: {list(agent_indices.keys())}"
+                        )
+                        continue
+
+                    if dep_idx >= current_idx:
+                        logger.debug(
+                            f"Skipping context dependency '{dep_name}' (comes after current action)"
+                        )
+                        continue
+
+                    # Parallel Branch Check
+                    is_ancestor = (
+                        HistoricalNodeDataLoader._find_node_in_lineage(
+                            dep_name, lineage, agent_indices
+                        )
+                        is not None
+                    )
+
+                    if not is_ancestor:
+                        logger.debug(
+                            f"Context dependency '{dep_name}' not in lineage (may not have executed yet). "
+                            f"Will attempt to load from historical files."
+                        )
+
+                    # Load historical data
+                    logger.debug(
+                        f"[HISTORICAL LOAD] Loading context dep '{dep_name}' from file_path={file_path}"
+                    )
+                    historical_data = ContextScopeProcessor._load_historical_node(
+                        action_name=dep_name,
+                        lineage=lineage,
+                        source_guid=source_guid,
+                        file_path=file_path,
+                        agent_indices=agent_indices,
+                        parent_target_id=current_item.get("parent_target_id"),
+                        root_target_id=current_item.get("root_target_id"),
+                    )
+
+                    if historical_data is None:
+                        logger.warning(
+                            f"[CONTEXT SOURCE] Context dependency '{dep_name}' historical data not found. "
+                            f"Lineage: {lineage}, source_guid: {source_guid}. "
+                            f"Dependency will not be available in field_context."
+                        )
+                        continue
+
+                    logger.debug(
+                        f"[HISTORICAL LOAD] Loaded context dep '{dep_name}': fields={list(historical_data.keys())}"
+                    )
+
+                    # PROGRESSIVE DATA EXPOSURE: Filter to only allowed fields
+                    allowed_fields = allowed_fields_map.get(dep_name)
+
+                    if allowed_fields is None:
+                        field_context[dep_name] = historical_data
+                        logger.debug(
+                            f"[CONTEXT SOURCE] Loaded '{dep_name}' with ALL {len(historical_data)} fields (wildcard)"
+                        )
+                    else:
+                        filtered_data = {
+                            field: historical_data[field]
+                            for field in allowed_fields
+                            if field in historical_data
                         }
 
-                        # Warn if declared fields not in contents
-                        missing_fields = set(allowed_fields) - set(contents.keys())
+                        missing_fields = set(allowed_fields) - set(historical_data.keys())
                         if missing_fields:
                             logger.warning(
-                                f"[REALTIME] Dependency '{dep_name}': "
-                                f"context_scope declares fields {missing_fields} but not found in contents. "
-                                f"Available: {list(contents.keys())[:20]}"
+                                f"[CONTEXT SOURCE] Dependency '{dep_name}': "
+                                f"context_scope declares fields {missing_fields} but not found. "
+                                f"Available fields: {list(historical_data.keys())}"
                             )
 
                         field_context[dep_name] = filtered_data
                         logger.debug(
-                            f"[REALTIME] Loaded dependency '{dep_name}' with {len(filtered_data)} fields "
-                            f"(filtered from {len(contents)} total): {list(filtered_data.keys())}"
+                            f"[CONTEXT SOURCE] Loaded '{dep_name}' with {len(filtered_data)} fields: "
+                            f"{list(filtered_data.keys())}"
                         )
+
+        elif agent_config and agent_config.get("dependencies") and not agent_indices:
+            # ERROR: Dependencies declared but no agent_indices provided
+            # agent_indices is REQUIRED for dependency resolution (no fallbacks)
+            from agent_actions.errors import ConfigurationError
+
+            dependencies = agent_config.get("dependencies", [])
+            raise ConfigurationError(
+                f"Action '{agent_name}' has dependencies {dependencies} but agent_indices was not provided. "
+                f"agent_indices is required for dependency resolution.\n\n"
+                f"Ensure the workflow orchestrator passes agent_indices to build_field_context_with_history().",
+                context={
+                    "action": agent_name,
+                    "dependencies": dependencies,
+                    "hint": "agent_indices must be a dict mapping action names to their positions",
+                },
+            )
 
         # 3. LOOP namespace - iteration info
         if loop_context:

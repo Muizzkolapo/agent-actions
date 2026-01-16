@@ -171,82 +171,79 @@ class AgentRunner:
     def _resolve_dependency_directories(
         self, agent_folder: Path, dependencies: List[str], agent_config: Dict, agent_name: str
     ) -> List[Path]:
-        """Resolve upstream directories from dependencies.
+        """Resolve upstream directories from dependencies (input sources).
 
-        NEW BEHAVIOR:
-        - Single dependency → Use it
-        - Multiple dependencies → Use primary_dependency (or last if not specified)
-        - Returns only PRIMARY dependency directory
+        SIMPLIFIED BEHAVIOR (Auto-Inferred Context Dependencies):
+        - `dependencies` field = input sources only
+        - Context sources are auto-inferred from context_scope (not handled here)
+        - Returns directories for ALL input sources
+
+        Single dependency: Returns [dep_dir]
+        Multiple dependencies: Returns [dep1_dir, dep2_dir, ...] for merging
 
         Args:
             agent_folder: Path to agent folder
-            dependencies: List of dependency names
-            agent_config: Full agent configuration (to get primary_dependency)
+            dependencies: List of input source names (from dependencies field)
+            agent_config: Full agent configuration
             agent_name: Agent name (for logging/errors)
 
         Returns:
-            List containing only the primary dependency directory path
+            List of input source directory paths
 
         Raises:
-            ConfigurationError: If primary_dependency invalid
-            DependencyError: If primary dependency directory not found
+            DependencyError: If any input source directory not found
         """
-        from agent_actions.errors import ConfigurationError, DependencyError
+        from agent_actions.errors import DependencyError
 
         target_dir = agent_folder / "target"
 
-        # Single dependency - straightforward
-        if len(dependencies) == 1:
-            dep_path = self._resolve_single_dependency(target_dir, dependencies[0])
+        # Check for deprecated primary_dependency field
+        if "primary_dependency" in agent_config:
+            primary_dep = agent_config["primary_dependency"]
+            logger.warning(
+                f"DEPRECATION WARNING: Action '{agent_name}' uses 'primary_dependency' "
+                f"which is deprecated.\n"
+                f"  OLD STYLE: dependencies: {dependencies}, primary_dependency: {primary_dep}\n"
+                f"  NEW STYLE: dependencies: {primary_dep}\n"
+                f"  Context dependencies are now auto-inferred from context_scope.\n"
+                f"  See docs/specs/SPEC_auto_inferred_context_dependencies.md for migration guide."
+            )
+            # For backward compatibility, use primary_dependency as the only input source
+            dependencies = [primary_dep]
+
+        # Resolve all input source directories
+        resolved_dirs = []
+        missing_dirs = []
+
+        for dep_name in dependencies:
+            dep_path = self._resolve_single_dependency(target_dir, dep_name)
             if dep_path:
-                return [dep_path]
+                resolved_dirs.append(dep_path)
+            else:
+                missing_dirs.append((dep_name, str(target_dir / dep_name)))
+
+        # Error if any input sources are missing
+        if missing_dirs:
+            missing_info = [f"'{name}' ({path})" for name, path in missing_dirs]
             raise DependencyError(
-                f"Dependency directory not found: {target_dir / dependencies[0]}",
-                context={"action": agent_name, "dependency": dependencies[0]},
-            )
-
-        # Multiple dependencies - determine primary
-        primary_dep = agent_config.get("primary_dependency")
-
-        if primary_dep:
-            # Explicit primary_dependency specified
-            if primary_dep not in dependencies:
-                raise ConfigurationError(
-                    f"Action '{agent_name}': primary_dependency '{primary_dep}' "
-                    f"not found in dependencies list: {dependencies}",
-                    context={
-                        "action": agent_name,
-                        "primary_dependency": primary_dep,
-                        "dependencies": dependencies,
-                    },
-                )
-            logger.info(
-                f"Action '{agent_name}': Using explicit primary_dependency "
-                f"'{primary_dep}' from {len(dependencies)} dependencies."
-            )
-        else:
-            # Convention: last dependency is primary
-            primary_dep = dependencies[-1]
-            logger.info(
-                f"Action '{agent_name}': Multiple dependencies {dependencies}. "
-                f"Using '{primary_dep}' (last in list) as primary input. "
-                f"To change, set 'primary_dependency: <name>' in config."
-            )
-
-        # Resolve primary dependency directory
-        dep_path = self._resolve_single_dependency(target_dir, primary_dep)
-        if not dep_path:
-            raise DependencyError(
-                f"Primary dependency directory not found: {target_dir / primary_dep}",
+                f"Action '{agent_name}': Input source directories not found: {missing_info}",
                 context={
                     "action": agent_name,
-                    "primary_dependency": primary_dep,
-                    "all_dependencies": dependencies,
-                    "expected_path": str(target_dir / primary_dep),
+                    "dependencies": dependencies,
+                    "missing": [m[0] for m in missing_dirs],
+                    "expected_parent": str(target_dir),
                 },
             )
 
-        return [dep_path]
+        # Log resolution
+        if len(resolved_dirs) == 1:
+            logger.info(f"Action '{agent_name}': Using '{dependencies[0]}' as input source")
+        else:
+            logger.info(
+                f"Action '{agent_name}': Merging {len(resolved_dirs)} input sources: {dependencies}"
+            )
+
+        return resolved_dirs
 
     def _resolve_single_dependency(self, target_dir: Path, dep_name: str) -> Optional[Path]:
         """Resolve a single dependency directory.
